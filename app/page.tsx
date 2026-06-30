@@ -307,7 +307,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-3">
           <Logo />
           <span className="text-[16px] font-extrabold tracking-tight text-ink">
-            Cue <span className="brand-text">Connect</span>
+            <span className="brand-text">Scout</span>
           </span>
           <div className="ml-auto hidden text-xs font-medium text-body/70 sm:block">
             Reach the right people, in your own voice
@@ -343,7 +343,7 @@ export default function Home() {
                   <span className="brand-text">Start the conversation.</span>
                 </h1>
                 <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-body">
-                  Cue Connect helps you reach the right people across email, LinkedIn,
+                  Scout helps you reach the right people across email, LinkedIn,
                   Instagram and more. It finds their contact info and drafts warm,
                   personal messages that sound like you, so saying hello feels easy.
                 </p>
@@ -468,7 +468,7 @@ export default function Home() {
                   <Tail side="left" />
                   <div className="flex items-center gap-1.5">
                     <span className="text-sm font-semibold text-ink">
-                      Cue Connect is searching
+                      Scout is searching
                     </span>
                     <span className="ml-1 flex gap-1">
                       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
@@ -498,7 +498,7 @@ export default function Home() {
                   <Step
                     n="2"
                     title="We find them for you"
-                    body="Cue Connect searches the public web and pulls real names and emails. Never invented."
+                    body="Scout searches the public web and pulls real names and emails. Never invented."
                     icon={<path d="M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />}
                   />
                   <Step
@@ -525,7 +525,7 @@ export default function Home() {
                       className="flex w-full items-center gap-3 border-b border-warm-border px-5 py-4 text-left transition hover:bg-warm-bg/40"
                     >
                       <div>
-                        <div className="text-sm font-bold text-ink">Cue Connect</div>
+                        <div className="text-sm font-bold text-ink">Scout</div>
                         <div className="text-xs text-body/80">
                           I found {opps.length} {uc.targetNoun} who fit. Pick who to
                           reach out to.
@@ -640,7 +640,7 @@ export default function Home() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
           <span className="font-semibold text-ink">
-            Cue <span className="brand-text">Connect</span>
+            <span className="brand-text">Scout</span>
           </span>
           <span className="ml-auto">
             Discover, draft, and connect, in your own voice.
@@ -661,7 +661,7 @@ export default function Home() {
             <div className="flex items-center gap-3 border-b border-warm-border px-6 py-4">
               <Avatar />
               <div>
-                <div className="text-sm font-bold text-ink">Cue Connect</div>
+                <div className="text-sm font-bold text-ink">Scout</div>
                 <div className="text-xs text-body/80">
                   {opps.length} {uc.targetNoun} who fit
                 </div>
@@ -816,7 +816,7 @@ function TemplatesTab({
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Set up how each kind of message should sound, an email, a LinkedIn note, an
-        Instagram DM. When Cue Connect drafts outreach, it uses the right format and
+        Instagram DM. When Scout drafts outreach, it uses the right format and
         your voice for each channel.
         <span className="text-body/60"> (Saved on this device.)</span>
       </p>
@@ -837,7 +837,7 @@ function TemplatesTab({
               ))}
             </select>
             <p className="mt-2.5 text-xs leading-relaxed text-body/80">
-              Cue Connect drafts this kind of message in the style you show it here.
+              Scout drafts this kind of message in the style you show it here.
             </p>
           </div>
           <div>
@@ -923,13 +923,13 @@ function ProfileTab({
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Tell Cue Connect who you are. This shapes the categories we suggest and makes
+        Tell Scout who you are. This shapes the categories we suggest and makes
         every message sound like you.
         <span className="text-body/60"> (Saved on this device.)</span>
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-        <Label>What are you using Cue Connect for?</Label>
+        <Label>What are you using Scout for?</Label>
         <select
           value={useCase}
           onChange={(e) => onUseCase(e.target.value as TemplateKey)}
