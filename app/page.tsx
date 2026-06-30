@@ -200,7 +200,7 @@ export default function Home() {
   }
 
   function addCategory() {
-    const name = window.prompt("Name this category of search:", "");
+    const name = window.prompt("Name this search:", "");
     if (!name || !name.trim()) return;
     const c: Category = {
       id: `cat-${Date.now()}`,
@@ -377,7 +377,7 @@ export default function Home() {
                       onClick={addCategory}
                       className="font-semibold text-accent transition hover:underline"
                     >
-                      + Save current as a category
+                      + Save Search
                     </button>
                     {catId && (
                       <button
