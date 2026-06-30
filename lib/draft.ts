@@ -4,6 +4,7 @@
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { TEMPLATES } from "./templates";
+import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate, TemplateKey } from "./types";
 
 function pickChannel(opp: Opportunity): {
@@ -95,7 +96,8 @@ export async function draftFor(
         `${sender}\n\n${recipient}\n\n${purpose}\n\n${task}${tpl}`
       )
     );
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e; // credits/auth/limit — don't swallow
     gen = null;
   }
 

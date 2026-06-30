@@ -1,4 +1,8 @@
 // Tavily web-search wrapper, ported from tavilySearch() in 07_Discovery.gs.
+// Throws ApiCreditError on credit/auth/limit problems so the UI can report them;
+// returns [] for ordinary transient failures (a single flaky query).
+
+import { classifyApiError } from "./apiErrors";
 
 export interface TavilyResult {
   title: string;
@@ -12,8 +16,10 @@ export async function tavilySearch(
 ): Promise<TavilyResult[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) throw new Error("TAVILY_API_KEY is not set");
+
+  let res: Response;
   try {
-    const res = await fetch("https://api.tavily.com/search", {
+    res = await fetch("https://api.tavily.com/search", {
       method: "POST",
       headers: {
         "content-type": "application/json",
@@ -26,7 +32,21 @@ export async function tavilySearch(
         search_depth: "basic",
       }),
     });
-    if (!res.ok) return [];
+  } catch {
+    return []; // network blip — transient, just no results for this query
+  }
+
+  if (!res.ok) {
+    let text = "";
+    try {
+      text = await res.text();
+    } catch {}
+    const credit = classifyApiError("Tavily", res.status, text);
+    if (credit) throw credit; // out of credits / bad key / limit — surface it
+    return []; // other non-200 — treat as no results
+  }
+
+  try {
     const data = await res.json();
     return (data?.results || []) as TavilyResult[];
   } catch {

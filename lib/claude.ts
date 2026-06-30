@@ -1,6 +1,8 @@
 // Anthropic wrapper + the loose-JSON parser, ported from claudeJson() and
 // parseJsonLoose() in your scripts (07_Discovery.gs). No SDK needed — one fetch.
 
+import { classifyApiError } from "./apiErrors";
+
 const MODEL = process.env.SCOUT_MODEL || "claude-sonnet-4-6";
 
 export async function claudeJson(system: string, user: string): Promise<string> {
@@ -22,9 +24,10 @@ export async function claudeJson(system: string, user: string): Promise<string> 
   });
   const body = await res.json();
   if (!res.ok) {
-    throw new Error(
-      `Anthropic ${res.status}: ${body?.error?.message || "request failed"}`
-    );
+    const msg = body?.error?.message || "request failed";
+    const credit = classifyApiError("Anthropic", res.status, msg);
+    if (credit) throw credit;
+    throw new Error(`Anthropic ${res.status}: ${msg}`);
   }
   return body?.content?.[0]?.text || "";
 }

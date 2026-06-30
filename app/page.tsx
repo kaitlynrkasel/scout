@@ -64,6 +64,7 @@ export default function Home() {
   const [discovering, setDiscovering] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState("");
+  const [apiReason, setApiReason] = useState<string | null>(null); // 'credits'|'auth'|'rate'
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -161,6 +162,13 @@ export default function Home() {
     setDrafts([]);
     setStats("");
     setError("");
+    setApiReason(null);
+  }
+
+  // Show the message from a failed API response, flagging credit/key/limit issues.
+  function reportError(data: any) {
+    setError(data?.error || "Something went wrong. Please try again.");
+    setApiReason(data?.credit ? data.reason || "credits" : null);
   }
 
   // Change the use case (from Profile). Seeds its categories the first time.
@@ -241,7 +249,10 @@ export default function Home() {
         body: JSON.stringify({ goal, about: aboutText, template: profile.useCase }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Discovery failed.");
+      if (!res.ok) {
+        reportError(data);
+        return;
+      }
       setOpps(data.opportunities || []);
       const sel: Record<string, boolean> = {};
       (data.opportunities || []).forEach((o: Opportunity) => (sel[o.id] = true));
@@ -273,7 +284,10 @@ export default function Home() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Drafting failed.");
+      if (!res.ok) {
+        reportError(data);
+        return;
+      }
       setDrafts(data.drafts || []);
     } catch (e: any) {
       setError(e.message);
@@ -424,11 +438,28 @@ export default function Home() {
               </div>
             </section>
 
-            {error && (
-              <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {error}
-              </div>
-            )}
+            {error &&
+              (apiReason ? (
+                <div className="mt-5 flex items-start gap-3 rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3.5">
+                  <WarnIcon />
+                  <div>
+                    <div className="text-sm font-bold text-amber-900">
+                      {apiReason === "credits"
+                        ? "Out of API credits"
+                        : apiReason === "auth"
+                        ? "API key problem"
+                        : "Rate limited"}
+                    </div>
+                    <p className="mt-0.5 text-sm leading-relaxed text-amber-800">
+                      {error}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {error}
+                </div>
+              ))}
 
             {discovering && (
               <div className="mt-8 flex items-start gap-3">
@@ -1068,6 +1099,25 @@ function Avatar() {
     <span className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-gradient">
       <Logo white />
     </span>
+  );
+}
+
+function WarnIcon() {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#b45309"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="mt-0.5 shrink-0"
+    >
+      <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
+      <path d="M12 9v4 M12 17h.01" />
+    </svg>
   );
 }
 

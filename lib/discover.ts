@@ -6,6 +6,7 @@
 import { claudeJson, parseJsonLoose } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
 import { TEMPLATES } from "./templates";
+import { ApiCreditError } from "./apiErrors";
 import type { Opportunity, TemplateKey } from "./types";
 
 function buildQueries(goal: string, templateKey: TemplateKey): string[] {
@@ -63,7 +64,8 @@ async function extract(
     `${ctx}\n${fields}\n\nSEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 2800)}`;
   try {
     return parseJsonLoose(await claudeJson(sys, user));
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e; // credits/auth/limit — don't swallow
     return null;
   }
 }

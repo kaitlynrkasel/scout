@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { draftFor } from "@/lib/draft";
+import { ApiCreditError } from "@/lib/apiErrors";
 import type { Opportunity, OutreachTemplate, TemplateKey } from "@/lib/types";
 
 export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
@@ -33,6 +34,12 @@ export async function POST(req: NextRequest) {
     );
     return NextResponse.json({ drafts });
   } catch (e: any) {
+    if (e instanceof ApiCreditError) {
+      return NextResponse.json(
+        { error: e.userMessage(), credit: true, provider: e.provider, reason: e.reason },
+        { status: 402 }
+      );
+    }
     return NextResponse.json({ error: e?.message || "Drafting failed." }, { status: 500 });
   }
 }
