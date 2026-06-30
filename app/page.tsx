@@ -14,27 +14,53 @@ const OUTREACH_KINDS = [
   "Cover letter",
   "Other",
 ];
+
+// Suggested categories of search, seeded from the profile's use case. Users can
+// add their own and remove any of these, so the options become their own.
+const SUGGESTED: Record<TemplateKey, { name: string; goal: string }[]> = {
+  networking: [
+    { name: "Coffee chats", goal: "professionals in my field open to a quick coffee or call" },
+    { name: "Mentors", goal: "experienced people in my field open to mentoring" },
+    { name: "Peers", goal: "people at a similar career stage in my field to connect with" },
+    { name: "Industry leaders", goal: "well-known, respected leaders in my industry" },
+  ],
+  jobs: [
+    { name: "Internships", goal: "internships in my field accepting applications" },
+    { name: "Recruiters", goal: "recruiters and hiring managers in my field" },
+    { name: "Coffee chats", goal: "people doing the job I want, for advice" },
+    { name: "Part-time roles", goal: "part-time jobs in my field hiring now" },
+  ],
+  musicpr: [
+    { name: "Playlist curators", goal: "playlist curators accepting submissions" },
+    { name: "Press & blogs", goal: "music blogs and press that cover artists like me" },
+    { name: "Radio", goal: "radio shows and stations that play my kind of music" },
+    { name: "Cowriters", goal: "songwriters open to cowriting" },
+  ],
+};
+
 const TPL_KEY = "cue_templates";
 const PROFILE_KEY = "cue_profile";
 const CAT_KEY = "cue_categories";
+const SEED_KEY = "cue_seeded";
 
 interface Profile {
   name: string;
   bio: string;
+  useCase: TemplateKey;
 }
 interface Category {
   id: string;
   name: string;
-  useCase: TemplateKey;
   goal: string;
+  useCase: TemplateKey;
 }
 
 export default function Home() {
   const [tab, setTab] = useState<"outreach" | "templates" | "profile">("outreach");
 
   // ---- Outreach state ----
-  const [useCase, setUseCase] = useState<TemplateKey>("networking");
-  const [goal, setGoal] = useState(TEMPLATES.networking.exampleGoal);
+  const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
+  const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState("");
@@ -48,100 +74,171 @@ export default function Home() {
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
-  const [profile, setProfile] = useState<Profile>({ name: "", bio: "" });
+  const [profile, setProfile] = useState<Profile>({
+    name: "",
+    bio: "",
+    useCase: "networking",
+  });
   const [categories, setCategories] = useState<Category[]>([]);
+  const [seeded, setSeeded] = useState<string[]>([]);
 
+  // Load everything + seed suggested categories for the active use case.
   useEffect(() => {
+    let prof: Profile = { name: "", bio: "", useCase: "networking" };
+    try {
+      const p = localStorage.getItem(PROFILE_KEY);
+      if (p) prof = { ...prof, ...JSON.parse(p) };
+    } catch {}
+    let cats: Category[] = [];
+    try {
+      const c = localStorage.getItem(CAT_KEY);
+      if (c) cats = JSON.parse(c);
+    } catch {}
+    let sd: string[] = [];
+    try {
+      const s = localStorage.getItem(SEED_KEY);
+      if (s) sd = JSON.parse(s);
+    } catch {}
     try {
       const t = localStorage.getItem(TPL_KEY);
       if (t) setMyTemplates(JSON.parse(t));
-      const p = localStorage.getItem(PROFILE_KEY);
-      if (p) setProfile(JSON.parse(p));
-      const c = localStorage.getItem(CAT_KEY);
-      if (c) setCategories(JSON.parse(c));
     } catch {}
+
+    if (!sd.includes(prof.useCase)) {
+      cats = [...cats, ...seedFor(prof.useCase)];
+      sd = [...sd, prof.useCase];
+      saveCats(cats);
+      saveSeeded(sd);
+    }
+    setProfile(prof);
+    setCategories(cats);
+    setSeeded(sd);
+    const mine = cats.filter((c) => c.useCase === prof.useCase);
+    if (mine.length) {
+      setCatId(mine[0].id);
+      setGoal(mine[0].goal);
+    } else {
+      setGoal(TEMPLATES[prof.useCase].exampleGoal);
+    }
   }, []);
 
-  function persistTemplates(next: OutreachTemplate[]) {
-    setMyTemplates(next);
-    try {
-      localStorage.setItem(TPL_KEY, JSON.stringify(next));
-    } catch {}
+  function seedFor(uc: TemplateKey): Category[] {
+    return SUGGESTED[uc].map((s, i) => ({
+      id: `sug-${uc}-${i}`,
+      name: s.name,
+      goal: s.goal,
+      useCase: uc,
+    }));
   }
-  function persistProfile(next: Profile) {
-    setProfile(next);
+  const saveTpls = (n: OutreachTemplate[]) => {
+    setMyTemplates(n);
     try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(next));
+      localStorage.setItem(TPL_KEY, JSON.stringify(n));
     } catch {}
+  };
+  const saveProfile = (n: Profile) => {
+    setProfile(n);
+    try {
+      localStorage.setItem(PROFILE_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  const saveCats = (n: Category[]) => {
+    setCategories(n);
+    try {
+      localStorage.setItem(CAT_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  const saveSeeded = (n: string[]) => {
+    setSeeded(n);
+    try {
+      localStorage.setItem(SEED_KEY, JSON.stringify(n));
+    } catch {}
+  };
+
+  function resetResults() {
+    setOpps([]);
+    setSelected({});
+    setDrafts([]);
+    setStats("");
+    setError("");
   }
-  function persistCategories(next: Category[]) {
-    setCategories(next);
-    try {
-      localStorage.setItem(CAT_KEY, JSON.stringify(next));
-    } catch {}
+
+  // Change the use case (from Profile). Seeds its categories the first time.
+  function changeUseCase(uc: TemplateKey) {
+    const next = { ...profile, useCase: uc };
+    saveProfile(next);
+    let cats = categories;
+    if (!seeded.includes(uc)) {
+      cats = [...categories, ...seedFor(uc)];
+      saveCats(cats);
+      saveSeeded([...seeded, uc]);
+    }
+    const mine = cats.filter((c) => c.useCase === uc);
+    if (mine.length) {
+      setCatId(mine[0].id);
+      setGoal(mine[0].goal);
+    } else {
+      setCatId("");
+      setGoal(TEMPLATES[uc].exampleGoal);
+    }
+    resetResults();
+  }
+
+  function selectCategory(id: string) {
+    setCatId(id);
+    const c = categories.find((x) => x.id === id);
+    if (c) setGoal(c.goal);
+    resetResults();
+  }
+
+  function addCategory() {
+    const name = window.prompt("Name this category of search:", "");
+    if (!name || !name.trim()) return;
+    const c: Category = {
+      id: `cat-${Date.now()}`,
+      name: name.trim(),
+      goal: goal,
+      useCase: profile.useCase,
+    };
+    saveCats([...categories, c]);
+    setCatId(c.id);
+  }
+
+  function removeCategory(id: string) {
+    const next = categories.filter((c) => c.id !== id);
+    saveCats(next);
+    if (catId === id) {
+      const mine = next.filter((c) => c.useCase === profile.useCase);
+      if (mine.length) {
+        setCatId(mine[0].id);
+        setGoal(mine[0].goal);
+      } else {
+        setCatId("");
+      }
+    }
   }
 
   function addTemplate() {
     if (!mtText.trim()) return;
-    persistTemplates([
+    saveTpls([
       { id: `${Date.now()}`, channel: mtChannel, text: mtText.trim() },
       ...myTemplates,
     ]);
     setMtText("");
   }
-  function removeTemplate(id: string) {
-    persistTemplates(myTemplates.filter((s) => s.id !== id));
-  }
 
-  function saveCategory() {
-    const name = window.prompt(
-      "Name this outreach request (so you can reuse it):",
-      goal.slice(0, 40)
-    );
-    if (!name || !name.trim()) return;
-    persistCategories([
-      { id: `${Date.now()}`, name: name.trim(), useCase, goal },
-      ...categories,
-    ]);
-  }
-  function loadCategory(c: Category) {
-    setUseCase(c.useCase);
-    setGoal(c.goal);
-    setOpps([]);
-    setSelected({});
-    setDrafts([]);
-    setStats("");
-    setError("");
-  }
-  function removeCategory(id: string) {
-    persistCategories(categories.filter((c) => c.id !== id));
-  }
-
-  const uc = TEMPLATES[useCase];
+  const uc = TEMPLATES[profile.useCase];
+  const myCats = categories.filter((c) => c.useCase === profile.useCase);
   const aboutText = [profile.name, profile.bio].filter(Boolean).join(". ").trim();
 
-  function switchUseCase(key: TemplateKey) {
-    setUseCase(key);
-    setGoal(TEMPLATES[key].exampleGoal);
-    setOpps([]);
-    setSelected({});
-    setDrafts([]);
-    setStats("");
-    setError("");
-  }
-
   async function runDiscover() {
-    setError("");
-    setDrafts([]);
-    setSelected({});
-    setOpps([]);
-    setStats("");
+    resetResults();
     setDiscovering(true);
     try {
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, template: useCase }),
+        body: JSON.stringify({ goal, about: aboutText, template: profile.useCase }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Discovery failed.");
@@ -171,7 +268,7 @@ export default function Home() {
         body: JSON.stringify({
           opportunities: chosen,
           about: aboutText,
-          template: useCase,
+          template: profile.useCase,
           templates: myTemplates,
         }),
       });
@@ -248,75 +345,72 @@ export default function Home() {
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
               <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
                 <div>
-                  <Label>Use case</Label>
+                  <Label>Category of search</Label>
                   <select
-                    value={useCase}
-                    onChange={(e) => switchUseCase(e.target.value as TemplateKey)}
+                    value={catId}
+                    onChange={(e) => selectCategory(e.target.value)}
                     className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   >
-                    {TEMPLATE_LIST.map((tpl) => (
-                      <option key={tpl.key} value={tpl.key}>
-                        {tpl.label}
+                    {myCats.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
                       </option>
                     ))}
+                    <option value="">Custom search…</option>
                   </select>
-                  <p className="mt-2.5 text-xs leading-relaxed text-body/80">
-                    {uc.blurb}
-                  </p>
-                  {!aboutText && (
+                  <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                    <button
+                      onClick={addCategory}
+                      className="font-semibold text-accent transition hover:underline"
+                    >
+                      + Save current as a category
+                    </button>
+                    {catId && (
+                      <button
+                        onClick={() => removeCategory(catId)}
+                        className="text-body/60 transition hover:text-accent"
+                      >
+                        Remove this category
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-body/70">
+                    Categories are suggested from your{" "}
                     <button
                       onClick={() => setTab("profile")}
-                      className="mt-3 text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                      className="font-semibold text-accent hover:underline"
                     >
-                      Add your info in Profile to personalize →
+                      Profile
                     </button>
-                  )}
+                    . Add or remove any to make them yours.
+                  </p>
                 </div>
 
                 <div>
                   <Label>Who are you looking for?</Label>
                   <textarea
                     value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
+                    onChange={(e) => {
+                      setGoal(e.target.value);
+                      setCatId(""); // editing turns it into a custom search
+                    }}
                     placeholder={uc.goalPlaceholder}
                     rows={3}
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
                   <p className="mt-1.5 text-xs text-body/70">
-                    Describe the people or opportunities you want, in plain language.
+                    Tip: add your industry, genre, or city to sharpen the results.
                   </p>
+                  {!aboutText && (
+                    <button
+                      onClick={() => setTab("profile")}
+                      className="mt-2 text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                    >
+                      Add your info in Profile to personalize your messages →
+                    </button>
+                  )}
                 </div>
               </div>
-
-              {/* Saved categories */}
-              {categories.length > 0 && (
-                <div className="mt-5 flex flex-wrap items-center gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-                    Saved
-                  </span>
-                  {categories.map((c) => (
-                    <span
-                      key={c.id}
-                      className="group inline-flex items-center gap-1.5 rounded-full border border-warm-border bg-warm-bg px-3 py-1 text-xs font-medium text-ink"
-                    >
-                      <button
-                        onClick={() => loadCategory(c)}
-                        className="transition hover:text-accent"
-                        title={`${TEMPLATES[c.useCase].label}: ${c.goal}`}
-                      >
-                        {c.name}
-                      </button>
-                      <button
-                        onClick={() => removeCategory(c.id)}
-                        className="text-body/40 transition hover:text-accent"
-                        aria-label="Remove saved search"
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
-                </div>
-              )}
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
@@ -325,13 +419,6 @@ export default function Home() {
                   className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                 >
                   {discovering ? "Finding…" : `Find ${uc.targetNoun}`}
-                </button>
-                <button
-                  onClick={saveCategory}
-                  disabled={!goal.trim()}
-                  className="rounded-xl border border-warm-border bg-white px-4 py-3 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
-                >
-                  Save as category
                 </button>
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
               </div>
@@ -372,7 +459,7 @@ export default function Home() {
                   <Step
                     n="1"
                     title="Tell us who to reach"
-                    body="Pick a use case and describe the people you want to connect with, in plain language."
+                    body="Pick a category and describe the people you want to connect with, in plain language."
                     icon={
                       <path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z M12 11.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
                     }
@@ -502,12 +589,19 @@ export default function Home() {
           setText={setMtText}
           add={addTemplate}
           list={myTemplates}
-          remove={removeTemplate}
+          remove={(id) => saveTpls(myTemplates.filter((s) => s.id !== id))}
         />
       )}
 
       {tab === "profile" && (
-        <ProfileTab profile={profile} onChange={persistProfile} />
+        <ProfileTab
+          name={profile.name}
+          bio={profile.bio}
+          useCase={profile.useCase}
+          onName={(v) => saveProfile({ ...profile, name: v })}
+          onBio={(v) => saveProfile({ ...profile, bio: v })}
+          onUseCase={changeUseCase}
+        />
       )}
 
       {/* ---------------- Footer ---------------- */}
@@ -568,7 +662,7 @@ export default function Home() {
   );
 }
 
-/* ---------------- Finds list (used inline + full screen) ---------------- */
+/* ---------------- Finds list ---------------- */
 function FindsList({
   opps,
   selected,
@@ -778,11 +872,19 @@ function TemplatesTab({
 
 /* ---------------- Profile tab ---------------- */
 function ProfileTab({
-  profile,
-  onChange,
+  name,
+  bio,
+  useCase,
+  onName,
+  onBio,
+  onUseCase,
 }: {
-  profile: Profile;
-  onChange: (p: Profile) => void;
+  name: string;
+  bio: string;
+  useCase: TemplateKey;
+  onName: (v: string) => void;
+  onBio: (v: string) => void;
+  onUseCase: (v: TemplateKey) => void;
 }) {
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
@@ -790,28 +892,63 @@ function ProfileTab({
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Tell Cue Connect who you are. Paste your resume, bio, or anything that
-        describes you or your company. Every search and every draft uses this to sound
-        like you and explain why you are reaching out.
+        Tell Cue Connect who you are. This shapes the categories we suggest and makes
+        every message sound like you.
         <span className="text-body/60"> (Saved on this device.)</span>
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-        <Label>Your name or company</Label>
-        <input
-          value={profile.name}
-          onChange={(e) => onChange({ ...profile, name: e.target.value })}
-          placeholder="e.g. Kaitlyn Kasel, or Cue Creative"
-          className="mb-5 w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-        />
-        <Label>Paste your resume, bio, or company description</Label>
-        <textarea
-          value={profile.bio}
-          onChange={(e) => onChange({ ...profile, bio: e.target.value })}
-          rows={12}
-          placeholder="Paste anything that tells us who you are: your resume, a short bio, your company's about page, your experience, what you do. The more you give, the more personal your outreach becomes."
-          className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-        />
+        <Label>What are you using Cue Connect for?</Label>
+        <select
+          value={useCase}
+          onChange={(e) => onUseCase(e.target.value as TemplateKey)}
+          className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        >
+          {TEMPLATE_LIST.map((t) => (
+            <option key={t.key} value={t.key}>
+              {t.label}
+            </option>
+          ))}
+        </select>
+        <div className="mt-3 rounded-xl bg-warm-bg/70 px-4 py-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Suggested categories
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {SUGGESTED[useCase].map((s) => (
+              <span
+                key={s.name}
+                className="rounded-full border border-warm-border bg-white px-3 py-1 text-xs font-medium text-ink"
+              >
+                {s.name}
+              </span>
+            ))}
+          </div>
+          <p className="mt-2.5 text-xs text-body/70">
+            These appear on the Outreach tab. You can add or remove any of them there.
+          </p>
+        </div>
+
+        <div className="mt-6">
+          <Label>Your name or company</Label>
+          <input
+            value={name}
+            onChange={(e) => onName(e.target.value)}
+            placeholder="e.g. Kaitlyn Kasel, or Cue Creative"
+            className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+        </div>
+
+        <div className="mt-5">
+          <Label>Paste your resume, bio, or company description</Label>
+          <textarea
+            value={bio}
+            onChange={(e) => onBio(e.target.value)}
+            rows={12}
+            placeholder="Paste anything that tells us who you are: your resume, a short bio, your company's about page, your experience, what you do. The more you give, the more personal your outreach becomes."
+            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+        </div>
         <p className="mt-3 text-xs text-body/70">
           Saved automatically as you type. Used to personalize every message, never
           shared.
@@ -846,7 +983,9 @@ function Count({ n }: { n: number }) {
   );
 }
 function Dot() {
-  return <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-brand-gradient align-middle" />;
+  return (
+    <span className="ml-1.5 inline-block h-1.5 w-1.5 rounded-full bg-brand-gradient align-middle" />
+  );
 }
 
 function TabButton({
@@ -911,8 +1050,6 @@ function Step({
   );
 }
 
-// The little triangle tail most chat bubbles have. A rotated square sitting half
-// outside the bubble edge, bordered on its two outer sides to match the bubble.
 function Tail({ side }: { side: "left" | "right" }) {
   return (
     <span
