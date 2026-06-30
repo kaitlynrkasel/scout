@@ -100,6 +100,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Use cases */}
+      <UseCases />
+
       {/* Features */}
       <section id="features" className="mx-auto max-w-6xl px-6 py-20">
         <h2 className="text-3xl font-extrabold tracking-tight text-ink">
@@ -185,6 +188,80 @@ export default function Landing() {
 
       <Footer />
     </div>
+  );
+}
+
+const USE_CASES = [
+  { who: "Musician / manager", q: "Unsigned bassists in Nashville to join my artist's band" },
+  { who: "Health brand", q: "Fitness influencers to promote my new supplement" },
+  { who: "Startup founder", q: "Heads of growth at Series A SaaS companies" },
+  { who: "Author", q: "Book bloggers who review thriller novels" },
+  { who: "Nonprofit", q: "Local businesses to sponsor our charity 5K" },
+  { who: "Photographer", q: "Wedding planners near Austin to partner with" },
+  { who: "Podcaster", q: "Personal-finance experts to interview as guests" },
+  { who: "Job seeker", q: "Recruiters hiring remote UX designers" },
+  { who: "Filmmaker", q: "Cinematographers open to indie short films" },
+  { who: "E-commerce", q: "Micro-influencers in sustainable fashion" },
+  { who: "Event organizer", q: "Women-in-tech speakers for our conference" },
+  { who: "Restaurant owner", q: "Food critics and foodie accounts in Chicago" },
+];
+
+function UseCases() {
+  return (
+    <section className="mx-auto max-w-6xl px-6 py-20">
+      <h2 className="text-3xl font-extrabold tracking-tight text-ink">
+        Whatever you&apos;re working on,{" "}
+        <span className="brand-text">Scout finds your people</span>
+      </h2>
+      <p className="mt-2 max-w-2xl text-[15px] text-body">
+        It is not just for one industry. Here are real things people search for, the
+        more specific, the better Scout does. Yours probably fits right in.
+      </p>
+      <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {USE_CASES.map((u) => (
+          <div
+            key={u.q}
+            className="rounded-2xl border border-warm-border bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft"
+          >
+            <div className="text-[11px] font-bold uppercase tracking-wider text-accent">
+              {u.who}
+            </div>
+            <div className="mt-2 flex items-start gap-2.5 rounded-xl bg-warm-bg/60 px-3 py-2.5">
+              <SearchIcon />
+              <span className="text-sm font-medium leading-snug text-ink">{u.q}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-8">
+        <a
+          href="/app"
+          className="inline-block rounded-xl bg-brand-gradient px-6 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+        >
+          Search for yours
+        </a>
+      </div>
+    </section>
+  );
+}
+
+function SearchIcon() {
+  return (
+    <svg
+      className="mt-0.5 shrink-0"
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="#e8566b"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="11" cy="11" r="7" />
+      <path d="M21 21l-4.3-4.3" />
+    </svg>
   );
 }
 
