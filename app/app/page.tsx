@@ -146,6 +146,7 @@ interface ScoutToolProps {
   // present, ScoutTool hydrates from it instead of localStorage and saves back.
   initialState?: AppState | null;
   onSaveState?: (state: AppState) => void;
+  accountEmail?: string; // the signed-in user's email, for the Account section
 }
 
 // ---- Auth shell: login vs. tool; loads the profile from the account (or, if
@@ -259,6 +260,7 @@ function AuthedShell() {
           dbSaveState(session.user.id, s);
         }, 800);
       }}
+      accountEmail={session.user.email || ""}
     />
   );
 }
@@ -271,6 +273,7 @@ function ScoutTool({
   getToken,
   initialState,
   onSaveState,
+  accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
     "outreach" | "finds" | "dashboard" | "templates" | "profile"
@@ -313,6 +316,17 @@ function ScoutTool({
   const [gmailBusyId, setGmailBusyId] = useState(""); // draft being sent/drafted
   const [gmailSent, setGmailSent] = useState<Record<string, "draft" | "send">>({});
   const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
+
+  // ---- Community benchmarks (aggregate, everyone else) + account ----
+  const [community, setCommunity] = useState<{
+    users: number;
+    avgDenyRate: number | null;
+    avgFinds: number | null;
+    avgDrafts: number | null;
+    avgFitKept: number | null;
+  } | null>(null);
+  const [accountBusy, setAccountBusy] = useState("");
+  const [accountNote, setAccountNote] = useState("");
 
   // True once initial hydration finishes, so the sync effect doesn't fire mid-load.
   const hydratedRef = useRef(false);
@@ -484,8 +498,59 @@ function ScoutTool({
       if (r.ok) setGmail(await r.json());
     } catch {}
   };
+  // Load aggregate community benchmarks (averages only, no individual data).
+  const refreshCommunity = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const r = await fetch("/api/community-stats", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (r.ok) setCommunity(await r.json());
+    } catch {}
+  };
+
+  // Change the account password (Supabase handles it with the current session).
+  const changePassword = async (pw: string) => {
+    if (!supabase || pw.length < 6) {
+      setAccountNote("Password must be at least 6 characters.");
+      return;
+    }
+    setAccountBusy("password");
+    setAccountNote("");
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setAccountBusy("");
+    setAccountNote(error ? error.message : "Password updated.");
+  };
+
+  // Permanently delete the account and all data, then sign out.
+  const deleteAccount = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    setAccountBusy("delete");
+    try {
+      const r = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const j = await r.json();
+      if (r.ok) {
+        await supabase?.auth.signOut();
+      } else {
+        setAccountNote(j.error || "Couldn't delete the account.");
+      }
+    } catch (e: any) {
+      setAccountNote(e?.message || "Couldn't delete the account.");
+    } finally {
+      setAccountBusy("");
+    }
+  };
+
   useEffect(() => {
     refreshGmail();
+    refreshCommunity();
     // Handle the return from Google's consent screen.
     try {
       const p = new URLSearchParams(window.location.search);
@@ -1407,6 +1472,7 @@ function ScoutTool({
           projects={projects}
           categoriesCount={categories.length}
           finds={finds}
+          community={community}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
@@ -1445,6 +1511,12 @@ function ScoutTool({
           onConnectGmail={connectGmail}
           onDisconnectGmail={disconnectGmail}
           onGmailMode={setGmailMode}
+          accountEmail={accountEmail || ""}
+          accountBusy={accountBusy}
+          accountNote={accountNote}
+          onChangePassword={changePassword}
+          onDeleteAccount={deleteAccount}
+          onLogout={onLogout}
         />
       )}
 
@@ -2059,6 +2131,7 @@ function DashboardTab({
   projects,
   categoriesCount,
   finds,
+  community,
   goOutreach,
   goTemplates,
   goProfile,
@@ -2069,6 +2142,13 @@ function DashboardTab({
   projects: Project[];
   categoriesCount: number;
   finds: Find[];
+  community: {
+    users: number;
+    avgDenyRate: number | null;
+    avgFinds: number | null;
+    avgDrafts: number | null;
+    avgFitKept: number | null;
+  } | null;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
@@ -2306,6 +2386,56 @@ function DashboardTab({
         )}
       </section>
 
+      {/* -------- You vs the community (real aggregate averages) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">You vs the community</h2>
+        <p className="mt-1 text-sm text-body/80">
+          How you compare to everyone else using Scout. Aggregate averages only,
+          never anyone&apos;s private data.
+        </p>
+        {!community || community.users < 1 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-white/60 p-8 text-center text-sm text-body/70">
+            Community benchmarks appear here as more people use Scout. Yours are
+            ready, everyone else&apos;s are still coming.
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <CompareRow
+                label="Deny rate"
+                you={learned.decided ? learned.denyRate : null}
+                them={community.avgDenyRate}
+                fmt="pct"
+                lowerBetter
+              />
+              <CompareRow
+                label="Fit sweet spot"
+                you={learned.keptFit}
+                them={community.avgFitKept}
+                fmt="pct"
+              />
+              <CompareRow
+                label="Finds saved"
+                you={finds.length}
+                them={community.avgFinds}
+                fmt="num"
+              />
+              <CompareRow
+                label="Messages drafted"
+                you={activity.drafts}
+                them={community.avgDrafts}
+                fmt="num"
+              />
+            </div>
+            <p className="mt-3 text-xs text-body/60">
+              Based on {community.users} other{" "}
+              {community.users === 1 ? "person" : "people"} using Scout. Small samples
+              are noisy, this sharpens as the community grows.
+            </p>
+          </>
+        )}
+      </section>
+
       {/* -------- How Scout learns YOU -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout is learning you</h2>
@@ -2390,6 +2520,52 @@ function DashboardTab({
         </p>
       </section>
     </main>
+  );
+}
+
+function CompareRow({
+  label,
+  you,
+  them,
+  fmt,
+  lowerBetter = false,
+}: {
+  label: string;
+  you: number | null;
+  them: number | null;
+  fmt: "pct" | "num";
+  lowerBetter?: boolean;
+}) {
+  const f = (v: number | null) =>
+    v == null ? "—" : fmt === "pct" ? `${Math.round(v * 100)}%` : `${Math.round(v)}`;
+  const ahead =
+    you != null && them != null
+      ? lowerBetter
+        ? you < them
+        : you > them
+      : null;
+  return (
+    <div className="rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wider text-body/60">
+          {label}
+        </span>
+        {ahead != null && ahead && (
+          <span className="text-[10px] font-bold text-emerald-600">▲ ahead</span>
+        )}
+      </div>
+      <div className="mt-1.5 flex items-end gap-3">
+        <div>
+          <div className="text-2xl font-extrabold tracking-tight text-ink">{f(you)}</div>
+          <div className="text-[10px] font-medium text-body/60">you</div>
+        </div>
+        <div className="mb-1.5 text-xs text-body/40">vs</div>
+        <div>
+          <div className="text-lg font-bold text-body/70">{f(them)}</div>
+          <div className="text-[10px] font-medium text-body/60">community avg</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -2784,6 +2960,12 @@ function ProfileTab({
   onConnectGmail,
   onDisconnectGmail,
   onGmailMode,
+  accountEmail,
+  accountBusy,
+  accountNote,
+  onChangePassword,
+  onDeleteAccount,
+  onLogout,
 }: {
   name: string;
   bio: string;
@@ -2802,6 +2984,12 @@ function ProfileTab({
   onConnectGmail: () => void;
   onDisconnectGmail: () => void;
   onGmailMode: (mode: "draft" | "send") => void;
+  accountEmail: string;
+  accountBusy: string;
+  accountNote: string;
+  onChangePassword: (pw: string) => void;
+  onDeleteAccount: () => void;
+  onLogout?: () => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -3079,12 +3267,131 @@ function ProfileTab({
           </button>
           <span className="text-xs text-body/70">
             {canConfirm
-              ? "Saved automatically. This is only visible to you."
+              ? "Saved automatically to your account. This is only visible to you."
               : "Add your name to continue. A resume or bio is optional, it just makes messages more personal."}
           </span>
         </div>
       </section>
+
+      {accountEmail && (
+        <AccountCard
+          email={accountEmail}
+          busy={accountBusy}
+          note={accountNote}
+          onChangePassword={onChangePassword}
+          onDeleteAccount={onDeleteAccount}
+          onLogout={onLogout}
+        />
+      )}
     </main>
+  );
+}
+
+/* ---------------- Account section (login info, password, delete) ---------------- */
+function AccountCard({
+  email,
+  busy,
+  note,
+  onChangePassword,
+  onDeleteAccount,
+  onLogout,
+}: {
+  email: string;
+  busy: string;
+  note: string;
+  onChangePassword: (pw: string) => void;
+  onDeleteAccount: () => void;
+  onLogout?: () => void;
+}) {
+  const [pw, setPw] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <h2 className="text-lg font-bold text-ink">Account</h2>
+      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Signed in as
+          </div>
+          <div className="truncate text-sm font-semibold text-ink">{email}</div>
+        </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Log out
+          </button>
+        )}
+      </div>
+
+      {/* Change password */}
+      <div className="mt-5">
+        <Label>Change password</Label>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            placeholder="New password (min 6 characters)"
+            className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+          <button
+            onClick={() => {
+              onChangePassword(pw);
+              setPw("");
+            }}
+            disabled={busy === "password" || pw.length < 6}
+            className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            {busy === "password" ? "Updating…" : "Update"}
+          </button>
+        </div>
+      </div>
+
+      {note && (
+        <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/70 px-4 py-2.5 text-xs font-medium text-ink">
+          {note}
+        </div>
+      )}
+
+      {/* Delete account */}
+      <div className="mt-6 border-t border-warm-border pt-5">
+        <div className="text-sm font-bold text-ink">Delete account</div>
+        <p className="mt-1 text-xs leading-relaxed text-body/70">
+          Permanently removes your account, profile, projects, finds, and any
+          connected email. This can&apos;t be undone.
+        </p>
+        {confirming ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-accent">
+              Really delete everything?
+            </span>
+            <button
+              onClick={onDeleteAccount}
+              disabled={busy === "delete"}
+              className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+            >
+              {busy === "delete" ? "Deleting…" : "Yes, delete my account"}
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            className="mt-3 rounded-lg border border-red-200 px-3.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50"
+          >
+            Delete my account
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
