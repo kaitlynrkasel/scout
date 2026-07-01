@@ -238,8 +238,13 @@ export default function Home() {
   const uc = TEMPLATES[profile.useCase];
   const myCats = categories.filter((c) => c.useCase === profile.useCase);
   const aboutText = [profile.name, profile.bio].filter(Boolean).join(". ").trim();
+  const profileComplete = !!profile.bio.trim(); // must tell Scout who you are first
 
   async function runDiscover() {
+    if (!profileComplete) {
+      setTab("profile");
+      return;
+    }
     resetResults();
     setDiscovering(true);
     try {
@@ -355,7 +360,8 @@ export default function Home() {
           </section>
 
           <main className="mx-auto max-w-6xl px-6 pb-20">
-            {/* ---------------- Request card ---------------- */}
+            {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
+            {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
               <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
                 <div>
@@ -437,6 +443,9 @@ export default function Home() {
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
               </div>
             </section>
+            ) : (
+              <ProfileGate onSetup={() => setTab("profile")} />
+            )}
 
             {error &&
               (apiReason ? (
@@ -484,7 +493,7 @@ export default function Home() {
             )}
 
             {/* ---------------- How it works ---------------- */}
-            {!opps.length && !discovering && (
+            {profileComplete && !opps.length && !discovering && (
               <section className="mt-12">
                 <div className="grid gap-5 sm:grid-cols-3">
                   <Step
@@ -986,6 +995,55 @@ function ProfileTab({
         </p>
       </section>
     </main>
+  );
+}
+
+/* ---------------- Profile gate (shown until a profile exists) ---------------- */
+function ProfileGate({ onSetup }: { onSetup: () => void }) {
+  return (
+    <section className="mt-6 rounded-3xl border border-warm-border bg-white p-8 text-center shadow-soft sm:p-12">
+      <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-gradient">
+        <svg
+          width="26"
+          height="26"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="white"
+          strokeWidth="1.8"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5 20a7 7 0 0 1 14 0" />
+        </svg>
+      </div>
+      <h2 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">
+        First, tell <span className="brand-text">Scout</span> who you are
+      </h2>
+      <p className="mx-auto mt-2.5 max-w-md text-[15px] leading-relaxed text-body">
+        Scout uses your profile to find the right people and write messages that sound
+        like you. Add a few details to start scouting, it takes about a minute.
+      </p>
+      <button
+        onClick={onSetup}
+        className="mt-6 rounded-xl bg-brand-gradient px-7 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+      >
+        Set up your profile
+      </button>
+      <div className="mx-auto mt-7 flex max-w-md flex-wrap justify-center gap-2">
+        {["Pick what you're using Scout for", "Paste your resume or bio", "Start scouting"].map(
+          (s, i) => (
+            <span
+              key={s}
+              className="rounded-full border border-warm-border bg-warm-bg/60 px-3 py-1 text-xs font-medium text-body"
+            >
+              {i + 1}. {s}
+            </span>
+          )
+        )}
+      </div>
+    </section>
   );
 }
 
