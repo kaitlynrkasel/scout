@@ -11,6 +11,9 @@ import {
   supabase,
   loadProfile as dbLoadProfile,
   saveProfile as dbSaveProfile,
+  loadState as dbLoadState,
+  saveState as dbSaveState,
+  type AppState,
 } from "@/lib/supabase";
 
 const OUTREACH_KINDS = [
@@ -107,6 +110,10 @@ interface ScoutToolProps {
   // Returns the current Supabase access token, used to call the Gmail routes.
   // Absent in per-browser (no-auth) mode, which hides the Gmail features.
   getToken?: () => Promise<string | null>;
+  // Account-synced app state (templates/projects/categories/activity). When
+  // present, ScoutTool hydrates from it instead of localStorage and saves back.
+  initialState?: AppState | null;
+  onSaveState?: (state: AppState) => void;
 }
 
 // ---- Auth shell: login vs. tool; loads the profile from the account (or, if
@@ -151,7 +158,9 @@ function AuthedShell() {
   const [checked, setChecked] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "Networking" });
+  const [initialState, setInitialState] = useState<AppState | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!supabase) return;
@@ -172,13 +181,14 @@ function AuthedShell() {
     if (!uid) return;
     let cancelled = false;
     setProfileLoaded(false);
-    dbLoadProfile(uid).then((p) => {
+    Promise.all([dbLoadProfile(uid), dbLoadState(uid)]).then(([p, s]) => {
       if (cancelled) return;
       setInitial(
         p
           ? { name: p.name, bio: p.bio, useCase: p.useCase || "Networking", linkedin: p.linkedin || "" }
           : { name: "", bio: "", useCase: "Networking", linkedin: "" }
       );
+      setInitialState(s);
       setProfileLoaded(true);
     });
     return () => {
@@ -210,6 +220,13 @@ function AuthedShell() {
         const { data } = await supabase!.auth.getSession();
         return data.session?.access_token ?? null;
       }}
+      initialState={initialState}
+      onSaveState={(s) => {
+        if (stateTimer.current) clearTimeout(stateTimer.current);
+        stateTimer.current = setTimeout(() => {
+          dbSaveState(session.user.id, s);
+        }, 800);
+      }}
     />
   );
 }
@@ -220,6 +237,8 @@ function ScoutTool({
   onLogout,
   showLogout,
   getToken,
+  initialState,
+  onSaveState,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
     "outreach" | "dashboard" | "templates" | "profile"
@@ -260,32 +279,50 @@ function ScoutTool({
   const [gmailSent, setGmailSent] = useState<Record<string, "draft" | "send">>({});
   const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
 
+  // True once initial hydration finishes, so the sync effect doesn't fire mid-load.
+  const hydratedRef = useRef(false);
+
   // Load everything, then make sure at least one project exists (migrating any
-  // pre-project categories into a default project the first time).
+  // pre-project categories into a default project the first time). When signed
+  // in with account-synced state, hydrate from that; otherwise from localStorage
+  // (per-browser mode, or an account's very first login which then seeds the DB).
   useEffect(() => {
     const prof: Profile = initialProfile;
     let cats: Category[] = [];
-    try {
-      const c = localStorage.getItem(CAT_KEY);
-      if (c) cats = JSON.parse(c);
-    } catch {}
     let projs: Project[] = [];
-    try {
-      const p = localStorage.getItem(PROJECTS_KEY);
-      if (p) projs = JSON.parse(p);
-    } catch {}
     let active = "";
-    try {
-      active = localStorage.getItem(ACTIVE_KEY) || "";
-    } catch {}
-    try {
-      const t = localStorage.getItem(TPL_KEY);
-      if (t) setMyTemplates(JSON.parse(t));
-    } catch {}
-    try {
-      const a = localStorage.getItem(ACT_KEY);
-      if (a) setActivity({ ...ZERO_ACTIVITY, ...JSON.parse(a) });
-    } catch {}
+    let tpls: OutreachTemplate[] = [];
+    let act: Partial<Activity> | null = null;
+
+    if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
+      cats = initialState.categories || [];
+      projs = initialState.projects || [];
+      active = initialState.activeId || "";
+      tpls = initialState.templates || [];
+      act = initialState.activity || null;
+    } else {
+      try {
+        const c = localStorage.getItem(CAT_KEY);
+        if (c) cats = JSON.parse(c);
+      } catch {}
+      try {
+        const p = localStorage.getItem(PROJECTS_KEY);
+        if (p) projs = JSON.parse(p);
+      } catch {}
+      try {
+        active = localStorage.getItem(ACTIVE_KEY) || "";
+      } catch {}
+      try {
+        const t = localStorage.getItem(TPL_KEY);
+        if (t) tpls = JSON.parse(t);
+      } catch {}
+      try {
+        const a = localStorage.getItem(ACT_KEY);
+        if (a) act = JSON.parse(a);
+      } catch {}
+    }
+    setMyTemplates(tpls);
+    if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -325,6 +362,20 @@ function ScoutTool({
       setCatId("");
       setGoal(ucInfo(proj.useCase).exampleGoal);
     }
+  }, []);
+
+  // Once hydrated, mirror app state to the account (debounced by the parent) so
+  // templates, projects, categories, and activity follow the user across devices.
+  useEffect(() => {
+    if (!onSaveState || !hydratedRef.current) return;
+    onSaveState({ templates: myTemplates, projects, categories, activeId, activity });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myTemplates, projects, categories, activeId, activity]);
+
+  // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
+  // sync only fires on genuine post-load changes, never on the initial values.
+  useEffect(() => {
+    hydratedRef.current = true;
   }, []);
 
   function seedForProject(projectId: string, uc: string): Category[] {

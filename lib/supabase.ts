@@ -49,3 +49,34 @@ export async function saveProfile(userId: string, p: DbProfile): Promise<void> {
     updated_at: new Date().toISOString(),
   });
 }
+
+// The rest of the user's app state (templates, projects, categories, activity)
+// stored as one JSON blob per user, so it syncs across their devices like the
+// profile does. Read/written with the user's own session (RLS = own row only).
+export interface AppState {
+  templates?: any[];
+  projects?: any[];
+  categories?: any[];
+  activeId?: string;
+  activity?: any;
+}
+
+export async function loadState(userId: string): Promise<AppState | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("user_state")
+    .select("data")
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error || !data) return null;
+  return (data.data || {}) as AppState;
+}
+
+export async function saveState(userId: string, state: AppState): Promise<void> {
+  if (!supabase) return;
+  await supabase.from("user_state").upsert({
+    user_id: userId,
+    data: state,
+    updated_at: new Date().toISOString(),
+  });
+}
