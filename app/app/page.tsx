@@ -438,7 +438,7 @@ export default function Home() {
                   disabled={discovering || !goal.trim()}
                   className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                 >
-                  {discovering ? "Finding…" : `Find ${uc.targetNoun}`}
+                  {discovering ? "Scouting…" : "Scout"}
                 </button>
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
               </div>
