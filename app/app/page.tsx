@@ -1375,6 +1375,7 @@ function ScoutTool({
           templates={myTemplates}
           projects={projects}
           categoriesCount={categories.length}
+          finds={finds}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
@@ -1944,6 +1945,56 @@ function FindCard({
   );
 }
 
+/* ---------------- Preference / deny-rate analytics from real finds ---------------- */
+function learnedFromFinds(finds: Find[]) {
+  const decided = finds.filter((f) => f.status !== "new");
+  const denied = decided.filter((f) => f.status === "denied");
+  const kept = decided.filter((f) => f.status === "drafted" || f.status === "sent");
+  const denyRate = decided.length ? denied.length / decided.length : 0;
+
+  // Real trend: split the decisions you've made in half by time and compare the
+  // deny rate of the earlier half vs the recent half. Only shown with enough data.
+  let trend: { early: number; recent: number; delta: number } | null = null;
+  if (decided.length >= 6) {
+    const sorted = decided.slice().sort((a, b) => (a.addedAt || 0) - (b.addedAt || 0));
+    const mid = Math.floor(sorted.length / 2);
+    const older = sorted.slice(0, mid);
+    const newer = sorted.slice(mid);
+    const rate = (arr: Find[]) =>
+      arr.length ? arr.filter((f) => f.status === "denied").length / arr.length : 0;
+    const early = rate(older);
+    const recent = rate(newer);
+    trend = { early, recent, delta: recent - early };
+  }
+
+  const tally = (arr: Find[]) => {
+    const m: Record<string, number> = {};
+    for (const f of arr) {
+      const c = f.opp.channel || "Unknown";
+      m[c] = (m[c] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  };
+  const avgFit = (arr: Find[]) => {
+    const fs = arr
+      .map((f) => f.opp.fitScore)
+      .filter((v): v is number => typeof v === "number");
+    return fs.length ? fs.reduce((a, b) => a + b, 0) / fs.length : null;
+  };
+
+  return {
+    decided: decided.length,
+    denied: denied.length,
+    kept: kept.length,
+    denyRate,
+    trend,
+    keptChannels: tally(kept),
+    deniedChannels: tally(denied),
+    keptFit: avgFit(kept),
+    deniedFit: avgFit(denied),
+  };
+}
+
 /* ---------------- Dashboard tab ---------------- */
 function DashboardTab({
   activity,
@@ -1951,6 +2002,7 @@ function DashboardTab({
   templates,
   projects,
   categoriesCount,
+  finds,
   goOutreach,
   goTemplates,
   goProfile,
@@ -1960,10 +2012,12 @@ function DashboardTab({
   templates: OutreachTemplate[];
   projects: Project[];
   categoriesCount: number;
+  finds: Find[];
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
 }) {
+  const learned = learnedFromFinds(finds);
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -2067,6 +2121,134 @@ function DashboardTab({
           started.
         </p>
       )}
+
+      {/* -------- What Scout has learned about your taste (real, from finds) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">What Scout knows about your taste</h2>
+        <p className="mt-1 text-sm text-body/80">
+          Built from the finds you keep and pass on, all your own data. The more you
+          review, the sharper Scout&apos;s picture of who you actually want.
+        </p>
+
+        {learned.decided === 0 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-white/60 p-8 text-center text-sm text-body/70">
+            Nothing learned yet. As you draft messages and set aside finds that
+            aren&apos;t a fit on the{" "}
+            <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
+              Finds
+            </button>{" "}
+            tab, your deny rate and preferences show up here.
+          </div>
+        ) : (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            {/* Deny rate + trend */}
+            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                Your deny rate
+              </div>
+              <div className="mt-1 flex items-end gap-2">
+                <span className="text-3xl font-extrabold tracking-tight text-ink">
+                  {Math.round(learned.denyRate * 100)}%
+                </span>
+                {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
+                  <span
+                    className={`mb-1 text-xs font-bold ${
+                      learned.trend.delta < 0 ? "text-emerald-600" : "text-body/60"
+                    }`}
+                  >
+                    {learned.trend.delta < 0 ? "▼ down" : "▲ up"} from{" "}
+                    {Math.round(learned.trend.early * 100)}%
+                  </span>
+                )}
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                {learned.trend
+                  ? learned.trend.delta < -0.01
+                    ? "Fewer of Scout's finds are misses now than when you started, it's getting your taste."
+                    : learned.trend.delta > 0.01
+                    ? "Recent finds are landing less often. Adjusting your goal wording or project context can sharpen them."
+                    : "Holding steady as Scout learns what fits."
+                  : `You've set aside ${learned.denied} of ${learned.decided} you reviewed. A trend appears once you've reviewed a few more.`}
+              </p>
+            </div>
+
+            {/* Fit sweet spot */}
+            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                Your fit sweet spot
+              </div>
+              {learned.keptFit != null ? (
+                <>
+                  <div className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
+                    {Math.round(learned.keptFit * 100)}%
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                    Average fit of the people you reach out to
+                    {learned.deniedFit != null && (
+                      <>
+                        {" "}
+                        vs {Math.round(learned.deniedFit * 100)}% for the ones you pass.
+                        Scout leans toward your range.
+                      </>
+                    )}
+                  </p>
+                </>
+              ) : (
+                <p className="mt-2 text-xs text-body/70">
+                  Draft a few finds and this shows the fit level you gravitate toward.
+                </p>
+              )}
+            </div>
+
+            {/* Preferences */}
+            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
+              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                Your preferences so far
+              </div>
+              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <div className="text-xs font-semibold text-emerald-700">You reach out to</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {learned.keptChannels.length ? (
+                      learned.keptChannels.slice(0, 4).map(([c, n]) => (
+                        <span
+                          key={c}
+                          className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
+                        >
+                          {c} · {n}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-body/50">nothing yet</span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs font-semibold text-body/60">You tend to pass on</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {learned.deniedChannels.length ? (
+                      learned.deniedChannels.slice(0, 4).map(([c, n]) => (
+                        <span
+                          key={c}
+                          className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                        >
+                          {c} · {n}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-body/50">nothing yet</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="mt-3 text-xs text-body/60">
+                Scout uses these patterns to rank future finds toward the kind you
+                actually act on.
+              </p>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* -------- How Scout learns YOU -------- */}
       <section className="mt-10">
