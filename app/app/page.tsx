@@ -1229,10 +1229,13 @@ function ProfileTab({
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
 
-  // When a resume is read: keep the full text as the bio right away (so nothing
-  // is lost even if the read-back fails), then ask Scout to fill name + use case.
-  async function handleResume(text: string) {
-    onBio(text);
+  // Read some source text (a resume, a LinkedIn PDF/About section, a bio) and let
+  // Scout fill in name + use case from it. keepBio=false when the text is already
+  // in the bio box (the "read this" button), so we don't stomp the user's edits.
+  async function readAndFill(text: string, keepBio = true) {
+    const t = (text || "").trim();
+    if (!t) return;
+    if (keepBio) onBio(t);
     setNote("");
     setAutofilled(false);
     setParsing(true);
@@ -1240,18 +1243,20 @@ function ProfileTab({
       const res = await fetch("/api/parse-profile", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text: t }),
       });
       const data = await res.json();
       if (res.ok && (data.name || data.useCase)) {
         onAutofill(data.name, data.useCase);
         setAutofilled(true);
-        setNote("Scout filled these in from your resume. Edit anything that's off.");
+        setNote("Scout filled these in for you. Edit anything that's off.");
+      } else if (res.ok) {
+        setNote("Saved it below. Add your name and use case to finish.");
       } else {
-        setNote("Saved your resume below. Add your name and use case to finish.");
+        setNote(data?.error || "Couldn't read that. Add your details below.");
       }
     } catch {
-      setNote("Saved your resume text below. Add your name and use case to finish.");
+      setNote("Saved it below. Add your name and use case to finish.");
     } finally {
       setParsing(false);
     }
@@ -1263,22 +1268,27 @@ function ProfileTab({
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Drop in your resume and Scout fills the rest for you. Everything stays
-        editable, and it shapes who we find and how your messages sound.
+        Drop in your resume or LinkedIn and Scout fills the rest for you. Everything
+        stays editable, and it shapes who we find and how your messages sound.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-        {/* -------- Resume first: read it and auto-populate -------- */}
-        <Label>Start with your resume</Label>
+        {/* -------- Resume / LinkedIn first: read it and auto-populate -------- */}
+        <Label>Start with your resume or LinkedIn</Label>
         <FileDrop
           label={
-            parsing ? "Reading your resume…" : "Drop your resume here, or click to upload"
+            parsing
+              ? "Reading and filling in your profile…"
+              : "Drop your resume or LinkedIn PDF here, or click to upload"
           }
-          onText={handleResume}
+          onText={(t) => readAndFill(t)}
         />
         <p className="mt-2 text-xs leading-relaxed text-body/70">
-          Scout reads it and fills in your name, use case, and background below. No
-          resume? Just fill the fields in yourself.
+          Scout reads it and fills in your name, use case, and background below.{" "}
+          <span className="font-semibold text-body">From LinkedIn:</span> open your
+          profile, tap <span className="font-semibold text-body">More → Save to PDF</span>,
+          and drop that file here. (LinkedIn blocks apps from reading your profile from
+          just a link, so this is the reliable way in.)
         </p>
         {parsing && (
           <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-accent">
@@ -1344,16 +1354,30 @@ function ProfileTab({
               placeholder="linkedin.com/in/yourname"
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
+            <p className="mt-1.5 text-xs leading-relaxed text-body/60">
+              Saved to your profile and used to personalize outreach. To fill your
+              profile <span className="font-semibold">from</span> LinkedIn, upload your
+              LinkedIn PDF above or paste your About section below.
+            </p>
           </div>
         </div>
 
         <div className="mt-5">
-          <Label>Resume, bio, or background</Label>
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <Label className="mb-0">Resume, LinkedIn, or bio</Label>
+            <button
+              onClick={() => readAndFill(bio, false)}
+              disabled={!bio.trim() || parsing}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              {parsing ? "Reading…" : "Read this & fill in my profile"}
+            </button>
+          </div>
           <textarea
             value={bio}
             onChange={(e) => onBio(e.target.value)}
             rows={11}
-            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: a short bio, your company's about page, your experience. The more you give, the more personal your outreach becomes."
+            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Then tap 'Read this & fill in my profile'. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
