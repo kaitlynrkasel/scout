@@ -65,7 +65,8 @@ function suggestionsFor(useCase: string): { name: string; goal: string }[] {
 const TPL_KEY = "cue_templates";
 const PROFILE_KEY = "cue_profile";
 const CAT_KEY = "cue_categories";
-const SEED_KEY = "cue_seeded";
+const PROJECTS_KEY = "cue_projects";
+const ACTIVE_KEY = "cue_active_project";
 
 interface Profile {
   name: string;
@@ -73,11 +74,20 @@ interface Profile {
   useCase: string; // free text; matched to a preset when it can be, else read as-is
   linkedin?: string;
 }
+// A project is a self-contained workspace: its own use case, its own context
+// (e.g. the specific artist you're reaching out for), and its own categories.
+// A manager runs one project per artist; a job seeker might have just one.
+interface Project {
+  id: string;
+  name: string;
+  useCase: string;
+  context: string; // who this outreach is for — fed into discovery + drafting
+}
 interface Category {
   id: string;
   name: string;
   goal: string;
-  useCase: string; // stored as ucKey() so categories bucket by normalized use case
+  projectId: string; // categories belong to a project
 }
 
 interface ScoutToolProps {
@@ -194,6 +204,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   // ---- Outreach state ----
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   const [editingCats, setEditingCats] = useState(false); // category manager open?
+  const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -211,9 +222,11 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   const [mtText, setMtText] = useState("");
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [seeded, setSeeded] = useState<string[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [activeId, setActiveId] = useState<string>("");
 
-  // Load everything + seed suggested categories for the active use case.
+  // Load everything, then make sure at least one project exists (migrating any
+  // pre-project categories into a default project the first time).
   useEffect(() => {
     const prof: Profile = initialProfile;
     let cats: Category[] = [];
@@ -221,42 +234,66 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       const c = localStorage.getItem(CAT_KEY);
       if (c) cats = JSON.parse(c);
     } catch {}
-    let sd: string[] = [];
+    let projs: Project[] = [];
     try {
-      const s = localStorage.getItem(SEED_KEY);
-      if (s) sd = JSON.parse(s);
+      const p = localStorage.getItem(PROJECTS_KEY);
+      if (p) projs = JSON.parse(p);
+    } catch {}
+    let active = "";
+    try {
+      active = localStorage.getItem(ACTIVE_KEY) || "";
     } catch {}
     try {
       const t = localStorage.getItem(TPL_KEY);
       if (t) setMyTemplates(JSON.parse(t));
     } catch {}
 
-    const key = ucKey(prof.useCase);
-    if (!sd.includes(key)) {
-      cats = [...cats, ...seedFor(prof.useCase)];
-      sd = [...sd, key];
+    if (!projs.length) {
+      // First run under the projects model. Create one default project and adopt
+      // any existing categories (which used a `useCase` field) into it.
+      const def: Project = {
+        id: `proj-${Date.now()}`,
+        name: prof.name ? `${prof.name}` : "My outreach",
+        useCase: prof.useCase,
+        context: "",
+      };
+      const migrated = cats.map((c: any) => ({
+        id: c.id,
+        name: c.name,
+        goal: c.goal,
+        projectId: def.id,
+      }));
+      cats = migrated.length ? migrated : seedForProject(def.id, def.useCase);
+      projs = [def];
+      active = def.id;
+      saveProjectsRaw(projs);
+      saveActiveRaw(active);
       saveCats(cats);
-      saveSeeded(sd);
     }
+    if (!projs.some((p) => p.id === active)) active = projs[0].id;
+
     setProfile(prof);
+    setProjects(projs);
+    setActiveId(active);
     setCategories(cats);
-    setSeeded(sd);
-    const mine = cats.filter((c) => c.useCase === key);
+
+    const proj = projs.find((p) => p.id === active) || projs[0];
+    const mine = cats.filter((c) => c.projectId === proj.id);
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
     } else {
-      setGoal(ucInfo(prof.useCase).exampleGoal);
+      setCatId("");
+      setGoal(ucInfo(proj.useCase).exampleGoal);
     }
   }, []);
 
-  function seedFor(uc: string): Category[] {
-    const key = ucKey(uc);
+  function seedForProject(projectId: string, uc: string): Category[] {
     return suggestionsFor(uc).map((s, i) => ({
-      id: `sug-${key}-${i}`,
+      id: `sug-${projectId}-${i}`,
       name: s.name,
       goal: s.goal,
-      useCase: key,
+      projectId,
     }));
   }
   const saveTpls = (n: OutreachTemplate[]) => {
@@ -281,10 +318,18 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       localStorage.setItem(CAT_KEY, JSON.stringify(n));
     } catch {}
   };
-  const saveSeeded = (n: string[]) => {
-    setSeeded(n);
+  const saveProjectsRaw = (n: Project[]) => {
     try {
-      localStorage.setItem(SEED_KEY, JSON.stringify(n));
+      localStorage.setItem(PROJECTS_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  const saveProjects = (n: Project[]) => {
+    setProjects(n);
+    saveProjectsRaw(n);
+  };
+  const saveActiveRaw = (id: string) => {
+    try {
+      localStorage.setItem(ACTIVE_KEY, id);
     } catch {}
   };
 
@@ -303,25 +348,75 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     setApiReason(data?.credit ? data.reason || "credits" : null);
   }
 
-  // Change the use case (from Profile). Seeds its categories the first time.
+  // From the Profile tab: set the personal default use case (used for new
+  // projects) and apply it to the project you're currently in.
   function changeUseCase(uc: string) {
-    const key = ucKey(uc);
     patchProfile({ useCase: uc });
-    let cats = categories;
-    if (!seeded.includes(key)) {
-      cats = [...categories, ...seedFor(uc)];
-      saveCats(cats);
-      saveSeeded([...seeded, key]);
+    if (activeId) setProjectUseCase(activeId, uc);
+  }
+
+  // Set a project's use case; seed its categories if it has none yet.
+  function setProjectUseCase(id: string, uc: string) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, useCase: uc } : p)));
+    if (!categories.some((c) => c.projectId === id)) {
+      const seeded = seedForProject(id, uc);
+      saveCats([...categories, ...seeded]);
+      if (id === activeId && seeded.length) {
+        setCatId(seeded[0].id);
+        setGoal(seeded[0].goal);
+      }
     }
-    const mine = cats.filter((c) => c.useCase === key);
+  }
+
+  // ---- Projects ----
+  function selectProject(id: string) {
+    setActiveId(id);
+    saveActiveRaw(id);
+    setEditingProjects(false);
+    const proj = projects.find((p) => p.id === id);
+    const mine = categories.filter((c) => c.projectId === id);
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
     } else {
       setCatId("");
-      setGoal(ucInfo(uc).exampleGoal);
+      setGoal(proj ? ucInfo(proj.useCase).exampleGoal : "");
     }
     resetResults();
+  }
+
+  function addProject(name: string) {
+    const nm = name.trim();
+    if (!nm) return;
+    const activeProj = projects.find((p) => p.id === activeId);
+    const useCase = activeProj ? activeProj.useCase : profile.useCase;
+    const proj: Project = { id: `proj-${Date.now()}`, name: nm, useCase, context: "" };
+    saveProjects([...projects, proj]);
+    const seeded = seedForProject(proj.id, useCase);
+    saveCats([...categories, ...seeded]);
+    setActiveId(proj.id);
+    saveActiveRaw(proj.id);
+    setCatId(seeded[0]?.id || "");
+    setGoal(seeded[0]?.goal || "");
+    resetResults();
+  }
+
+  function renameProject(id: string, name: string) {
+    const nm = name.trim();
+    if (!nm) return;
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, name: nm } : p)));
+  }
+
+  function removeProject(id: string) {
+    if (projects.length <= 1) return; // always keep at least one project
+    const nextProjects = projects.filter((p) => p.id !== id);
+    saveProjects(nextProjects);
+    saveCats(categories.filter((c) => c.projectId !== id));
+    if (activeId === id) selectProject(nextProjects[0].id);
+  }
+
+  function setProjectContext(id: string, context: string) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, context } : p)));
   }
 
   // Prefill identity fields after Scout reads a resume. Keeps a name the user
@@ -346,7 +441,8 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     resetResults();
   }
 
-  // "+ Save Search": save the current goal text as a new named category.
+  // "+ Save Search": save the current goal text as a new named category in the
+  // active project.
   function addCategory() {
     const name = window.prompt("Name this search:", "");
     if (!name || !name.trim()) return;
@@ -354,7 +450,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       id: `cat-${Date.now()}`,
       name: name.trim(),
       goal: goal,
-      useCase: ucKey(profile.useCase),
+      projectId: activeId,
     };
     saveCats([...categories, c]);
     setCatId(c.id);
@@ -368,7 +464,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       id: `cat-${Date.now()}`,
       name: nm,
       goal: "",
-      useCase: ucKey(profile.useCase),
+      projectId: activeId,
     };
     saveCats([...categories, c]);
     setCatId(c.id);
@@ -387,7 +483,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     const next = categories.filter((c) => c.id !== id);
     saveCats(next);
     if (catId === id) {
-      const mine = next.filter((c) => c.useCase === ucKey(profile.useCase));
+      const mine = next.filter((c) => c.projectId === activeId);
       if (mine.length) {
         setCatId(mine[0].id);
         setGoal(mine[0].goal);
@@ -406,12 +502,19 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     setMtText("");
   }
 
-  const uc = ucInfo(profile.useCase);
-  const myCats = categories.filter((c) => c.useCase === ucKey(profile.useCase));
+  const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
+  const activeUseCase = activeProject ? activeProject.useCase : profile.useCase;
+  const uc = ucInfo(activeUseCase);
+  const myCats = activeProject
+    ? categories.filter((c) => c.projectId === activeProject.id)
+    : [];
   const aboutText = [
     profile.name,
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
+    activeProject && activeProject.context
+      ? "This outreach is on behalf of / for: " + activeProject.context
+      : "",
   ]
     .filter(Boolean)
     .join(". ")
@@ -429,7 +532,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, useCase: profile.useCase }),
+        body: JSON.stringify({ goal, about: aboutText, useCase: activeUseCase }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -462,7 +565,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
         body: JSON.stringify({
           opportunities: chosen,
           about: aboutText,
-          useCase: profile.useCase,
+          useCase: activeUseCase,
           templates: myTemplates,
         }),
       });
@@ -551,6 +654,67 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+              {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
+              <div className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]">
+                <div>
+                  <Label>Project</Label>
+                  <div className="relative">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={activeId}
+                        onChange={(e) => selectProject(e.target.value)}
+                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      >
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => setEditingProjects(true)}
+                        title="Manage projects"
+                        aria-label="Manage projects"
+                        className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                      >
+                        <PencilIcon />
+                      </button>
+                    </div>
+                    {editingProjects && (
+                      <CategoryManager
+                        cats={projects}
+                        onAdd={addProject}
+                        onRename={renameProject}
+                        onRemove={removeProject}
+                        onClose={() => setEditingProjects(false)}
+                        title="Your projects"
+                        addPlaceholder="New project (e.g. an artist)"
+                        emptyText="No projects yet."
+                      />
+                    )}
+                  </div>
+                  <p className="mt-2.5 text-xs leading-relaxed text-body/70">
+                    One workspace per artist, client, or goal, each with its own
+                    categories and searches. Tap the pencil to add or remove projects.
+                  </p>
+                </div>
+
+                <div>
+                  <Label>Who this outreach is for (optional)</Label>
+                  <textarea
+                    value={activeProject?.context || ""}
+                    onChange={(e) => setProjectContext(activeId, e.target.value)}
+                    rows={2}
+                    placeholder="e.g. Anna Belt — Nashville folk-rock singer-songwriter, new single out now, for fans of Stevie Nicks and Maggie Rogers."
+                    className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  />
+                  <p className="mt-1.5 text-xs text-body/70">
+                    Scout weaves this into every message for this project, so pitches
+                    sound like they're really about {activeProject?.name || "them"}.
+                  </p>
+                </div>
+              </div>
+
               <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
                 <div>
                   <Label>Category of search</Label>
@@ -596,14 +760,12 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                     </button>
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-body/70">
-                    Categories are suggested from your{" "}
-                    <button
-                      onClick={() => setTab("profile")}
-                      className="font-semibold text-accent hover:underline"
-                    >
-                      Profile
-                    </button>
-                    . Tap the pencil to add, rename, or remove them from your dropdown.
+                    Categories belong to{" "}
+                    <span className="font-semibold text-body">
+                      {activeProject?.name || "this project"}
+                    </span>
+                    . Tap the pencil to add, rename, or remove them from this
+                    project&apos;s dropdown.
                   </p>
                 </div>
 
@@ -1653,19 +1815,27 @@ function WarnIcon() {
   );
 }
 
-/* ---------------- Category manager (pencil popover: add / rename / remove) ---------------- */
+/* ---------------- List manager (pencil popover: add / rename / remove) ---------------- */
 function CategoryManager({
   cats,
   onAdd,
   onRename,
   onRemove,
   onClose,
+  title = "Edit categories",
+  addPlaceholder = "New category name",
+  emptyText = "No categories yet. Add one below.",
+  canRemove = true,
 }: {
   cats: { id: string; name: string }[];
   onAdd: (name: string) => void;
   onRename: (id: string, name: string) => void;
   onRemove: (id: string) => void;
   onClose: () => void;
+  title?: string;
+  addPlaceholder?: string;
+  emptyText?: string;
+  canRemove?: boolean;
 }) {
   const [newName, setNewName] = useState("");
   const ref = useRef<HTMLDivElement>(null);
@@ -1691,7 +1861,7 @@ function CategoryManager({
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-          Edit categories
+          {title}
         </span>
         <button
           onClick={onClose}
@@ -1703,9 +1873,7 @@ function CategoryManager({
 
       <div className="max-h-56 space-y-1.5 overflow-auto">
         {cats.length === 0 && (
-          <p className="px-1 py-2 text-xs text-body/60">
-            No categories yet. Add one below.
-          </p>
+          <p className="px-1 py-2 text-xs text-body/60">{emptyText}</p>
         )}
         {cats.map((c) => (
           <div key={c.id} className="flex items-center gap-1.5">
@@ -1720,14 +1888,16 @@ function CategoryManager({
               }}
               className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
             />
-            <button
-              onClick={() => onRemove(c.id)}
-              title={`Remove ${c.name}`}
-              aria-label={`Remove ${c.name}`}
-              className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-            >
-              <TrashIcon />
-            </button>
+            {canRemove && cats.length > 1 && (
+              <button
+                onClick={() => onRemove(c.id)}
+                title={`Remove ${c.name}`}
+                aria-label={`Remove ${c.name}`}
+                className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+              >
+                <TrashIcon />
+              </button>
+            )}
           </div>
         ))}
       </div>
@@ -1739,7 +1909,7 @@ function CategoryManager({
           onKeyDown={(e) => {
             if (e.key === "Enter") add();
           }}
-          placeholder="New category name"
+          placeholder={addPlaceholder}
           className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
         />
         <button
