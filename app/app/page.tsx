@@ -71,6 +71,7 @@ const CAT_KEY = "cue_categories";
 const PROJECTS_KEY = "cue_projects";
 const ACTIVE_KEY = "cue_active_project";
 const ACT_KEY = "cue_activity";
+const FINDS_KEY = "cue_finds";
 
 interface Activity {
   searches: number;
@@ -101,6 +102,37 @@ interface Category {
   goal: string;
   projectId: string; // categories belong to a project
 }
+
+// A find is a saved person/opportunity you can work through: draft, deny, or mark
+// contacted. Finds accumulate across searches and persist per project.
+type FindStatus = "new" | "drafted" | "sent" | "denied";
+interface Find {
+  id: string; // stable dedup key: project + normalized name + host
+  projectId: string;
+  status: FindStatus;
+  opp: Opportunity;
+  draft?: Draft;
+  addedAt: number;
+}
+
+function normNameKey(s: string): string {
+  return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+function urlHostKey(u: string): string {
+  const m = String(u || "").match(/^https?:\/\/([^/?#]+)/i);
+  return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
+}
+function findKey(projectId: string, o: Opportunity): string {
+  return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
+}
+
+const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "drafted", label: "Drafted" },
+  { key: "sent", label: "Sent" },
+  { key: "denied", label: "Denied" },
+  { key: "all", label: "All" },
+];
 
 interface ScoutToolProps {
   initialProfile: Profile;
@@ -241,7 +273,7 @@ function ScoutTool({
   onSaveState,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "dashboard" | "templates" | "profile"
+    "outreach" | "finds" | "dashboard" | "templates" | "profile"
   >("outreach");
 
   // ---- Outreach state ----
@@ -268,6 +300,9 @@ function ScoutTool({
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
+  const [finds, setFinds] = useState<Find[]>([]);
+  const [findFilter, setFindFilter] = useState<FindStatus | "all">("new");
+  const [findDraftingId, setFindDraftingId] = useState(""); // find being drafted
 
   // ---- Gmail connection ----
   const [gmail, setGmail] = useState<{
@@ -293,6 +328,7 @@ function ScoutTool({
     let active = "";
     let tpls: OutreachTemplate[] = [];
     let act: Partial<Activity> | null = null;
+    let savedFinds: Find[] = [];
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -300,6 +336,7 @@ function ScoutTool({
       active = initialState.activeId || "";
       tpls = initialState.templates || [];
       act = initialState.activity || null;
+      savedFinds = initialState.finds || [];
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -320,9 +357,14 @@ function ScoutTool({
         const a = localStorage.getItem(ACT_KEY);
         if (a) act = JSON.parse(a);
       } catch {}
+      try {
+        const f = localStorage.getItem(FINDS_KEY);
+        if (f) savedFinds = JSON.parse(f);
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
+    setFinds(Array.isArray(savedFinds) ? savedFinds : []);
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -368,9 +410,9 @@ function ScoutTool({
   // templates, projects, categories, and activity follow the user across devices.
   useEffect(() => {
     if (!onSaveState || !hydratedRef.current) return;
-    onSaveState({ templates: myTemplates, projects, categories, activeId, activity });
+    onSaveState({ templates: myTemplates, projects, categories, activeId, activity, finds });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity]);
+  }, [myTemplates, projects, categories, activeId, activity, finds]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -406,6 +448,12 @@ function ScoutTool({
     setCategories(n);
     try {
       localStorage.setItem(CAT_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  const saveFinds = (n: Find[]) => {
+    setFinds(n);
+    try {
+      localStorage.setItem(FINDS_KEY, JSON.stringify(n));
     } catch {}
   };
   // Bump real activity counters (searches run, people found, drafts written,
@@ -495,11 +543,12 @@ function ScoutTool({
     setGmail({ connected: false });
   };
 
-  // Create a draft in / send from the user's Gmail for one message.
-  const sendViaGmail = async (d: Draft) => {
-    if (!getToken) return;
+  // Create a draft in / send from the user's Gmail for one message. Returns the
+  // mode ("draft"/"send") on success, or null on failure.
+  const sendViaGmail = async (d: Draft): Promise<"draft" | "send" | null> => {
+    if (!getToken) return null;
     const token = await getToken();
-    if (!token) return;
+    if (!token) return null;
     setError("");
     setGmailBusyId(d.opportunityId);
     try {
@@ -512,11 +561,13 @@ function ScoutTool({
       if (r.ok) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
-      } else {
-        reportError(j);
+        return j.mode as "draft" | "send";
       }
+      reportError(j);
+      return null;
     } catch (e: any) {
       setError(e?.message || "Gmail request failed.");
+      return null;
     } finally {
       setGmailBusyId("");
     }
@@ -725,6 +776,78 @@ function ScoutTool({
     .trim();
   const profileComplete = !!profile.bio.trim(); // must tell Scout who you are first
 
+  // Finds belonging to the active project (newest first), and the count still to work.
+  const myFinds = activeProject
+    ? finds.filter((f) => f.projectId === activeProject.id)
+    : [];
+  const newFindCount = myFinds.filter((f) => f.status === "new").length;
+
+  // ---- Finds pipeline ----
+  // Add newly discovered people to the active project's finds (deduped, keeping
+  // any status/draft already set). Returns how many were genuinely new.
+  function mergeFinds(newOpps: Opportunity[]): number {
+    const existing = new Set(finds.map((f) => f.id));
+    const fresh: Find[] = [];
+    for (const o of newOpps) {
+      const id = findKey(activeId, o);
+      if (existing.has(id)) continue;
+      existing.add(id);
+      fresh.push({ id, projectId: activeId, status: "new", opp: o, addedAt: Date.now() });
+    }
+    if (fresh.length) saveFinds([...fresh, ...finds]);
+    return fresh.length;
+  }
+
+  function setFindStatus(id: string, status: FindStatus) {
+    saveFinds(finds.map((f) => (f.id === id ? { ...f, status } : f)));
+  }
+  function removeFind(id: string) {
+    saveFinds(finds.filter((f) => f.id !== id));
+  }
+
+  // Draft a message for a single find and store it on that find.
+  async function draftFind(find: Find) {
+    setError("");
+    setFindDraftingId(find.id);
+    try {
+      const res = await fetch("/api/draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opportunities: [find.opp],
+          about: aboutText,
+          useCase: activeUseCase,
+          templates: myTemplates,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        reportError(data);
+        return;
+      }
+      const draft: Draft | undefined = (data.drafts || [])[0];
+      if (draft) {
+        saveFinds(
+          finds.map((f) =>
+            f.id === find.id ? { ...f, draft, status: "drafted" } : f
+          )
+        );
+        bumpActivity({ drafts: 1 });
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setFindDraftingId("");
+    }
+  }
+
+  // Send/draft a find's message via Gmail, then mark it contacted on success.
+  async function sendFindViaGmail(find: Find) {
+    if (!find.draft) return;
+    const mode = await sendViaGmail(find.draft);
+    if (mode === "send") setFindStatus(find.id, "sent");
+  }
+
   async function runDiscover() {
     if (!profileComplete) {
       setTab("profile");
@@ -750,7 +873,9 @@ function ScoutTool({
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
+      const added = mergeFinds(data.opportunities || []);
       bumpActivity({ searches: 1, found: (data.opportunities || []).length });
+      if (added) setStats((s) => `${s} · ${added} new saved to Finds`);
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -818,6 +943,10 @@ function ScoutTool({
         <div className="mx-auto flex max-w-6xl gap-7 px-6">
           <TabButton active={tab === "outreach"} onClick={() => setTab("outreach")}>
             Outreach
+          </TabButton>
+          <TabButton active={tab === "finds"} onClick={() => setTab("finds")}>
+            Finds
+            {newFindCount > 0 && <Count n={newFindCount} />}
           </TabButton>
           <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")}>
             Dashboard
@@ -1219,6 +1348,26 @@ function ScoutTool({
         </>
       )}
 
+      {tab === "finds" && (
+        <FindsTab
+          finds={myFinds}
+          projectName={activeProject?.name || "this project"}
+          filter={findFilter}
+          setFilter={setFindFilter}
+          gmail={gmail}
+          draftingId={findDraftingId}
+          gmailBusyId={gmailBusyId}
+          onDraft={draftFind}
+          onDeny={(f) => setFindStatus(f.id, "denied")}
+          onReopen={(f) => setFindStatus(f.id, "new")}
+          onMarkSent={(f) => setFindStatus(f.id, "sent")}
+          onRemove={(f) => removeFind(f.id)}
+          onSendGmail={sendFindViaGmail}
+          onCopy={() => bumpActivity({ copies: 1 })}
+          goOutreach={() => setTab("outreach")}
+        />
+      )}
+
       {tab === "dashboard" && (
         <DashboardTab
           activity={activity}
@@ -1457,6 +1606,341 @@ function ContactValue({
     >
       {value}
     </a>
+  );
+}
+
+/* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
+function FindsTab({
+  finds,
+  projectName,
+  filter,
+  setFilter,
+  gmail,
+  draftingId,
+  gmailBusyId,
+  onDraft,
+  onDeny,
+  onReopen,
+  onMarkSent,
+  onRemove,
+  onSendGmail,
+  onCopy,
+  goOutreach,
+}: {
+  finds: Find[];
+  projectName: string;
+  filter: FindStatus | "all";
+  setFilter: (f: FindStatus | "all") => void;
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  draftingId: string;
+  gmailBusyId: string;
+  onDraft: (f: Find) => void;
+  onDeny: (f: Find) => void;
+  onReopen: (f: Find) => void;
+  onMarkSent: (f: Find) => void;
+  onRemove: (f: Find) => void;
+  onSendGmail: (f: Find) => void;
+  onCopy: () => void;
+  goOutreach: () => void;
+}) {
+  const counts: Record<string, number> = { all: finds.length };
+  for (const s of ["new", "drafted", "sent", "denied"] as FindStatus[]) {
+    counts[s] = finds.filter((f) => f.status === s).length;
+  }
+  const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
+    .slice()
+    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
+
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            Your <span className="brand-text">finds</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Everyone Scout has found for{" "}
+            <span className="font-semibold text-ink">{projectName}</span>. Draft a
+            message, mark who you&apos;ve contacted, or set aside the ones that
+            aren&apos;t a fit.
+          </p>
+        </div>
+        <button
+          onClick={goOutreach}
+          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+        >
+          Find more
+        </button>
+      </div>
+
+      {/* Status filter */}
+      <div className="mt-6 flex flex-wrap gap-2">
+        {FIND_STATUSES.map((s) => {
+          const on = filter === s.key;
+          return (
+            <button
+              key={s.key}
+              onClick={() => setFilter(s.key)}
+              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                on
+                  ? "border-coral/50 bg-brand-gradient text-white"
+                  : "border-warm-border bg-white text-body hover:bg-warm-bg"
+              }`}
+            >
+              {s.label}
+              <span className={on ? "text-white/80" : "text-body/50"}>
+                {" "}
+                {counts[s.key] || 0}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {shown.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-white/60 p-12 text-center text-sm text-body/70">
+          {finds.length === 0 ? (
+            <>
+              No finds yet. Run a search on the{" "}
+              <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
+                Outreach
+              </button>{" "}
+              tab and everyone Scout finds lands here.
+            </>
+          ) : (
+            "Nothing in this list."
+          )}
+        </div>
+      ) : (
+        <div className="mt-5 space-y-3">
+          {shown.map((f) => (
+            <FindCard
+              key={f.id}
+              find={f}
+              gmail={gmail}
+              drafting={draftingId === f.id}
+              gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
+              onDraft={() => onDraft(f)}
+              onDeny={() => onDeny(f)}
+              onReopen={() => onReopen(f)}
+              onMarkSent={() => onMarkSent(f)}
+              onRemove={() => onRemove(f)}
+              onSendGmail={() => onSendGmail(f)}
+              onCopy={onCopy}
+            />
+          ))}
+        </div>
+      )}
+    </main>
+  );
+}
+
+function FindStatusBadge({ status }: { status: FindStatus }) {
+  const map: Record<FindStatus, { label: string; cls: string }> = {
+    new: { label: "New", cls: "border-warm-border bg-warm-bg text-body" },
+    drafted: { label: "Drafted", cls: "border-coral/30 bg-warm-bg text-accent" },
+    sent: { label: "Sent", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    denied: { label: "Not a fit", cls: "border-warm-border bg-white text-body/50" },
+  };
+  const s = map[status];
+  return (
+    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>
+      {s.label}
+    </span>
+  );
+}
+
+function FindCard({
+  find,
+  gmail,
+  drafting,
+  gmailBusy,
+  onDraft,
+  onDeny,
+  onReopen,
+  onMarkSent,
+  onRemove,
+  onSendGmail,
+  onCopy,
+}: {
+  find: Find;
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  drafting: boolean;
+  gmailBusy: boolean;
+  onDraft: () => void;
+  onDeny: () => void;
+  onReopen: () => void;
+  onMarkSent: () => void;
+  onRemove: () => void;
+  onSendGmail: () => void;
+  onCopy: () => void;
+}) {
+  const o = find.opp;
+  const d = find.draft;
+  const denied = find.status === "denied";
+  const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
+
+  return (
+    <div
+      className={`rounded-2xl border p-4 shadow-card transition ${
+        denied ? "border-warm-border bg-white/60 opacity-70" : "border-warm-border bg-white"
+      }`}
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink">
+          {o.url ? (
+            <a href={o.url} target="_blank" rel="noreferrer" className="transition hover:text-accent">
+              {o.name}
+            </a>
+          ) : (
+            o.name
+          )}
+        </span>
+        <FindStatusBadge status={find.status} />
+        {o.fitScore != null && (
+          <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
+            {Math.round(o.fitScore * 100)}% fit
+          </span>
+        )}
+        <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
+          {o.channel}
+        </span>
+      </div>
+
+      {(o.outlet || o.location) && (
+        <div className="mt-0.5 text-xs text-body/80">
+          {[o.outlet, o.location].filter(Boolean).join(" · ")}
+        </div>
+      )}
+      <div className="mt-1 text-xs">
+        {o.contactEmail && (
+          <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
+        )}
+        {o.contactName && (
+          <span className="text-body">
+            {o.contactEmail ? "  ·  " : ""}
+            {o.contactName}
+            {o.contactRole ? ` (${o.contactRole})` : ""}
+          </span>
+        )}
+        {o.contactHandle && (
+          <span className="text-body/70">
+            {o.contactEmail || o.contactName ? "  ·  " : ""}
+            <ContactValue value={o.contactHandle} className="text-body/70" />
+          </span>
+        )}
+      </div>
+      {o.whyItFits && (
+        <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
+      )}
+
+      {/* Stored draft */}
+      {d && (
+        <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+          {d.subject && (
+            <div className="mb-1.5 text-sm font-semibold text-ink">{d.subject}</div>
+          )}
+          <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
+            {d.body}
+          </pre>
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        {find.status === "new" && (
+          <button
+            onClick={onDraft}
+            disabled={drafting}
+            className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+          >
+            {drafting ? "Drafting…" : "Draft a message"}
+          </button>
+        )}
+
+        {d && (
+          <>
+            {gmail.connected && emailDraft && find.status !== "sent" ? (
+              <button
+                onClick={onSendGmail}
+                disabled={gmailBusy}
+                className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+              >
+                {gmailBusy
+                  ? "Working…"
+                  : gmail.sendMode === "send"
+                  ? "Send from Gmail"
+                  : "Create Gmail draft"}
+              </button>
+            ) : (
+              find.status !== "sent" && (
+                <SendAction draft={d} onUse={onCopy} />
+              )
+            )}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(
+                  (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
+                );
+                onCopy();
+              }}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Copy
+            </button>
+            {find.status === "new" && (
+              <button
+                onClick={onDraft}
+                disabled={drafting}
+                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+              >
+                Redraft
+              </button>
+            )}
+          </>
+        )}
+
+        {find.status !== "sent" && (
+          <button
+            onClick={onMarkSent}
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Mark contacted
+          </button>
+        )}
+
+        {denied ? (
+          <button
+            onClick={onReopen}
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+          >
+            Reopen
+          </button>
+        ) : find.status === "sent" ? (
+          <button
+            onClick={onReopen}
+            className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
+          >
+            Reopen
+          </button>
+        ) : (
+          <button
+            onClick={onDeny}
+            className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
+          >
+            Not a fit
+          </button>
+        )}
+        {denied && (
+          <button
+            onClick={onRemove}
+            className="text-xs font-semibold text-body/40 transition hover:text-accent"
+          >
+            Remove
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 

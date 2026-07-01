@@ -59,6 +59,7 @@ export interface AppState {
   categories?: any[];
   activeId?: string;
   activity?: any;
+  finds?: any[];
 }
 
 export async function loadState(userId: string): Promise<AppState | null> {
