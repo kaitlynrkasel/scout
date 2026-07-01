@@ -774,7 +774,9 @@ function ScoutTool({
     .filter(Boolean)
     .join(". ")
     .trim();
-  const profileComplete = !!profile.bio.trim(); // must tell Scout who you are first
+  // A light gate: a name OR a bio is enough to start. Resume and LinkedIn are
+  // optional — they just make outreach more personal.
+  const profileComplete = !!(profile.name.trim() || profile.bio.trim());
 
   // Finds belonging to the active project (newest first), and the count still to work.
   const myFinds = activeProject
@@ -3078,7 +3080,7 @@ function ProfileTab({
           <span className="text-xs text-body/70">
             {canConfirm
               ? "Saved automatically. This is only visible to you."
-              : "Add your resume or a short bio to continue."}
+              : "Add your name to continue. A resume or bio is optional, it just makes messages more personal."}
           </span>
         </div>
       </section>
@@ -3165,8 +3167,8 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
         First, tell <span className="brand-text">Scout</span> who you are
       </h2>
       <p className="mx-auto mt-2.5 max-w-md text-[15px] leading-relaxed text-body">
-        Scout uses your profile to find the right people and write messages that sound
-        like you. Add a few details to start scouting, it takes about a minute.
+        Just your name is enough to start. Adding a resume, LinkedIn, or website is
+        optional, it only makes your messages more personal.
       </p>
       <button
         onClick={onSetup}
@@ -3175,7 +3177,7 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
         Set up your profile
       </button>
       <div className="mx-auto mt-7 flex max-w-md flex-wrap justify-center gap-2">
-        {["Pick what you're using Scout for", "Paste your resume or bio", "Start scouting"].map(
+        {["Add your name", "Resume or website (optional)", "Start scouting"].map(
           (s, i) => (
             <span
               key={s}
