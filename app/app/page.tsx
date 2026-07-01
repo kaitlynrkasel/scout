@@ -2568,6 +2568,21 @@ function ProfileTab({
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
+  // Individual vs company changes how you fill your profile (resume vs website).
+  const [kind, setKind] = useState<"individual" | "company">("individual");
+  const [website, setWebsite] = useState("");
+  useEffect(() => {
+    try {
+      const k = localStorage.getItem("cue_kind");
+      if (k === "company" || k === "individual") setKind(k);
+    } catch {}
+  }, []);
+  function chooseKind(k: "individual" | "company") {
+    setKind(k);
+    try {
+      localStorage.setItem("cue_kind", k);
+    } catch {}
+  }
 
   // Read some source text (a resume, a LinkedIn PDF/About section, a bio) and let
   // Scout fill in name + use case from it. keepBio=false when the text is already
@@ -2602,14 +2617,41 @@ function ProfileTab({
     }
   }
 
+  // Fetch a company website and fill the profile from it.
+  async function readWebsite() {
+    const u = website.trim();
+    if (!u) return;
+    setNote("");
+    setAutofilled(false);
+    setParsing(true);
+    try {
+      const res = await fetch("/api/read-website", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url: u }),
+      });
+      const data = await res.json();
+      if (res.ok && data.text) {
+        await readAndFill(`Website: ${data.url || u}\n\n${data.text}`);
+      } else {
+        setNote(data?.error || "Couldn't read that site. Paste your info below instead.");
+        setParsing(false);
+      }
+    } catch {
+      setNote("Couldn't read that site. Paste your info below instead.");
+      setParsing(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-3xl font-extrabold tracking-tight text-ink">
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Drop in your resume or LinkedIn and Scout fills the rest for you. Everything
-        stays editable, and it shapes who we find and how your messages sound.
+        Drop in your resume, LinkedIn, or company website and Scout fills the rest
+        for you. Everything stays editable, and it shapes who we find and how your
+        messages sound.
       </p>
 
       {gmailAvailable && (
@@ -2623,22 +2665,79 @@ function ProfileTab({
       )}
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-        {/* -------- Resume / LinkedIn first: read it and auto-populate -------- */}
-        <Label>Start with your resume or LinkedIn</Label>
-        <FileDrop
-          label={
-            parsing
-              ? "Reading and filling in your profile…"
-              : "Drop your resume or LinkedIn PDF here, or click to upload"
-          }
-          onText={(t) => readAndFill(t)}
-        />
+        {/* -------- Individual vs company: resume drop or website -------- */}
+        <div className="mb-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(["individual", "company"] as const).map((k) => (
+            <button
+              key={k}
+              onClick={() => chooseKind(k)}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+                kind === k
+                  ? "bg-white text-ink shadow-card"
+                  : "text-body/60 hover:text-ink"
+              }`}
+            >
+              {k === "individual" ? "I'm an individual" : "I'm a company"}
+            </button>
+          ))}
+        </div>
+
+        <Label>
+          {kind === "company"
+            ? "Start with your website"
+            : "Start with your resume or LinkedIn"}
+        </Label>
+
+        {kind === "company" ? (
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={website}
+              onChange={(e) => setWebsite(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  readWebsite();
+                }
+              }}
+              placeholder="yourcompany.com"
+              className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+            <button
+              onClick={readWebsite}
+              disabled={parsing || !website.trim()}
+              className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+            >
+              {parsing ? "Reading…" : "Read my website"}
+            </button>
+          </div>
+        ) : (
+          <FileDrop
+            label={
+              parsing
+                ? "Reading and filling in your profile…"
+                : "Drop your resume or LinkedIn PDF here, or click to upload"
+            }
+            onText={(t) => readAndFill(t)}
+          />
+        )}
+
         <p className="mt-2 text-xs leading-relaxed text-body/70">
-          Scout reads it and fills in your name, use case, and background below.{" "}
-          <span className="font-semibold text-body">From LinkedIn:</span> open your
-          profile, tap <span className="font-semibold text-body">More → Save to PDF</span>,
-          and drop that file here. (LinkedIn blocks apps from reading your profile from
-          just a link, so this is the reliable way in.)
+          {kind === "company" ? (
+            <>
+              Scout reads your site and fills in your company name, what you do, and
+              your background below. You can still paste anything into the box lower
+              down.
+            </>
+          ) : (
+            <>
+              Scout reads it and fills in your name, use case, and background below.{" "}
+              <span className="font-semibold text-body">From LinkedIn:</span> open your
+              profile, tap{" "}
+              <span className="font-semibold text-body">More → Save to PDF</span>, and
+              drop that file here. (LinkedIn blocks apps from reading your profile from
+              just a link, so this is the reliable way in.)
+            </>
+          )}
         </p>
         {parsing && (
           <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-accent">
