@@ -867,9 +867,7 @@ function ScoutTool({
         return;
       }
       setOpps(data.opportunities || []);
-      const sel: Record<string, boolean> = {};
-      (data.opportunities || []).forEach((o: Opportunity) => (sel[o.id] = true));
-      setSelected(sel);
+      setSelected({}); // nothing pre-approved — you approve who you want to reach
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
@@ -888,7 +886,7 @@ function ScoutTool({
     setExpanded(false);
     setDrafting(true);
     try {
-      const chosen = opps.filter((o) => selected[o.id]);
+      const chosen = visibleOpps.filter((o) => selected[o.id]);
       const res = await fetch("/api/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -904,8 +902,24 @@ function ScoutTool({
         reportError(data);
         return;
       }
-      setDrafts(data.drafts || []);
-      bumpActivity({ drafts: (data.drafts || []).length });
+      const newDrafts: Draft[] = data.drafts || [];
+      setDrafts(newDrafts);
+      bumpActivity({ drafts: newDrafts.length });
+      // Persist drafts onto the matching pipeline finds so approved → drafted
+      // shows up in the Finds tab.
+      if (newDrafts.length) {
+        const draftByOppId = new Map(newDrafts.map((d) => [d.opportunityId, d]));
+        const oppById = new Map(chosen.map((o) => [o.id, o]));
+        saveFinds(
+          finds.map((f) => {
+            const opp = [...oppById.values()].find(
+              (o) => findKey(activeId, o) === f.id
+            );
+            const dr = opp ? draftByOppId.get(opp.id) : undefined;
+            return dr ? { ...f, draft: dr, status: "drafted" } : f;
+          })
+        );
+      }
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -913,9 +927,19 @@ function ScoutTool({
     }
   }
 
-  const selectedCount = opps.filter((o) => selected[o.id]).length;
+  // Results hide anyone denied here (denial flows to the Finds pipeline).
+  const deniedFindIds = new Set(
+    finds.filter((f) => f.status === "denied").map((f) => f.id)
+  );
+  const visibleOpps = opps.filter((o) => !deniedFindIds.has(findKey(activeId, o)));
+  const selectedCount = visibleOpps.filter((o) => selected[o.id]).length;
   const toggle = (id: string, v: boolean) =>
     setSelected((s) => ({ ...s, [id]: v }));
+  // Deny a result: mark it "Not a fit" in the pipeline and drop it from the batch.
+  const denyOpp = (o: Opportunity) => {
+    setFindStatus(findKey(activeId, o), "denied");
+    setSelected((s) => ({ ...s, [o.id]: false }));
+  };
 
   return (
     <div className="min-h-screen">
@@ -1244,19 +1268,24 @@ function ScoutTool({
                     </button>
 
                     <div className="max-h-[460px] overflow-auto p-4">
-                      <FindsList opps={opps} selected={selected} toggle={toggle} />
+                      <FindsList
+                        opps={visibleOpps}
+                        selected={selected}
+                        onApprove={toggle}
+                        onDeny={denyOpp}
+                      />
                     </div>
 
                     <div className="flex flex-wrap items-center gap-3 border-t border-warm-border px-5 py-4">
                       <span className="text-sm text-body/80">
-                        {selectedCount} selected
+                        {selectedCount} approved
                       </span>
                       <button
                         onClick={runDraft}
                         disabled={drafting || selectedCount === 0}
                         className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                       >
-                        {drafting ? "Drafting…" : `Draft messages for ${selectedCount}`}
+                        {drafting ? "Drafting…" : `Draft the ${selectedCount} approved`}
                       </button>
                     </div>
                   </div>
@@ -1456,16 +1485,22 @@ function ScoutTool({
               </button>
             </div>
             <div className="overflow-auto p-5 sm:p-6">
-              <FindsList opps={opps} selected={selected} toggle={toggle} roomy />
+              <FindsList
+                opps={visibleOpps}
+                selected={selected}
+                onApprove={toggle}
+                onDeny={denyOpp}
+                roomy
+              />
             </div>
             <div className="flex flex-wrap items-center gap-3 border-t border-warm-border px-6 py-4">
-              <span className="text-sm text-body/80">{selectedCount} selected</span>
+              <span className="text-sm text-body/80">{selectedCount} approved</span>
               <button
                 onClick={runDraft}
                 disabled={drafting || selectedCount === 0}
                 className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
               >
-                {drafting ? "Drafting…" : `Draft messages for ${selectedCount}`}
+                {drafting ? "Drafting…" : `Draft the ${selectedCount} approved`}
               </button>
             </div>
           </div>
@@ -1479,12 +1514,14 @@ function ScoutTool({
 function FindsList({
   opps,
   selected,
-  toggle,
+  onApprove,
+  onDeny,
   roomy = false,
 }: {
   opps: Opportunity[];
   selected: Record<string, boolean>;
-  toggle: (id: string, v: boolean) => void;
+  onApprove: (id: string, v: boolean) => void;
+  onDeny: (o: Opportunity) => void;
   roomy?: boolean;
 }) {
   return (
@@ -1492,20 +1529,14 @@ function FindsList({
       {opps.map((o) => {
         const on = !!selected[o.id];
         return (
-          <label
+          <div
             key={o.id}
-            className={`flex cursor-pointer gap-3 rounded-2xl border p-3.5 transition ${
+            className={`flex flex-col gap-3 rounded-2xl border p-3.5 transition ${
               on
                 ? "border-coral/40 bg-warm-bg/60"
-                : "border-warm-border bg-white hover:bg-warm-bg/30"
+                : "border-warm-border bg-white"
             }`}
           >
-            <input
-              type="checkbox"
-              checked={on}
-              onChange={(e) => toggle(o.id, e.target.checked)}
-              className="mt-1 h-4 w-4 accent-coral"
-            />
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="font-semibold text-ink">
@@ -1567,7 +1598,30 @@ function FindsList({
                 </div>
               )}
             </div>
-          </label>
+            <div className="flex items-center gap-2 border-t border-warm-border/70 pt-2.5">
+              <button
+                onClick={() => onApprove(o.id, !on)}
+                className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                  on
+                    ? "bg-brand-gradient text-white shadow-card"
+                    : "border border-warm-border text-body hover:bg-warm-bg"
+                }`}
+              >
+                {on ? "Approved ✓" : "Approve"}
+              </button>
+              <button
+                onClick={() => onDeny(o)}
+                className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+              >
+                Deny
+              </button>
+              {on && (
+                <span className="ml-auto text-[11px] font-medium text-accent">
+                  Will be drafted
+                </span>
+              )}
+            </div>
+          </div>
         );
       })}
     </div>
