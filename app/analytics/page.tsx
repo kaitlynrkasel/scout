@@ -173,6 +173,51 @@ Thanks so much, and congrats again on the signings!`}
           </div>
         </Section>
 
+        {/* How Scout learns */}
+        <Section
+          eyebrow="It gets better as you use it"
+          title="How Scout learns"
+          sub="Two loops make every search sharper, one just for you, one for everyone."
+        >
+          <div className="grid gap-5 sm:grid-cols-2">
+            <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="h-8 w-8 rounded-xl bg-brand-gradient" />
+                <span className="text-xs font-bold uppercase tracking-wider text-accent">
+                  Learns you
+                </span>
+              </div>
+              <h3 className="text-[16px] font-bold text-ink">Private to your account</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-body">
+                The more you use Scout, the more it fits you. Your profile, the searches
+                you keep, the people you reach out to, and the edits you make to drafts
+                all teach it your taste and your voice, so your next results and messages
+                land closer to what you want. This stays private to your account.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="h-8 w-8 rounded-xl bg-brand-gradient" />
+                <span className="text-xs font-bold uppercase tracking-wider text-accent">
+                  Learns from everyone
+                </span>
+              </div>
+              <h3 className="text-[16px] font-bold text-ink">Smarter for the whole community</h3>
+              <p className="mt-1.5 text-sm leading-relaxed text-body">
+                Across everyone using Scout, broad patterns, which kinds of outreach get
+                replies, which sources have real contacts, what a great message looks
+                like, make the engine better for all. It is aggregate and anonymous:
+                shared patterns, never your private profile or contacts.
+              </p>
+            </div>
+          </div>
+          <p className="mt-4 text-xs text-body/70">
+            These learning loops are part of how Scout is built. As the community grows,
+            live numbers will appear here, real reply rates and improvements over time,
+            rather than estimates.
+          </p>
+        </Section>
+
         {/* Honesty note + CTA */}
         <div className="mt-14 rounded-2xl border border-warm-border bg-white p-6 text-center shadow-card">
           <p className="mx-auto max-w-2xl text-sm leading-relaxed text-body">

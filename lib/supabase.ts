@@ -17,6 +17,7 @@ export interface DbProfile {
   name: string;
   bio: string;
   useCase: string;
+  linkedin?: string;
 }
 
 // Load the signed-in user's profile row (or null if they have none yet).
@@ -24,7 +25,7 @@ export async function loadProfile(userId: string): Promise<DbProfile | null> {
   if (!supabase) return null;
   const { data, error } = await supabase
     .from("profiles")
-    .select("name, bio, use_case")
+    .select("name, bio, use_case, linkedin")
     .eq("id", userId)
     .maybeSingle();
   if (error || !data) return null;
@@ -32,6 +33,7 @@ export async function loadProfile(userId: string): Promise<DbProfile | null> {
     name: data.name || "",
     bio: data.bio || "",
     useCase: data.use_case || "networking",
+    linkedin: data.linkedin || "",
   };
 }
 
@@ -43,6 +45,7 @@ export async function saveProfile(userId: string, p: DbProfile): Promise<void> {
     name: p.name,
     bio: p.bio,
     use_case: p.useCase,
+    linkedin: p.linkedin || "",
     updated_at: new Date().toISOString(),
   });
 }

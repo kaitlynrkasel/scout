@@ -5,6 +5,7 @@ import { TEMPLATE_LIST, TEMPLATES } from "@/lib/templates";
 import type { Draft, Opportunity, OutreachTemplate, TemplateKey } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
+import { fileToText } from "@/lib/fileText";
 import {
   authEnabled,
   supabase,
@@ -55,6 +56,7 @@ interface Profile {
   name: string;
   bio: string;
   useCase: TemplateKey;
+  linkedin?: string;
 }
 interface Category {
   id: string;
@@ -137,8 +139,8 @@ function AuthedShell() {
       if (cancelled) return;
       setInitial(
         p
-          ? { name: p.name, bio: p.bio, useCase: p.useCase as TemplateKey }
-          : { name: "", bio: "", useCase: "networking" }
+          ? { name: p.name, bio: p.bio, useCase: p.useCase as TemplateKey, linkedin: p.linkedin || "" }
+          : { name: "", bio: "", useCase: "networking", linkedin: "" }
       );
       setProfileLoaded(true);
     });
@@ -157,7 +159,12 @@ function AuthedShell() {
       onSaveProfile={(n) => {
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
-          dbSaveProfile(session.user.id, { name: n.name, bio: n.bio, useCase: n.useCase });
+          dbSaveProfile(session.user.id, {
+            name: n.name,
+            bio: n.bio,
+            useCase: n.useCase,
+            linkedin: n.linkedin || "",
+          });
         }, 700);
       }}
       onLogout={() => supabase?.auth.signOut()}
@@ -338,7 +345,14 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
 
   const uc = TEMPLATES[profile.useCase];
   const myCats = categories.filter((c) => c.useCase === profile.useCase);
-  const aboutText = [profile.name, profile.bio].filter(Boolean).join(". ").trim();
+  const aboutText = [
+    profile.name,
+    profile.bio,
+    profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
+  ]
+    .filter(Boolean)
+    .join(". ")
+    .trim();
   const profileComplete = !!profile.bio.trim(); // must tell Scout who you are first
 
   async function runDiscover() {
@@ -748,10 +762,14 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
         <ProfileTab
           name={profile.name}
           bio={profile.bio}
+          linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
           onName={(v) => saveProfile({ ...profile, name: v })}
           onBio={(v) => saveProfile({ ...profile, bio: v })}
+          onLinkedin={(v) => saveProfile({ ...profile, linkedin: v })}
           onUseCase={changeUseCase}
+          canConfirm={profileComplete}
+          onConfirm={() => setTab("outreach")}
         />
       )}
 
@@ -962,12 +980,16 @@ function TemplatesTab({
           </div>
           <div>
             <Label>Show us how you write it</Label>
+            <FileDrop
+              label="Drop a cover letter or example file, or click to upload"
+              onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
+            />
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
-              placeholder="Paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
-              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              placeholder="…or paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
+              className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
           </div>
         </div>
@@ -1025,17 +1047,25 @@ function TemplatesTab({
 function ProfileTab({
   name,
   bio,
+  linkedin,
   useCase,
   onName,
   onBio,
+  onLinkedin,
   onUseCase,
+  canConfirm,
+  onConfirm,
 }: {
   name: string;
   bio: string;
+  linkedin: string;
   useCase: TemplateKey;
   onName: (v: string) => void;
   onBio: (v: string) => void;
+  onLinkedin: (v: string) => void;
   onUseCase: (v: TemplateKey) => void;
+  canConfirm: boolean;
+  onConfirm: () => void;
 }) {
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
@@ -1045,7 +1075,6 @@ function ProfileTab({
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Tell Scout who you are. This shapes the categories we suggest and makes
         every message sound like you.
-        <span className="text-body/60"> (Saved on this device.)</span>
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -1080,32 +1109,115 @@ function ProfileTab({
           </p>
         </div>
 
-        <div className="mt-6">
-          <Label>Your name or company</Label>
-          <input
-            value={name}
-            onChange={(e) => onName(e.target.value)}
-            placeholder="e.g. Kaitlyn Kasel, or Cue Creative"
-            className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-          />
+        <div className="mt-6 grid gap-4 sm:grid-cols-2">
+          <div>
+            <Label>Your name or company</Label>
+            <input
+              value={name}
+              onChange={(e) => onName(e.target.value)}
+              placeholder="e.g. Kaitlyn Kasel, or Cue Creative"
+              className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+          </div>
+          <div>
+            <Label>Your LinkedIn (optional)</Label>
+            <input
+              value={linkedin}
+              onChange={(e) => onLinkedin(e.target.value)}
+              placeholder="linkedin.com/in/yourname"
+              className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+          </div>
         </div>
 
         <div className="mt-5">
-          <Label>Paste your resume, bio, or company description</Label>
-          <textarea
-            value={bio}
-            onChange={(e) => onBio(e.target.value)}
-            rows={12}
-            placeholder="Paste anything that tells us who you are: your resume, a short bio, your company's about page, your experience, what you do. The more you give, the more personal your outreach becomes."
-            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          <Label>Resume, bio, or company description</Label>
+          <FileDrop
+            label="Drop your resume here, or click to upload"
+            onText={(t) => onBio(bio.trim() ? bio.trim() + "\n\n" + t : t)}
           />
+          <div className="mt-3">
+            <textarea
+              value={bio}
+              onChange={(e) => onBio(e.target.value)}
+              rows={11}
+              placeholder="…or paste it here. Anything that tells us who you are: your resume, a short bio, your company's about page, your experience. The more you give, the more personal your outreach becomes."
+              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+          </div>
         </div>
-        <p className="mt-3 text-xs text-body/70">
-          Saved automatically as you type. Used to personalize every message, never
-          shared.
-        </p>
+
+        <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
+          <button
+            onClick={onConfirm}
+            disabled={!canConfirm}
+            className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+          >
+            Save &amp; start scouting
+          </button>
+          <span className="text-xs text-body/70">
+            {canConfirm
+              ? "Saved automatically. This is only visible to you."
+              : "Add your resume or a short bio to continue."}
+          </span>
+        </div>
       </section>
     </main>
+  );
+}
+
+/* ---------------- Reusable file drop (resume, cover letters) ---------------- */
+function FileDrop({
+  onText,
+  label = "Drop a file here, or click to upload",
+  accept = ".pdf,.docx,.txt,.md",
+}: {
+  onText: (text: string) => void;
+  label?: string;
+  accept?: string;
+}) {
+  const [reading, setReading] = useState(false);
+  const [err, setErr] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  async function handle(file?: File | null) {
+    if (!file) return;
+    setErr("");
+    setReading(true);
+    try {
+      const text = await fileToText(file);
+      if (text) onText(text);
+      else setErr("That file had no readable text, try pasting it instead.");
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't read that file.");
+    } finally {
+      setReading(false);
+    }
+  }
+
+  return (
+    <div
+      onDragOver={(e) => e.preventDefault()}
+      onDrop={(e) => {
+        e.preventDefault();
+        handle(e.dataTransfer.files?.[0]);
+      }}
+      onClick={() => inputRef.current?.click()}
+      className="cursor-pointer rounded-xl border border-dashed border-warm-border bg-warm-bg/40 px-4 py-5 text-center transition hover:border-coral/40 hover:bg-warm-bg/70"
+    >
+      <input
+        ref={inputRef}
+        type="file"
+        accept={accept}
+        className="hidden"
+        onChange={(e) => handle(e.target.files?.[0])}
+      />
+      <div className="text-sm font-semibold text-ink">
+        {reading ? "Reading…" : label}
+      </div>
+      <div className="mt-0.5 text-xs text-body/70">PDF, Word (.docx), or text file</div>
+      {err && <div className="mt-1.5 text-xs font-semibold text-accent">{err}</div>}
+    </div>
   );
 }
 
