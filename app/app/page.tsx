@@ -949,7 +949,9 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                             {d.channelType}
                           </span>
                           {d.to && (
-                            <span className="text-xs text-body/70">→ {d.to}</span>
+                            <span className="text-xs text-body/70">
+                              → <ContactValue value={d.to} className="text-body/70" />
+                            </span>
                           )}
                           <button
                             onClick={() =>
@@ -1131,7 +1133,10 @@ function FindsList({
               )}
               <div className="mt-1 text-xs">
                 {o.contactEmail && (
-                  <span className="font-semibold text-accent">{o.contactEmail}</span>
+                  <ContactValue
+                    value={o.contactEmail}
+                    className="font-semibold text-accent"
+                  />
                 )}
                 {o.contactName && (
                   <span className="text-body">
@@ -1143,7 +1148,7 @@ function FindsList({
                 {o.contactHandle && (
                   <span className="text-body/70">
                     {o.contactEmail || o.contactName ? "  ·  " : ""}
-                    {o.contactHandle}
+                    <ContactValue value={o.contactHandle} className="text-body/70" />
                   </span>
                 )}
                 {!o.contactEmail && !o.contactName && !o.contactHandle && (
@@ -1160,6 +1165,42 @@ function FindsList({
         );
       })}
     </div>
+  );
+}
+
+/* ---------------- Clickable contact value (email → mailto, URL/handle → link) ---------------- */
+function mailHref(v: string): string | null {
+  const s = String(v || "").trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s) ? "mailto:" + s : null;
+}
+function linkHref(v: string): string | null {
+  const s = String(v || "").trim();
+  if (!s || s.includes("@")) return null;
+  if (/^https?:\/\//i.test(s)) return s;
+  // A domain/handle like "linkedin.com/in/x" or "twitter.com/x" — make it absolute.
+  if (/^[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(s)) return "https://" + s.replace(/^\/+/, "");
+  return null;
+}
+function ContactValue({
+  value,
+  className = "",
+}: {
+  value: string;
+  className?: string;
+}) {
+  const mail = mailHref(value);
+  const href = mail || linkHref(value);
+  if (!href) return <span className={className}>{value}</span>;
+  return (
+    <a
+      href={href}
+      target={mail ? undefined : "_blank"}
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      className={`${className} underline decoration-dotted underline-offset-2 transition hover:text-accent`}
+    >
+      {value}
+    </a>
   );
 }
 
