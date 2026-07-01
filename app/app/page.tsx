@@ -1,8 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { TEMPLATE_LIST, TEMPLATES } from "@/lib/templates";
 import type { Draft, Opportunity, OutreachTemplate, TemplateKey } from "@/lib/types";
+import type { Session } from "@supabase/supabase-js";
+import AuthScreen from "./AuthScreen";
+import {
+  authEnabled,
+  supabase,
+  loadProfile as dbLoadProfile,
+  saveProfile as dbSaveProfile,
+} from "@/lib/supabase";
 
 const OUTREACH_KINDS = [
   "Email",
@@ -55,7 +63,110 @@ interface Category {
   useCase: TemplateKey;
 }
 
-export default function Home() {
+interface ScoutToolProps {
+  initialProfile: Profile;
+  onSaveProfile: (p: Profile) => void;
+  onLogout?: () => void;
+  showLogout?: boolean;
+}
+
+// ---- Auth shell: login vs. tool; loads the profile from the account (or, if
+// Supabase isn't configured yet, falls back to per-browser storage). ----
+export default function AppShell() {
+  return authEnabled ? <AuthedShell /> : <LocalShell />;
+}
+
+function Loading() {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-warm-fade">
+      <div className="h-8 w-8 animate-spin rounded-full border-[3px] border-warm-border border-t-coral" />
+    </div>
+  );
+}
+
+function LocalShell() {
+  const [ready, setReady] = useState(false);
+  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "networking" });
+  useEffect(() => {
+    try {
+      const p = localStorage.getItem(PROFILE_KEY);
+      if (p) setInitial({ name: "", bio: "", useCase: "networking", ...JSON.parse(p) });
+    } catch {}
+    setReady(true);
+  }, []);
+  if (!ready) return <Loading />;
+  return (
+    <ScoutTool
+      initialProfile={initial}
+      onSaveProfile={(n) => {
+        try {
+          localStorage.setItem(PROFILE_KEY, JSON.stringify(n));
+        } catch {}
+      }}
+    />
+  );
+}
+
+function AuthedShell() {
+  const [session, setSession] = useState<Session | null>(null);
+  const [checked, setChecked] = useState(false);
+  const [profileLoaded, setProfileLoaded] = useState(false);
+  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "networking" });
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setChecked(true);
+    });
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+      setSession(s);
+      setChecked(true);
+      if (!s) setProfileLoaded(false);
+    });
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const uid = session?.user?.id;
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    setProfileLoaded(false);
+    dbLoadProfile(uid).then((p) => {
+      if (cancelled) return;
+      setInitial(
+        p
+          ? { name: p.name, bio: p.bio, useCase: p.useCase as TemplateKey }
+          : { name: "", bio: "", useCase: "networking" }
+      );
+      setProfileLoaded(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  if (!checked) return <Loading />;
+  if (!session) return <AuthScreen />;
+  if (!profileLoaded) return <Loading />;
+  return (
+    <ScoutTool
+      key={session.user.id}
+      initialProfile={initial}
+      onSaveProfile={(n) => {
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(() => {
+          dbSaveProfile(session.user.id, { name: n.name, bio: n.bio, useCase: n.useCase });
+        }, 700);
+      }}
+      onLogout={() => supabase?.auth.signOut()}
+      showLogout
+    />
+  );
+}
+
+function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: ScoutToolProps) {
   const [tab, setTab] = useState<"outreach" | "templates" | "profile">("outreach");
 
   // ---- Outreach state ----
@@ -75,21 +186,13 @@ export default function Home() {
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
-  const [profile, setProfile] = useState<Profile>({
-    name: "",
-    bio: "",
-    useCase: "networking",
-  });
+  const [profile, setProfile] = useState<Profile>(initialProfile);
   const [categories, setCategories] = useState<Category[]>([]);
   const [seeded, setSeeded] = useState<string[]>([]);
 
   // Load everything + seed suggested categories for the active use case.
   useEffect(() => {
-    let prof: Profile = { name: "", bio: "", useCase: "networking" };
-    try {
-      const p = localStorage.getItem(PROFILE_KEY);
-      if (p) prof = { ...prof, ...JSON.parse(p) };
-    } catch {}
+    const prof: Profile = initialProfile;
     let cats: Category[] = [];
     try {
       const c = localStorage.getItem(CAT_KEY);
@@ -139,9 +242,7 @@ export default function Home() {
   };
   const saveProfile = (n: Profile) => {
     setProfile(n);
-    try {
-      localStorage.setItem(PROFILE_KEY, JSON.stringify(n));
-    } catch {}
+    onSaveProfile(n);
   };
   const saveCats = (n: Category[]) => {
     setCategories(n);
@@ -314,8 +415,18 @@ export default function Home() {
           <span className="text-[16px] font-extrabold tracking-tight text-ink">
             <span className="brand-text">Scout</span>
           </span>
-          <div className="ml-auto hidden text-xs font-medium text-body/70 sm:block">
-            Reach the right people, in your own voice
+          <div className="ml-auto flex items-center gap-4">
+            <span className="hidden text-xs font-medium text-body/70 sm:block">
+              Reach the right people, in your own voice
+            </span>
+            {showLogout && (
+              <button
+                onClick={onLogout}
+                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+              >
+                Log out
+              </button>
+            )}
           </div>
         </div>
         <div className="mx-auto flex max-w-6xl gap-7 px-6">
