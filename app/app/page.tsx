@@ -104,6 +104,9 @@ interface ScoutToolProps {
   onSaveProfile: (p: Profile) => void;
   onLogout?: () => void;
   showLogout?: boolean;
+  // Returns the current Supabase access token, used to call the Gmail routes.
+  // Absent in per-browser (no-auth) mode, which hides the Gmail features.
+  getToken?: () => Promise<string | null>;
 }
 
 // ---- Auth shell: login vs. tool; loads the profile from the account (or, if
@@ -203,11 +206,21 @@ function AuthedShell() {
       }}
       onLogout={() => supabase?.auth.signOut()}
       showLogout
+      getToken={async () => {
+        const { data } = await supabase!.auth.getSession();
+        return data.session?.access_token ?? null;
+      }}
     />
   );
 }
 
-function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: ScoutToolProps) {
+function ScoutTool({
+  initialProfile,
+  onSaveProfile,
+  onLogout,
+  showLogout,
+  getToken,
+}: ScoutToolProps) {
   const [tab, setTab] = useState<
     "outreach" | "dashboard" | "templates" | "profile"
   >("outreach");
@@ -236,6 +249,16 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState<string>("");
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
+
+  // ---- Gmail connection ----
+  const [gmail, setGmail] = useState<{
+    connected: boolean;
+    email?: string;
+    sendMode?: "draft" | "send";
+  }>({ connected: false });
+  const [gmailBusyId, setGmailBusyId] = useState(""); // draft being sent/drafted
+  const [gmailSent, setGmailSent] = useState<Record<string, "draft" | "send">>({});
+  const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
 
   // Load everything, then make sure at least one project exists (migrating any
   // pre-project categories into a default project the first time).
@@ -350,6 +373,104 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       return next;
     });
   };
+  // Load Gmail connection status once (and after returning from the OAuth flow).
+  const refreshGmail = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const r = await fetch("/api/gmail/status", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (r.ok) setGmail(await r.json());
+    } catch {}
+  };
+  useEffect(() => {
+    refreshGmail();
+    // Handle the return from Google's consent screen.
+    try {
+      const p = new URLSearchParams(window.location.search);
+      const g = p.get("gmail");
+      if (g) {
+        setTab("profile");
+        setGmailNote(
+          g === "connected"
+            ? "Gmail connected."
+            : g === "norefresh"
+            ? "Almost there, reconnect and allow access to finish."
+            : "Couldn't connect Gmail. Please try again."
+        );
+        const u = new URL(window.location.href);
+        u.searchParams.delete("gmail");
+        window.history.replaceState({}, "", u.toString());
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const setGmailMode = async (mode: "draft" | "send") => {
+    if (!getToken) return;
+    setGmail((g) => ({ ...g, sendMode: mode })); // optimistic
+    const token = await getToken();
+    if (!token) return;
+    await fetch("/api/gmail/mode", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+  };
+
+  const connectGmail = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    const r = await fetch("/api/gmail/auth", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const j = await r.json();
+    if (j.url) window.location.href = j.url;
+    else setError(j.error || "Couldn't start the Gmail connection.");
+  };
+
+  const disconnectGmail = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    await fetch("/api/gmail/disconnect", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    setGmail({ connected: false });
+  };
+
+  // Create a draft in / send from the user's Gmail for one message.
+  const sendViaGmail = async (d: Draft) => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    setError("");
+    setGmailBusyId(d.opportunityId);
+    try {
+      const r = await fetch("/api/gmail/send", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
+        bumpActivity({ copies: 1 });
+      } else {
+        reportError(j);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Gmail request failed.");
+    } finally {
+      setGmailBusyId("");
+    }
+  };
+
   const saveProjectsRaw = (n: Project[]) => {
     try {
       localStorage.setItem(PROJECTS_KEY, JSON.stringify(n));
@@ -991,7 +1112,31 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                             </span>
                           )}
                           <div className="ml-auto flex items-center gap-2">
-                            <SendAction draft={d} onUse={() => bumpActivity({ copies: 1 })} />
+                            {gmail.connected &&
+                            d.channelType === "email" &&
+                            mailHref(d.to) ? (
+                              gmailSent[d.opportunityId] ? (
+                                <span className="rounded-lg bg-warm-bg px-3 py-1 text-xs font-bold text-accent">
+                                  {gmailSent[d.opportunityId] === "send"
+                                    ? "Sent ✓"
+                                    : "In your Gmail drafts ✓"}
+                                </span>
+                              ) : (
+                                <button
+                                  onClick={() => sendViaGmail(d)}
+                                  disabled={gmailBusyId === d.opportunityId}
+                                  className="rounded-lg bg-brand-gradient px-3 py-1 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+                                >
+                                  {gmailBusyId === d.opportunityId
+                                    ? "Working…"
+                                    : gmail.sendMode === "send"
+                                    ? "Send from Gmail"
+                                    : "Create Gmail draft"}
+                                </button>
+                              )
+                            ) : (
+                              <SendAction draft={d} onUse={() => bumpActivity({ copies: 1 })} />
+                            )}
                             <button
                               onClick={() => {
                                 navigator.clipboard.writeText(
@@ -1062,6 +1207,12 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
           onAutofill={autofillIdentity}
           canConfirm={profileComplete}
           onConfirm={() => setTab("outreach")}
+          gmailAvailable={!!getToken}
+          gmail={gmail}
+          gmailNote={gmailNote}
+          onConnectGmail={connectGmail}
+          onDisconnectGmail={disconnectGmail}
+          onGmailMode={setGmailMode}
         />
       )}
 
@@ -1729,6 +1880,118 @@ function UseCaseCombo({
   );
 }
 
+/* ---------------- Gmail connection card ---------------- */
+function GmailCard({
+  gmail,
+  note,
+  onConnect,
+  onDisconnect,
+  onMode,
+}: {
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  note: string;
+  onConnect: () => void;
+  onDisconnect: () => void;
+  onMode: (mode: "draft" | "send") => void;
+}) {
+  const mode = gmail.sendMode || "draft";
+  return (
+    <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 7 9 6 9-6" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-ink">Send from your email</div>
+          {gmail.connected ? (
+            <p className="mt-0.5 text-sm text-body">
+              Connected as{" "}
+              <span className="font-semibold text-ink">{gmail.email || "your Gmail"}</span>
+              . Your messages go out from your own address.
+            </p>
+          ) : (
+            <p className="mt-0.5 text-sm leading-relaxed text-body">
+              Connect Gmail so Scout can put a ready-to-go draft in your inbox, or send
+              it for you, straight from your own address.
+            </p>
+          )}
+        </div>
+        {gmail.connected ? (
+          <button
+            onClick={onDisconnect}
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Disconnect
+          </button>
+        ) : (
+          <button
+            onClick={onConnect}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Connect Gmail
+          </button>
+        )}
+      </div>
+
+      {gmail.connected && (
+        <div className="mt-5 border-t border-warm-border pt-5">
+          <Label>When you use a draft</Label>
+          <div className="mt-1 grid gap-2.5 sm:grid-cols-2">
+            {(
+              [
+                {
+                  key: "draft",
+                  title: "Create a draft I review",
+                  body: "Scout puts the message in your Gmail drafts. You open it and hit send.",
+                },
+                {
+                  key: "send",
+                  title: "Send automatically",
+                  body: "Scout sends the message from your address right away. No review step.",
+                },
+              ] as const
+            ).map((opt) => {
+              const on = mode === opt.key;
+              return (
+                <button
+                  key={opt.key}
+                  onClick={() => onMode(opt.key)}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    on
+                      ? "border-coral/50 bg-warm-bg/60 ring-2 ring-coral/15"
+                      : "border-warm-border bg-white hover:bg-warm-bg/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`flex h-4 w-4 items-center justify-center rounded-full border ${
+                        on ? "border-coral bg-coral" : "border-warm-border"
+                      }`}
+                    >
+                      {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                    </span>
+                    <span className="text-sm font-bold text-ink">{opt.title}</span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-body/80">{opt.body}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {note && (
+        <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/70 px-4 py-2.5 text-xs font-medium text-ink">
+          {note}
+        </div>
+      )}
+    </section>
+  );
+}
+
 /* ---------------- Profile tab ---------------- */
 function ProfileTab({
   name,
@@ -1742,6 +2005,12 @@ function ProfileTab({
   onAutofill,
   canConfirm,
   onConfirm,
+  gmailAvailable,
+  gmail,
+  gmailNote,
+  onConnectGmail,
+  onDisconnectGmail,
+  onGmailMode,
 }: {
   name: string;
   bio: string;
@@ -1754,6 +2023,12 @@ function ProfileTab({
   onAutofill: (name?: string, useCase?: string) => void;
   canConfirm: boolean;
   onConfirm: () => void;
+  gmailAvailable: boolean;
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  gmailNote: string;
+  onConnectGmail: () => void;
+  onDisconnectGmail: () => void;
+  onGmailMode: (mode: "draft" | "send") => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -1801,6 +2076,16 @@ function ProfileTab({
         Drop in your resume or LinkedIn and Scout fills the rest for you. Everything
         stays editable, and it shapes who we find and how your messages sound.
       </p>
+
+      {gmailAvailable && (
+        <GmailCard
+          gmail={gmail}
+          note={gmailNote}
+          onConnect={onConnectGmail}
+          onDisconnect={onDisconnectGmail}
+          onMode={onGmailMode}
+        />
+      )}
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
         {/* -------- Resume / LinkedIn first: read it and auto-populate -------- */}
