@@ -320,6 +320,16 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     setCatId(c.id);
   }
 
+  // Edit the selected category: rename it and save the current goal text into it.
+  function editCategory() {
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat) return;
+    const newName = window.prompt("Edit this category's name:", cat.name);
+    if (newName === null) return; // cancelled
+    const name = newName.trim() || cat.name;
+    saveCats(categories.map((c) => (c.id === catId ? { ...c, name, goal } : c)));
+  }
+
   function removeCategory(id: string) {
     const next = categories.filter((c) => c.id !== id);
     saveCats(next);
@@ -491,18 +501,30 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
               <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
                 <div>
                   <Label>Category of search</Label>
-                  <select
-                    value={catId}
-                    onChange={(e) => selectCategory(e.target.value)}
-                    className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                  >
-                    {myCats.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                    <option value="">Custom search…</option>
-                  </select>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={catId}
+                      onChange={(e) => selectCategory(e.target.value)}
+                      className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    >
+                      {myCats.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                      <option value="">Custom search…</option>
+                    </select>
+                    {catId && (
+                      <button
+                        onClick={editCategory}
+                        title="Edit this category"
+                        aria-label="Edit this category"
+                        className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                      >
+                        <PencilIcon />
+                      </button>
+                    )}
+                  </div>
                   <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                     <button
                       onClick={addCategory}
@@ -527,7 +549,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                     >
                       Profile
                     </button>
-                    . Add or remove any to make them yours.
+                    . Add, edit (pencil), or remove any to make them yours.
                   </p>
                 </div>
 
@@ -535,10 +557,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                   <Label>Who are you looking for?</Label>
                   <textarea
                     value={goal}
-                    onChange={(e) => {
-                      setGoal(e.target.value);
-                      setCatId(""); // editing turns it into a custom search
-                    }}
+                    onChange={(e) => setGoal(e.target.value)}
                     placeholder={uc.goalPlaceholder}
                     rows={3}
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
@@ -1398,6 +1417,25 @@ function WarnIcon() {
     >
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
       <path d="M12 9v4 M12 17h.01" />
+    </svg>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
     </svg>
   );
 }
