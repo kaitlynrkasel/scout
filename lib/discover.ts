@@ -5,16 +5,16 @@
 
 import { claudeJson, parseJsonLoose } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
-import { TEMPLATES } from "./templates";
+import { resolveTemplate, GENERIC } from "./templates";
 import { ApiCreditError } from "./apiErrors";
-import type { Opportunity, TemplateKey } from "./types";
+import type { Opportunity } from "./types";
 
-function buildQueries(goal: string, templateKey: TemplateKey): string[] {
-  const t = TEMPLATES[templateKey];
+function buildQueries(goal: string, useCase: string): string[] {
+  const tails = resolveTemplate(useCase)?.queryTails || GENERIC.queryTails;
   const g = goal.trim();
   const set = new Set<string>();
   set.add(g);
-  for (const tail of t.queryTails) set.add(tail.replace("{goal}", g));
+  for (const tail of tails) set.add(tail.replace("{goal}", g));
   return Array.from(set);
 }
 
@@ -43,12 +43,12 @@ async function extract(
   cand: TavilyResult,
   goal: string,
   about: string,
-  templateKey: TemplateKey
+  useCase: string
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
-  const t = TEMPLATES[templateKey];
+  const noun = (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
   const sys =
-    `You are a research assistant. From a web search result, extract a structured record of one ${t.targetNoun.slice(0, -1) || "target"} ` +
-    `the user could reach out to, matching their GOAL. Return ONLY a JSON object, no prose, no markdown. ` +
+    `You are a research assistant. From a web search result, extract a structured record of one ${noun || "target"} ` +
+    `the user could reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
     `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
     `Set is_relevant to false for: news articles, generic "top 10" listicles with no specific target, login/paywall pages, ` +
     `pay-to-play services, and the user themselves.`;
@@ -59,7 +59,7 @@ async function extract(
     `url (best link), location, fit_score (0 to 1, how well this matches the goal), ` +
     `why_it_fits (one specific, true detail about them, used to personalize outreach; empty if unknown).`;
   const ctx =
-    `USER GOAL: ${goal}\nABOUT THE USER: ${about}\nVERTICAL: ${t.label}.`;
+    `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
   const user =
     `${ctx}\n${fields}\n\nSEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 2800)}`;
   try {
@@ -81,10 +81,10 @@ export interface DiscoverResult {
 export async function discover(
   goal: string,
   about: string,
-  templateKey: TemplateKey,
+  useCase: string,
   maxItems = 10
 ): Promise<DiscoverResult> {
-  const queries = buildQueries(goal, templateKey);
+  const queries = buildQueries(goal, useCase);
 
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
@@ -112,7 +112,7 @@ export async function discover(
   for (let i = 0; i < candidates.length && opps.length < maxItems; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
     const recs = await Promise.all(
-      batch.map((c) => extract(c, goal, about, templateKey))
+      batch.map((c) => extract(c, goal, about, useCase))
     );
     for (let j = 0; j < recs.length; j++) {
       if (opps.length >= maxItems) break;

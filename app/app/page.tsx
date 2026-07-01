@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { TEMPLATE_LIST, TEMPLATES } from "@/lib/templates";
-import type { Draft, Opportunity, OutreachTemplate, TemplateKey } from "@/lib/types";
+import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
+import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import { fileToText } from "@/lib/fileText";
@@ -26,7 +26,9 @@ const OUTREACH_KINDS = [
 
 // Suggested categories of search, seeded from the profile's use case. Users can
 // add their own and remove any of these, so the options become their own.
-const SUGGESTED: Record<TemplateKey, { name: string; goal: string }[]> = {
+// Keyed by ucKey() — the deep presets have tailored sets; anything else falls
+// back to GENERIC_SUGGESTIONS.
+const SUGGESTED: Record<string, { name: string; goal: string }[]> = {
   networking: [
     { name: "Coffee chats", goal: "professionals in my field open to a quick coffee or call" },
     { name: "Mentors", goal: "experienced people in my field open to mentoring" },
@@ -47,6 +49,19 @@ const SUGGESTED: Record<TemplateKey, { name: string; goal: string }[]> = {
   ],
 };
 
+// Fallback categories for any free-text use case that isn't one of the presets.
+const GENERIC_SUGGESTIONS: { name: string; goal: string }[] = [
+  { name: "Warm intros", goal: "people connected to my goal who could make a warm introduction" },
+  { name: "Decision makers", goal: "the people who decide about what I'm reaching out about" },
+  { name: "Peers", goal: "people doing similar work I can connect and share notes with" },
+  { name: "Partners", goal: "people or organizations who could partner with me" },
+];
+
+// Suggested categories for a use case: tailored set for a preset, generic otherwise.
+function suggestionsFor(useCase: string): { name: string; goal: string }[] {
+  return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
+}
+
 const TPL_KEY = "cue_templates";
 const PROFILE_KEY = "cue_profile";
 const CAT_KEY = "cue_categories";
@@ -55,14 +70,14 @@ const SEED_KEY = "cue_seeded";
 interface Profile {
   name: string;
   bio: string;
-  useCase: TemplateKey;
+  useCase: string; // free text; matched to a preset when it can be, else read as-is
   linkedin?: string;
 }
 interface Category {
   id: string;
   name: string;
   goal: string;
-  useCase: TemplateKey;
+  useCase: string; // stored as ucKey() so categories bucket by normalized use case
 }
 
 interface ScoutToolProps {
@@ -88,11 +103,11 @@ function Loading() {
 
 function LocalShell() {
   const [ready, setReady] = useState(false);
-  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "networking" });
+  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "Networking" });
   useEffect(() => {
     try {
       const p = localStorage.getItem(PROFILE_KEY);
-      if (p) setInitial({ name: "", bio: "", useCase: "networking", ...JSON.parse(p) });
+      if (p) setInitial({ name: "", bio: "", useCase: "Networking", ...JSON.parse(p) });
     } catch {}
     setReady(true);
   }, []);
@@ -113,7 +128,7 @@ function AuthedShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
-  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "networking" });
+  const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "Networking" });
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -139,8 +154,8 @@ function AuthedShell() {
       if (cancelled) return;
       setInitial(
         p
-          ? { name: p.name, bio: p.bio, useCase: p.useCase as TemplateKey, linkedin: p.linkedin || "" }
-          : { name: "", bio: "", useCase: "networking", linkedin: "" }
+          ? { name: p.name, bio: p.bio, useCase: p.useCase || "Networking", linkedin: p.linkedin || "" }
+          : { name: "", bio: "", useCase: "Networking", linkedin: "" }
       );
       setProfileLoaded(true);
     });
@@ -215,30 +230,32 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       if (t) setMyTemplates(JSON.parse(t));
     } catch {}
 
-    if (!sd.includes(prof.useCase)) {
+    const key = ucKey(prof.useCase);
+    if (!sd.includes(key)) {
       cats = [...cats, ...seedFor(prof.useCase)];
-      sd = [...sd, prof.useCase];
+      sd = [...sd, key];
       saveCats(cats);
       saveSeeded(sd);
     }
     setProfile(prof);
     setCategories(cats);
     setSeeded(sd);
-    const mine = cats.filter((c) => c.useCase === prof.useCase);
+    const mine = cats.filter((c) => c.useCase === key);
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
     } else {
-      setGoal(TEMPLATES[prof.useCase].exampleGoal);
+      setGoal(ucInfo(prof.useCase).exampleGoal);
     }
   }, []);
 
-  function seedFor(uc: TemplateKey): Category[] {
-    return SUGGESTED[uc].map((s, i) => ({
-      id: `sug-${uc}-${i}`,
+  function seedFor(uc: string): Category[] {
+    const key = ucKey(uc);
+    return suggestionsFor(uc).map((s, i) => ({
+      id: `sug-${key}-${i}`,
       name: s.name,
       goal: s.goal,
-      useCase: uc,
+      useCase: key,
     }));
   }
   const saveTpls = (n: OutreachTemplate[]) => {
@@ -280,22 +297,23 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   }
 
   // Change the use case (from Profile). Seeds its categories the first time.
-  function changeUseCase(uc: TemplateKey) {
+  function changeUseCase(uc: string) {
+    const key = ucKey(uc);
     const next = { ...profile, useCase: uc };
     saveProfile(next);
     let cats = categories;
-    if (!seeded.includes(uc)) {
+    if (!seeded.includes(key)) {
       cats = [...categories, ...seedFor(uc)];
       saveCats(cats);
-      saveSeeded([...seeded, uc]);
+      saveSeeded([...seeded, key]);
     }
-    const mine = cats.filter((c) => c.useCase === uc);
+    const mine = cats.filter((c) => c.useCase === key);
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
     } else {
       setCatId("");
-      setGoal(TEMPLATES[uc].exampleGoal);
+      setGoal(ucInfo(uc).exampleGoal);
     }
     resetResults();
   }
@@ -314,7 +332,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       id: `cat-${Date.now()}`,
       name: name.trim(),
       goal: goal,
-      useCase: profile.useCase,
+      useCase: ucKey(profile.useCase),
     };
     saveCats([...categories, c]);
     setCatId(c.id);
@@ -334,7 +352,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     const next = categories.filter((c) => c.id !== id);
     saveCats(next);
     if (catId === id) {
-      const mine = next.filter((c) => c.useCase === profile.useCase);
+      const mine = next.filter((c) => c.useCase === ucKey(profile.useCase));
       if (mine.length) {
         setCatId(mine[0].id);
         setGoal(mine[0].goal);
@@ -353,8 +371,8 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     setMtText("");
   }
 
-  const uc = TEMPLATES[profile.useCase];
-  const myCats = categories.filter((c) => c.useCase === profile.useCase);
+  const uc = ucInfo(profile.useCase);
+  const myCats = categories.filter((c) => c.useCase === ucKey(profile.useCase));
   const aboutText = [
     profile.name,
     profile.bio,
@@ -376,7 +394,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, template: profile.useCase }),
+        body: JSON.stringify({ goal, about: aboutText, useCase: profile.useCase }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -409,7 +427,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
         body: JSON.stringify({
           opportunities: chosen,
           about: aboutText,
-          template: profile.useCase,
+          useCase: profile.useCase,
           templates: myTemplates,
         }),
       });
@@ -1062,6 +1080,104 @@ function TemplatesTab({
   );
 }
 
+/* ---------------- Use-case combobox (free text + typeahead suggestions) ---------------- */
+function UseCaseCombo({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [draft, setDraft] = useState(value);
+  const [active, setActive] = useState(0);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  // Keep the field in sync if the profile's use case changes elsewhere.
+  useEffect(() => setDraft(value), [value]);
+
+  // Close the dropdown on an outside click.
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, []);
+
+  const q = draft.trim().toLowerCase();
+  const matches = q
+    ? USE_CASE_SUGGESTIONS.filter((s) => s.toLowerCase().includes(q))
+    : USE_CASE_SUGGESTIONS;
+
+  // Commit typed or picked text. No match is fine, we keep exactly what they typed.
+  function commit(v: string) {
+    const val = v.trim();
+    if (val) {
+      setDraft(val);
+      if (val !== value) onChange(val);
+    } else {
+      setDraft(value); // don't allow an empty use case
+    }
+    setOpen(false);
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <input
+        value={draft}
+        onChange={(e) => {
+          setDraft(e.target.value);
+          setActive(0);
+          setOpen(true);
+        }}
+        onFocus={() => setOpen(true)}
+        onBlur={() => commit(draft)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            commit(open && matches[active] ? matches[active] : draft);
+          } else if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setOpen(true);
+            setActive((a) => Math.min(a + 1, matches.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setActive((a) => Math.max(a - 1, 0));
+          } else if (e.key === "Escape") {
+            setDraft(value);
+            setOpen(false);
+          }
+        }}
+        placeholder="Type what you're using Scout for…"
+        className="w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+      />
+      {open && matches.length > 0 && (
+        <div className="absolute z-30 mt-1.5 max-h-64 w-full overflow-auto rounded-xl border border-warm-border bg-white py-1 shadow-soft">
+          {matches.map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              onMouseEnter={() => setActive(i)}
+              onMouseDown={(e) => {
+                e.preventDefault(); // keep focus; run our commit, not the blur
+                commit(s);
+              }}
+              className={`block w-full px-3.5 py-2 text-left text-sm transition ${
+                i === active ? "bg-warm-bg text-ink" : "text-body hover:bg-warm-bg/60"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Profile tab ---------------- */
 function ProfileTab({
   name,
@@ -1078,11 +1194,11 @@ function ProfileTab({
   name: string;
   bio: string;
   linkedin: string;
-  useCase: TemplateKey;
+  useCase: string;
   onName: (v: string) => void;
   onBio: (v: string) => void;
   onLinkedin: (v: string) => void;
-  onUseCase: (v: TemplateKey) => void;
+  onUseCase: (v: string) => void;
   canConfirm: boolean;
   onConfirm: () => void;
 }) {
@@ -1098,23 +1214,18 @@ function ProfileTab({
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
         <Label>What are you using Scout for?</Label>
-        <select
-          value={useCase}
-          onChange={(e) => onUseCase(e.target.value as TemplateKey)}
-          className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-        >
-          {TEMPLATE_LIST.map((t) => (
-            <option key={t.key} value={t.key}>
-              {t.label}
-            </option>
-          ))}
-        </select>
+        <UseCaseCombo value={useCase} onChange={onUseCase} />
+        <p className="mt-2 text-xs leading-relaxed text-body/70">
+          Type anything, a job hunt, finding a band member, press for a product, investors.
+          Pick a suggestion if one fits, or just describe it in your own words and Scout
+          will figure out who to look for.
+        </p>
         <div className="mt-3 rounded-xl bg-warm-bg/70 px-4 py-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
             Suggested categories
           </div>
           <div className="mt-2 flex flex-wrap gap-2">
-            {SUGGESTED[useCase].map((s) => (
+            {suggestionsFor(useCase).map((s) => (
               <span
                 key={s.name}
                 className="rounded-full border border-warm-border bg-white px-3 py-1 text-xs font-medium text-ink"

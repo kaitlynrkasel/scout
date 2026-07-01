@@ -3,9 +3,9 @@
 // from the contact we actually have, and never fabricates.
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
-import { TEMPLATES } from "./templates";
+import { resolveTemplate, GENERIC } from "./templates";
 import { ApiCreditError } from "./apiErrors";
-import type { Draft, Opportunity, OutreachTemplate, TemplateKey } from "./types";
+import type { Draft, Opportunity, OutreachTemplate } from "./types";
 
 function pickChannel(opp: Opportunity): {
   channelType: Draft["channelType"];
@@ -47,14 +47,15 @@ function templateBlock(
 export async function draftFor(
   opp: Opportunity,
   about: string,
-  templateKey: TemplateKey,
+  useCase: string,
   templates: OutreachTemplate[] = []
 ): Promise<Draft> {
-  const t = TEMPLATES[templateKey];
+  const t = resolveTemplate(useCase);
+  const draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
   const { channelType, to } = pickChannel(opp);
 
   const sys =
-    `You write outreach for someone reaching out in the "${t.label}" context. ` +
+    `You write outreach for someone whose use case is "${useCase}". ` +
     `Voice: warm, genuine, human, first person, never salesy. ` +
     `NEVER use em-dashes or en-dashes; use commas and periods like a normal typed email. ` +
     `Write SHORT paragraphs (1 to 3 sentences) separated by a blank line ("\\n\\n"). ` +
@@ -70,7 +71,7 @@ export async function draftFor(
 
   const sender = `ABOUT THE SENDER (draw on what fits, do not list it all): ${about}`;
 
-  const purpose = `PURPOSE / STYLE of this message: ${t.draftStyle}`;
+  const purpose = `PURPOSE / STYLE of this message: ${draftStyle}`;
 
   let task: string;
   if (channelType === "email") {

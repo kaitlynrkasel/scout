@@ -71,3 +71,75 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
 };
 
 export const TEMPLATE_LIST: Template[] = Object.values(TEMPLATES);
+
+// The use case is now free text. These are just autocomplete suggestions; typing
+// anything else is fine, the engine reads it and adapts.
+export const USE_CASE_SUGGESTIONS = [
+  "Networking",
+  "Job / Internship search",
+  "Music PR / Playlisting",
+  "Sales / lead generation",
+  "Recruiting / hiring",
+  "Press & media outreach",
+  "Fundraising / investors",
+  "Partnerships & business development",
+  "Influencer marketing",
+  "Freelance clients",
+  "Real estate leads",
+  "Event planning & speakers",
+  "Podcast guest booking",
+  "Community building",
+];
+
+// Best-effort match of a free-text use case to one of the deep presets. Returns
+// null for anything else (the engine then behaves generically + reads the text).
+export function resolveTemplate(useCase: string): Template | null {
+  const s = String(useCase || "").toLowerCase();
+  if (/music|playlist|\ba&r\b|record label|song|artist/.test(s)) return TEMPLATES.musicpr;
+  if (/job|intern|career|hiring|new grad|co-?op/.test(s)) return TEMPLATES.jobs;
+  if (/network|coffee|mentor|connect|advice/.test(s)) return TEMPLATES.networking;
+  return null;
+}
+
+export const GENERIC = {
+  targetNoun: "people",
+  blurb: "Scout reads your use case and finds who fits.",
+  goalPlaceholder: "e.g. the people or opportunities you want to reach",
+  exampleGoal: "",
+  draftStyle:
+    "A warm, genuine, personal message that fits the sender's goal, with a clear but soft ask. Human and specific, never salesy.",
+  queryTails: [
+    "{goal}",
+    "{goal} contact",
+    "{goal} email",
+    "{goal} how to reach",
+    "{goal} apply",
+  ],
+};
+
+// Display info for a free-text use case (preset when matched, generic otherwise).
+export function ucInfo(useCase: string) {
+  const t = resolveTemplate(useCase);
+  if (t)
+    return {
+      targetNoun: t.targetNoun,
+      blurb: t.blurb,
+      goalPlaceholder: t.goalPlaceholder,
+      exampleGoal: t.exampleGoal,
+      key: t.key as string,
+    };
+  return {
+    targetNoun: GENERIC.targetNoun,
+    blurb: GENERIC.blurb,
+    goalPlaceholder: GENERIC.goalPlaceholder,
+    exampleGoal: GENERIC.exampleGoal,
+    key: "",
+  };
+}
+
+// A normalized key so "Networking"/"networking" bucket together, and custom use
+// cases get their own stable bucket.
+export function ucKey(useCase: string): string {
+  const t = resolveTemplate(useCase);
+  return t ? t.key : String(useCase || "").trim().toLowerCase() || "general";
+}

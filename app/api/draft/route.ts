@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { draftFor } from "@/lib/draft";
 import { ApiCreditError } from "@/lib/apiErrors";
-import type { Opportunity, OutreachTemplate, TemplateKey } from "@/lib/types";
+import type { Opportunity, OutreachTemplate } from "@/lib/types";
 
 export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
 
 export async function POST(req: NextRequest) {
   try {
-    const { opportunities, about, template, templates } = await req.json();
+    const { opportunities, about, useCase, template, templates } = await req.json();
     const opps: Opportunity[] = opportunities || [];
     const myTemplates: OutreachTemplate[] = templates || [];
+    const uc = String(useCase || template || "networking");
     if (!opps.length) {
       return NextResponse.json({ error: "No opportunities selected." }, { status: 400 });
     }
@@ -23,14 +24,7 @@ export async function POST(req: NextRequest) {
     const drafts = await Promise.all(
       opps
         .slice(0, 8)
-        .map((o) =>
-          draftFor(
-            o,
-            String(about || ""),
-            (template as TemplateKey) || "networking",
-            myTemplates
-          )
-        )
+        .map((o) => draftFor(o, String(about || ""), uc, myTemplates))
     );
     return NextResponse.json({ drafts });
   } catch (e: any) {

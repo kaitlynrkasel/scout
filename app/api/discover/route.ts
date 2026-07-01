@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
-import type { TemplateKey } from "@/lib/types";
 
 export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
 
 export async function POST(req: NextRequest) {
   try {
-    const { goal, about, template } = await req.json();
+    const { goal, about, useCase, template } = await req.json();
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
     }
@@ -23,7 +22,7 @@ export async function POST(req: NextRequest) {
     const result = await discover(
       String(goal),
       String(about || ""),
-      (template as TemplateKey) || "networking",
+      String(useCase || template || "networking"),
       10
     );
     return NextResponse.json(result);
