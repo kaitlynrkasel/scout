@@ -990,17 +990,20 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                               → <ContactValue value={d.to} className="text-body/70" />
                             </span>
                           )}
-                          <button
-                            onClick={() => {
-                              navigator.clipboard.writeText(
-                                (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
-                              );
-                              bumpActivity({ copies: 1 });
-                            }}
-                            className="ml-auto rounded-lg border border-warm-border px-3 py-1 text-xs font-semibold text-body transition hover:bg-warm-bg"
-                          >
-                            Copy
-                          </button>
+                          <div className="ml-auto flex items-center gap-2">
+                            <SendAction draft={d} onUse={() => bumpActivity({ copies: 1 })} />
+                            <button
+                              onClick={() => {
+                                navigator.clipboard.writeText(
+                                  (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
+                                );
+                                bumpActivity({ copies: 1 });
+                              }}
+                              className="rounded-lg border border-warm-border px-3 py-1 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                            >
+                              Copy
+                            </button>
+                          </div>
                         </div>
                         {d.subject && (
                           <div className="mb-2.5 border-b border-warm-border pb-2.5 text-sm font-semibold text-ink">
@@ -1349,7 +1352,7 @@ function DashboardTab({
       <section className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <StatCard n={activity.found} label="People found" />
         <StatCard n={activity.drafts} label="Messages drafted" />
-        <StatCard n={activity.copies} label="Copied to send" />
+        <StatCard n={activity.copies} label="Taken to send" />
         <StatCard n={activity.searches} label="Searches run" />
       </section>
 
@@ -1473,6 +1476,43 @@ function StatCard({ n, label }: { n: number; label: string }) {
       <div className="mt-1 text-xs font-medium text-body/70">{label}</div>
     </div>
   );
+}
+
+/* ---------------- One-click send action per draft (no account linking needed) ---------------- */
+function SendAction({ draft, onUse }: { draft: Draft; onUse: () => void }) {
+  const btn =
+    "rounded-lg bg-brand-gradient px-3 py-1 text-xs font-bold text-white shadow-card transition hover:opacity-95";
+
+  if (draft.channelType === "email") {
+    const to = mailHref(draft.to) ? draft.to : "";
+    const href =
+      `mailto:${to}` +
+      `?subject=${encodeURIComponent(draft.subject || "")}` +
+      `&body=${encodeURIComponent(draft.body || "")}`;
+    return (
+      <a href={href} onClick={onUse} className={btn}>
+        Open in email
+      </a>
+    );
+  }
+
+  const url = linkHref(draft.to);
+  if (url) {
+    const isLi = /linkedin\.com/i.test(url);
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noreferrer"
+        onClick={onUse}
+        className={btn}
+        title="Opens their profile so you can paste and send"
+      >
+        {isLi ? "Open in LinkedIn" : "Open link"}
+      </a>
+    );
+  }
+  return null;
 }
 
 /* ---------------- Templates tab ---------------- */
