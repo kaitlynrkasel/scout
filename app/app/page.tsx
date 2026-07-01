@@ -67,6 +67,15 @@ const PROFILE_KEY = "cue_profile";
 const CAT_KEY = "cue_categories";
 const PROJECTS_KEY = "cue_projects";
 const ACTIVE_KEY = "cue_active_project";
+const ACT_KEY = "cue_activity";
+
+interface Activity {
+  searches: number;
+  found: number;
+  drafts: number;
+  copies: number;
+}
+const ZERO_ACTIVITY: Activity = { searches: 0, found: 0, drafts: 0, copies: 0 };
 
 interface Profile {
   name: string;
@@ -199,7 +208,9 @@ function AuthedShell() {
 }
 
 function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: ScoutToolProps) {
-  const [tab, setTab] = useState<"outreach" | "templates" | "profile">("outreach");
+  const [tab, setTab] = useState<
+    "outreach" | "dashboard" | "templates" | "profile"
+  >("outreach");
 
   // ---- Outreach state ----
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
@@ -224,6 +235,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState<string>("");
+  const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
 
   // Load everything, then make sure at least one project exists (migrating any
   // pre-project categories into a default project the first time).
@@ -246,6 +258,10 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     try {
       const t = localStorage.getItem(TPL_KEY);
       if (t) setMyTemplates(JSON.parse(t));
+    } catch {}
+    try {
+      const a = localStorage.getItem(ACT_KEY);
+      if (a) setActivity({ ...ZERO_ACTIVITY, ...JSON.parse(a) });
     } catch {}
 
     if (!projs.length) {
@@ -317,6 +333,22 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     try {
       localStorage.setItem(CAT_KEY, JSON.stringify(n));
     } catch {}
+  };
+  // Bump real activity counters (searches run, people found, drafts written,
+  // drafts copied to send). Honest usage, no invented metrics.
+  const bumpActivity = (patch: Partial<Activity>) => {
+    setActivity((prev) => {
+      const next: Activity = {
+        searches: prev.searches + (patch.searches || 0),
+        found: prev.found + (patch.found || 0),
+        drafts: prev.drafts + (patch.drafts || 0),
+        copies: prev.copies + (patch.copies || 0),
+      };
+      try {
+        localStorage.setItem(ACT_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   };
   const saveProjectsRaw = (n: Project[]) => {
     try {
@@ -546,6 +578,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
+      bumpActivity({ searches: 1, found: (data.opportunities || []).length });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -575,6 +608,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
         return;
       }
       setDrafts(data.drafts || []);
+      bumpActivity({ drafts: (data.drafts || []).length });
     } catch (e: any) {
       setError(e.message);
     } finally {
@@ -612,6 +646,9 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
         <div className="mx-auto flex max-w-6xl gap-7 px-6">
           <TabButton active={tab === "outreach"} onClick={() => setTab("outreach")}>
             Outreach
+          </TabButton>
+          <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")}>
+            Dashboard
           </TabButton>
           <TabButton active={tab === "templates"} onClick={() => setTab("templates")}>
             Templates
@@ -954,11 +991,12 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                             </span>
                           )}
                           <button
-                            onClick={() =>
+                            onClick={() => {
                               navigator.clipboard.writeText(
                                 (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
-                              )
-                            }
+                              );
+                              bumpActivity({ copies: 1 });
+                            }}
                             className="ml-auto rounded-lg border border-warm-border px-3 py-1 text-xs font-semibold text-body transition hover:bg-warm-bg"
                           >
                             Copy
@@ -980,6 +1018,19 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
             )}
           </main>
         </>
+      )}
+
+      {tab === "dashboard" && (
+        <DashboardTab
+          activity={activity}
+          profile={profile}
+          templates={myTemplates}
+          projects={projects}
+          categoriesCount={categories.length}
+          goOutreach={() => setTab("outreach")}
+          goTemplates={() => setTab("templates")}
+          goProfile={() => setTab("profile")}
+        />
       )}
 
       {tab === "templates" && (
@@ -1201,6 +1252,226 @@ function ContactValue({
     >
       {value}
     </a>
+  );
+}
+
+/* ---------------- Dashboard tab ---------------- */
+function DashboardTab({
+  activity,
+  profile,
+  templates,
+  projects,
+  categoriesCount,
+  goOutreach,
+  goTemplates,
+  goProfile,
+}: {
+  activity: Activity;
+  profile: Profile;
+  templates: OutreachTemplate[];
+  projects: Project[];
+  categoriesCount: number;
+  goOutreach: () => void;
+  goTemplates: () => void;
+  goProfile: () => void;
+}) {
+  const channels = new Set(templates.map((t) => t.channel)).size;
+  const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
+  // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
+  const minutesSaved = activity.drafts * 6;
+  const timeSaved =
+    minutesSaved >= 60
+      ? `${(minutesSaved / 60).toFixed(1)} hrs`
+      : `${minutesSaved} min`;
+
+  // What Scout uses to personalize FOR YOU — each item is a real signal or a
+  // concrete way to make your outreach sharper.
+  const signals = [
+    {
+      done: !!profile.bio.trim(),
+      label: "Your resume / bio is on file",
+      hint: "Scout draws on your real background so messages sound like you.",
+      cta: profile.bio.trim() ? null : { label: "Add it in Profile", go: goProfile },
+    },
+    {
+      done: !!(profile.linkedin || "").trim(),
+      label: "LinkedIn connected",
+      hint: "Adds context about who you are to every message.",
+      cta: (profile.linkedin || "").trim()
+        ? null
+        : { label: "Add your LinkedIn", go: goProfile },
+    },
+    {
+      done: templates.length > 0,
+      label:
+        templates.length > 0
+          ? `${templates.length} voice ${templates.length === 1 ? "template" : "templates"} across ${channels} ${channels === 1 ? "channel" : "channels"}`
+          : "Teach Scout your writing voice",
+      hint: "Scout matches the tone and format of your own emails and DMs.",
+      cta:
+        channels >= 3
+          ? null
+          : { label: "Add a template", go: goTemplates },
+    },
+    {
+      done: projectsWithContext > 0,
+      label:
+        projectsWithContext > 0
+          ? `${projectsWithContext} ${projectsWithContext === 1 ? "project has" : "projects have"} context set`
+          : "Add context to your projects",
+      hint: "Tell Scout who each project is for, so pitches are about the right person.",
+      cta:
+        projectsWithContext === projects.length
+          ? null
+          : { label: "Add context", go: goOutreach },
+    },
+    {
+      done: activity.searches > 0,
+      label:
+        activity.searches > 0
+          ? "Scout is learning from your searches"
+          : "Run your first search",
+      hint: "Every search and every person you keep teaches Scout what a good match looks like for you.",
+      cta: activity.searches > 0 ? null : { label: "Start scouting", go: goOutreach },
+    },
+  ];
+
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12">
+      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+        Your <span className="brand-text">dashboard</span>
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        How your outreach is going, and how Scout is getting sharper for you.
+      </p>
+
+      {/* -------- Activity (real counts) -------- */}
+      <section className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StatCard n={activity.found} label="People found" />
+        <StatCard n={activity.drafts} label="Messages drafted" />
+        <StatCard n={activity.copies} label="Copied to send" />
+        <StatCard n={activity.searches} label="Searches run" />
+      </section>
+
+      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/50 px-5 py-4">
+        <div>
+          <div className="text-lg font-extrabold text-ink">
+            ~{timeSaved}{" "}
+            <span className="text-xs font-semibold text-body/70">saved (est.)</span>
+          </div>
+          <p className="mt-0.5 text-xs text-body/70">
+            Rough estimate at about 6 minutes to find and personally write each of
+            your {activity.drafts} {activity.drafts === 1 ? "message" : "messages"}.
+          </p>
+        </div>
+        <button
+          onClick={goOutreach}
+          className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+        >
+          Scout more people
+        </button>
+      </div>
+
+      {activity.searches === 0 && (
+        <p className="mt-3 text-xs text-body/60">
+          Numbers fill in as you use Scout. Run a search on the Outreach tab to get
+          started.
+        </p>
+      )}
+
+      {/* -------- How Scout learns YOU -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">How Scout is learning you</h2>
+        <p className="mt-1 text-sm text-body/80">
+          Everything here is private to your account. The more Scout knows, the more
+          your outreach sounds like you, not a template.
+        </p>
+        <div className="mt-4 space-y-2.5">
+          {signals.map((s) => (
+            <div
+              key={s.label}
+              className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            >
+              <span
+                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white ${
+                  s.done ? "bg-brand-gradient" : "border border-warm-border bg-warm-bg"
+                }`}
+              >
+                {s.done ? (
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 6 9 17l-5-5" />
+                  </svg>
+                ) : (
+                  <span className="text-sm font-bold text-body/50">+</span>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-semibold text-ink">{s.label}</div>
+                <div className="mt-0.5 text-xs leading-relaxed text-body/80">
+                  {s.hint}
+                </div>
+              </div>
+              {s.cta && (
+                <button
+                  onClick={s.cta.go}
+                  className="shrink-0 self-center rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+                >
+                  {s.cta.label}
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* -------- How Scout learns from EVERYONE -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">How Scout gets better for everyone</h2>
+        <div className="mt-4 rounded-3xl border border-warm-border bg-white p-6 shadow-card">
+          <p className="text-sm leading-relaxed text-body">
+            Scout improves for all users as the shared engine learns which search
+            angles surface real people, which channels actually get replies, and what a
+            strong match looks like by field. These patterns are aggregate and
+            anonymous, they tune the defaults everyone starts from.
+          </p>
+          <div className="mt-4 flex items-start gap-3 rounded-2xl bg-warm-bg/60 px-4 py-3">
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect x="3" y="11" width="18" height="10" rx="2" />
+                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+              </svg>
+            </span>
+            <p className="text-xs leading-relaxed text-body">
+              <span className="font-semibold text-ink">Your data stays yours.</span> Your
+              resume, your voice templates, your contacts, and your messages are private
+              to your account and never shown to other users.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* -------- Honesty note about reply tracking -------- */}
+      <section className="mt-8 rounded-2xl border border-dashed border-warm-border bg-white/60 px-5 py-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+          Coming soon
+        </div>
+        <p className="mt-1.5 text-sm leading-relaxed text-body">
+          Right now Scout drafts messages and you send them from your own email or DMs,
+          so opens and replies aren&apos;t tracked automatically yet. When you connect
+          sending, this dashboard will show real response and reply rates, not
+          estimates.
+        </p>
+      </section>
+    </main>
+  );
+}
+
+function StatCard({ n, label }: { n: number; label: string }) {
+  return (
+    <div className="rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+      <div className="text-3xl font-extrabold tracking-tight text-ink">{n}</div>
+      <div className="mt-1 text-xs font-medium text-body/70">{label}</div>
+    </div>
   );
 }
 
