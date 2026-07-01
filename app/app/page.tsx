@@ -264,9 +264,15 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       localStorage.setItem(TPL_KEY, JSON.stringify(n));
     } catch {}
   };
-  const saveProfile = (n: Profile) => {
-    setProfile(n);
-    onSaveProfile(n);
+  // Merge a partial update into the profile using a functional state update, so
+  // several field updates fired in a row (e.g. resume autofill setting bio, then
+  // name, then use case) never clobber each other via a stale closure.
+  const patchProfile = (patch: Partial<Profile>) => {
+    setProfile((prev) => {
+      const next = { ...prev, ...patch };
+      onSaveProfile(next);
+      return next;
+    });
   };
   const saveCats = (n: Category[]) => {
     setCategories(n);
@@ -299,8 +305,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
   // Change the use case (from Profile). Seeds its categories the first time.
   function changeUseCase(uc: string) {
     const key = ucKey(uc);
-    const next = { ...profile, useCase: uc };
-    saveProfile(next);
+    patchProfile({ useCase: uc });
     let cats = categories;
     if (!seeded.includes(key)) {
       cats = [...categories, ...seedFor(uc)];
@@ -316,6 +321,21 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
       setGoal(ucInfo(uc).exampleGoal);
     }
     resetResults();
+  }
+
+  // Prefill identity fields after Scout reads a resume. Keeps a name the user
+  // already typed; sets the inferred use case (which reseeds its categories).
+  // Bio is set separately (immediately) so nothing is lost if parsing fails.
+  function autofillIdentity(name?: string, useCase?: string) {
+    if (name && name.trim()) {
+      setProfile((prev) => {
+        if (prev.name && prev.name.trim()) return prev; // don't overwrite theirs
+        const next = { ...prev, name: name.trim() };
+        onSaveProfile(next);
+        return next;
+      });
+    }
+    if (useCase && useCase.trim()) changeUseCase(useCase.trim());
   }
 
   function selectCategory(id: string) {
@@ -801,10 +821,11 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
           bio={profile.bio}
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
-          onName={(v) => saveProfile({ ...profile, name: v })}
-          onBio={(v) => saveProfile({ ...profile, bio: v })}
-          onLinkedin={(v) => saveProfile({ ...profile, linkedin: v })}
+          onName={(v) => patchProfile({ name: v })}
+          onBio={(v) => patchProfile({ bio: v })}
+          onLinkedin={(v) => patchProfile({ linkedin: v })}
           onUseCase={changeUseCase}
+          onAutofill={autofillIdentity}
           canConfirm={profileComplete}
           onConfirm={() => setTab("outreach")}
         />
@@ -1188,6 +1209,7 @@ function ProfileTab({
   onBio,
   onLinkedin,
   onUseCase,
+  onAutofill,
   canConfirm,
   onConfirm,
 }: {
@@ -1199,20 +1221,85 @@ function ProfileTab({
   onBio: (v: string) => void;
   onLinkedin: (v: string) => void;
   onUseCase: (v: string) => void;
+  onAutofill: (name?: string, useCase?: string) => void;
   canConfirm: boolean;
   onConfirm: () => void;
 }) {
+  const [parsing, setParsing] = useState(false);
+  const [autofilled, setAutofilled] = useState(false);
+  const [note, setNote] = useState("");
+
+  // When a resume is read: keep the full text as the bio right away (so nothing
+  // is lost even if the read-back fails), then ask Scout to fill name + use case.
+  async function handleResume(text: string) {
+    onBio(text);
+    setNote("");
+    setAutofilled(false);
+    setParsing(true);
+    try {
+      const res = await fetch("/api/parse-profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      const data = await res.json();
+      if (res.ok && (data.name || data.useCase)) {
+        onAutofill(data.name, data.useCase);
+        setAutofilled(true);
+        setNote("Scout filled these in from your resume. Edit anything that's off.");
+      } else {
+        setNote("Saved your resume below. Add your name and use case to finish.");
+      }
+    } catch {
+      setNote("Saved your resume text below. Add your name and use case to finish.");
+    } finally {
+      setParsing(false);
+    }
+  }
+
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-3xl font-extrabold tracking-tight text-ink">
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Tell Scout who you are. This shapes the categories we suggest and makes
-        every message sound like you.
+        Drop in your resume and Scout fills the rest for you. Everything stays
+        editable, and it shapes who we find and how your messages sound.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+        {/* -------- Resume first: read it and auto-populate -------- */}
+        <Label>Start with your resume</Label>
+        <FileDrop
+          label={
+            parsing ? "Reading your resume…" : "Drop your resume here, or click to upload"
+          }
+          onText={handleResume}
+        />
+        <p className="mt-2 text-xs leading-relaxed text-body/70">
+          Scout reads it and fills in your name, use case, and background below. No
+          resume? Just fill the fields in yourself.
+        </p>
+        {parsing && (
+          <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-accent">
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-warm-border border-t-coral" />
+            Reading your resume and filling in your profile…
+          </div>
+        )}
+        {note && !parsing && (
+          <div
+            className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium ${
+              autofilled
+                ? "border border-warm-border bg-warm-bg/70 text-ink"
+                : "border border-warm-border bg-white text-body"
+            }`}
+          >
+            {note}
+          </div>
+        )}
+
+        <hr className="my-7 border-warm-border" />
+
         <Label>What are you using Scout for?</Label>
         <UseCaseCombo value={useCase} onChange={onUseCase} />
         <p className="mt-2 text-xs leading-relaxed text-body/70">
@@ -1261,20 +1348,14 @@ function ProfileTab({
         </div>
 
         <div className="mt-5">
-          <Label>Resume, bio, or company description</Label>
-          <FileDrop
-            label="Drop your resume here, or click to upload"
-            onText={(t) => onBio(bio.trim() ? bio.trim() + "\n\n" + t : t)}
+          <Label>Resume, bio, or background</Label>
+          <textarea
+            value={bio}
+            onChange={(e) => onBio(e.target.value)}
+            rows={11}
+            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: a short bio, your company's about page, your experience. The more you give, the more personal your outreach becomes."
+            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
-          <div className="mt-3">
-            <textarea
-              value={bio}
-              onChange={(e) => onBio(e.target.value)}
-              rows={11}
-              placeholder="…or paste it here. Anything that tells us who you are: your resume, a short bio, your company's about page, your experience. The more you give, the more personal your outreach becomes."
-              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
-          </div>
         </div>
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">

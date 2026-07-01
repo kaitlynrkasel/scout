@@ -18,8 +18,10 @@ export async function fileToText(file: File): Promise<string> {
 
   if (name.endsWith(".pdf")) {
     const pdfjs: any = await import("pdfjs-dist");
-    // Load the worker from a CDN so we don't have to wire it into the bundler.
-    pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
+    // Worker is served same-origin from /public (copied there by scripts/
+    // copy-pdf-worker.mjs at build time), so it's always version-matched and
+    // never depends on a CDN having this exact pdfjs release.
+    pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjs.getDocument({ data: arrayBuffer }).promise;
     let out = "";

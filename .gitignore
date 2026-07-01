@@ -7,3 +7,4 @@
 .DS_Store
 next-env.d.ts
 .vercel
+public/pdf.worker.min.mjs
