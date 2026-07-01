@@ -193,6 +193,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
 
   // ---- Outreach state ----
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
+  const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -345,6 +346,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     resetResults();
   }
 
+  // "+ Save Search": save the current goal text as a new named category.
   function addCategory() {
     const name = window.prompt("Name this search:", "");
     if (!name || !name.trim()) return;
@@ -358,14 +360,27 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
     setCatId(c.id);
   }
 
-  // Edit the selected category: rename it and save the current goal text into it.
-  function editCategory() {
-    const cat = categories.find((c) => c.id === catId);
-    if (!cat) return;
-    const newName = window.prompt("Edit this category's name:", cat.name);
-    if (newName === null) return; // cancelled
-    const name = newName.trim() || cat.name;
-    saveCats(categories.map((c) => (c.id === catId ? { ...c, name, goal } : c)));
+  // Category manager (pencil): add a fresh empty category and select it.
+  function addCategoryNamed(name: string) {
+    const nm = name.trim();
+    if (!nm) return;
+    const c: Category = {
+      id: `cat-${Date.now()}`,
+      name: nm,
+      goal: "",
+      useCase: ucKey(profile.useCase),
+    };
+    saveCats([...categories, c]);
+    setCatId(c.id);
+    setGoal("");
+    resetResults();
+  }
+
+  // Category manager (pencil): rename a category in the dropdown.
+  function renameCategory(id: string, name: string) {
+    const nm = name.trim();
+    if (!nm) return;
+    saveCats(categories.map((c) => (c.id === id ? { ...c, name: nm } : c)));
   }
 
   function removeCategory(id: string) {
@@ -539,28 +554,37 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
               <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
                 <div>
                   <Label>Category of search</Label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={catId}
-                      onChange={(e) => selectCategory(e.target.value)}
-                      className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                    >
-                      {myCats.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                      <option value="">Custom search…</option>
-                    </select>
-                    {catId && (
+                  <div className="relative">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={catId}
+                        onChange={(e) => selectCategory(e.target.value)}
+                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      >
+                        {myCats.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                        <option value="">Custom search…</option>
+                      </select>
                       <button
-                        onClick={editCategory}
-                        title="Edit this category"
-                        aria-label="Edit this category"
+                        onClick={() => setEditingCats(true)}
+                        title="Edit categories"
+                        aria-label="Edit categories"
                         className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
                         <PencilIcon />
                       </button>
+                    </div>
+                    {editingCats && (
+                      <CategoryManager
+                        cats={myCats}
+                        onAdd={addCategoryNamed}
+                        onRename={renameCategory}
+                        onRemove={removeCategory}
+                        onClose={() => setEditingCats(false)}
+                      />
                     )}
                   </div>
                   <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -570,14 +594,6 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                     >
                       + Save Search
                     </button>
-                    {catId && (
-                      <button
-                        onClick={() => removeCategory(catId)}
-                        className="text-body/60 transition hover:text-accent"
-                      >
-                        Remove this category
-                      </button>
-                    )}
                   </div>
                   <p className="mt-3 text-xs leading-relaxed text-body/70">
                     Categories are suggested from your{" "}
@@ -587,7 +603,7 @@ function ScoutTool({ initialProfile, onSaveProfile, onLogout, showLogout }: Scou
                     >
                       Profile
                     </button>
-                    . Add, edit (pencil), or remove any to make them yours.
+                    . Tap the pencil to add, rename, or remove them from your dropdown.
                   </p>
                 </div>
 
@@ -1633,6 +1649,126 @@ function WarnIcon() {
     >
       <path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z" />
       <path d="M12 9v4 M12 17h.01" />
+    </svg>
+  );
+}
+
+/* ---------------- Category manager (pencil popover: add / rename / remove) ---------------- */
+function CategoryManager({
+  cats,
+  onAdd,
+  onRename,
+  onRemove,
+  onClose,
+}: {
+  cats: { id: string; name: string }[];
+  onAdd: (name: string) => void;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [newName, setNewName] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [onClose]);
+
+  function add() {
+    if (!newName.trim()) return;
+    onAdd(newName);
+    setNewName("");
+  }
+
+  return (
+    <div
+      ref={ref}
+      className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-2xl border border-warm-border bg-white p-3 shadow-soft"
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+          Edit categories
+        </span>
+        <button
+          onClick={onClose}
+          className="text-xs font-semibold text-accent transition hover:underline"
+        >
+          Done
+        </button>
+      </div>
+
+      <div className="max-h-56 space-y-1.5 overflow-auto">
+        {cats.length === 0 && (
+          <p className="px-1 py-2 text-xs text-body/60">
+            No categories yet. Add one below.
+          </p>
+        )}
+        {cats.map((c) => (
+          <div key={c.id} className="flex items-center gap-1.5">
+            <input
+              defaultValue={c.name}
+              onBlur={(e) => {
+                if (e.target.value.trim() && e.target.value.trim() !== c.name)
+                  onRename(c.id, e.target.value);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") e.currentTarget.blur();
+              }}
+              className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
+            />
+            <button
+              onClick={() => onRemove(c.id)}
+              title={`Remove ${c.name}`}
+              aria-label={`Remove ${c.name}`}
+              className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+            >
+              <TrashIcon />
+            </button>
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-2.5 flex items-center gap-1.5 border-t border-warm-border pt-2.5">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") add();
+          }}
+          placeholder="New category name"
+          className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
+        />
+        <button
+          onClick={add}
+          disabled={!newName.trim()}
+          className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40"
+        >
+          Add
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.9"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M3 6h18 M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2 M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6 M14 11v6" />
     </svg>
   );
 }
