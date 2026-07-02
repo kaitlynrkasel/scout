@@ -276,7 +276,7 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "templates" | "profile"
+    "outreach" | "finds" | "dashboard" | "templates" | "profile" | "account"
   >("outreach");
 
   // ---- Outreach state ----
@@ -1021,12 +1021,20 @@ function ScoutTool({
             <span className="hidden text-xs font-medium text-body/70 sm:block">
               Reach the right people, in your own voice
             </span>
-            {showLogout && (
+            {accountEmail && (
               <button
-                onClick={onLogout}
-                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                onClick={() => setTab("account")}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
+                  tab === "account"
+                    ? "border-coral/40 bg-warm-bg text-accent"
+                    : "border-warm-border text-body hover:bg-warm-bg"
+                }`}
               >
-                Log out
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <circle cx="12" cy="8" r="3.5" />
+                  <path d="M5 20a7 7 0 0 1 14 0" />
+                </svg>
+                Account
               </button>
             )}
           </div>
@@ -1050,6 +1058,11 @@ function ScoutTool({
             Profile
             {profile.bio.trim() && <Dot />}
           </TabButton>
+          {accountEmail && (
+            <TabButton active={tab === "account"} onClick={() => setTab("account")}>
+              Account
+            </TabButton>
+          )}
         </div>
       </header>
 
@@ -1511,13 +1524,26 @@ function ScoutTool({
           onConnectGmail={connectGmail}
           onDisconnectGmail={disconnectGmail}
           onGmailMode={setGmailMode}
-          accountEmail={accountEmail || ""}
-          accountBusy={accountBusy}
-          accountNote={accountNote}
-          onChangePassword={changePassword}
-          onDeleteAccount={deleteAccount}
-          onLogout={onLogout}
         />
+      )}
+
+      {tab === "account" && accountEmail && (
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            Your <span className="brand-text">account</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Your login and everything Scout saves for you live here.
+          </p>
+          <AccountCard
+            email={accountEmail}
+            busy={accountBusy}
+            note={accountNote}
+            onChangePassword={changePassword}
+            onDeleteAccount={deleteAccount}
+            onLogout={onLogout}
+          />
+        </main>
       )}
 
       {/* ---------------- Footer ---------------- */}
@@ -2960,12 +2986,6 @@ function ProfileTab({
   onConnectGmail,
   onDisconnectGmail,
   onGmailMode,
-  accountEmail,
-  accountBusy,
-  accountNote,
-  onChangePassword,
-  onDeleteAccount,
-  onLogout,
 }: {
   name: string;
   bio: string;
@@ -2984,12 +3004,6 @@ function ProfileTab({
   onConnectGmail: () => void;
   onDisconnectGmail: () => void;
   onGmailMode: (mode: "draft" | "send") => void;
-  accountEmail: string;
-  accountBusy: string;
-  accountNote: string;
-  onChangePassword: (pw: string) => void;
-  onDeleteAccount: () => void;
-  onLogout?: () => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -3272,17 +3286,6 @@ function ProfileTab({
           </span>
         </div>
       </section>
-
-      {accountEmail && (
-        <AccountCard
-          email={accountEmail}
-          busy={accountBusy}
-          note={accountNote}
-          onChangePassword={onChangePassword}
-          onDeleteAccount={onDeleteAccount}
-          onLogout={onLogout}
-        />
-      )}
     </main>
   );
 }
@@ -3308,8 +3311,7 @@ function AccountCard({
 
   return (
     <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-      <h2 className="text-lg font-bold text-ink">Account</h2>
-      <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
             Signed in as
