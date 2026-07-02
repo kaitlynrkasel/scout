@@ -2469,6 +2469,7 @@ function DashboardTab({
       {/* -------- Outreach advice: what's working for others + proven playbook -------- */}
       <OutreachAdvice
         community={community}
+        finds={finds}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
       />
@@ -2563,15 +2564,77 @@ function DashboardTab({
 /* ---------------- Outreach advice: community patterns + proven playbook ---------------- */
 function OutreachAdvice({
   community,
+  finds,
   goOutreach,
   goTemplates,
 }: {
   community: CommunityStats | null;
+  finds: Find[];
   goOutreach: () => void;
   goTemplates: () => void;
 }) {
   const p = community?.patterns;
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  // ---- Tailored coaching on the user's own drafts ----
+  // Newest drafts from the pipeline, with whether they were actually sent.
+  const myDrafts = finds
+    .filter((f) => f.draft && (f.draft.body || "").trim())
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    .slice(0, 8)
+    .map((f) => ({
+      channel: f.draft!.channelType,
+      outcome: f.status === "sent" ? "sent" : "drafted",
+      subject: f.draft!.subject || "",
+      body: f.draft!.body || "",
+    }));
+  // Cache key: same drafts → reuse the last review instead of re-spending credits.
+  const draftsKey = myDrafts.map((d) => `${d.outcome}:${d.body.length}`).join("|");
+
+  const [coach, setCoach] = useState<{ title: string; advice: string }[] | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [coachErr, setCoachErr] = useState("");
+  const [reviewedCount, setReviewedCount] = useState(0);
+
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem("cue_draft_advice") || "null");
+      if (c && c.key === draftsKey && Array.isArray(c.tips)) {
+        setCoach(c.tips);
+        setReviewedCount(c.reviewed || 0);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftsKey]);
+
+  async function reviewDrafts() {
+    setCoachBusy(true);
+    setCoachErr("");
+    try {
+      const r = await fetch("/api/draft-advice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drafts: myDrafts }),
+      });
+      const j = await r.json();
+      if (r.ok && j.tips) {
+        setCoach(j.tips);
+        setReviewedCount(j.reviewed || myDrafts.length);
+        try {
+          localStorage.setItem(
+            "cue_draft_advice",
+            JSON.stringify({ key: draftsKey, tips: j.tips, reviewed: j.reviewed })
+          );
+        } catch {}
+      } else {
+        setCoachErr(j.error || "Couldn't review your drafts.");
+      }
+    } catch (e: any) {
+      setCoachErr(e?.message || "Couldn't review your drafts.");
+    } finally {
+      setCoachBusy(false);
+    }
+  }
 
   // Real, data-backed insights — each renders only when the community data
   // actually supports it (enough decisions, and the effect is really there).
@@ -2637,9 +2700,70 @@ function OutreachAdvice({
     <section className="mt-10">
       <h2 className="text-lg font-bold text-ink">Outreach advice</h2>
       <p className="mt-1 text-sm text-body/80">
-        What&apos;s working for other people on Scout, plus the fundamentals that
-        always hold.
+        Coaching on your own drafts, what&apos;s working for other people on Scout,
+        and the fundamentals that always hold.
       </p>
+
+      {/* Tailored coaching from the user's own drafts */}
+      <div className="mt-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">
+          Tailored to you
+        </div>
+        {myDrafts.length === 0 ? (
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+            Once you&apos;ve drafted a few messages, Scout can read them and coach you
+            on your own writing.{" "}
+            <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
+              Draft some first
+            </button>
+            .
+          </p>
+        ) : (
+          <>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button
+                onClick={reviewDrafts}
+                disabled={coachBusy}
+                className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {coachBusy
+                  ? "Reading your drafts…"
+                  : coach
+                  ? "Review again"
+                  : `Review my ${myDrafts.length} recent ${myDrafts.length === 1 ? "draft" : "drafts"}`}
+              </button>
+              <span className="text-xs text-body/60">
+                Scout reads your recent messages and coaches you on them. Uses a small
+                amount of API credit.
+              </span>
+            </div>
+            {coachErr && (
+              <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs text-amber-800">
+                {coachErr}
+              </p>
+            )}
+            {coach && (
+              <>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {coach.map((t) => (
+                    <div
+                      key={t.title}
+                      className="rounded-2xl border border-coral/30 bg-white p-4 shadow-card"
+                    >
+                      <div className="text-sm font-bold text-ink">{t.title}</div>
+                      <p className="mt-1 text-xs leading-relaxed text-body">{t.advice}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                  Based on {reviewedCount || myDrafts.length} of your own drafts, private
+                  to you
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </div>
 
       {/* Data-backed community insights */}
       <div className="mt-4">
