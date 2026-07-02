@@ -65,13 +65,39 @@ function suggestionsFor(useCase: string): { name: string; goal: string }[] {
   return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
 }
 
-const TPL_KEY = "cue_templates";
-const PROFILE_KEY = "cue_profile";
-const CAT_KEY = "cue_categories";
-const PROJECTS_KEY = "cue_projects";
-const ACTIVE_KEY = "cue_active_project";
-const ACT_KEY = "cue_activity";
-const FINDS_KEY = "cue_finds";
+const TPL_KEY = "scout_templates";
+const PROFILE_KEY = "scout_profile";
+const CAT_KEY = "scout_categories";
+const PROJECTS_KEY = "scout_projects";
+const ACTIVE_KEY = "scout_active_project";
+const ACT_KEY = "scout_activity";
+const FINDS_KEY = "scout_finds";
+const KIND_KEY = "scout_kind";
+
+// One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
+// per-browser users keep their profile, projects, and finds after the rebrand.
+// Copies each old value to the new key only when the new one isn't set yet, then
+// drops the old key. Safe to call on every load (a no-op once migrated).
+function migrateLegacyKeys() {
+  try {
+    const map: Record<string, string> = {
+      cue_templates: TPL_KEY,
+      cue_profile: PROFILE_KEY,
+      cue_categories: CAT_KEY,
+      cue_projects: PROJECTS_KEY,
+      cue_active_project: ACTIVE_KEY,
+      cue_activity: ACT_KEY,
+      cue_finds: FINDS_KEY,
+      cue_kind: KIND_KEY,
+    };
+    for (const [oldKey, newKey] of Object.entries(map)) {
+      const val = localStorage.getItem(oldKey);
+      if (val === null) continue;
+      if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, val);
+      localStorage.removeItem(oldKey);
+    }
+  } catch {}
+}
 
 interface Activity {
   searches: number;
@@ -322,6 +348,7 @@ function ScoutTool({
   // in with account-synced state, hydrate from that; otherwise from localStorage
   // (per-browser mode, or an account's very first login which then seeds the DB).
   useEffect(() => {
+    migrateLegacyKeys();
     const prof: Profile = initialProfile;
     let cats: Category[] = [];
     let projs: Project[] = [];
@@ -2811,14 +2838,14 @@ function ProfileTab({
   const [website, setWebsite] = useState("");
   useEffect(() => {
     try {
-      const k = localStorage.getItem("cue_kind");
+      const k = localStorage.getItem(KIND_KEY);
       if (k === "company" || k === "individual") setKind(k);
     } catch {}
   }, []);
   function chooseKind(k: "individual" | "company") {
     setKind(k);
     try {
-      localStorage.setItem("cue_kind", k);
+      localStorage.setItem(KIND_KEY, k);
     } catch {}
   }
 
@@ -3029,7 +3056,7 @@ function ProfileTab({
             <input
               value={name}
               onChange={(e) => onName(e.target.value)}
-              placeholder="e.g. Kaitlyn Kasel, or Cue Creative"
+              placeholder="e.g. Kaitlyn Kasel, or Belt Creative"
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
           </div>
