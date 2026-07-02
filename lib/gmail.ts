@@ -7,11 +7,13 @@ import crypto from "crypto";
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
 // openid+email let us learn which address connected; gmail.compose covers both
-// creating drafts and sending.
+// creating drafts and sending; gmail.metadata lets us read thread HEADERS only
+// (never message bodies) to detect replies for reply tracking.
 const SCOPES = [
   "openid",
   "email",
   "https://www.googleapis.com/auth/gmail.compose",
+  "https://www.googleapis.com/auth/gmail.metadata",
 ];
 
 const STATE_SECRET = process.env.GOOGLE_CLIENT_SECRET || "scout-state-secret";
@@ -92,7 +94,7 @@ export async function exchangeCode(origin: string, code: string): Promise<any> {
   return r.json();
 }
 
-async function accessTokenFromRefresh(refreshToken: string): Promise<string> {
+export async function accessTokenFromRefresh(refreshToken: string): Promise<string> {
   const body = new URLSearchParams({
     refresh_token: refreshToken,
     client_id: process.env.GOOGLE_CLIENT_ID || "",
@@ -144,7 +146,8 @@ function buildRaw(
   return Buffer.from(msg).toString("base64url");
 }
 
-// Create a draft in the user's inbox, or send outright.
+// Create a draft in the user's inbox, or send outright. Returns the Gmail
+// thread id so replies in that thread can be detected later.
 export async function gmailSendOrDraft(opts: {
   refreshToken: string;
   from: string;
@@ -152,7 +155,7 @@ export async function gmailSendOrDraft(opts: {
   subject: string;
   body: string;
   mode: "send" | "draft";
-}): Promise<{ id: string; mode: "send" | "draft" }> {
+}): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   const raw = buildRaw(opts.from, opts.to, opts.subject, opts.body);
   const url =
@@ -170,5 +173,47 @@ export async function gmailSendOrDraft(opts: {
   });
   if (!r.ok) throw new Error("gmail api failed: " + (await r.text()));
   const j = await r.json();
-  return { id: j.id || j.message?.id || "", mode: opts.mode };
+  return {
+    id: j.id || j.message?.id || "",
+    threadId: j.threadId || j.message?.threadId || "",
+    mode: opts.mode,
+  };
+}
+
+// Which of these threads have a reply (a message from someone other than the
+// user)? Uses metadata-only reads: headers, never bodies.
+export async function gmailThreadsWithReplies(
+  refreshToken: string,
+  userEmail: string,
+  threadIds: string[]
+): Promise<Set<string>> {
+  const at = await accessTokenFromRefresh(refreshToken);
+  const me = userEmail.toLowerCase();
+  const replied = new Set<string>();
+  for (const tid of threadIds.slice(0, 20)) {
+    const r = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(
+        tid
+      )}?format=metadata&metadataHeaders=From`,
+      { headers: { authorization: `Bearer ${at}` } }
+    );
+    if (r.status === 403) {
+      const body = await r.text();
+      throw Object.assign(new Error("insufficient scope: " + body), {
+        needsReconnect: true,
+      });
+    }
+    if (!r.ok) continue; // thread gone/inaccessible — skip, don't fail the batch
+    const j = await r.json();
+    const msgs = j.messages || [];
+    const hasReply = msgs.some((m: any) => {
+      if ((m.labelIds || []).includes("DRAFT")) return false;
+      const from = (m.payload?.headers || []).find(
+        (h: any) => (h.name || "").toLowerCase() === "from"
+      );
+      return from && !String(from.value || "").toLowerCase().includes(me);
+    });
+    if (hasReply) replied.add(tid);
+  }
+  return replied;
 }

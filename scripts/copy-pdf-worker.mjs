@@ -7,7 +7,9 @@ import { dirname, join } from "node:path";
 
 const require = createRequire(import.meta.url);
 const pkg = require.resolve("pdfjs-dist/package.json");
-const src = join(dirname(pkg), "build", "pdf.worker.min.mjs");
+// LEGACY worker to match the legacy main build imported in lib/fileText.ts —
+// the modern build breaks on older Safari/iOS ("undefined is not a function").
+const src = join(dirname(pkg), "legacy", "build", "pdf.worker.min.mjs");
 const destDir = join(process.cwd(), "public");
 const dest = join(destDir, "pdf.worker.min.mjs");
 

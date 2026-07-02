@@ -129,9 +129,9 @@ interface Category {
   projectId: string; // categories belong to a project
 }
 
-// A find is a saved person/opportunity you can work through: draft, deny, or mark
-// contacted. Finds accumulate across searches and persist per project.
-type FindStatus = "new" | "drafted" | "sent" | "denied";
+// A find is a saved person/opportunity you can work through: draft, deny, mark
+// contacted, and log replies. Finds accumulate across searches, per project.
+type FindStatus = "new" | "drafted" | "sent" | "replied" | "denied";
 interface Find {
   id: string; // stable dedup key: project + normalized name + host
   projectId: string;
@@ -139,6 +139,7 @@ interface Find {
   opp: Opportunity;
   draft?: Draft;
   addedAt: number;
+  gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
 }
 
 function normNameKey(s: string): string {
@@ -152,12 +153,38 @@ function findKey(projectId: string, o: Opportunity): string {
   return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
 }
 
+// Aggregate community benchmarks + what's-working patterns from /api/community-stats.
+interface CommunityStats {
+  users: number;
+  avgDenyRate: number | null;
+  avgFinds: number | null;
+  avgDrafts: number | null;
+  avgFitKept: number | null;
+  patterns?: {
+    decidedFinds: number;
+    channels: { channel: string; total: number; keptRate: number }[];
+    fitKept: number | null;
+    fitDenied: number | null;
+    contextEffect: { withContext: number | null; withoutContext: number | null } | null;
+  };
+}
+
 const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
   { key: "sent", label: "Sent" },
+  { key: "replied", label: "Replied" },
   { key: "denied", label: "Denied" },
   { key: "all", label: "All" },
+];
+
+// Labels for the manual status control on each find.
+const STATUS_OPTIONS: { key: FindStatus; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "drafted", label: "Drafted" },
+  { key: "sent", label: "Sent" },
+  { key: "replied", label: "Replied" },
+  { key: "denied", label: "Not a fit" },
 ];
 
 interface ScoutToolProps {
@@ -172,6 +199,7 @@ interface ScoutToolProps {
   // present, ScoutTool hydrates from it instead of localStorage and saves back.
   initialState?: AppState | null;
   onSaveState?: (state: AppState) => void;
+  accountEmail?: string; // the signed-in user's email, for the Account section
 }
 
 // ---- Auth shell: login vs. tool; loads the profile from the account (or, if
@@ -285,6 +313,7 @@ function AuthedShell() {
           dbSaveState(session.user.id, s);
         }, 800);
       }}
+      accountEmail={session.user.email || ""}
     />
   );
 }
@@ -297,9 +326,10 @@ function ScoutTool({
   getToken,
   initialState,
   onSaveState,
+  accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "templates" | "profile"
+    "outreach" | "finds" | "dashboard" | "templates" | "profile" | "account"
   >("dashboard");
 
   // ---- Outreach state ----
@@ -339,6 +369,11 @@ function ScoutTool({
   const [gmailBusyId, setGmailBusyId] = useState(""); // draft being sent/drafted
   const [gmailSent, setGmailSent] = useState<Record<string, "draft" | "send">>({});
   const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
+
+  // ---- Community benchmarks (aggregate, everyone else) + account ----
+  const [community, setCommunity] = useState<CommunityStats | null>(null);
+  const [accountBusy, setAccountBusy] = useState("");
+  const [accountNote, setAccountNote] = useState("");
 
   // True once initial hydration finishes, so the sync effect doesn't fire mid-load.
   const hydratedRef = useRef(false);
@@ -511,8 +546,59 @@ function ScoutTool({
       if (r.ok) setGmail(await r.json());
     } catch {}
   };
+  // Load aggregate community benchmarks (averages only, no individual data).
+  const refreshCommunity = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const r = await fetch("/api/community-stats", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (r.ok) setCommunity(await r.json());
+    } catch {}
+  };
+
+  // Change the account password (Supabase handles it with the current session).
+  const changePassword = async (pw: string) => {
+    if (!supabase || pw.length < 6) {
+      setAccountNote("Password must be at least 6 characters.");
+      return;
+    }
+    setAccountBusy("password");
+    setAccountNote("");
+    const { error } = await supabase.auth.updateUser({ password: pw });
+    setAccountBusy("");
+    setAccountNote(error ? error.message : "Password updated.");
+  };
+
+  // Permanently delete the account and all data, then sign out.
+  const deleteAccount = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    setAccountBusy("delete");
+    try {
+      const r = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const j = await r.json();
+      if (r.ok) {
+        await supabase?.auth.signOut();
+      } else {
+        setAccountNote(j.error || "Couldn't delete the account.");
+      }
+    } catch (e: any) {
+      setAccountNote(e?.message || "Couldn't delete the account.");
+    } finally {
+      setAccountBusy("");
+    }
+  };
+
   useEffect(() => {
     refreshGmail();
+    refreshCommunity();
     // Handle the return from Google's consent screen.
     try {
       const p = new URLSearchParams(window.location.search);
@@ -571,7 +657,9 @@ function ScoutTool({
   };
 
   // Create a draft in / send from the user's Gmail for one message. Returns the
-  // mode ("draft"/"send") on success, or null on failure.
+  // mode ("draft"/"send") on success, or null on failure. Also stores the Gmail
+  // thread id on the matching pipeline find (and flips it to sent when sending),
+  // so replies in that thread can be tracked later.
   const sendViaGmail = async (d: Draft): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
@@ -588,6 +676,21 @@ function ScoutTool({
       if (r.ok) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
+        setFinds((prev) => {
+          const next = prev.map((f) =>
+            f.draft?.opportunityId === d.opportunityId
+              ? {
+                  ...f,
+                  gmailThreadId: j.threadId || f.gmailThreadId,
+                  status: (j.mode === "send" ? "sent" : f.status) as FindStatus,
+                }
+              : f
+          );
+          try {
+            localStorage.setItem(FINDS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         return j.mode as "draft" | "send";
       }
       reportError(j);
@@ -870,11 +973,63 @@ function ScoutTool({
     }
   }
 
-  // Send/draft a find's message via Gmail, then mark it contacted on success.
+  // Send/draft a find's message via Gmail. sendViaGmail patches the find itself
+  // (thread id + sent status), so nothing more to do here.
   async function sendFindViaGmail(find: Find) {
     if (!find.draft) return;
-    const mode = await sendViaGmail(find.draft);
-    if (mode === "send") setFindStatus(find.id, "sent");
+    await sendViaGmail(find.draft);
+  }
+
+  // ---- Reply tracking: check tracked Gmail threads for responses ----
+  const [repliesBusy, setRepliesBusy] = useState(false);
+  const [repliesNote, setRepliesNote] = useState("");
+  async function checkReplies() {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    const candidates = finds
+      .filter(
+        (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
+      )
+      .slice(0, 20)
+      .map((f) => ({ id: f.id, threadId: f.gmailThreadId }));
+    if (!candidates.length) {
+      setRepliesNote(
+        "Nothing to check yet. Send a message through Gmail first and replies get tracked automatically."
+      );
+      return;
+    }
+    setRepliesBusy(true);
+    setRepliesNote("");
+    try {
+      const r = await fetch("/api/gmail/replies", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ threads: candidates }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        const replied: string[] = j.replied || [];
+        if (replied.length) {
+          saveFinds(
+            finds.map((f) =>
+              replied.includes(f.id) ? { ...f, status: "replied" as FindStatus } : f
+            )
+          );
+          setRepliesNote(
+            `${replied.length} ${replied.length === 1 ? "reply" : "replies"} found and marked.`
+          );
+        } else {
+          setRepliesNote(`No new replies yet (checked ${j.checked || candidates.length}).`);
+        }
+      } else {
+        setRepliesNote(j.error || "Couldn't check for replies.");
+      }
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't check for replies.");
+    } finally {
+      setRepliesBusy(false);
+    }
   }
 
   async function runDiscover() {
@@ -978,6 +1133,7 @@ function ScoutTool({
         newFindCount={newFindCount}
         templatesCount={myTemplates.length}
         profileHasBio={!!profile.bio.trim()}
+        hasAccount={!!accountEmail}
         projects={projects}
         activeId={activeId}
         onSelectProject={selectProject}
@@ -1370,9 +1526,13 @@ function ScoutTool({
           onDeny={(f) => setFindStatus(f.id, "denied")}
           onReopen={(f) => setFindStatus(f.id, "new")}
           onMarkSent={(f) => setFindStatus(f.id, "sent")}
+          onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
           onCopy={() => bumpActivity({ copies: 1 })}
+          onCheckReplies={checkReplies}
+          repliesBusy={repliesBusy}
+          repliesNote={repliesNote}
           goOutreach={() => setTab("outreach")}
         />
       )}
@@ -1385,6 +1545,7 @@ function ScoutTool({
           projects={projects}
           categoriesCount={categories.length}
           finds={finds}
+          community={community}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
@@ -1424,6 +1585,25 @@ function ScoutTool({
           onDisconnectGmail={disconnectGmail}
           onGmailMode={setGmailMode}
         />
+      )}
+
+      {tab === "account" && accountEmail && (
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            Your <span className="brand-text">account</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Your login and everything Scout saves for you live here.
+          </p>
+          <AccountCard
+            email={accountEmail}
+            busy={accountBusy}
+            note={accountNote}
+            onChangePassword={changePassword}
+            onDeleteAccount={deleteAccount}
+            onLogout={onLogout}
+          />
+        </main>
       )}
 
       {/* ---------------- Footer ---------------- */}
@@ -1498,6 +1678,7 @@ function SideNav({
   newFindCount,
   templatesCount,
   profileHasBio,
+  hasAccount,
   projects,
   activeId,
   onSelectProject,
@@ -1509,6 +1690,7 @@ function SideNav({
   newFindCount: number;
   templatesCount: number;
   profileHasBio: boolean;
+  hasAccount: boolean;
   projects: Project[];
   activeId: string;
   onSelectProject: (id: string) => void;
@@ -1567,6 +1749,20 @@ function SideNav({
         </>
       ),
     },
+    ...(hasAccount
+      ? [
+          {
+            key: "account",
+            label: "Account",
+            icon: (
+              <>
+                <circle cx="12" cy="8" r="3.5" />
+                <path d="M5 20a7 7 0 0 1 14 0" />
+              </>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -1830,9 +2026,13 @@ function FindsTab({
   onDeny,
   onReopen,
   onMarkSent,
+  onStatus,
   onRemove,
   onSendGmail,
   onCopy,
+  onCheckReplies,
+  repliesBusy,
+  repliesNote,
   goOutreach,
 }: {
   finds: Find[];
@@ -1846,15 +2046,22 @@ function FindsTab({
   onDeny: (f: Find) => void;
   onReopen: (f: Find) => void;
   onMarkSent: (f: Find) => void;
+  onStatus: (f: Find, s: FindStatus) => void;
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
   onCopy: () => void;
+  onCheckReplies: () => void;
+  repliesBusy: boolean;
+  repliesNote: string;
   goOutreach: () => void;
 }) {
   const counts: Record<string, number> = { all: finds.length };
-  for (const s of ["new", "drafted", "sent", "denied"] as FindStatus[]) {
+  for (const s of ["new", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
     counts[s] = finds.filter((f) => f.status === s).length;
   }
+  const trackable = finds.some(
+    (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
+  );
   const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
     .slice()
     .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
@@ -1873,13 +2080,30 @@ function FindsTab({
             aren&apos;t a fit.
           </p>
         </div>
-        <button
-          onClick={goOutreach}
-          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
-        >
-          Find more
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {gmail.connected && trackable && (
+            <button
+              onClick={onCheckReplies}
+              disabled={repliesBusy}
+              className="rounded-xl border border-warm-border bg-white px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+            >
+              {repliesBusy ? "Checking…" : "Check for replies"}
+            </button>
+          )}
+          <button
+            onClick={goOutreach}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Find more
+          </button>
+        </div>
       </div>
+
+      {repliesNote && (
+        <p className="mt-3 rounded-xl border border-warm-border bg-warm-bg/60 px-4 py-2.5 text-xs font-medium text-ink">
+          {repliesNote}
+        </p>
+      )}
 
       {/* Status filter */}
       <div className="mt-6 flex flex-wrap gap-2">
@@ -1932,6 +2156,7 @@ function FindsTab({
               onDeny={() => onDeny(f)}
               onReopen={() => onReopen(f)}
               onMarkSent={() => onMarkSent(f)}
+              onStatus={(s) => onStatus(f, s)}
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
               onCopy={onCopy}
@@ -1943,18 +2168,35 @@ function FindsTab({
   );
 }
 
-function FindStatusBadge({ status }: { status: FindStatus }) {
-  const map: Record<FindStatus, { label: string; cls: string }> = {
-    new: { label: "New", cls: "border-warm-border bg-warm-bg text-body" },
-    drafted: { label: "Drafted", cls: "border-coral/30 bg-warm-bg text-accent" },
-    sent: { label: "Sent", cls: "border-sage/40 bg-sage/15 text-sage" },
-    denied: { label: "Not a fit", cls: "border-warm-border bg-white text-body/50" },
+// The status pill is also the manual control: pick any status directly.
+function FindStatusBadge({
+  status,
+  onStatus,
+}: {
+  status: FindStatus;
+  onStatus: (s: FindStatus) => void;
+}) {
+  const map: Record<FindStatus, string> = {
+    new: "border-warm-border bg-warm-bg text-body",
+    drafted: "border-coral/30 bg-warm-bg text-accent",
+    sent: "border-sage/40 bg-sage/15 text-sage",
+    replied: "border-sage/60 bg-sage/25 text-brown-deep",
+    denied: "border-warm-border bg-white text-body/50",
   };
-  const s = map[status];
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>
-      {s.label}
-    </span>
+    <select
+      value={status}
+      onChange={(e) => onStatus(e.target.value as FindStatus)}
+      title="Set status"
+      aria-label="Set status"
+      className={`cursor-pointer appearance-none rounded-full border px-2 py-0.5 text-[10px] font-bold outline-none transition focus:ring-2 focus:ring-coral/20 ${map[status]}`}
+    >
+      {STATUS_OPTIONS.map((o) => (
+        <option key={o.key} value={o.key}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -1967,6 +2209,7 @@ function FindCard({
   onDeny,
   onReopen,
   onMarkSent,
+  onStatus,
   onRemove,
   onSendGmail,
   onCopy,
@@ -1979,6 +2222,7 @@ function FindCard({
   onDeny: () => void;
   onReopen: () => void;
   onMarkSent: () => void;
+  onStatus: (s: FindStatus) => void;
   onRemove: () => void;
   onSendGmail: () => void;
   onCopy: () => void;
@@ -1986,6 +2230,8 @@ function FindCard({
   const o = find.opp;
   const d = find.draft;
   const denied = find.status === "denied";
+  // Contacted (or beyond): hide the send/mark actions.
+  const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
 
   return (
@@ -2004,7 +2250,7 @@ function FindCard({
             o.name
           )}
         </span>
-        <FindStatusBadge status={find.status} />
+        <FindStatusBadge status={find.status} onStatus={onStatus} />
         {o.fitScore != null && (
           <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
             {Math.round(o.fitScore * 100)}% fit
@@ -2068,7 +2314,7 @@ function FindCard({
 
         {d && (
           <>
-            {gmail.connected && emailDraft && find.status !== "sent" ? (
+            {gmail.connected && emailDraft && !done ? (
               <button
                 onClick={onSendGmail}
                 disabled={gmailBusy}
@@ -2081,9 +2327,7 @@ function FindCard({
                   : "Create Gmail draft"}
               </button>
             ) : (
-              find.status !== "sent" && (
-                <SendAction draft={d} onUse={onCopy} />
-              )
+              !done && <SendAction draft={d} onUse={onCopy} />
             )}
             <button
               onClick={() => {
@@ -2108,7 +2352,7 @@ function FindCard({
           </>
         )}
 
-        {find.status !== "sent" && (
+        {!done && (
           <button
             onClick={onMarkSent}
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -2124,7 +2368,7 @@ function FindCard({
           >
             Reopen
           </button>
-        ) : find.status === "sent" ? (
+        ) : done ? (
           <button
             onClick={onReopen}
             className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
@@ -2156,8 +2400,15 @@ function FindCard({
 function learnedFromFinds(finds: Find[]) {
   const decided = finds.filter((f) => f.status !== "new");
   const denied = decided.filter((f) => f.status === "denied");
-  const kept = decided.filter((f) => f.status === "drafted" || f.status === "sent");
+  const kept = decided.filter(
+    (f) => f.status === "drafted" || f.status === "sent" || f.status === "replied"
+  );
   const denyRate = decided.length ? denied.length / decided.length : 0;
+  // Reply rate over messages known to have gone out (sent or replied) — the
+  // replies logged/tracked, not a claim about untracked sends.
+  const sentish = finds.filter((f) => f.status === "sent" || f.status === "replied");
+  const repliedCount = finds.filter((f) => f.status === "replied").length;
+  const replyRate = sentish.length ? repliedCount / sentish.length : null;
 
   // Real trend: split the decisions you've made in half by time and compare the
   // deny rate of the earlier half vs the recent half. Only shown with enough data.
@@ -2199,6 +2450,9 @@ function learnedFromFinds(finds: Find[]) {
     deniedChannels: tally(denied),
     keptFit: avgFit(kept),
     deniedFit: avgFit(denied),
+    replyRate,
+    repliedCount,
+    sentCount: sentish.length,
   };
 }
 
@@ -2210,6 +2464,7 @@ function DashboardTab({
   projects,
   categoriesCount,
   finds,
+  community,
   goOutreach,
   goTemplates,
   goProfile,
@@ -2220,6 +2475,7 @@ function DashboardTab({
   projects: Project[];
   categoriesCount: number;
   finds: Find[];
+  community: CommunityStats | null;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
@@ -2465,6 +2721,28 @@ function DashboardTab({
               )}
             </div>
 
+            {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
+            {learned.replyRate != null && (
+              <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                  Your reply rate
+                </div>
+                <div className="mt-1 flex items-end gap-2">
+                  <span className="text-3xl font-extrabold tracking-tight text-ink">
+                    {Math.round(learned.replyRate * 100)}%
+                  </span>
+                  <span className="mb-1 text-xs text-body/60">
+                    {learned.repliedCount} of {learned.sentCount} sent
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                  Replies Scout has tracked through Gmail or you&apos;ve logged by
+                  setting a find to Replied. Untracked sends aren&apos;t counted
+                  against you.
+                </p>
+              </div>
+            )}
+
             {/* Preferences */}
             <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
               <div className="text-xs font-bold uppercase tracking-wider text-body/60">
@@ -2552,6 +2830,64 @@ function DashboardTab({
           )}
         </div>
       </section>
+
+      {/* -------- You vs the community (real aggregate averages) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">You vs the community</h2>
+        <p className="mt-1 text-sm text-body/80">
+          How you compare to everyone else using Scout. Aggregate averages only,
+          never anyone&apos;s private data.
+        </p>
+        {!community || community.users < 1 ? (
+          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-white/60 p-8 text-center text-sm text-body/70">
+            Community benchmarks appear here as more people use Scout. Yours are
+            ready, everyone else&apos;s are still coming.
+          </div>
+        ) : (
+          <>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <CompareRow
+                label="Deny rate"
+                you={learned.decided ? learned.denyRate : null}
+                them={community.avgDenyRate}
+                fmt="pct"
+                lowerBetter
+              />
+              <CompareRow
+                label="Fit sweet spot"
+                you={learned.keptFit}
+                them={community.avgFitKept}
+                fmt="pct"
+              />
+              <CompareRow
+                label="Finds saved"
+                you={finds.length}
+                them={community.avgFinds}
+                fmt="num"
+              />
+              <CompareRow
+                label="Messages drafted"
+                you={activity.drafts}
+                them={community.avgDrafts}
+                fmt="num"
+              />
+            </div>
+            <p className="mt-3 text-xs text-body/60">
+              Based on {community.users} other{" "}
+              {community.users === 1 ? "person" : "people"} using Scout. Small samples
+              are noisy, this sharpens as the community grows.
+            </p>
+          </>
+        )}
+      </section>
+
+      {/* -------- Outreach advice: what's working for others + proven playbook -------- */}
+      <OutreachAdvice
+        community={community}
+        finds={finds}
+        goOutreach={goOutreach}
+        goTemplates={goTemplates}
+      />
 
       {/* -------- How Scout learns YOU -------- */}
       <section className="mt-10">
@@ -2653,6 +2989,320 @@ function DashboardTab({
         </button>
       </section>
     </main>
+  );
+}
+
+/* ---------------- Outreach advice: community patterns + proven playbook ---------------- */
+function OutreachAdvice({
+  community,
+  finds,
+  goOutreach,
+  goTemplates,
+}: {
+  community: CommunityStats | null;
+  finds: Find[];
+  goOutreach: () => void;
+  goTemplates: () => void;
+}) {
+  const p = community?.patterns;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  // ---- Tailored coaching on the user's own drafts ----
+  // Newest drafts from the pipeline, with whether they were actually sent.
+  const myDrafts = finds
+    .filter((f) => f.draft && (f.draft.body || "").trim())
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    .slice(0, 8)
+    .map((f) => ({
+      channel: f.draft!.channelType,
+      outcome:
+        f.status === "replied" ? "replied" : f.status === "sent" ? "sent" : "drafted",
+      subject: f.draft!.subject || "",
+      body: f.draft!.body || "",
+    }));
+  // Cache key: same drafts → reuse the last review instead of re-spending credits.
+  const draftsKey = myDrafts.map((d) => `${d.outcome}:${d.body.length}`).join("|");
+
+  const [coach, setCoach] = useState<{ title: string; advice: string }[] | null>(null);
+  const [coachBusy, setCoachBusy] = useState(false);
+  const [coachErr, setCoachErr] = useState("");
+  const [reviewedCount, setReviewedCount] = useState(0);
+
+  useEffect(() => {
+    try {
+      const c = JSON.parse(localStorage.getItem("cue_draft_advice") || "null");
+      if (c && c.key === draftsKey && Array.isArray(c.tips)) {
+        setCoach(c.tips);
+        setReviewedCount(c.reviewed || 0);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftsKey]);
+
+  async function reviewDrafts() {
+    setCoachBusy(true);
+    setCoachErr("");
+    try {
+      const r = await fetch("/api/draft-advice", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drafts: myDrafts }),
+      });
+      const j = await r.json();
+      if (r.ok && j.tips) {
+        setCoach(j.tips);
+        setReviewedCount(j.reviewed || myDrafts.length);
+        try {
+          localStorage.setItem(
+            "cue_draft_advice",
+            JSON.stringify({ key: draftsKey, tips: j.tips, reviewed: j.reviewed })
+          );
+        } catch {}
+      } else {
+        setCoachErr(j.error || "Couldn't review your drafts.");
+      }
+    } catch (e: any) {
+      setCoachErr(e?.message || "Couldn't review your drafts.");
+    } finally {
+      setCoachBusy(false);
+    }
+  }
+
+  // Real, data-backed insights — each renders only when the community data
+  // actually supports it (enough decisions, and the effect is really there).
+  const insights: { title: string; body: string; basis: string }[] = [];
+  if (p) {
+    const top = p.channels[0];
+    if (top) {
+      insights.push({
+        title: `${top.channel} finds get acted on most`,
+        body: `${pct(top.keptRate)} of ${top.channel.toLowerCase()} finds are drafted or contacted — lead with searches likely to surface ${top.channel.toLowerCase()} contacts.`,
+        basis: `${top.total} community decisions`,
+      });
+    }
+    if (p.fitKept != null && p.fitDenied != null && p.fitKept > p.fitDenied) {
+      insights.push({
+        title: `The sweet spot is around ${pct(p.fitKept)} fit`,
+        body: `People act on finds averaging ${pct(p.fitKept)} fit and pass on ones around ${pct(p.fitDenied)}. Sharpening your goal wording lifts the fit of what Scout brings back.`,
+        basis: `${p.decidedFinds} community decisions`,
+      });
+    }
+    const ce = p.contextEffect;
+    if (
+      ce &&
+      ce.withContext != null &&
+      ce.withoutContext != null &&
+      ce.withContext < ce.withoutContext
+    ) {
+      insights.push({
+        title: "Project context cuts the misses",
+        body: `People who describe who their outreach is for see a ${pct(ce.withContext)} deny rate vs ${pct(ce.withoutContext)} without it. Fill in "Who this outreach is for" on each project.`,
+        basis: "community deny rates, with vs without context",
+      });
+    }
+  }
+
+  // Established outreach practice — honestly labeled, not dressed up as Scout data.
+  const playbook: { title: string; body: string; cta?: { label: string; go: () => void } }[] = [
+    {
+      title: "Open with something real about them",
+      body: "One specific, true line about their work beats any template. Personalized outreach earns roughly 12–25% replies vs 1–3% for generic blasts (industry benchmarks).",
+    },
+    {
+      title: "Keep it to three short paragraphs",
+      body: "Who you are, why them specifically, one soft ask. Busy people reply to messages they can read in ten seconds.",
+    },
+    {
+      title: "Ask small",
+      body: "\"Would you be open to a quick call?\" outperforms a hard pitch. The first message starts the conversation; it doesn't close the deal.",
+      cta: { label: "Draft one now", go: goOutreach },
+    },
+    {
+      title: "Sound like yourself",
+      body: "Drafts written in your real voice get replies your polished-corporate voice never will. Give Scout a few examples of how you actually write.",
+      cta: { label: "Add a voice template", go: goTemplates },
+    },
+    {
+      title: "Follow up once, kindly",
+      body: "A short, friendly nudge after about a week roughly doubles response rates. One follow-up is persistence; three is spam.",
+    },
+  ];
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold text-ink">Outreach advice</h2>
+      <p className="mt-1 text-sm text-body/80">
+        Coaching on your own drafts, what&apos;s working for other people on Scout,
+        and the fundamentals that always hold.
+      </p>
+
+      {/* Tailored coaching from the user's own drafts */}
+      <div className="mt-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">
+          Tailored to you
+        </div>
+        {myDrafts.length === 0 ? (
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+            Once you&apos;ve drafted a few messages, Scout can read them and coach you
+            on your own writing.{" "}
+            <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
+              Draft some first
+            </button>
+            .
+          </p>
+        ) : (
+          <>
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button
+                onClick={reviewDrafts}
+                disabled={coachBusy}
+                className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {coachBusy
+                  ? "Reading your drafts…"
+                  : coach
+                  ? "Review again"
+                  : `Review my ${myDrafts.length} recent ${myDrafts.length === 1 ? "draft" : "drafts"}`}
+              </button>
+              <span className="text-xs text-body/60">
+                Scout reads your recent messages and coaches you on them. Uses a small
+                amount of API credit.
+              </span>
+            </div>
+            {coachErr && (
+              <p className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs text-amber-800">
+                {coachErr}
+              </p>
+            )}
+            {coach && (
+              <>
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  {coach.map((t) => (
+                    <div
+                      key={t.title}
+                      className="rounded-2xl border border-coral/30 bg-white p-4 shadow-card"
+                    >
+                      <div className="text-sm font-bold text-ink">{t.title}</div>
+                      <p className="mt-1 text-xs leading-relaxed text-body">{t.advice}</p>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                  Based on {reviewedCount || myDrafts.length} of your own drafts, private
+                  to you
+                </p>
+              </>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Data-backed community insights */}
+      <div className="mt-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">
+          Working for the community right now
+        </div>
+        {insights.length ? (
+          <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+            {insights.map((tip) => (
+              <div
+                key={tip.title}
+                className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
+              >
+                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                  Based on {tip.basis}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+            Live patterns show up here once the community has made enough decisions —
+            real numbers only, so nothing appears until the data can back it up.
+          </p>
+        )}
+      </div>
+
+      {/* Proven playbook */}
+      <div className="mt-5">
+        <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+          The proven playbook
+        </div>
+        <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+          {playbook.map((tip) => (
+            <div
+              key={tip.title}
+              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                {tip.cta && (
+                  <button
+                    onClick={tip.cta.go}
+                    className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+                  >
+                    {tip.cta.label}
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2.5 text-xs text-body/50">
+          Playbook tips are established outreach practice, not Scout data. The section
+          above switches to real community numbers as they accumulate.
+        </p>
+      </div>
+    </section>
+  );
+}
+
+function CompareRow({
+  label,
+  you,
+  them,
+  fmt,
+  lowerBetter = false,
+}: {
+  label: string;
+  you: number | null;
+  them: number | null;
+  fmt: "pct" | "num";
+  lowerBetter?: boolean;
+}) {
+  const f = (v: number | null) =>
+    v == null ? "—" : fmt === "pct" ? `${Math.round(v * 100)}%` : `${Math.round(v)}`;
+  const ahead =
+    you != null && them != null
+      ? lowerBetter
+        ? you < them
+        : you > them
+      : null;
+  return (
+    <div className="rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-bold uppercase tracking-wider text-body/60">
+          {label}
+        </span>
+        {ahead != null && ahead && (
+          <span className="text-[10px] font-bold text-emerald-600">▲ ahead</span>
+        )}
+      </div>
+      <div className="mt-1.5 flex items-end gap-3">
+        <div>
+          <div className="text-2xl font-extrabold tracking-tight text-ink">{f(you)}</div>
+          <div className="text-[10px] font-medium text-body/60">you</div>
+        </div>
+        <div className="mb-1.5 text-xs text-body/40">vs</div>
+        <div>
+          <div className="text-lg font-bold text-body/70">{f(them)}</div>
+          <div className="text-[10px] font-medium text-body/60">community avg</div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -3365,12 +4015,119 @@ function ProfileTab({
           </button>
           <span className="text-xs text-body/70">
             {canConfirm
-              ? "Saved automatically. This is only visible to you."
+              ? "Saved automatically to your account. This is only visible to you."
               : "Add your name to continue. A resume or bio is optional, it just makes messages more personal."}
           </span>
         </div>
       </section>
     </main>
+  );
+}
+
+/* ---------------- Account section (login info, password, delete) ---------------- */
+function AccountCard({
+  email,
+  busy,
+  note,
+  onChangePassword,
+  onDeleteAccount,
+  onLogout,
+}: {
+  email: string;
+  busy: string;
+  note: string;
+  onChangePassword: (pw: string) => void;
+  onDeleteAccount: () => void;
+  onLogout?: () => void;
+}) {
+  const [pw, setPw] = useState("");
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
+        <div className="min-w-0">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Signed in as
+          </div>
+          <div className="truncate text-sm font-semibold text-ink">{email}</div>
+        </div>
+        {onLogout && (
+          <button
+            onClick={onLogout}
+            className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Log out
+          </button>
+        )}
+      </div>
+
+      {/* Change password */}
+      <div className="mt-5">
+        <Label>Change password</Label>
+        <div className="flex flex-wrap gap-2">
+          <input
+            type="password"
+            value={pw}
+            onChange={(e) => setPw(e.target.value)}
+            placeholder="New password (min 6 characters)"
+            className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+          <button
+            onClick={() => {
+              onChangePassword(pw);
+              setPw("");
+            }}
+            disabled={busy === "password" || pw.length < 6}
+            className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            {busy === "password" ? "Updating…" : "Update"}
+          </button>
+        </div>
+      </div>
+
+      {note && (
+        <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/70 px-4 py-2.5 text-xs font-medium text-ink">
+          {note}
+        </div>
+      )}
+
+      {/* Delete account */}
+      <div className="mt-6 border-t border-warm-border pt-5">
+        <div className="text-sm font-bold text-ink">Delete account</div>
+        <p className="mt-1 text-xs leading-relaxed text-body/70">
+          Permanently removes your account, profile, projects, finds, and any
+          connected email. This can&apos;t be undone.
+        </p>
+        {confirming ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-accent">
+              Really delete everything?
+            </span>
+            <button
+              onClick={onDeleteAccount}
+              disabled={busy === "delete"}
+              className="rounded-lg bg-red-600 px-3.5 py-1.5 text-xs font-bold text-white transition hover:bg-red-700 disabled:opacity-50"
+            >
+              {busy === "delete" ? "Deleting…" : "Yes, delete my account"}
+            </button>
+            <button
+              onClick={() => setConfirming(false)}
+              className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setConfirming(true)}
+            className="mt-3 rounded-lg border border-red-200 px-3.5 py-1.5 text-xs font-bold text-red-600 transition hover:bg-red-50"
+          >
+            Delete my account
+          </button>
+        )}
+      </div>
+    </section>
   );
 }
 
