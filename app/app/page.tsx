@@ -300,7 +300,7 @@ function ScoutTool({
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
     "outreach" | "finds" | "dashboard" | "templates" | "profile"
-  >("outreach");
+  >("dashboard");
 
   // ---- Outreach state ----
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
@@ -971,77 +971,29 @@ function ScoutTool({
   };
 
   return (
-    <div className="min-h-screen">
-      {/* ---------------- App bar ---------------- */}
-      <header className="sticky top-0 z-20 border-b border-warm-border bg-white/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-3">
-          <Logo />
-          <span className="text-[16px] font-extrabold tracking-tight text-ink">
-            <span className="brand-text">Scout</span>
-          </span>
-          <div className="ml-auto flex items-center gap-4">
-            <span className="hidden text-xs font-medium text-body/70 sm:block">
-              Reach the right people, in your own voice
-            </span>
-            {showLogout && (
-              <button
-                onClick={onLogout}
-                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-              >
-                Log out
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="mx-auto flex max-w-6xl gap-7 px-6">
-          <TabButton active={tab === "outreach"} onClick={() => setTab("outreach")}>
-            Outreach
-          </TabButton>
-          <TabButton active={tab === "finds"} onClick={() => setTab("finds")}>
-            Finds
-            {newFindCount > 0 && <Count n={newFindCount} />}
-          </TabButton>
-          <TabButton active={tab === "dashboard"} onClick={() => setTab("dashboard")}>
-            Dashboard
-          </TabButton>
-          <TabButton active={tab === "templates"} onClick={() => setTab("templates")}>
-            Templates
-            {myTemplates.length > 0 && <Count n={myTemplates.length} />}
-          </TabButton>
-          <TabButton active={tab === "profile"} onClick={() => setTab("profile")}>
-            Profile
-            {profile.bio.trim() && <Dot />}
-          </TabButton>
-        </div>
-      </header>
+    <div className="flex min-h-screen">
+      <SideNav
+        tab={tab}
+        setTab={setTab}
+        newFindCount={newFindCount}
+        templatesCount={myTemplates.length}
+        profileHasBio={!!profile.bio.trim()}
+        projects={projects}
+        activeId={activeId}
+        onSelectProject={selectProject}
+        showLogout={!!showLogout}
+        onLogout={onLogout}
+      />
+      <div className="flex min-w-0 flex-1 flex-col">
 
       {tab === "outreach" && (
-        <>
-          {/* ---------------- Hero ---------------- */}
-          <section className="relative overflow-hidden bg-warm-fade">
-            <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full bg-brand-gradient opacity-[0.12] blur-3xl" />
-            <div className="mx-auto grid max-w-6xl items-center gap-8 px-6 pb-3 pt-12 lg:grid-cols-[1.3fr_1fr]">
-              <div>
-                <span className="inline-block rounded-full border border-warm-border bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent shadow-card">
-                  One place for every conversation
-                </span>
-                <h1 className="mt-4 max-w-2xl text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl">
-                  Find your people.{" "}
-                  <span className="brand-text">Start the conversation.</span>
-                </h1>
-                <p className="mt-4 max-w-xl text-[15px] leading-relaxed text-body">
-                  Scout helps you reach the right people across email, LinkedIn,
-                  Instagram and more. It finds their contact info and drafts warm,
-                  personal messages that sound like you, so saying hello feels easy.
-                </p>
-              </div>
-              <div className="hidden lg:block">
-                <HeroArt />
-              </div>
-            </div>
-          </section>
-
-          <main className="mx-auto max-w-6xl px-6 pb-20">
+          <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
+          <div className="mb-6">
+            <h1 className="text-2xl font-extrabold tracking-tight text-ink">Outreach</h1>
+            <p className="mt-1 text-sm text-body">
+              Find the right people and draft messages in your voice.
+            </p>
+          </div>
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -1403,7 +1355,6 @@ function ScoutTool({
               </section>
             )}
           </main>
-        </>
       )}
 
       {tab === "finds" && (
@@ -1487,6 +1438,7 @@ function ScoutTool({
           </span>
         </div>
       </footer>
+      </div>
 
       {/* ---------------- Full-screen finds ---------------- */}
       {expanded && opps.length > 0 && (
@@ -1536,6 +1488,178 @@ function ScoutTool({
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------------- Sidebar navigation ---------------- */
+function SideNav({
+  tab,
+  setTab,
+  newFindCount,
+  templatesCount,
+  profileHasBio,
+  projects,
+  activeId,
+  onSelectProject,
+  showLogout,
+  onLogout,
+}: {
+  tab: string;
+  setTab: (t: any) => void;
+  newFindCount: number;
+  templatesCount: number;
+  profileHasBio: boolean;
+  projects: Project[];
+  activeId: string;
+  onSelectProject: (id: string) => void;
+  showLogout: boolean;
+  onLogout?: () => void;
+}) {
+  const items: {
+    key: string;
+    label: string;
+    icon: React.ReactNode;
+    badge?: number;
+    dot?: boolean;
+  }[] = [
+    {
+      key: "dashboard",
+      label: "Dashboard",
+      icon: (
+        <>
+          <rect x="3" y="3" width="7" height="9" rx="1.5" />
+          <rect x="14" y="3" width="7" height="5" rx="1.5" />
+          <rect x="14" y="12" width="7" height="9" rx="1.5" />
+          <rect x="3" y="16" width="7" height="5" rx="1.5" />
+        </>
+      ),
+    },
+    {
+      key: "outreach",
+      label: "Outreach",
+      icon: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />,
+    },
+    {
+      key: "finds",
+      label: "Finds",
+      badge: newFindCount,
+      icon: <path d="M20 7 9 18l-5-5" />,
+    },
+    {
+      key: "templates",
+      label: "Templates",
+      badge: templatesCount,
+      icon: (
+        <>
+          <rect x="4" y="4" width="16" height="16" rx="2.5" />
+          <path d="M8 9h8M8 13h5" />
+        </>
+      ),
+    },
+    {
+      key: "profile",
+      label: "Profile",
+      dot: profileHasBio,
+      icon: (
+        <>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 21a8 8 0 0 1 16 0" />
+        </>
+      ),
+    },
+  ];
+
+  return (
+    <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col gap-1 border-r border-warm-border bg-surface p-4">
+      <div className="flex items-center gap-3 px-2 pb-4 pt-1">
+        {/* Logo placeholder — swap this slot for the real Scout mark. */}
+        <span
+          aria-hidden
+          className="flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-warm-border bg-brown-tint text-[7px] font-bold uppercase leading-none tracking-wide text-muted"
+        >
+          Logo
+        </span>
+        <span className="text-xl font-extrabold tracking-tight text-ink">Scout</span>
+      </div>
+
+      <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
+        Menu
+      </div>
+      <nav className="flex flex-col gap-1">
+        {items.map((it) => {
+          const active = tab === it.key;
+          return (
+            <button
+              key={it.key}
+              onClick={() => setTab(it.key)}
+              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                active
+                  ? "bg-brown text-white shadow-soft"
+                  : "text-body hover:bg-brown-tint hover:text-brown-deep"
+              }`}
+            >
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={active ? "" : "opacity-80"}
+              >
+                {it.icon}
+              </svg>
+              {it.label}
+              {typeof it.badge === "number" && it.badge > 0 && (
+                <span
+                  className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
+                    active ? "bg-white/20 text-white" : "bg-brown-tint text-brown-deep"
+                  }`}
+                >
+                  {it.badge}
+                </span>
+              )}
+              {it.dot && (
+                <span
+                  className={`ml-auto h-1.5 w-1.5 rounded-full ${
+                    active ? "bg-white" : "bg-brown"
+                  }`}
+                />
+              )}
+            </button>
+          );
+        })}
+      </nav>
+
+      <div className="mt-auto border-t border-warm-border pt-3">
+        <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
+          Active project
+        </div>
+        {projects.length > 0 && (
+          <select
+            value={activeId}
+            onChange={(e) => onSelectProject(e.target.value)}
+            className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2.5 text-xs font-bold text-ink outline-none transition focus:border-brown"
+          >
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        )}
+        {showLogout && (
+          <button
+            onClick={onLogout}
+            className="mt-3 w-full rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-brown-tint"
+          >
+            Log out
+          </button>
+        )}
+      </div>
+    </aside>
   );
 }
 
@@ -1823,7 +1947,7 @@ function FindStatusBadge({ status }: { status: FindStatus }) {
   const map: Record<FindStatus, { label: string; cls: string }> = {
     new: { label: "New", cls: "border-warm-border bg-warm-bg text-body" },
     drafted: { label: "Drafted", cls: "border-coral/30 bg-warm-bg text-accent" },
-    sent: { label: "Sent", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+    sent: { label: "Sent", cls: "border-sage/40 bg-sage/15 text-sage" },
     denied: { label: "Not a fit", cls: "border-warm-border bg-white text-body/50" },
   };
   const s = map[status];
@@ -2101,6 +2225,13 @@ function DashboardTab({
   goProfile: () => void;
 }) {
   const learned = learnedFromFinds(finds);
+  const pipe = {
+    new: finds.filter((f) => f.status === "new").length,
+    drafted: finds.filter((f) => f.status === "drafted").length,
+    sent: finds.filter((f) => f.status === "sent").length,
+    denied: finds.filter((f) => f.status === "denied").length,
+  };
+  const pipeMax = Math.max(1, pipe.new, pipe.drafted, pipe.sent, pipe.denied);
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -2163,88 +2294,73 @@ function DashboardTab({
   ];
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
-        Your <span className="brand-text">dashboard</span>
-      </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
+    <main className="mx-auto w-full max-w-5xl px-8 py-10">
+      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Dashboard</h1>
+      <p className="mt-1 text-sm text-body">
         How your outreach is going, and how Scout is getting sharper for you.
       </p>
 
       {/* -------- Activity (real counts) -------- */}
-      <section className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard n={activity.found} label="People found" />
-        <StatCard n={activity.drafts} label="Messages drafted" />
-        <StatCard n={activity.copies} label="Taken to send" />
-        <StatCard n={activity.searches} label="Searches run" />
+      <section className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile
+          n={activity.searches}
+          label="Searches run"
+          icon={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>}
+        />
+        <StatTile
+          n={activity.found}
+          label="People found"
+          icon={<><circle cx="9" cy="8" r="3.5" /><path d="M3 20a6 6 0 0 1 12 0M16 6a3.5 3.5 0 0 1 0 7M21 20a6 6 0 0 0-4-5.6" /></>}
+        />
+        <StatTile
+          n={activity.drafts}
+          label="Drafts written"
+          icon={<><path d="M4 4h16v12H8l-4 4z" /><path d="M8 9h8M8 12h5" /></>}
+        />
+        <StatTile
+          n={activity.copies}
+          label="Taken to send"
+          icon={<path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6z" />}
+        />
       </section>
 
-      <div className="mt-3 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/50 px-5 py-4">
-        <div>
-          <div className="text-lg font-extrabold text-ink">
-            ~{timeSaved}{" "}
-            <span className="text-xs font-semibold text-body/70">saved (est.)</span>
-          </div>
-          <p className="mt-0.5 text-xs text-body/70">
-            Rough estimate at about 6 minutes to find and personally write each of
-            your {activity.drafts} {activity.drafts === 1 ? "message" : "messages"}.
+      {/* -------- Taste learning + pipeline -------- */}
+      <section className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
+          <h2 className="text-sm font-extrabold text-ink">
+            What Scout is learning about your taste
+          </h2>
+          <p className="mt-0.5 text-xs text-muted">
+            Built from the finds you keep and pass on, all your own data.
           </p>
-        </div>
-        <button
-          onClick={goOutreach}
-          className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
-        >
-          Scout more people
-        </button>
-      </div>
-
-      {activity.searches === 0 && (
-        <p className="mt-3 text-xs text-body/60">
-          Numbers fill in as you use Scout. Run a search on the Outreach tab to get
-          started.
-        </p>
-      )}
-
-      {/* -------- What Scout has learned about your taste (real, from finds) -------- */}
-      <section className="mt-10">
-        <h2 className="text-lg font-bold text-ink">What Scout knows about your taste</h2>
-        <p className="mt-1 text-sm text-body/80">
-          Built from the finds you keep and pass on, all your own data. The more you
-          review, the sharper Scout&apos;s picture of who you actually want.
-        </p>
-
-        {learned.decided === 0 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-white/60 p-8 text-center text-sm text-body/70">
-            Nothing learned yet. As you draft messages and set aside finds that
-            aren&apos;t a fit on the{" "}
-            <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
-              Finds
-            </button>{" "}
-            tab, your deny rate and preferences show up here.
-          </div>
-        ) : (
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {/* Deny rate + trend */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
-              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-                Your deny rate
-              </div>
-              <div className="mt-1 flex items-end gap-2">
-                <span className="text-3xl font-extrabold tracking-tight text-ink">
+          {learned.decided === 0 ? (
+            <p className="mt-6 text-sm leading-relaxed text-body/70">
+              Nothing learned yet. As you draft messages and set aside finds that
+              aren&apos;t a fit, your deny rate and preferences show up here.
+            </p>
+          ) : (
+            <>
+              <div className="mt-4 flex items-end gap-3">
+                <span className="text-4xl font-extrabold tracking-tight text-ink">
                   {Math.round(learned.denyRate * 100)}%
                 </span>
-                {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
-                  <span
-                    className={`mb-1 text-xs font-bold ${
-                      learned.trend.delta < 0 ? "text-emerald-600" : "text-body/60"
-                    }`}
-                  >
-                    {learned.trend.delta < 0 ? "▼ down" : "▲ up"} from{" "}
-                    {Math.round(learned.trend.early * 100)}%
-                  </span>
-                )}
+                <div className="pb-1">
+                  <div className="text-xs font-bold uppercase tracking-wider text-muted">
+                    Deny rate
+                  </div>
+                  {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
+                    <div
+                      className={`text-xs font-bold ${
+                        learned.trend.delta < 0 ? "text-sage" : "text-muted"
+                      }`}
+                    >
+                      {learned.trend.delta < 0 ? "▼ down" : "▲ up"} from{" "}
+                      {Math.round(learned.trend.early * 100)}%
+                    </div>
+                  )}
+                </div>
               </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+              <p className="mt-3 text-xs leading-relaxed text-body/70">
                 {learned.trend
                   ? learned.trend.delta < -0.01
                     ? "Fewer of Scout's finds are misses now than when you started, it's getting your taste."
@@ -2253,8 +2369,74 @@ function DashboardTab({
                     : "Holding steady as Scout learns what fits."
                   : `You've set aside ${learned.denied} of ${learned.decided} you reviewed. A trend appears once you've reviewed a few more.`}
               </p>
+            </>
+          )}
+          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
+            <div className="text-xs text-body/70">
+              ~{timeSaved} <span className="text-muted">saved (est.)</span>, about 6 min
+              per message.
             </div>
+            <button
+              onClick={goOutreach}
+              className="ml-auto rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
+            >
+              Scout more people
+            </button>
+          </div>
+        </div>
 
+        <div className="rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
+          <h2 className="text-sm font-extrabold text-ink">Your pipeline</h2>
+          <p className="mt-0.5 text-xs text-muted">Finds across every project</p>
+          <div className="mt-4 grid gap-3">
+            {(
+              [
+                { label: "New", n: pipe.new, color: "bg-sage" },
+                { label: "Drafted", n: pipe.drafted, color: "bg-brown" },
+                { label: "Sent", n: pipe.sent, color: "bg-brown-deep" },
+                { label: "Denied", n: pipe.denied, color: "bg-danger" },
+              ] as const
+            ).map((r) => (
+              <div key={r.label} className="flex items-center gap-3 text-sm">
+                <span className="w-16 text-xs font-semibold text-body">{r.label}</span>
+                <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-brown-tint">
+                  <span
+                    className={`block h-full rounded-full ${r.color}`}
+                    style={{ width: `${Math.round((r.n / pipeMax) * 100)}%` }}
+                  />
+                </span>
+                <span className="w-6 text-right text-xs font-extrabold text-ink">
+                  {r.n}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 border-t border-warm-border pt-3 text-xs text-body/70">
+            <b className="text-ink">
+              {pipe.new} {pipe.new === 1 ? "person" : "people"}
+            </b>{" "}
+            waiting for you in Finds.
+          </div>
+        </div>
+      </section>
+
+      {activity.searches === 0 && (
+        <p className="mt-3 text-xs text-muted">
+          Numbers fill in as you use Scout. Run a search on the Outreach tab to get
+          started.
+        </p>
+      )}
+
+      {/* -------- Fit + preferences (only once there's data to show) -------- */}
+      {learned.decided > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-bold text-ink">Your fit and preferences</h2>
+          <p className="mt-1 text-sm text-body/80">
+            The fit level and channels you gravitate toward, learned from the finds
+            you keep and pass on.
+          </p>
+
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {/* Fit sweet spot */}
             <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
               <div className="text-xs font-bold uppercase tracking-wider text-body/60">
@@ -2290,7 +2472,7 @@ function DashboardTab({
               </div>
               <div className="mt-3 grid gap-4 sm:grid-cols-2">
                 <div>
-                  <div className="text-xs font-semibold text-emerald-700">You reach out to</div>
+                  <div className="text-xs font-semibold text-sage">You reach out to</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
                     {learned.keptChannels.length ? (
                       learned.keptChannels.slice(0, 4).map(([c, n]) => (
@@ -2330,7 +2512,45 @@ function DashboardTab({
               </p>
             </div>
           </div>
-        )}
+        </section>
+      )}
+
+      {/* -------- Your projects -------- */}
+      <section className="mt-10">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold text-ink">Your projects</h2>
+          <button
+            onClick={goOutreach}
+            className="text-xs font-bold text-accent transition hover:underline"
+          >
+            Go to Outreach →
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {projects.length === 0 ? (
+            <p className="text-sm text-muted">No projects yet.</p>
+          ) : (
+            projects.slice(0, 6).map((p) => {
+              const mine = finds.filter((f) => f.projectId === p.id);
+              const nw = mine.filter((f) => f.status === "new").length;
+              const sent = mine.filter((f) => f.status === "sent").length;
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                >
+                  <span className="h-10 w-10 shrink-0 rounded-xl bg-brand-gradient" />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-ink">{p.name}</div>
+                    <div className="truncate text-xs text-muted">
+                      {p.useCase} · {nw} new · {sent} sent
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </section>
 
       {/* -------- How Scout learns YOU -------- */}
@@ -2416,15 +2636,54 @@ function DashboardTab({
           estimates.
         </p>
       </section>
+
+      {/* -------- CTA -------- */}
+      <section className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl bg-brand-gradient px-6 py-5 text-white shadow-soft">
+        <div>
+          <h3 className="text-base font-extrabold">Ready to reach a few more people?</h3>
+          <p className="mt-1 text-xs text-white/80">
+            Pick up where you left off, or start a fresh search.
+          </p>
+        </div>
+        <button
+          onClick={goOutreach}
+          className="ml-auto rounded-xl bg-white px-5 py-2.5 text-sm font-extrabold text-brown-deep transition hover:opacity-95"
+        >
+          Start scouting →
+        </button>
+      </section>
     </main>
   );
 }
 
-function StatCard({ n, label }: { n: number; label: string }) {
+function StatTile({
+  n,
+  label,
+  icon,
+}: {
+  n: number;
+  label: string;
+  icon: React.ReactNode;
+}) {
   return (
-    <div className="rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+    <div className="rounded-3xl border border-warm-border bg-surface p-5 shadow-card">
+      <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brown-tint">
+        <svg
+          width="17"
+          height="17"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          className="text-brown-deep"
+        >
+          {icon}
+        </svg>
+      </span>
       <div className="text-3xl font-extrabold tracking-tight text-ink">{n}</div>
-      <div className="mt-1 text-xs font-medium text-body/70">{label}</div>
+      <div className="mt-1 text-xs font-semibold text-body">{label}</div>
     </div>
   );
 }
@@ -3577,8 +3836,8 @@ function Logo({ small = false, white = false }: { small?: boolean; white?: boole
     <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden>
       <defs>
         <linearGradient id="cc-grad" x1="0" y1="0" x2="24" y2="24">
-          <stop stopColor="#ff8a5b" />
-          <stop offset="1" stopColor="#ff6f91" />
+          <stop stopColor="#7a5b41" />
+          <stop offset="1" stopColor="#5e4530" />
         </linearGradient>
       </defs>
       <rect width="24" height="24" rx="7" fill="url(#cc-grad)" />

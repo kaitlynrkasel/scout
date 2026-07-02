@@ -5,8 +5,8 @@ export function Logo({ size = 24 }: { size?: number }) {
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
       <defs>
         <linearGradient id="scout-grad" x1="0" y1="0" x2="24" y2="24">
-          <stop stopColor="#ff8a5b" />
-          <stop offset="1" stopColor="#ff6f91" />
+          <stop stopColor="#7a5b41" />
+          <stop offset="1" stopColor="#5e4530" />
         </linearGradient>
       </defs>
       <rect width="24" height="24" rx="7" fill="url(#scout-grad)" />

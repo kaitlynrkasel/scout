@@ -7,29 +7,25 @@
 }
 
 body {
-  /* Soft warm wash that fades to white, so the whole page feels light and airy. */
-  background:
-    radial-gradient(900px 500px at 80% -10%, rgba(255, 111, 145, 0.10), transparent 60%),
-    radial-gradient(800px 460px at 0% 0%, rgba(255, 138, 91, 0.10), transparent 55%),
-    #ffffff;
-  background-attachment: fixed;
-  color: #6b5f66;
+  /* Calm warm-cream wash. The app shell (sidebar + cards) sits on top of this. */
+  background: #f1eadf;
+  color: #6e6155;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
 
-/* Gradient text helper for the wordmark + accents. */
+/* Gradient text helper for the wordmark + accents (warm brown). */
 .brand-text {
-  background: linear-gradient(100deg, #ff8a5b 0%, #ff6f91 100%);
+  background: linear-gradient(100deg, #7a5b41 0%, #5e4530 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
 }
 
-/* Refined native select with a warm chevron. */
+/* Refined native select with a warm-brown chevron. */
 select.scout-select {
   appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23c98a86' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%237a5b41' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.75rem center;
   padding-right: 2.3rem;

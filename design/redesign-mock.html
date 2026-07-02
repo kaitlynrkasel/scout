@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Scout — redesign (clickable)</title>
+<style>
+  :root{
+    --bg:#F1EADF; --surface:#FBF8F2; --surface-2:#FFFFFF;
+    --ink:#372C21; --body:#6E6155; --muted:#A2937F; --border:#E7DCCB;
+    --brown:#7A5B41; --brown-deep:#5E4530; --brown-tint:#EFE4D4;
+    --sage:#8C9A76;                 /* used only as a tiny highlight */
+    --danger:#B08068;
+    --shadow:0 1px 2px rgba(74,54,34,.05), 0 8px 24px rgba(74,54,34,.06);
+    --radius:20px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--body);display:flex;min-height:100vh;
+    font-family:ui-sans-serif,-apple-system,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
+  a{text-decoration:none}
+
+  /* ---------- Sidebar ---------- */
+  .sidebar{width:248px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);
+    display:flex;flex-direction:column;padding:22px 16px;gap:8px;position:sticky;top:0;height:100vh}
+  .brand{display:flex;align-items:center;gap:11px;padding:6px 8px 18px}
+  .logo-slot{width:38px;height:38px;border-radius:12px;border:1.5px dashed var(--border);background:var(--brown-tint);
+    display:flex;align-items:center;justify-content:center;font-size:8px;color:var(--muted);text-align:center;line-height:1.1;letter-spacing:.02em}
+  .wordmark{font-size:20px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .navlabel{font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted);padding:14px 10px 6px}
+  .nav button{width:100%;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:12px;border:0;background:none;cursor:pointer;
+    color:var(--body);font-size:14px;font-weight:600;transition:.15s;font-family:inherit;text-align:left}
+  .nav button .ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;opacity:.85}
+  .nav button:hover{background:var(--brown-tint);color:var(--brown-deep)}
+  .nav button.active{background:var(--brown);color:#fff;box-shadow:var(--shadow)}
+  .nav button.active .ico{opacity:1}
+  .nav button .badge{margin-left:auto;background:var(--brown-tint);color:var(--brown-deep);font-size:11px;font-weight:800;border-radius:999px;padding:1px 8px}
+  .nav button.active .badge{background:rgba(255,255,255,.22);color:#fff}
+  .side-foot{margin-top:auto;border-top:1px solid var(--border);padding-top:12px}
+  .proj{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:var(--surface-2);border:1px solid var(--border);cursor:pointer}
+  .proj .dot{width:26px;height:26px;border-radius:8px;background:var(--brown);flex-shrink:0}
+  .proj .n{font-size:12.5px;font-weight:700;color:var(--ink)}
+  .proj .s{font-size:11px;color:var(--muted)}
+  .caret{margin-left:auto;color:var(--muted)}
+
+  /* ---------- Main ---------- */
+  .main{flex:1;min-width:0;display:flex;flex-direction:column}
+  .topbar{display:flex;align-items:center;gap:16px;padding:22px 34px}
+  .hello h1{margin:0;font-size:23px;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+  .hello p{margin:3px 0 0;font-size:13px;color:var(--body)}
+  .search{margin-left:auto;display:flex;align-items:center;gap:9px;background:var(--surface);border:1px solid var(--border);
+    border-radius:999px;padding:10px 16px;width:260px;color:var(--muted);font-size:13px}
+  .search svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+  .gmail-pill{display:flex;align-items:center;gap:7px;background:var(--surface);border:1px solid var(--border);color:var(--brown-deep);
+    border-radius:999px;padding:8px 13px;font-size:12px;font-weight:700}
+  .gmail-pill .live{width:7px;height:7px;border-radius:999px;background:var(--sage)}   /* sage = tiny status dot */
+  .avatar{width:38px;height:38px;border-radius:999px;background:var(--brown)}
+  .content{padding:6px 34px 44px;display:grid;gap:18px}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .card.pad{padding:20px 22px}
+  h3.ct{margin:0;font-size:14px;font-weight:800;color:var(--ink);letter-spacing:-.01em}
+  .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .seehead{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .seehead a{font-size:12px;font-weight:700;color:var(--brown)}
+  .screen{display:none}
+  .screen.show{display:block}
+
+  /* stat tiles */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+  .tile{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px;box-shadow:var(--shadow)}
+  .tile .tico{width:34px;height:34px;border-radius:10px;background:var(--brown-tint);display:flex;align-items:center;justify-content:center;margin-bottom:12px}
+  .tile .tico svg{width:17px;height:17px;stroke:var(--brown-deep);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+  .tile .num{font-size:30px;font-weight:800;color:var(--ink);line-height:1;letter-spacing:-.02em}
+  .tile .lbl{font-size:12.5px;color:var(--body);margin-top:6px;font-weight:600}
+  .tile .delta{font-size:11px;color:var(--muted);font-weight:700;margin-top:4px}
+  .band{display:grid;grid-template-columns:1.6fr 1fr;gap:18px}
+  .legend{display:flex;gap:14px;font-size:11.5px;color:var(--body);font-weight:600;margin-top:10px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .swatch{width:10px;height:10px;border-radius:3px}
+  .pipe{display:grid;gap:11px;margin-top:4px}
+  .pipe-row{display:flex;align-items:center;gap:12px;font-size:13px}
+  .pipe-row .pn{width:66px;color:var(--body);font-weight:600}
+  .pipe-track{flex:1;height:9px;border-radius:999px;background:var(--brown-tint);overflow:hidden}
+  .pipe-fill{height:100%;border-radius:999px}
+  .pipe-row .pc{width:26px;text-align:right;font-weight:800;color:var(--ink);font-size:13px}
+  .lower{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .projcard{display:flex;align-items:center;gap:13px;padding:12px;border:1px solid var(--border);border-radius:14px;background:var(--surface-2);margin-bottom:10px}
+  .projcard:last-child{margin-bottom:0}
+  .projcard .pv{width:40px;height:40px;border-radius:11px;background:var(--brown);flex-shrink:0}
+  .projcard .pt{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .projcard .ps{font-size:11.5px;color:var(--muted);margin-top:1px}
+  .projcard .go{margin-left:auto;color:var(--brown);font-size:18px}
+  .act{display:flex;gap:12px;padding:10px 2px;border-bottom:1px dashed var(--border);font-size:13px}
+  .act:last-child{border-bottom:0}
+  .act .ad{width:8px;height:8px;border-radius:999px;background:var(--brown);margin-top:5px;flex-shrink:0}
+  .act .at{color:var(--ink);font-weight:600}
+  .act .as{color:var(--muted);font-size:11.5px}
+  .act .aw{margin-left:auto;color:var(--muted);font-size:11.5px;white-space:nowrap}
+  .cta{display:flex;align-items:center;gap:16px;background:linear-gradient(120deg,var(--brown),var(--brown-deep));
+    color:#fff;border-radius:var(--radius);padding:20px 24px;box-shadow:var(--shadow)}
+  .cta h3{color:#fff;font-size:16px;margin:0}
+  .cta p{margin:4px 0 0;font-size:12.5px;color:rgba(255,255,255,.82)}
+  .cta button{margin-left:auto;background:#fff;color:var(--brown-deep);border:0;border-radius:12px;padding:12px 20px;font-weight:800;font-size:13px;cursor:pointer}
+
+  /* form bits (Outreach / Profile / Templates) */
+  .lbl2{font-size:11.5px;font-weight:700;color:var(--ink);letter-spacing:.02em;margin-bottom:7px;display:block}
+  .field,.selectbox{width:100%;background:var(--surface-2);border:1px solid var(--border);border-radius:12px;
+    padding:12px 14px;font-size:13.5px;color:var(--ink);font-family:inherit;resize:vertical}
+  .field::placeholder{color:var(--muted)}
+  .row2{display:grid;grid-template-columns:240px 1fr;gap:20px}
+  .btn{background:var(--brown);color:#fff;border:0;border-radius:12px;padding:12px 22px;font-weight:800;font-size:13.5px;cursor:pointer;box-shadow:var(--shadow)}
+  .btn.ghost{background:var(--surface-2);color:var(--brown-deep);border:1px solid var(--border);box-shadow:none}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{border:1px solid var(--border);background:var(--surface-2);border-radius:999px;padding:7px 14px;font-size:12.5px;font-weight:700;color:var(--body);cursor:pointer}
+  .chip.on{background:var(--brown);color:#fff;border-color:var(--brown)}
+
+  /* result / find cards */
+  .finds{display:grid;gap:12px}
+  .find{display:flex;align-items:flex-start;gap:14px;padding:16px;border:1px solid var(--border);border-radius:16px;background:var(--surface-2)}
+  .find .fav{width:42px;height:42px;border-radius:12px;background:var(--brown-tint);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--brown-deep);font-weight:800;font-size:15px}
+  .find .fn{font-size:14.5px;font-weight:800;color:var(--ink)}
+  .find .fr{font-size:12.5px;color:var(--body);margin-top:2px}
+  .find .fw{font-size:12px;color:var(--muted);margin-top:7px;line-height:1.5}
+  .find .meta{display:flex;gap:8px;margin-top:9px;flex-wrap:wrap}
+  .tag{font-size:11px;font-weight:700;border-radius:999px;padding:3px 10px;background:var(--brown-tint);color:var(--brown-deep)}
+  .tag.sage{background:#EAEEE1;color:#5c6a49}   /* the only sage tint, on "new" */
+  .fit{margin-left:auto;text-align:right;flex-shrink:0}
+  .fit .fs{font-size:19px;font-weight:800;color:var(--ink)}
+  .fit .fl{font-size:10.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em}
+  .fbtns{display:flex;flex-direction:column;gap:8px;margin-left:14px;flex-shrink:0}
+  .mini{border-radius:10px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;border:1px solid var(--border)}
+  .mini.approve{background:var(--brown);color:#fff;border-color:var(--brown)}
+  .mini.deny{background:var(--surface);color:var(--body)}
+  .filterbar{display:flex;gap:8px;margin-bottom:16px;align-items:center}
+
+  /* draft bubble */
+  .draft{max-width:640px;border:1px solid var(--border);border-radius:18px;background:var(--surface-2);padding:18px 20px}
+  .draft .dh{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .draft .dn{font-weight:800;color:var(--ink);font-size:13.5px}
+  .draft .dsub{font-size:12.5px;font-weight:700;color:var(--ink);border-bottom:1px solid var(--border);padding-bottom:9px;margin-bottom:9px}
+  .draft pre{white-space:pre-wrap;font-family:inherit;font-size:13px;line-height:1.6;color:var(--body);margin:0}
+  .tplcard{border:1px solid var(--border);border-radius:16px;background:var(--surface-2);padding:16px}
+  .tplcard .tch{font-size:11px;font-weight:800;color:var(--brown-deep);background:var(--brown-tint);border-radius:999px;padding:3px 10px;display:inline-block;margin-bottom:9px}
+  .tplcard p{margin:0;font-size:12.5px;line-height:1.6;color:var(--body)}
+</style>
+</head>
+<body>
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="brand"><div class="logo-slot">YOUR<br>LOGO</div><div class="wordmark">Scout</div></div>
+    <div class="navlabel">Menu</div>
+    <nav class="nav" id="nav">
+      <button data-s="dash" class="active"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>Dashboard</button>
+      <button data-s="out"><svg class="ico" viewBox="0 0 24 24"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z"/></svg>Outreach</button>
+      <button data-s="finds"><svg class="ico" viewBox="0 0 24 24"><path d="M20 7 9 18l-5-5"/></svg>Finds <span class="badge">6</span></button>
+      <button data-s="tpl"><svg class="ico" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2.5"/><path d="M8 9h8M8 13h5"/></svg>Templates <span class="badge">3</span></button>
+      <button data-s="prof"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>Profile</button>
+    </nav>
+    <div class="side-foot">
+      <div class="navlabel" style="padding-top:0">Active project</div>
+      <div class="proj"><div class="dot"></div><div><div class="n">Anna Belt</div><div class="s">Music PR · 6 new finds</div></div>
+        <svg class="caret" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></div>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <div class="main">
+    <div class="topbar">
+      <div class="hello"><h1 id="ph1">Hello, Kaitlyn 👋</h1><p id="ppp">Here's what Scout has been up to this week.</p></div>
+      <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>Search…</div>
+      <div class="gmail-pill"><span class="live"></span>Gmail connected</div>
+      <div class="avatar"></div>
+    </div>
+
+    <!-- ===== DASHBOARD ===== -->
+    <div class="content screen show" id="s-dash">
+      <div class="stats">
+        <div class="tile"><div class="tico"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg></div><div class="num">14</div><div class="lbl">Searches run</div><div class="delta">▲ 4 this week</div></div>
+        <div class="tile"><div class="tico"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0M16 6a3.5 3.5 0 0 1 0 7M21 20a6 6 0 0 0-4-5.6"/></svg></div><div class="num">128</div><div class="lbl">People found</div><div class="delta">▲ 22 this week</div></div>
+        <div class="tile"><div class="tico"><svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z"/><path d="M8 9h8M8 12h5"/></svg></div><div class="num">41</div><div class="lbl">Drafts written</div><div class="delta">▲ 9 this week</div></div>
+        <div class="tile"><div class="tico"><svg viewBox="0 0 24 24"><path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6z"/></svg></div><div class="num">17</div><div class="lbl">Messages sent</div><div class="delta">▲ 5 this week</div></div>
+      </div>
+      <div class="band">
+        <div class="card pad">
+          <div class="seehead"><div><h3 class="ct">What Scout is learning about your taste</h3><div class="sub">Your deny rate is trending down as Scout tunes to who you approve.</div></div><a href="#">Details →</a></div>
+          <svg viewBox="0 0 520 150" width="100%" height="150" preserveAspectRatio="none" role="img" aria-label="Deny rate down from 62% to 24% over 8 weeks.">
+            <defs><linearGradient id="fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7A5B41" stop-opacity=".22"/><stop offset="1" stop-color="#7A5B41" stop-opacity="0"/></linearGradient></defs>
+            <line x1="0" y1="38" x2="520" y2="38" stroke="#E7DCCB"/><line x1="0" y1="76" x2="520" y2="76" stroke="#E7DCCB"/><line x1="0" y1="114" x2="520" y2="114" stroke="#E7DCCB"/>
+            <path d="M0,44 L74,58 L148,52 L222,74 L296,86 L370,96 L444,108 L520,118 L520,150 L0,150 Z" fill="url(#fill)"/>
+            <path d="M0,44 L74,58 L148,52 L222,74 L296,86 L370,96 L444,108 L520,118" fill="none" stroke="#7A5B41" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="520" cy="118" r="4.5" fill="#7A5B41" stroke="#FBF8F2" stroke-width="2"/>
+          </svg>
+          <div class="legend"><span><span class="swatch" style="background:#7A5B41"></span>Deny rate — 62% → 24% over 8 weeks</span></div>
+        </div>
+        <div class="card pad">
+          <div class="seehead"><div><h3 class="ct">Your pipeline</h3><div class="sub">Finds across every project</div></div></div>
+          <div class="pipe">
+            <div class="pipe-row"><span class="pn">New</span><span class="pipe-track"><span class="pipe-fill" style="width:70%;background:var(--sage)"></span></span><span class="pc">32</span></div>
+            <div class="pipe-row"><span class="pn">Drafted</span><span class="pipe-track"><span class="pipe-fill" style="width:44%;background:var(--brown)"></span></span><span class="pc">20</span></div>
+            <div class="pipe-row"><span class="pn">Sent</span><span class="pipe-track"><span class="pipe-fill" style="width:38%;background:var(--brown-deep)"></span></span><span class="pc">17</span></div>
+            <div class="pipe-row"><span class="pn">Denied</span><span class="pipe-track"><span class="pipe-fill" style="width:20%;background:var(--danger)"></span></span><span class="pc">9</span></div>
+          </div>
+          <div style="margin-top:18px;padding-top:14px;border-top:1px solid var(--border);font-size:12.5px"><b style="color:var(--ink)">32 people</b> are waiting for you in Finds.</div>
+        </div>
+      </div>
+      <div class="lower">
+        <div class="card pad">
+          <div class="seehead"><h3 class="ct">Your projects</h3><a href="#">Manage →</a></div>
+          <div class="projcard"><div class="pv"></div><div><div class="pt">Anna Belt</div><div class="ps">Music PR · 6 new · 3 drafted</div></div><span class="go">→</span></div>
+          <div class="projcard"><div class="pv" style="background:var(--brown-deep)"></div><div><div class="pt">My internship search</div><div class="ps">Jobs · 12 new · 5 sent</div></div><span class="go">→</span></div>
+          <div class="projcard"><div class="pv" style="background:#B8A98F"></div><div><div class="pt">Belt Creative networking</div><div class="ps">Networking · 4 new</div></div><span class="go">→</span></div>
+        </div>
+        <div class="card pad">
+          <div class="seehead"><h3 class="ct">Recent activity</h3><a href="#">All →</a></div>
+          <div class="act"><span class="ad"></span><div><div class="at">Drafted an email to a Spotify curator</div><div class="as">Anna Belt · Playlist curators</div></div><span class="aw">2h ago</span></div>
+          <div class="act"><span class="ad"></span><div><div class="at">Sent 3 messages from Gmail</div><div class="as">My internship search</div></div><span class="aw">Yesterday</span></div>
+          <div class="act"><span class="ad"></span><div><div class="at">Found 22 new people</div><div class="as">Networking · Warm intros</div></div><span class="aw">Yesterday</span></div>
+          <div class="act"><span class="ad"></span><div><div class="at">Denied 5 that weren't a fit</div><div class="as">Scout is learning your taste</div></div><span class="aw">2d ago</span></div>
+        </div>
+      </div>
+      <div class="cta"><div><h3>Ready to reach a few more people?</h3><p>Pick up where you left off in the Anna Belt project.</p></div><button>Start scouting →</button></div>
+    </div>
+
+    <!-- ===== OUTREACH ===== -->
+    <div class="content screen" id="s-out">
+      <div class="card pad">
+        <div class="row2" style="border-bottom:1px solid var(--border);padding-bottom:20px;margin-bottom:20px">
+          <div><label class="lbl2">Project</label><div class="selectbox" style="display:flex;align-items:center">Anna Belt ▾</div>
+            <p class="sub" style="margin-top:9px">One workspace per artist, client, or goal.</p></div>
+          <div><label class="lbl2">Who this outreach is for (optional)</label>
+            <textarea class="field" rows="2" placeholder="e.g. Anna Belt — Nashville folk-rock singer-songwriter, new single out now, for fans of Stevie Nicks and Maggie Rogers.">Anna Belt — Nashville folk-rock singer-songwriter, new single out now.</textarea></div>
+        </div>
+        <div class="row2">
+          <div><label class="lbl2">Category of search</label><div class="selectbox" style="display:flex;align-items:center">Playlist curators ▾</div>
+            <div class="chips" style="margin-top:10px"><span class="chip on">Playlist curators</span><span class="chip">Press &amp; blogs</span><span class="chip">Radio</span></div></div>
+          <div><label class="lbl2">Who are you looking for?</label>
+            <textarea class="field" rows="3" placeholder="Describe the people you want to reach…">indie folk-rock playlist curators and blogs accepting submissions</textarea>
+            <div style="margin-top:14px"><button class="btn">Scout →</button><span class="sub" style="margin-left:14px">Reads the web, finds real contacts. ~30–60s.</span></div></div>
+        </div>
+      </div>
+
+      <div class="card pad">
+        <div class="seehead"><div><h3 class="ct">Scout found 8 curators who fit</h3><div class="sub">Approve who to reach out to, deny who isn't a fit.</div></div><span class="sub">2 approved</span></div>
+        <div class="finds">
+          <div class="find">
+            <div class="fav">FF</div>
+            <div style="flex:1">
+              <div class="fn">Fresh Folk — Weekly Discovery</div>
+              <div class="fr">Spotify editorial-style playlist · 84k followers</div>
+              <div class="fw">Recently added two Nashville singer-songwriters and posts an open submission form each Friday.</div>
+              <div class="meta"><span class="tag sage">New</span><span class="tag">Email</span><span class="tag">curators@freshfolk.co</span></div>
+            </div>
+            <div class="fit"><div class="fs">0.92</div><div class="fl">Fit</div></div>
+            <div class="fbtns"><button class="mini approve">✓ Approve</button><button class="mini deny">Deny</button></div>
+          </div>
+          <div class="find">
+            <div class="fav">HH</div>
+            <div style="flex:1">
+              <div class="fn">Hazel Hart · Indie blog</div>
+              <div class="fr">Folk &amp; Americana coverage · accepts submissions</div>
+              <div class="fw">Wrote a feature on artists influenced by Stevie Nicks last month.</div>
+              <div class="meta"><span class="tag sage">New</span><span class="tag">LinkedIn</span></div>
+            </div>
+            <div class="fit"><div class="fs">0.88</div><div class="fl">Fit</div></div>
+            <div class="fbtns"><button class="mini approve">✓ Approve</button><button class="mini deny">Deny</button></div>
+          </div>
+          <div class="find" style="opacity:.72">
+            <div class="fav">MM</div>
+            <div style="flex:1">
+              <div class="fn">Midnight Mixtape</div>
+              <div class="fr">Playlist · 12k followers</div>
+              <div class="fw">Genre skews electronic — lighter fit for folk-rock.</div>
+              <div class="meta"><span class="tag">Website Form</span></div>
+            </div>
+            <div class="fit"><div class="fs">0.55</div><div class="fl">Fit</div></div>
+            <div class="fbtns"><button class="mini approve">✓ Approve</button><button class="mini deny">Deny</button></div>
+          </div>
+        </div>
+        <div style="margin-top:18px;display:flex"><button class="btn" style="margin-left:auto">Draft the 2 approved →</button></div>
+      </div>
+
+      <div class="card pad">
+        <div class="seehead"><h3 class="ct">Messages (1)</h3></div>
+        <div class="draft" style="margin-left:auto">
+          <div class="dh"><span class="dn">Fresh Folk</span><span class="tag">email</span><span class="sub">→ curators@freshfolk.co</span>
+            <button class="mini approve" style="margin-left:auto">Create Gmail draft</button></div>
+          <div class="dsub">A Nashville folk-rock single for your Friday submissions</div>
+          <pre>Hi there,
+
+I saw Fresh Folk recently featured a couple of Nashville singer-songwriters, and your Friday submission window felt like the right place to reach out.
+
+I help promote Anna Belt, a Nashville folk-rock artist with a new single out now, for fans of Stevie Nicks and Maggie Rogers. I'd love for you to give it a listen and consider it for the playlist.
+
+Thank you for making room for new artists.
+Kaitlyn</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== FINDS ===== -->
+    <div class="content screen" id="s-finds">
+      <div class="card pad">
+        <div class="filterbar">
+          <span class="chip on">New · 6</span><span class="chip">Drafted · 3</span><span class="chip">Sent · 2</span><span class="chip">Denied · 4</span><span class="chip">All</span>
+          <span class="sub" style="margin-left:auto">Anna Belt project</span>
+        </div>
+        <div class="finds">
+          <div class="find">
+            <div class="fav">FF</div>
+            <div style="flex:1"><div class="fn">Fresh Folk — Weekly Discovery</div><div class="fr">Spotify playlist · 84k followers</div>
+              <div class="meta"><span class="tag sage">New</span><span class="tag">Email</span><span class="tag">curators@freshfolk.co</span></div></div>
+            <div class="fbtns"><button class="mini approve">Draft</button><button class="mini deny">Not a fit</button></div>
+          </div>
+          <div class="find">
+            <div class="fav">TR</div>
+            <div style="flex:1"><div class="fn">The Roundup · Americana newsletter</div><div class="fr">Weekly new-music roundup · 30k subs</div>
+              <div class="meta"><span class="tag sage">New</span><span class="tag">Email</span></div></div>
+            <div class="fbtns"><button class="mini approve">Draft</button><button class="mini deny">Not a fit</button></div>
+          </div>
+          <div class="find">
+            <div class="fav">HH</div>
+            <div style="flex:1"><div class="fn">Hazel Hart · Indie blog</div><div class="fr">Folk &amp; Americana · drafted, ready to send</div>
+              <div class="meta"><span class="tag">Drafted</span><span class="tag">LinkedIn</span></div></div>
+            <div class="fbtns"><button class="mini approve">Send</button><button class="mini deny">Reopen</button></div>
+          </div>
+          <div class="find" style="opacity:.7">
+            <div class="fav">WV</div>
+            <div style="flex:1"><div class="fn">Wildwood Sessions</div><div class="fr">Sent yesterday via Gmail</div>
+              <div class="meta"><span class="tag">Sent ✓</span></div></div>
+            <div class="fbtns"><button class="mini deny">View</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== TEMPLATES ===== -->
+    <div class="content screen" id="s-tpl">
+      <div class="band" style="grid-template-columns:1fr 1.4fr">
+        <div class="card pad">
+          <h3 class="ct" style="margin-bottom:14px">Add a template</h3>
+          <label class="lbl2">Channel</label><div class="selectbox" style="display:flex;align-items:center;margin-bottom:14px">Email ▾</div>
+          <label class="lbl2">Your outreach sample</label>
+          <textarea class="field" rows="7" placeholder="Paste a message in your own voice. Scout matches its tone, warmth, and length — never copies it."></textarea>
+          <div style="margin-top:14px"><button class="btn">Save template</button></div>
+          <p class="sub" style="margin-top:12px">Scout learns how you sound and writes new outreach to match.</p>
+        </div>
+        <div class="card pad">
+          <div class="seehead"><h3 class="ct">Your templates</h3><span class="sub">3 saved</span></div>
+          <div style="display:grid;gap:12px">
+            <div class="tplcard"><span class="tch">Email</span><p>Hi [name], I loved your recent work on [detail]. I'm reaching out because…</p></div>
+            <div class="tplcard"><span class="tch">LinkedIn message</span><p>Hey [name] — really admire what you're building at [company]. Would love to connect…</p></div>
+            <div class="tplcard"><span class="tch">Cover letter</span><p>Dear [team], I'm a Belmont music business student with internship experience at…</p></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PROFILE ===== -->
+    <div class="content screen" id="s-prof">
+      <div class="band" style="grid-template-columns:1.3fr 1fr">
+        <div class="card pad">
+          <h3 class="ct" style="margin-bottom:16px">Your profile</h3>
+          <div style="display:grid;gap:16px">
+            <div><label class="lbl2">Your name or company</label><input class="field" value="Kaitlyn Kasel" /></div>
+            <div><label class="lbl2">About you</label><textarea class="field" rows="4">Belmont music business student and founder of a small artist-development company, hoping to learn from people doing A&amp;R.</textarea></div>
+            <div class="row2" style="grid-template-columns:1fr 1fr">
+              <div><label class="lbl2">Use case</label><div class="selectbox" style="display:flex;align-items:center">Music PR / Playlisting ▾</div></div>
+              <div><label class="lbl2">LinkedIn (optional)</label><input class="field" placeholder="linkedin.com/in/…" /></div>
+            </div>
+            <div><button class="btn">Save profile</button></div>
+          </div>
+        </div>
+        <div class="card pad">
+          <h3 class="ct" style="margin-bottom:14px">Connections</h3>
+          <div class="projcard" style="margin-bottom:14px"><div class="pv" style="background:var(--sage)"></div>
+            <div><div class="pt">Gmail</div><div class="ps">Connected · draft-in-inbox mode</div></div><span class="go">✓</span></div>
+          <div class="chips"><span class="chip on">Create drafts</span><span class="chip">Send directly</span></div>
+          <p class="sub" style="margin-top:14px;line-height:1.6">Scout can create drafts in your Gmail so you review before anything goes out, or send directly once you trust it.</p>
+          <div style="margin-top:18px;border-top:1px solid var(--border);padding-top:16px">
+            <label class="lbl2">Autofill from a resume or website</label>
+            <button class="btn ghost">Upload a file</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="max-width:1180px;margin:0 auto;padding:0 34px 40px;color:var(--muted);font-size:12px">
+      Clickable layout mock — use the sidebar to move between screens. Throwaway prototype, no product code changed. Logo slot left empty for you.
+    </div>
+  </div>
+
+<script>
+  const titles = {
+    dash:["Hello, Kaitlyn 👋","Here's what Scout has been up to this week."],
+    out:["Outreach","Find the right people and draft in your voice."],
+    finds:["Finds","Work each person through: draft, send, or set aside."],
+    tpl:["Templates","Teach Scout how you sound."],
+    prof:["Profile","You, your voice, and your connections."]
+  };
+  const nav = document.getElementById('nav');
+  nav.addEventListener('click', e=>{
+    const b = e.target.closest('button'); if(!b) return;
+    const s = b.dataset.s;
+    [...nav.children].forEach(x=>x.classList.toggle('active', x===b));
+    document.querySelectorAll('.screen').forEach(x=>x.classList.remove('show'));
+    document.getElementById('s-'+s).classList.add('show');
+    document.getElementById('ph1').textContent = titles[s][0];
+    document.getElementById('ppp').textContent = titles[s][1];
+    window.scrollTo(0,0);
+  });
+</script>
+</body>
+</html>
