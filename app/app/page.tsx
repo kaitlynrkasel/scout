@@ -126,6 +126,22 @@ function findKey(projectId: string, o: Opportunity): string {
   return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
 }
 
+// Aggregate community benchmarks + what's-working patterns from /api/community-stats.
+interface CommunityStats {
+  users: number;
+  avgDenyRate: number | null;
+  avgFinds: number | null;
+  avgDrafts: number | null;
+  avgFitKept: number | null;
+  patterns?: {
+    decidedFinds: number;
+    channels: { channel: string; total: number; keptRate: number }[];
+    fitKept: number | null;
+    fitDenied: number | null;
+    contextEffect: { withContext: number | null; withoutContext: number | null } | null;
+  };
+}
+
 const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
@@ -318,13 +334,7 @@ function ScoutTool({
   const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
 
   // ---- Community benchmarks (aggregate, everyone else) + account ----
-  const [community, setCommunity] = useState<{
-    users: number;
-    avgDenyRate: number | null;
-    avgFinds: number | null;
-    avgDrafts: number | null;
-    avgFitKept: number | null;
-  } | null>(null);
+  const [community, setCommunity] = useState<CommunityStats | null>(null);
   const [accountBusy, setAccountBusy] = useState("");
   const [accountNote, setAccountNote] = useState("");
 
@@ -2168,13 +2178,7 @@ function DashboardTab({
   projects: Project[];
   categoriesCount: number;
   finds: Find[];
-  community: {
-    users: number;
-    avgDenyRate: number | null;
-    avgFinds: number | null;
-    avgDrafts: number | null;
-    avgFitKept: number | null;
-  } | null;
+  community: CommunityStats | null;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
@@ -2462,6 +2466,13 @@ function DashboardTab({
         )}
       </section>
 
+      {/* -------- Outreach advice: what's working for others + proven playbook -------- */}
+      <OutreachAdvice
+        community={community}
+        goOutreach={goOutreach}
+        goTemplates={goTemplates}
+      />
+
       {/* -------- How Scout learns YOU -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout is learning you</h2>
@@ -2546,6 +2557,150 @@ function DashboardTab({
         </p>
       </section>
     </main>
+  );
+}
+
+/* ---------------- Outreach advice: community patterns + proven playbook ---------------- */
+function OutreachAdvice({
+  community,
+  goOutreach,
+  goTemplates,
+}: {
+  community: CommunityStats | null;
+  goOutreach: () => void;
+  goTemplates: () => void;
+}) {
+  const p = community?.patterns;
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+
+  // Real, data-backed insights — each renders only when the community data
+  // actually supports it (enough decisions, and the effect is really there).
+  const insights: { title: string; body: string; basis: string }[] = [];
+  if (p) {
+    const top = p.channels[0];
+    if (top) {
+      insights.push({
+        title: `${top.channel} finds get acted on most`,
+        body: `${pct(top.keptRate)} of ${top.channel.toLowerCase()} finds are drafted or contacted — lead with searches likely to surface ${top.channel.toLowerCase()} contacts.`,
+        basis: `${top.total} community decisions`,
+      });
+    }
+    if (p.fitKept != null && p.fitDenied != null && p.fitKept > p.fitDenied) {
+      insights.push({
+        title: `The sweet spot is around ${pct(p.fitKept)} fit`,
+        body: `People act on finds averaging ${pct(p.fitKept)} fit and pass on ones around ${pct(p.fitDenied)}. Sharpening your goal wording lifts the fit of what Scout brings back.`,
+        basis: `${p.decidedFinds} community decisions`,
+      });
+    }
+    const ce = p.contextEffect;
+    if (
+      ce &&
+      ce.withContext != null &&
+      ce.withoutContext != null &&
+      ce.withContext < ce.withoutContext
+    ) {
+      insights.push({
+        title: "Project context cuts the misses",
+        body: `People who describe who their outreach is for see a ${pct(ce.withContext)} deny rate vs ${pct(ce.withoutContext)} without it. Fill in "Who this outreach is for" on each project.`,
+        basis: "community deny rates, with vs without context",
+      });
+    }
+  }
+
+  // Established outreach practice — honestly labeled, not dressed up as Scout data.
+  const playbook: { title: string; body: string; cta?: { label: string; go: () => void } }[] = [
+    {
+      title: "Open with something real about them",
+      body: "One specific, true line about their work beats any template. Personalized outreach earns roughly 12–25% replies vs 1–3% for generic blasts (industry benchmarks).",
+    },
+    {
+      title: "Keep it to three short paragraphs",
+      body: "Who you are, why them specifically, one soft ask. Busy people reply to messages they can read in ten seconds.",
+    },
+    {
+      title: "Ask small",
+      body: "\"Would you be open to a quick call?\" outperforms a hard pitch. The first message starts the conversation; it doesn't close the deal.",
+      cta: { label: "Draft one now", go: goOutreach },
+    },
+    {
+      title: "Sound like yourself",
+      body: "Drafts written in your real voice get replies your polished-corporate voice never will. Give Scout a few examples of how you actually write.",
+      cta: { label: "Add a voice template", go: goTemplates },
+    },
+    {
+      title: "Follow up once, kindly",
+      body: "A short, friendly nudge after about a week roughly doubles response rates. One follow-up is persistence; three is spam.",
+    },
+  ];
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-lg font-bold text-ink">Outreach advice</h2>
+      <p className="mt-1 text-sm text-body/80">
+        What&apos;s working for other people on Scout, plus the fundamentals that
+        always hold.
+      </p>
+
+      {/* Data-backed community insights */}
+      <div className="mt-4">
+        <div className="text-xs font-bold uppercase tracking-wider text-accent">
+          Working for the community right now
+        </div>
+        {insights.length ? (
+          <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+            {insights.map((tip) => (
+              <div
+                key={tip.title}
+                className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
+              >
+                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                  Based on {tip.basis}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+            Live patterns show up here once the community has made enough decisions —
+            real numbers only, so nothing appears until the data can back it up.
+          </p>
+        )}
+      </div>
+
+      {/* Proven playbook */}
+      <div className="mt-5">
+        <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+          The proven playbook
+        </div>
+        <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+          {playbook.map((tip) => (
+            <div
+              key={tip.title}
+              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                {tip.cta && (
+                  <button
+                    onClick={tip.cta.go}
+                    className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+                  >
+                    {tip.cta.label}
+                  </button>
+                )}
+              </div>
+              <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-2.5 text-xs text-body/50">
+          Playbook tips are established outreach practice, not Scout data. The section
+          above switches to real community numbers as they accumulate.
+        </p>
+      </div>
+    </section>
   );
 }
 

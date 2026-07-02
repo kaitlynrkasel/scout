@@ -28,6 +28,65 @@ function userMetrics(data: any) {
   };
 }
 
+// What's actually working across everyone else's pipelines: which channels get
+// acted on, the fit level people keep vs pass, and whether project context
+// lowers deny rates. Aggregates only; thin cohorts return null so the client
+// never shows a claim built on almost no data.
+function communityPatterns(rows: any[]) {
+  const allDecided: any[] = [];
+  const withCtx: number[] = [];
+  const withoutCtx: number[] = [];
+
+  for (const r of rows) {
+    const d = r.data || {};
+    const finds = Array.isArray(d.finds) ? d.finds : [];
+    const decided = finds.filter((f: any) => f.status !== "new");
+    allDecided.push(...decided);
+    if (decided.length) {
+      const denyRate =
+        decided.filter((f: any) => f.status === "denied").length / decided.length;
+      const hasCtx = (d.projects || []).some((p: any) => (p.context || "").trim());
+      (hasCtx ? withCtx : withoutCtx).push(denyRate);
+    }
+  }
+
+  // Channel kept-rates, only for channels with enough decisions to mean something.
+  const byChannel: Record<string, { kept: number; total: number }> = {};
+  for (const f of allDecided) {
+    const c = f.opp?.channel || "Unknown";
+    byChannel[c] = byChannel[c] || { kept: 0, total: 0 };
+    byChannel[c].total++;
+    if (f.status === "drafted" || f.status === "sent") byChannel[c].kept++;
+  }
+  const channels = Object.entries(byChannel)
+    .filter(([, v]) => v.total >= 5)
+    .map(([channel, v]) => ({ channel, total: v.total, keptRate: v.kept / v.total }))
+    .sort((a, b) => b.keptRate - a.keptRate);
+
+  const fits = (want: (f: any) => boolean) => {
+    const vals = allDecided
+      .filter(want)
+      .map((f: any) => f.opp?.fitScore)
+      .filter((v: any) => typeof v === "number");
+    return vals.length >= 5
+      ? vals.reduce((a: number, b: number) => a + b, 0) / vals.length
+      : null;
+  };
+  const mean = (a: number[]) =>
+    a.length ? a.reduce((x, y) => x + y, 0) / a.length : null;
+
+  return {
+    decidedFinds: allDecided.length,
+    channels,
+    fitKept: fits((f) => f.status === "drafted" || f.status === "sent"),
+    fitDenied: fits((f) => f.status === "denied"),
+    contextEffect:
+      withCtx.length >= 2 && withoutCtx.length >= 2
+        ? { withContext: mean(withCtx), withoutContext: mean(withoutCtx) }
+        : null,
+  };
+}
+
 export async function GET(req: NextRequest) {
   const uid = await userIdFromReq(req);
   if (!uid || !supabaseAdmin) return NextResponse.json({ users: 0 });
@@ -49,5 +108,6 @@ export async function GET(req: NextRequest) {
     avgFinds: avg((m) => m.finds),
     avgDrafts: avg((m) => m.drafts),
     avgFitKept: avg((m) => m.keptFit),
+    patterns: communityPatterns(others),
   });
 }
