@@ -18,6 +18,71 @@ function buildQueries(goal: string, useCase: string): string[] {
   return Array.from(set);
 }
 
+function isNetworkingUseCase(useCase: string): boolean {
+  if (resolveTemplate(useCase)?.key === "networking") return true;
+  return /\b(network|coffee|mentor|connect|advice|informational)/i.test(useCase);
+}
+
+// Plan smart, industry-aligned search queries from the goal + the user's actual
+// profile (their field, sub-specialty, seniority, city are inferred from ABOUT).
+// This is what makes results match the user's industry instead of being generic.
+// Falls back to the static template queries if there's no profile or on failure.
+async function planQueries(
+  goal: string,
+  about: string,
+  useCase: string
+): Promise<string[]> {
+  const g = goal.trim();
+  if (!about.trim()) return buildQueries(goal, useCase);
+
+  const jobs = isJobUseCase(useCase);
+  const networking = isNetworkingUseCase(useCase);
+
+  let guidance = "";
+  if (jobs) {
+    guidance =
+      "Target REAL job/internship openings IN THE USER'S INDUSTRY. Every query should pair the role/field with " +
+      "the user's specific industry and sub-field (e.g. for a music-business student wanting marketing: " +
+      "'music industry marketing internship 2026 apply', 'record label marketing intern careers', " +
+      "'Nashville entertainment marketing internship'). Include apply/careers/internship/2026, vary company types " +
+      "(labels, agencies, startups, brands in that field) and add the user's city or a hub city for that industry.";
+  } else if (networking) {
+    guidance =
+      "Target findable PEOPLE to network with in the user's exact field. Each query should combine a specific ROLE TITLE " +
+      "+ the user's industry/sub-field + an org type + a place + a findability signal (e.g. " +
+      "'A&R coordinator indie label Nashville LinkedIn', 'music marketing manager record label email', " +
+      "'Belmont music business alumni A&R'). Aim at real individuals with titles, not company homepages.";
+  } else {
+    guidance =
+      "Combine the goal with the user's specific field, sub-specialty, seniority and city so results match their industry.";
+  }
+
+  const year = new Date().getFullYear();
+  const sys =
+    "You are a search strategist for an outreach tool. From the user's goal and their profile, write web-search " +
+    "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
+    "these from ABOUT THE USER — do not ask). " +
+    guidance +
+    ` The current year is ${year}; for any dated query use ${year} or ${year + 1} (the current or upcoming cycle), never a past year. ` +
+    "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
+    "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
+  const user =
+    `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}`;
+
+  try {
+    const parsed: any = parseJsonLoose(await claudeJson(sys, user));
+    const qs = (Array.isArray(parsed?.queries) ? parsed.queries : [])
+      .map((s: any) => String(s || "").trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    if (qs.length >= 3) return Array.from(new Set([g, ...qs]));
+    return buildQueries(goal, useCase);
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    return buildQueries(goal, useCase);
+  }
+}
+
 function urlHost(u: string): string {
   const m = String(u || "").match(/^https?:\/\/([^\/?#]+)/i);
   return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
@@ -128,14 +193,17 @@ async function extract(
     `You are a research assistant. From a web search result, extract a structured record of one ${noun || "target"} ` +
     `the user could reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
     `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
+    `INDUSTRY ALIGNMENT IS CRITICAL: judge the result against the user's actual field/industry (from ABOUT THE USER). ` +
+    `If it is clearly OUTSIDE their industry or level, set is_relevant to false. Reserve fit_score above 0.7 for results ` +
+    `that clearly match BOTH the goal and the user's specific industry/sub-field; give 0.3 or below to off-industry ones. ` +
     `Set is_relevant to false for: news articles, generic "top 10" listicles with no specific target, login/paywall pages, ` +
-    `pay-to-play services, and the user themselves.`;
+    `pay-to-play services, off-industry results, and the user themselves.`;
   const fields =
     `Fields: is_relevant (bool), name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
-    `url (best link), location, fit_score (0 to 1, how well this matches the goal), ` +
-    `why_it_fits (one specific, true detail about them, used to personalize outreach; empty if unknown).`;
+    `url (best link), location, fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
+    `why_it_fits (one specific, true detail about them tied to the user's field, used to personalize outreach; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
   const user =
@@ -162,7 +230,7 @@ export async function discover(
   useCase: string,
   maxItems = 10
 ): Promise<DiscoverResult> {
-  const queries = buildQueries(goal, useCase);
+  const queries = await planQueries(goal, about, useCase);
 
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
