@@ -4144,7 +4144,7 @@ function AccountCard({
 function FileDrop({
   onText,
   label = "Drop a file here, or click to upload",
-  accept = ".pdf,.docx,.txt,.md",
+  accept = ".pdf,.docx,.html,.htm,.txt,.md",
 }: {
   onText: (text: string) => void;
   label?: string;
@@ -4189,7 +4189,7 @@ function FileDrop({
       <div className="text-sm font-semibold text-ink">
         {reading ? "Reading…" : label}
       </div>
-      <div className="mt-0.5 text-xs text-body/70">PDF, Word (.docx), or text file</div>
+      <div className="mt-0.5 text-xs text-body/70">PDF, Word (.docx), HTML, or text file</div>
       {err && <div className="mt-1.5 text-xs font-semibold text-accent">{err}</div>}
     </div>
   );
