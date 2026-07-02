@@ -11,7 +11,7 @@ function userMetrics(data: any) {
   const decided = finds.filter((f: any) => f.status !== "new");
   const denied = decided.filter((f: any) => f.status === "denied").length;
   const kept = decided.filter(
-    (f: any) => f.status === "drafted" || f.status === "sent"
+    (f: any) => f.status === "drafted" || f.status === "sent" || f.status === "replied"
   );
   const keptFit = kept
     .map((f: any) => f.opp?.fitScore)
@@ -56,7 +56,7 @@ function communityPatterns(rows: any[]) {
     const c = f.opp?.channel || "Unknown";
     byChannel[c] = byChannel[c] || { kept: 0, total: 0 };
     byChannel[c].total++;
-    if (f.status === "drafted" || f.status === "sent") byChannel[c].kept++;
+    if (f.status === "drafted" || f.status === "sent" || f.status === "replied") byChannel[c].kept++;
   }
   const channels = Object.entries(byChannel)
     .filter(([, v]) => v.total >= 5)
@@ -78,7 +78,7 @@ function communityPatterns(rows: any[]) {
   return {
     decidedFinds: allDecided.length,
     channels,
-    fitKept: fits((f) => f.status === "drafted" || f.status === "sent"),
+    fitKept: fits((f) => f.status === "drafted" || f.status === "sent" || f.status === "replied"),
     fitDenied: fits((f) => f.status === "denied"),
     contextEffect:
       withCtx.length >= 2 && withoutCtx.length >= 2

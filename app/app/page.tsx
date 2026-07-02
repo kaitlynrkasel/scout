@@ -103,9 +103,9 @@ interface Category {
   projectId: string; // categories belong to a project
 }
 
-// A find is a saved person/opportunity you can work through: draft, deny, or mark
-// contacted. Finds accumulate across searches and persist per project.
-type FindStatus = "new" | "drafted" | "sent" | "denied";
+// A find is a saved person/opportunity you can work through: draft, deny, mark
+// contacted, and log replies. Finds accumulate across searches, per project.
+type FindStatus = "new" | "drafted" | "sent" | "replied" | "denied";
 interface Find {
   id: string; // stable dedup key: project + normalized name + host
   projectId: string;
@@ -113,6 +113,7 @@ interface Find {
   opp: Opportunity;
   draft?: Draft;
   addedAt: number;
+  gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
 }
 
 function normNameKey(s: string): string {
@@ -146,8 +147,18 @@ const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
   { key: "sent", label: "Sent" },
+  { key: "replied", label: "Replied" },
   { key: "denied", label: "Denied" },
   { key: "all", label: "All" },
+];
+
+// Labels for the manual status control on each find.
+const STATUS_OPTIONS: { key: FindStatus; label: string }[] = [
+  { key: "new", label: "New" },
+  { key: "drafted", label: "Drafted" },
+  { key: "sent", label: "Sent" },
+  { key: "replied", label: "Replied" },
+  { key: "denied", label: "Not a fit" },
 ];
 
 interface ScoutToolProps {
@@ -619,7 +630,9 @@ function ScoutTool({
   };
 
   // Create a draft in / send from the user's Gmail for one message. Returns the
-  // mode ("draft"/"send") on success, or null on failure.
+  // mode ("draft"/"send") on success, or null on failure. Also stores the Gmail
+  // thread id on the matching pipeline find (and flips it to sent when sending),
+  // so replies in that thread can be tracked later.
   const sendViaGmail = async (d: Draft): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
@@ -636,6 +649,21 @@ function ScoutTool({
       if (r.ok) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
+        setFinds((prev) => {
+          const next = prev.map((f) =>
+            f.draft?.opportunityId === d.opportunityId
+              ? {
+                  ...f,
+                  gmailThreadId: j.threadId || f.gmailThreadId,
+                  status: (j.mode === "send" ? "sent" : f.status) as FindStatus,
+                }
+              : f
+          );
+          try {
+            localStorage.setItem(FINDS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         return j.mode as "draft" | "send";
       }
       reportError(j);
@@ -918,11 +946,63 @@ function ScoutTool({
     }
   }
 
-  // Send/draft a find's message via Gmail, then mark it contacted on success.
+  // Send/draft a find's message via Gmail. sendViaGmail patches the find itself
+  // (thread id + sent status), so nothing more to do here.
   async function sendFindViaGmail(find: Find) {
     if (!find.draft) return;
-    const mode = await sendViaGmail(find.draft);
-    if (mode === "send") setFindStatus(find.id, "sent");
+    await sendViaGmail(find.draft);
+  }
+
+  // ---- Reply tracking: check tracked Gmail threads for responses ----
+  const [repliesBusy, setRepliesBusy] = useState(false);
+  const [repliesNote, setRepliesNote] = useState("");
+  async function checkReplies() {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    const candidates = finds
+      .filter(
+        (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
+      )
+      .slice(0, 20)
+      .map((f) => ({ id: f.id, threadId: f.gmailThreadId }));
+    if (!candidates.length) {
+      setRepliesNote(
+        "Nothing to check yet. Send a message through Gmail first and replies get tracked automatically."
+      );
+      return;
+    }
+    setRepliesBusy(true);
+    setRepliesNote("");
+    try {
+      const r = await fetch("/api/gmail/replies", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ threads: candidates }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        const replied: string[] = j.replied || [];
+        if (replied.length) {
+          saveFinds(
+            finds.map((f) =>
+              replied.includes(f.id) ? { ...f, status: "replied" as FindStatus } : f
+            )
+          );
+          setRepliesNote(
+            `${replied.length} ${replied.length === 1 ? "reply" : "replies"} found and marked.`
+          );
+        } else {
+          setRepliesNote(`No new replies yet (checked ${j.checked || candidates.length}).`);
+        }
+      } else {
+        setRepliesNote(j.error || "Couldn't check for replies.");
+      }
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't check for replies.");
+    } finally {
+      setRepliesBusy(false);
+    }
   }
 
   async function runDiscover() {
@@ -1480,9 +1560,13 @@ function ScoutTool({
           onDeny={(f) => setFindStatus(f.id, "denied")}
           onReopen={(f) => setFindStatus(f.id, "new")}
           onMarkSent={(f) => setFindStatus(f.id, "sent")}
+          onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
           onCopy={() => bumpActivity({ copies: 1 })}
+          onCheckReplies={checkReplies}
+          repliesBusy={repliesBusy}
+          repliesNote={repliesNote}
           goOutreach={() => setTab("outreach")}
         />
       )}
@@ -1787,9 +1871,13 @@ function FindsTab({
   onDeny,
   onReopen,
   onMarkSent,
+  onStatus,
   onRemove,
   onSendGmail,
   onCopy,
+  onCheckReplies,
+  repliesBusy,
+  repliesNote,
   goOutreach,
 }: {
   finds: Find[];
@@ -1803,15 +1891,22 @@ function FindsTab({
   onDeny: (f: Find) => void;
   onReopen: (f: Find) => void;
   onMarkSent: (f: Find) => void;
+  onStatus: (f: Find, s: FindStatus) => void;
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
   onCopy: () => void;
+  onCheckReplies: () => void;
+  repliesBusy: boolean;
+  repliesNote: string;
   goOutreach: () => void;
 }) {
   const counts: Record<string, number> = { all: finds.length };
-  for (const s of ["new", "drafted", "sent", "denied"] as FindStatus[]) {
+  for (const s of ["new", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
     counts[s] = finds.filter((f) => f.status === s).length;
   }
+  const trackable = finds.some(
+    (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
+  );
   const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
     .slice()
     .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
@@ -1830,13 +1925,30 @@ function FindsTab({
             aren&apos;t a fit.
           </p>
         </div>
-        <button
-          onClick={goOutreach}
-          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
-        >
-          Find more
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {gmail.connected && trackable && (
+            <button
+              onClick={onCheckReplies}
+              disabled={repliesBusy}
+              className="rounded-xl border border-warm-border bg-white px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+            >
+              {repliesBusy ? "Checking…" : "Check for replies"}
+            </button>
+          )}
+          <button
+            onClick={goOutreach}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Find more
+          </button>
+        </div>
       </div>
+
+      {repliesNote && (
+        <p className="mt-3 rounded-xl border border-warm-border bg-warm-bg/60 px-4 py-2.5 text-xs font-medium text-ink">
+          {repliesNote}
+        </p>
+      )}
 
       {/* Status filter */}
       <div className="mt-6 flex flex-wrap gap-2">
@@ -1889,6 +2001,7 @@ function FindsTab({
               onDeny={() => onDeny(f)}
               onReopen={() => onReopen(f)}
               onMarkSent={() => onMarkSent(f)}
+              onStatus={(s) => onStatus(f, s)}
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
               onCopy={onCopy}
@@ -1900,18 +2013,35 @@ function FindsTab({
   );
 }
 
-function FindStatusBadge({ status }: { status: FindStatus }) {
-  const map: Record<FindStatus, { label: string; cls: string }> = {
-    new: { label: "New", cls: "border-warm-border bg-warm-bg text-body" },
-    drafted: { label: "Drafted", cls: "border-coral/30 bg-warm-bg text-accent" },
-    sent: { label: "Sent", cls: "border-emerald-200 bg-emerald-50 text-emerald-700" },
-    denied: { label: "Not a fit", cls: "border-warm-border bg-white text-body/50" },
+// The status pill is also the manual control: pick any status directly.
+function FindStatusBadge({
+  status,
+  onStatus,
+}: {
+  status: FindStatus;
+  onStatus: (s: FindStatus) => void;
+}) {
+  const map: Record<FindStatus, string> = {
+    new: "border-warm-border bg-warm-bg text-body",
+    drafted: "border-coral/30 bg-warm-bg text-accent",
+    sent: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    replied: "border-emerald-300 bg-emerald-100 text-emerald-800",
+    denied: "border-warm-border bg-white text-body/50",
   };
-  const s = map[status];
   return (
-    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${s.cls}`}>
-      {s.label}
-    </span>
+    <select
+      value={status}
+      onChange={(e) => onStatus(e.target.value as FindStatus)}
+      title="Set status"
+      aria-label="Set status"
+      className={`cursor-pointer appearance-none rounded-full border px-2 py-0.5 text-[10px] font-bold outline-none transition focus:ring-2 focus:ring-coral/20 ${map[status]}`}
+    >
+      {STATUS_OPTIONS.map((o) => (
+        <option key={o.key} value={o.key}>
+          {o.label}
+        </option>
+      ))}
+    </select>
   );
 }
 
@@ -1924,6 +2054,7 @@ function FindCard({
   onDeny,
   onReopen,
   onMarkSent,
+  onStatus,
   onRemove,
   onSendGmail,
   onCopy,
@@ -1936,6 +2067,7 @@ function FindCard({
   onDeny: () => void;
   onReopen: () => void;
   onMarkSent: () => void;
+  onStatus: (s: FindStatus) => void;
   onRemove: () => void;
   onSendGmail: () => void;
   onCopy: () => void;
@@ -1943,6 +2075,8 @@ function FindCard({
   const o = find.opp;
   const d = find.draft;
   const denied = find.status === "denied";
+  // Contacted (or beyond): hide the send/mark actions.
+  const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
 
   return (
@@ -1961,7 +2095,7 @@ function FindCard({
             o.name
           )}
         </span>
-        <FindStatusBadge status={find.status} />
+        <FindStatusBadge status={find.status} onStatus={onStatus} />
         {o.fitScore != null && (
           <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
             {Math.round(o.fitScore * 100)}% fit
@@ -2025,7 +2159,7 @@ function FindCard({
 
         {d && (
           <>
-            {gmail.connected && emailDraft && find.status !== "sent" ? (
+            {gmail.connected && emailDraft && !done ? (
               <button
                 onClick={onSendGmail}
                 disabled={gmailBusy}
@@ -2038,9 +2172,7 @@ function FindCard({
                   : "Create Gmail draft"}
               </button>
             ) : (
-              find.status !== "sent" && (
-                <SendAction draft={d} onUse={onCopy} />
-              )
+              !done && <SendAction draft={d} onUse={onCopy} />
             )}
             <button
               onClick={() => {
@@ -2065,7 +2197,7 @@ function FindCard({
           </>
         )}
 
-        {find.status !== "sent" && (
+        {!done && (
           <button
             onClick={onMarkSent}
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -2081,7 +2213,7 @@ function FindCard({
           >
             Reopen
           </button>
-        ) : find.status === "sent" ? (
+        ) : done ? (
           <button
             onClick={onReopen}
             className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
@@ -2113,8 +2245,15 @@ function FindCard({
 function learnedFromFinds(finds: Find[]) {
   const decided = finds.filter((f) => f.status !== "new");
   const denied = decided.filter((f) => f.status === "denied");
-  const kept = decided.filter((f) => f.status === "drafted" || f.status === "sent");
+  const kept = decided.filter(
+    (f) => f.status === "drafted" || f.status === "sent" || f.status === "replied"
+  );
   const denyRate = decided.length ? denied.length / decided.length : 0;
+  // Reply rate over messages known to have gone out (sent or replied) — the
+  // replies logged/tracked, not a claim about untracked sends.
+  const sentish = finds.filter((f) => f.status === "sent" || f.status === "replied");
+  const repliedCount = finds.filter((f) => f.status === "replied").length;
+  const replyRate = sentish.length ? repliedCount / sentish.length : null;
 
   // Real trend: split the decisions you've made in half by time and compare the
   // deny rate of the earlier half vs the recent half. Only shown with enough data.
@@ -2156,6 +2295,9 @@ function learnedFromFinds(finds: Find[]) {
     deniedChannels: tally(denied),
     keptFit: avgFit(kept),
     deniedFit: avgFit(denied),
+    replyRate,
+    repliedCount,
+    sentCount: sentish.length,
   };
 }
 
@@ -2365,6 +2507,28 @@ function DashboardTab({
                 </p>
               )}
             </div>
+
+            {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
+            {learned.replyRate != null && (
+              <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
+                <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                  Your reply rate
+                </div>
+                <div className="mt-1 flex items-end gap-2">
+                  <span className="text-3xl font-extrabold tracking-tight text-ink">
+                    {Math.round(learned.replyRate * 100)}%
+                  </span>
+                  <span className="mb-1 text-xs text-body/60">
+                    {learned.repliedCount} of {learned.sentCount} sent
+                  </span>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                  Replies Scout has tracked through Gmail or you&apos;ve logged by
+                  setting a find to Replied. Untracked sends aren&apos;t counted
+                  against you.
+                </p>
+              </div>
+            )}
 
             {/* Preferences */}
             <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
@@ -2584,7 +2748,8 @@ function OutreachAdvice({
     .slice(0, 8)
     .map((f) => ({
       channel: f.draft!.channelType,
-      outcome: f.status === "sent" ? "sent" : "drafted",
+      outcome:
+        f.status === "replied" ? "replied" : f.status === "sent" ? "sent" : "drafted",
       subject: f.draft!.subject || "",
       body: f.draft!.body || "",
     }));

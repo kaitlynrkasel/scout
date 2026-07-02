@@ -14,7 +14,12 @@ export async function POST(req: NextRequest) {
       .slice(0, 8)
       .map((d: any) => ({
         channel: String(d?.channel || "email"),
-        outcome: d?.outcome === "sent" ? "sent" : "drafted, not sent yet",
+        outcome:
+          d?.outcome === "replied"
+            ? "sent AND GOT A REPLY"
+            : d?.outcome === "sent"
+            ? "sent, no reply logged yet"
+            : "drafted, not sent yet",
         subject: String(d?.subject || "").slice(0, 200),
         body: String(d?.body || "").slice(0, 1500),
       }))
@@ -37,7 +42,9 @@ export async function POST(req: NextRequest) {
       "Return ONLY a JSON object {\"tips\": [{\"title\": string, \"advice\": string}]} with 3 to 5 tips. " +
       "Every tip must come from patterns you actually see in THESE drafts — quote or reference " +
       "short phrases from them so the person can see exactly what you mean. Point out what's working, " +
-      "not just problems. Skip generic advice (be personal, keep it short, soft ask) UNLESS a draft " +
+      "not just problems. Weigh outcomes heavily: when some drafts GOT A REPLY and others didn't, " +
+      "identify what the replied ones do differently and tell the person to do more of that. " +
+      "Skip generic advice (be personal, keep it short, soft ask) UNLESS a draft " +
       "actually violates it, and then show where. Never use em-dashes. Keep each tip to 2-3 sentences.";
 
     const user =
