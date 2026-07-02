@@ -2485,9 +2485,17 @@ function DashboardTab({
     new: finds.filter((f) => f.status === "new").length,
     drafted: finds.filter((f) => f.status === "drafted").length,
     sent: finds.filter((f) => f.status === "sent").length,
+    replied: finds.filter((f) => f.status === "replied").length,
     denied: finds.filter((f) => f.status === "denied").length,
   };
-  const pipeMax = Math.max(1, pipe.new, pipe.drafted, pipe.sent, pipe.denied);
+  const pipeMax = Math.max(
+    1,
+    pipe.new,
+    pipe.drafted,
+    pipe.sent,
+    pipe.replied,
+    pipe.denied
+  );
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -2647,9 +2655,10 @@ function DashboardTab({
           <div className="mt-4 grid gap-3">
             {(
               [
-                { label: "New", n: pipe.new, color: "bg-sage" },
+                { label: "New", n: pipe.new, color: "bg-brown-tint" },
                 { label: "Drafted", n: pipe.drafted, color: "bg-brown" },
                 { label: "Sent", n: pipe.sent, color: "bg-brown-deep" },
+                { label: "Replied", n: pipe.replied, color: "bg-sage" },
                 { label: "Denied", n: pipe.denied, color: "bg-danger" },
               ] as const
             ).map((r) => (
