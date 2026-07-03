@@ -1806,11 +1806,16 @@ function SideNav({
 
   return (
     <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col gap-1 border-r border-warm-border bg-surface p-4">
-      <div className="flex items-center gap-2.5 px-2 pb-4 pt-1">
+      <a
+        href="/"
+        aria-label="Scout home"
+        title="Back to homepage"
+        className="flex items-center gap-2.5 rounded-xl px-2 pb-4 pt-1 transition hover:opacity-80"
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src="/scout-logo.png" alt="Scout" width={36} height={36} className="h-9 w-9" />
         <span className="text-xl font-extrabold tracking-tight text-ink">Scout</span>
-      </div>
+      </a>
 
       <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
         Menu
