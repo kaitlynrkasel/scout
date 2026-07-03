@@ -57,4 +57,9 @@ export interface OutreachTemplate {
   id: string;
   channel: string; // "Email" | "LinkedIn message" | "Instagram DM" | ...
   text: string;
+  // Scope: which outreach this voice applies to. Empty projectId = every project
+  // (global). projectId set = only that project. categoryId set (implies a
+  // project) = only that category. Older templates have neither and stay global.
+  projectId?: string;
+  categoryId?: string;
 }

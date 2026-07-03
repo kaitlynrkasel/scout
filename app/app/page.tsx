@@ -137,6 +137,7 @@ type FindStatus = "new" | "drafted" | "sent" | "replied" | "denied";
 interface Find {
   id: string; // stable dedup key: project + normalized name + host
   projectId: string;
+  categoryId?: string; // which category's search surfaced this (for template scope)
   status: FindStatus;
   opp: Opportunity;
   draft?: Draft;
@@ -368,6 +369,8 @@ function ScoutTool({
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
+  const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
+  const [mtCategoryId, setMtCategoryId] = useState(""); // "" = all categories in project
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -967,10 +970,28 @@ function ScoutTool({
   function addTemplate() {
     if (!mtText.trim()) return;
     saveTpls([
-      { id: `${Date.now()}`, channel: mtChannel, text: mtText.trim() },
+      {
+        id: `${Date.now()}`,
+        channel: mtChannel,
+        text: mtText.trim(),
+        // Only record a scope when one was chosen; a category implies its project.
+        ...(mtProjectId ? { projectId: mtProjectId } : {}),
+        ...(mtProjectId && mtCategoryId ? { categoryId: mtCategoryId } : {}),
+      },
       ...myTemplates,
     ]);
     setMtText("");
+  }
+
+  // Which templates apply when drafting for a given project + category. Global
+  // templates (no projectId) always apply; project-scoped ones apply to that
+  // project; category-scoped ones only when that exact category is in play.
+  function templatesFor(projectId: string, categoryId?: string): OutreachTemplate[] {
+    return myTemplates.filter((t) => {
+      if (t.projectId && t.projectId !== projectId) return false;
+      if (t.categoryId && t.categoryId !== (categoryId || "")) return false;
+      return true;
+    });
   }
 
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
@@ -1010,7 +1031,14 @@ function ScoutTool({
       const id = findKey(activeId, o);
       if (existing.has(id)) continue;
       existing.add(id);
-      fresh.push({ id, projectId: activeId, status: "new", opp: o, addedAt: Date.now() });
+      fresh.push({
+        id,
+        projectId: activeId,
+        categoryId: catId || undefined,
+        status: "new",
+        opp: o,
+        addedAt: Date.now(),
+      });
     }
     if (fresh.length) saveFinds([...fresh, ...finds]);
     return fresh.length;
@@ -1193,7 +1221,7 @@ function ScoutTool({
           opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
           about: aboutText,
           useCase: activeUseCase,
-          templates: myTemplates,
+          templates: templatesFor(find.projectId, find.categoryId),
           coaching,
           editPairs,
         }),
@@ -1339,7 +1367,7 @@ function ScoutTool({
           opportunities: chosen,
           about: aboutText,
           useCase: activeUseCase,
-          templates: myTemplates,
+          templates: templatesFor(activeId, catId),
           coaching,
           editPairs,
         }),
@@ -1836,6 +1864,15 @@ function ScoutTool({
           add={addTemplate}
           list={myTemplates}
           remove={(id) => saveTpls(myTemplates.filter((s) => s.id !== id))}
+          projects={projects}
+          categories={categories}
+          scopeProjectId={mtProjectId}
+          scopeCategoryId={mtCategoryId}
+          setScopeProjectId={(id) => {
+            setMtProjectId(id);
+            setMtCategoryId(""); // switching project clears the category choice
+          }}
+          setScopeCategoryId={setMtCategoryId}
         />
       )}
 
@@ -4029,6 +4066,12 @@ function TemplatesTab({
   add,
   list,
   remove,
+  projects,
+  categories,
+  scopeProjectId,
+  scopeCategoryId,
+  setScopeProjectId,
+  setScopeCategoryId,
 }: {
   kinds: string[];
   channel: string;
@@ -4038,7 +4081,23 @@ function TemplatesTab({
   add: () => void;
   list: OutreachTemplate[];
   remove: (id: string) => void;
+  projects: Project[];
+  categories: Category[];
+  scopeProjectId: string;
+  scopeCategoryId: string;
+  setScopeProjectId: (id: string) => void;
+  setScopeCategoryId: (id: string) => void;
 }) {
+  const scopeCats = categories.filter((c) => c.projectId === scopeProjectId);
+  // Human label for where a saved template applies.
+  const scopeLabel = (t: OutreachTemplate): string => {
+    if (!t.projectId) return "All projects";
+    const proj = projects.find((p) => p.id === t.projectId);
+    const projName = proj?.name || "a project";
+    if (!t.categoryId) return projName;
+    const cat = categories.find((c) => c.id === t.categoryId);
+    return `${projName} · ${cat?.name || "a category"}`;
+  };
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-3xl font-extrabold tracking-tight text-ink">
@@ -4047,8 +4106,8 @@ function TemplatesTab({
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Set up how each kind of message should sound, an email, a LinkedIn note, an
         Instagram DM. When Scout drafts outreach, it uses the right format and
-        your voice for each channel.
-        <span className="text-body/60"> (Saved on this device.)</span>
+        your voice for each channel. Keep a template global, or assign it to a
+        specific project or category so each artist gets their own voice.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -4085,6 +4144,43 @@ function TemplatesTab({
             />
           </div>
         </div>
+        <div className="mt-6 border-t border-warm-border pt-5">
+          <Label>Where it applies</Label>
+          <div className="mt-1 grid gap-3 sm:grid-cols-2">
+            <select
+              value={scopeProjectId}
+              onChange={(e) => setScopeProjectId(e.target.value)}
+              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            >
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={scopeCategoryId}
+              onChange={(e) => setScopeCategoryId(e.target.value)}
+              disabled={!scopeProjectId}
+              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 disabled:opacity-50"
+            >
+              <option value="">
+                {scopeProjectId ? "All categories in this project" : "Pick a project first"}
+              </option>
+              {scopeCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-body/80">
+            Scope this voice to one project (say, a specific artist) or a single
+            category within it. Leave it on <span className="font-semibold">All projects</span> to
+            use it everywhere.
+          </p>
+        </div>
         <div className="mt-5">
           <button
             onClick={add}
@@ -4112,9 +4208,18 @@ function TemplatesTab({
                 key={s.id}
                 className="rounded-2xl border border-warm-border bg-white p-5 shadow-card"
               >
-                <div className="mb-2.5 flex items-center gap-2">
+                <div className="mb-2.5 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
                     {s.channel}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      s.projectId
+                        ? "border-sage/50 bg-sage/10 text-sage"
+                        : "border-warm-border bg-warm-bg text-body/70"
+                    }`}
+                  >
+                    {scopeLabel(s)}
                   </span>
                   <button
                     onClick={() => remove(s.id)}
