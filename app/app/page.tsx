@@ -5,6 +5,7 @@ import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
 import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
+import CornerDog from "./CornerDog";
 import { fileToText } from "@/lib/fileText";
 import {
   authEnabled,
@@ -1809,6 +1810,7 @@ function ScoutTool({
         showLogout={!!showLogout}
         onLogout={onLogout}
       />
+      <CornerDog />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
       <div className="flex flex-1 flex-col">
