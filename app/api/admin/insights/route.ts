@@ -41,6 +41,7 @@ export async function GET(req: Request) {
 
   const totals = {
     users: 0,
+    users_with_state_rows: 0, // every row in user_state, even ones with no finds
     finds: 0,
     new: 0,
     denied: 0,
@@ -49,6 +50,17 @@ export async function GET(req: Request) {
     sent: 0,
     replied: 0,
   };
+  // Per-user drill-down so we can spot whose data isn't landing in the
+  // aggregate. Includes rows even if their finds array is missing/empty.
+  const perUser: Array<{
+    userId: string;
+    finds: number;
+    denied: number;
+    approved: number;
+    updatedAt: string;
+    hasFindsField: boolean;
+    useCase: string;
+  }> = [];
   const reasonCounts = new Map<string, number>();
   const reasonExamples = new Map<string, string[]>();
   const hostCounts = new Map<string, number>();
@@ -65,10 +77,29 @@ export async function GET(req: Request) {
   for (const row of statesRes.data || []) {
     const uid = (row as any).user_id as string;
     const data = ((row as any).data || {}) as any;
-    const finds: any[] = Array.isArray(data?.finds) ? data.finds : [];
+    const updatedAt = String((row as any).updated_at || "");
+    const uc = useCaseByUser.get(uid) || "";
+    totals.users_with_state_rows++;
+    const hasFindsField = Array.isArray(data?.finds);
+    const finds: any[] = hasFindsField ? data.finds : [];
+    let userDenied = 0;
+    let userApproved = 0;
+    for (const f of finds) {
+      const status = String(f?.status || "").toLowerCase();
+      if (status === "denied") userDenied++;
+      else if (status === "drafted" || status === "sent" || status === "replied") userApproved++;
+    }
+    perUser.push({
+      userId: uid.slice(0, 8) + "…", // truncate for privacy; still lets us tell rows apart
+      finds: finds.length,
+      denied: userDenied,
+      approved: userApproved,
+      updatedAt,
+      hasFindsField,
+      useCase: uc,
+    });
     if (!finds.length) continue;
     totals.users++;
-    const uc = useCaseByUser.get(uid) || "";
     for (const f of finds) {
       totals.finds++;
       const status = String(f?.status || "").toLowerCase();
@@ -152,6 +183,7 @@ export async function GET(req: Request) {
       replied: totals.replied,
     },
     denials: denialsCapped,
+    perUser: perUser.sort((a, b) => b.finds - a.finds),
     generatedAt: new Date().toISOString(),
   });
 }

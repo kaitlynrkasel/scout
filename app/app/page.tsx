@@ -2998,6 +2998,7 @@ function ScoutTool({
 interface AdminInsights {
   totals: {
     users: number;
+    users_with_state_rows: number;
     finds: number;
     new: number;
     denied: number;
@@ -3017,6 +3018,15 @@ interface AdminInsights {
     reason: string;
     useCase: string;
     addedAt: number;
+  }[];
+  perUser: {
+    userId: string;
+    finds: number;
+    denied: number;
+    approved: number;
+    updatedAt: string;
+    hasFindsField: boolean;
+    useCase: string;
   }[];
   generatedAt: string;
 }
@@ -3116,10 +3126,16 @@ function InsightsTab({
 
       {data && (
         <>
-          {/* Top-line totals */}
+          {/* Top-line totals. "State rows" is every user_state row we can see
+              (including ones with no finds saved yet); "Users" is only those
+              with at least one find. If these two diverge a lot, some users'
+              finds aren't landing in Supabase. */}
           <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {[
-              ["Users", data.totals.users],
+              [
+                "State rows / Users",
+                `${data.totals.users_with_state_rows} / ${data.totals.users}`,
+              ],
               ["Finds", data.totals.finds],
               ["Denied", data.totals.denied],
               ["Approved", data.totals.approved],
@@ -3145,6 +3161,71 @@ function InsightsTab({
                 </div>
               </div>
             ))}
+          </section>
+
+          {/* Per-user drill-down. If a tester's row is missing here entirely,
+              their client never synced to Supabase (incognito, signed out, or
+              a different Supabase project). If their row is here but shows 0
+              finds, the finds array isn't being saved. */}
+          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+              Per-user (sorted by finds)
+            </h2>
+            <p className="mt-1 text-xs text-body/70">
+              Every row in <code>user_state</code>. Missing testers ⇒ their state
+              never hit Supabase.
+            </p>
+            <div className="mt-3 max-h-64 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
+                    <th className="py-1">User</th>
+                    <th className="py-1 text-right">Finds</th>
+                    <th className="py-1 text-right">Denied</th>
+                    <th className="py-1 text-right">Approved</th>
+                    <th className="py-1">Use case</th>
+                    <th className="py-1">Has finds field?</th>
+                    <th className="py-1">Last saved</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.perUser.map((u) => (
+                    <tr key={u.userId} className="border-t border-warm-border align-top">
+                      <td className="py-1.5 pr-2 font-mono text-[11px] text-body/80">
+                        {u.userId}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right font-bold tabular-nums text-ink">
+                        {u.finds}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">
+                        {u.denied}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">
+                        {u.approved}
+                      </td>
+                      <td className="py-1.5 pr-2 text-body/80">
+                        {u.useCase || "—"}
+                      </td>
+                      <td className="py-1.5 pr-2 text-body/80">
+                        {u.hasFindsField ? "yes" : (
+                          <span className="font-bold text-red-600">no</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-2 text-body/60">
+                        {u.updatedAt ? new Date(u.updatedAt).toLocaleString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.perUser.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-3 text-sm text-body/60">
+                        No user_state rows found at all.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Deny reasons + top denied hosts side by side */}
