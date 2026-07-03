@@ -2806,7 +2806,7 @@ function FindsList({
                     : "border border-warm-border text-body hover:bg-warm-bg"
                 }`}
               >
-                {on ? "Approved ✓" : "Approve"}
+                {on ? "Approved" : "Approve"}
               </button>
               {denyingId === o.id ? (
                 <div className="flex flex-wrap items-center gap-1.5">
