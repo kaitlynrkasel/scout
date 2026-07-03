@@ -160,6 +160,18 @@ const TOUR_STEPS: TourStep[] = [
     body: "Describe who you're trying to reach and Scout discovers matches, then drafts a message for each one in your voice. This is where most of your work happens.",
   },
   {
+    tab: "outreach",
+    target: "project-switcher",
+    title: "Projects: one workspace per goal",
+    body: "A project is a self-contained workspace — one per artist, client, or job hunt. Each keeps its own categories, finds, and context so pitches sound like they're really about that person.",
+  },
+  {
+    tab: "outreach",
+    target: "category-switcher",
+    title: "Categories: presets for each kind of search",
+    body: "Inside a project, categories are reusable search presets — e.g. \"press writers\" vs \"playlist curators\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
+  },
+  {
     tab: "finds",
     target: "nav-finds",
     title: "Review your Finds",
@@ -2133,7 +2145,10 @@ function ScoutTool({
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
-              <div className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]">
+              <div
+                data-tour="project-switcher"
+                className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]"
+              >
                 <div>
                   <Label>Project</Label>
                   <div className="relative">
@@ -2200,7 +2215,10 @@ function ScoutTool({
                 </div>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
+              <div
+                data-tour="category-switcher"
+                className="grid gap-6 sm:grid-cols-[230px_1fr]"
+              >
                 <div>
                   <Label>Category of search</Label>
                   <div className="relative">
