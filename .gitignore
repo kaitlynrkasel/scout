@@ -10,5 +10,6 @@ next-env.d.ts
 public/pdf.worker.min.mjs
 tsconfig.tsbuildinfo
 
-# Local Claude Code dev config
-.claude/
+# Local Claude Code dev config (but keep shared skills tracked)
+.claude/*
+!.claude/skills/
