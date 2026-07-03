@@ -3314,22 +3314,6 @@ function SideNav({
       badge: newFindCount,
       icon: <path d="M20 7 9 18l-5-5" />,
     },
-    ...(hasAccount
-      ? [
-          {
-            key: "team",
-            label: "Team",
-            icon: (
-              <>
-                <circle cx="9" cy="8" r="3.2" />
-                <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
-                <circle cx="17.5" cy="9.5" r="2.6" />
-                <path d="M15 20a6 6 0 0 1 6.5-5.6" />
-              </>
-            ),
-          },
-        ]
-      : []),
     {
       key: "templates",
       label: "Templates",
@@ -3352,6 +3336,22 @@ function SideNav({
         </>
       ),
     },
+    ...(hasAccount
+      ? [
+          {
+            key: "team",
+            label: "Team",
+            icon: (
+              <>
+                <circle cx="9" cy="8" r="3.2" />
+                <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+                <circle cx="17.5" cy="9.5" r="2.6" />
+                <path d="M15 20a6 6 0 0 1 6.5-5.6" />
+              </>
+            ),
+          },
+        ]
+      : []),
   ];
 
   return (
