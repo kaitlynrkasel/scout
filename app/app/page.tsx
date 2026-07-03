@@ -381,6 +381,14 @@ function ScoutTool({
   const [gmailSent, setGmailSent] = useState<Record<string, "draft" | "send">>({});
   const [gmailNote, setGmailNote] = useState(""); // message after the OAuth return
 
+  // ---- Outlook connection (mirrors Gmail) ----
+  const [outlook, setOutlook] = useState<{
+    connected: boolean;
+    email?: string;
+    sendMode?: "draft" | "send";
+  }>({ connected: false });
+  const [outlookNote, setOutlookNote] = useState(""); // message after the OAuth return
+
   // ---- Community benchmarks (aggregate, everyone else) + account ----
   const [community, setCommunity] = useState<CommunityStats | null>(null);
   const [accountBusy, setAccountBusy] = useState("");
@@ -557,6 +565,18 @@ function ScoutTool({
       if (r.ok) setGmail(await r.json());
     } catch {}
   };
+  // Load Outlook connection status once (and after returning from the OAuth flow).
+  const refreshOutlook = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const r = await fetch("/api/outlook/status", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (r.ok) setOutlook(await r.json());
+    } catch {}
+  };
   // Load aggregate community benchmarks (averages only, no individual data).
   const refreshCommunity = async () => {
     if (!getToken) return;
@@ -609,8 +629,9 @@ function ScoutTool({
 
   useEffect(() => {
     refreshGmail();
+    refreshOutlook();
     refreshCommunity();
-    // Handle the return from Google's consent screen.
+    // Handle the return from Google's / Microsoft's consent screen.
     try {
       const p = new URLSearchParams(window.location.search);
       const g = p.get("gmail");
@@ -623,8 +644,22 @@ function ScoutTool({
             ? "Almost there, reconnect and allow access to finish."
             : "Couldn't connect Gmail. Please try again."
         );
+      }
+      const o = p.get("outlook");
+      if (o) {
+        setTab("profile");
+        setOutlookNote(
+          o === "connected"
+            ? "Outlook connected."
+            : o === "norefresh"
+            ? "Almost there, reconnect and allow access to finish."
+            : "Couldn't connect Outlook. Please try again."
+        );
+      }
+      if (g || o) {
         const u = new URL(window.location.href);
         u.searchParams.delete("gmail");
+        u.searchParams.delete("outlook");
         window.history.replaceState({}, "", u.toString());
       }
     } catch {}
@@ -713,6 +748,114 @@ function ScoutTool({
       setGmailBusyId("");
     }
   };
+
+  // ---- Outlook actions (mirror Gmail) ----
+  const setOutlookMode = async (mode: "draft" | "send") => {
+    if (!getToken) return;
+    setOutlook((o) => ({ ...o, sendMode: mode })); // optimistic
+    const token = await getToken();
+    if (!token) return;
+    await fetch("/api/outlook/mode", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+      body: JSON.stringify({ mode }),
+    });
+  };
+
+  const connectOutlook = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    const r = await fetch("/api/outlook/auth", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const j = await r.json();
+    if (j.url) window.location.href = j.url;
+    else setError(j.error || "Couldn't start the Outlook connection.");
+  };
+
+  const disconnectOutlook = async () => {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    await fetch("/api/outlook/disconnect", {
+      method: "POST",
+      headers: { authorization: `Bearer ${token}` },
+    });
+    setOutlook({ connected: false });
+  };
+
+  // Create a draft in / send from the user's Outlook for one message. Shares the
+  // mailbox busy/sent state so the send buttons work for whichever provider is on.
+  const sendViaOutlook = async (d: Draft): Promise<"draft" | "send" | null> => {
+    if (!getToken) return null;
+    const token = await getToken();
+    if (!token) return null;
+    setError("");
+    setGmailBusyId(d.opportunityId);
+    try {
+      const r = await fetch("/api/outlook/send", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
+      });
+      const j = await r.json();
+      if (r.ok) {
+        setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
+        bumpActivity({ copies: 1 });
+        if (j.mode === "send") {
+          setFinds((prev) => {
+            const next = prev.map((f) =>
+              f.draft?.opportunityId === d.opportunityId
+                ? { ...f, status: "sent" as FindStatus }
+                : f
+            );
+            try {
+              localStorage.setItem(FINDS_KEY, JSON.stringify(next));
+            } catch {}
+            return next;
+          });
+        }
+        return j.mode as "draft" | "send";
+      }
+      reportError(j);
+      return null;
+    } catch (e: any) {
+      setError(e?.message || "Outlook request failed.");
+      return null;
+    } finally {
+      setGmailBusyId("");
+    }
+  };
+
+  // The mailbox used for one-click send/draft: Gmail if connected, else Outlook.
+  const activeMailbox = gmail.connected
+    ? {
+        connected: true,
+        email: gmail.email,
+        sendMode: gmail.sendMode,
+        provider: "gmail" as const,
+        label: "Gmail",
+      }
+    : outlook.connected
+    ? {
+        connected: true,
+        email: outlook.email,
+        sendMode: outlook.sendMode,
+        provider: "outlook" as const,
+        label: "Outlook",
+      }
+    : {
+        connected: false,
+        email: "",
+        sendMode: "draft" as const,
+        provider: null,
+        label: "",
+      };
+
+  const sendViaMailbox = (d: Draft): Promise<"draft" | "send" | null> =>
+    activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d);
 
   const saveProjectsRaw = (n: Project[]) => {
     try {
@@ -1001,7 +1144,7 @@ function ScoutTool({
   // (thread id + sent status), so nothing more to do here.
   async function sendFindViaGmail(find: Find) {
     if (!find.draft) return;
-    await sendViaGmail(find.draft);
+    await sendViaMailbox(find.draft);
   }
 
   // ---- Reply tracking: check tracked Gmail threads for responses ----
@@ -1496,26 +1639,26 @@ function ScoutTool({
                             </span>
                           )}
                           <div className="ml-auto flex items-center gap-2">
-                            {gmail.connected &&
+                            {activeMailbox.connected &&
                             d.channelType === "email" &&
                             mailHref(d.to) ? (
                               gmailSent[d.opportunityId] ? (
                                 <span className="rounded-lg bg-warm-bg px-3 py-1 text-xs font-bold text-accent">
                                   {gmailSent[d.opportunityId] === "send"
                                     ? "Sent ✓"
-                                    : "In your Gmail drafts ✓"}
+                                    : `In your ${activeMailbox.label} drafts ✓`}
                                 </span>
                               ) : (
                                 <button
-                                  onClick={() => sendViaGmail(d)}
+                                  onClick={() => sendViaMailbox(d)}
                                   disabled={gmailBusyId === d.opportunityId}
                                   className="rounded-lg bg-brand-gradient px-3 py-1 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
                                 >
                                   {gmailBusyId === d.opportunityId
                                     ? "Working…"
-                                    : gmail.sendMode === "send"
-                                    ? "Send from Gmail"
-                                    : "Create Gmail draft"}
+                                    : activeMailbox.sendMode === "send"
+                                    ? `Send from ${activeMailbox.label}`
+                                    : `Create ${activeMailbox.label} draft`}
                                 </button>
                               )
                             ) : (
@@ -1557,7 +1700,7 @@ function ScoutTool({
           projectName={activeProject?.name || "this project"}
           filter={findFilter}
           setFilter={setFindFilter}
-          gmail={gmail}
+          gmail={activeMailbox}
           draftingId={findDraftingId}
           gmailBusyId={gmailBusyId}
           onDraft={draftFind}
@@ -1617,12 +1760,17 @@ function ScoutTool({
           onAutofill={autofillIdentity}
           canConfirm={profileComplete}
           onConfirm={() => setTab("outreach")}
-          gmailAvailable={!!getToken}
+          mailboxAvailable={!!getToken}
           gmail={gmail}
           gmailNote={gmailNote}
           onConnectGmail={connectGmail}
           onDisconnectGmail={disconnectGmail}
           onGmailMode={setGmailMode}
+          outlook={outlook}
+          outlookNote={outlookNote}
+          onConnectOutlook={connectOutlook}
+          onDisconnectOutlook={disconnectOutlook}
+          onOutlookMode={setOutlookMode}
         />
       )}
 
@@ -2150,7 +2298,7 @@ function FindsTab({
   projectName: string;
   filter: FindStatus | "all";
   setFilter: (f: FindStatus | "all") => void;
-  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   draftingId: string;
   gmailBusyId: string;
   onDraft: (f: Find) => void;
@@ -2329,7 +2477,7 @@ function FindCard({
   onCopy,
 }: {
   find: Find;
-  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
   onDraft: () => void;
@@ -2439,8 +2587,8 @@ function FindCard({
                 {gmailBusy
                   ? "Working…"
                   : gmail.sendMode === "send"
-                  ? "Send from Gmail"
-                  : "Create Gmail draft"}
+                  ? `Send from ${gmail.label || "Gmail"}`
+                  : `Create ${gmail.label || "Gmail"} draft`}
               </button>
             ) : (
               !done && <SendAction draft={d} onUse={onCopy} />
@@ -3767,22 +3915,25 @@ function UseCaseCombo({
 }
 
 /* ---------------- Gmail connection card ---------------- */
-function GmailCard({
-  gmail,
+function MailboxCard({
+  provider,
+  conn,
   note,
   onConnect,
   onDisconnect,
   onMode,
 }: {
-  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  provider: "gmail" | "outlook";
+  conn: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
   note: string;
   onConnect: () => void;
   onDisconnect: () => void;
   onMode: (mode: "draft" | "send") => void;
 }) {
-  const mode = gmail.sendMode || "draft";
+  const label = provider === "gmail" ? "Gmail" : "Outlook";
+  const mode = conn.sendMode || "draft";
   return (
-    <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+    <section className="mt-5 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -3791,21 +3942,21 @@ function GmailCard({
           </svg>
         </span>
         <div className="min-w-0 flex-1">
-          <div className="text-[15px] font-bold text-ink">Send from your email</div>
-          {gmail.connected ? (
+          <div className="text-[15px] font-bold text-ink">Send from {label}</div>
+          {conn.connected ? (
             <p className="mt-0.5 text-sm text-body">
               Connected as{" "}
-              <span className="font-semibold text-ink">{gmail.email || "your Gmail"}</span>
+              <span className="font-semibold text-ink">{conn.email || `your ${label}`}</span>
               . Your messages go out from your own address.
             </p>
           ) : (
             <p className="mt-0.5 text-sm leading-relaxed text-body">
-              Connect Gmail so Scout can put a ready-to-go draft in your inbox, or send
+              Connect {label} so Scout can put a ready-to-go draft in your inbox, or send
               it for you, straight from your own address.
             </p>
           )}
         </div>
-        {gmail.connected ? (
+        {conn.connected ? (
           <button
             onClick={onDisconnect}
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -3817,12 +3968,12 @@ function GmailCard({
             onClick={onConnect}
             className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
           >
-            Connect Gmail
+            Connect {label}
           </button>
         )}
       </div>
 
-      {gmail.connected && (
+      {conn.connected && (
         <div className="mt-5 border-t border-warm-border pt-5">
           <Label>When you use a draft</Label>
           <div className="mt-1 grid gap-2.5 sm:grid-cols-2">
@@ -3831,7 +3982,7 @@ function GmailCard({
                 {
                   key: "draft",
                   title: "Create a draft I review",
-                  body: "Scout puts the message in your Gmail drafts. You open it and hit send.",
+                  body: `Scout puts the message in your ${label} drafts. You open it and hit send.`,
                 },
                 {
                   key: "send",
@@ -3891,12 +4042,17 @@ function ProfileTab({
   onAutofill,
   canConfirm,
   onConfirm,
-  gmailAvailable,
+  mailboxAvailable,
   gmail,
   gmailNote,
   onConnectGmail,
   onDisconnectGmail,
   onGmailMode,
+  outlook,
+  outlookNote,
+  onConnectOutlook,
+  onDisconnectOutlook,
+  onOutlookMode,
 }: {
   name: string;
   bio: string;
@@ -3909,12 +4065,17 @@ function ProfileTab({
   onAutofill: (name?: string, useCase?: string) => void;
   canConfirm: boolean;
   onConfirm: () => void;
-  gmailAvailable: boolean;
+  mailboxAvailable: boolean;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
   gmailNote: string;
   onConnectGmail: () => void;
   onDisconnectGmail: () => void;
   onGmailMode: (mode: "draft" | "send") => void;
+  outlook: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
+  outlookNote: string;
+  onConnectOutlook: () => void;
+  onDisconnectOutlook: () => void;
+  onOutlookMode: (mode: "draft" | "send") => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -4005,14 +4166,25 @@ function ProfileTab({
         messages sound.
       </p>
 
-      {gmailAvailable && (
-        <GmailCard
-          gmail={gmail}
-          note={gmailNote}
-          onConnect={onConnectGmail}
-          onDisconnect={onDisconnectGmail}
-          onMode={onGmailMode}
-        />
+      {mailboxAvailable && (
+        <>
+          <MailboxCard
+            provider="gmail"
+            conn={gmail}
+            note={gmailNote}
+            onConnect={onConnectGmail}
+            onDisconnect={onDisconnectGmail}
+            onMode={onGmailMode}
+          />
+          <MailboxCard
+            provider="outlook"
+            conn={outlook}
+            note={outlookNote}
+            onConnect={onConnectOutlook}
+            onDisconnect={onDisconnectOutlook}
+            onMode={onOutlookMode}
+          />
+        </>
       )}
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
