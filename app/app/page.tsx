@@ -1499,7 +1499,7 @@ function ScoutTool({
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
     profile.age ? `Age: ${profile.age}` : "",
-    profile.college ? `College: ${profile.college}` : "",
+    profile.college ? `Education: ${profile.college}` : "",
     profile.location ? `Location: ${profile.location}` : "",
     profile.companySize && profile.companySize !== "any"
       ? `Prefers ${profile.companySize === "small" ? "small companies / startups" : "large, established companies"}`
@@ -6969,11 +6969,11 @@ function ProfileTab({
               />
             </div>
             <div>
-              <Label>College</Label>
+              <Label>School or education</Label>
               <input
                 value={college}
                 onChange={(e) => onCollege(e.target.value)}
-                placeholder="e.g. USC, sophomore"
+                placeholder="e.g. USC junior, MFA 2022, self-taught"
                 className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
