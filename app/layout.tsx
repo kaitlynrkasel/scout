@@ -2,14 +2,15 @@ import type { Metadata } from "next";
 import localFont from "next/font/local";
 import "./globals.css";
 
-// Outfit — geometric, contemporary sans. Loaded locally (no runtime font CDN)
-// so the whole app renders the same typeface everywhere.
-const outfit = localFont({
+// Instrument Sans — a crisp, neutral grotesque for body/UI. Loaded locally (no
+// runtime font CDN) so the whole app renders the same typeface everywhere. Reads
+// sharper and more professional than a geometric sans at small/caption sizes.
+const sans = localFont({
   src: [
-    { path: "./fonts/Outfit-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/Outfit-Bold.ttf", weight: "700", style: "normal" },
+    { path: "./fonts/InstrumentSans-Regular.ttf", weight: "400", style: "normal" },
+    { path: "./fonts/InstrumentSans-Bold.ttf", weight: "700", style: "normal" },
   ],
-  variable: "--font-outfit",
+  variable: "--font-sans",
   display: "swap",
 });
 
@@ -28,7 +29,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${outfit.variable} ${youngSerif.variable}`}>
+    <html lang="en" className={`${sans.variable} ${youngSerif.variable}`}>
       <body>{children}</body>
     </html>
   );

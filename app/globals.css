@@ -10,7 +10,7 @@ body {
   /* Calm warm-cream wash. The app shell (sidebar + cards) sits on top of this. */
   background: #f3ecdd;
   color: #71624f;
-  font-family: var(--font-outfit), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
