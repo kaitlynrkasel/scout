@@ -2840,6 +2840,9 @@ function FindsList({
               </button>
               {denyingId === o.id ? (
                 <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-body/45">
+                    Why? optional, but a reason helps Scout learn faster
+                  </span>
                   <DenyReasons
                     onPick={(r) => {
                       setDenyingId("");
@@ -3706,6 +3709,9 @@ function FindCard({
         ) : denying ? (
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-semibold text-body/60">Why pass?</span>
+            <span className="text-[10px] text-body/45">
+              optional, but a reason helps Scout learn faster
+            </span>
             <DenyReasons
               onPick={(r) => {
                 setDenying(false);
@@ -3744,7 +3750,9 @@ function FindCard({
       {denied && (
         <div className="mt-2.5 border-t border-warm-border pt-2.5">
           <div className="mb-1.5 text-[11px] font-semibold text-body/60">
-            {find.denyReason ? "Reason you passed" : "Add a reason (optional)"}
+            {find.denyReason
+              ? "Reason you passed"
+              : "Add a reason (optional, but it helps Scout learn faster)"}
           </div>
           <DenyReasons current={find.denyReason} onPick={(r) => onSetReason(r)} />
         </div>
