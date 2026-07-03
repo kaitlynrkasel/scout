@@ -946,6 +946,20 @@ function ScoutTool({
     resetResults();
   }
 
+  // Add a category to a SPECIFIC project (used by the Profile editor, where you
+  // may be editing a project that isn't the active one).
+  function addCategoryToProject(projectId: string, name: string) {
+    const nm = name.trim();
+    if (!nm) return;
+    const c: Category = {
+      id: `cat-${Date.now()}`,
+      name: nm,
+      goal: "",
+      projectId,
+    };
+    saveCats([...categories, c]);
+  }
+
   // Category manager (pencil): rename a category in the dropdown.
   function renameCategory(id: string, name: string) {
     const nm = name.trim();
@@ -1895,6 +1909,14 @@ function ScoutTool({
           onConnectGmail={connectGmail}
           onDisconnectGmail={disconnectGmail}
           onGmailMode={setGmailMode}
+          projects={projects}
+          categories={categories}
+          onAddProject={addProject}
+          onRenameProject={renameProject}
+          onRemoveProject={removeProject}
+          onAddCategory={addCategoryToProject}
+          onRenameCategory={renameCategory}
+          onRemoveCategory={removeCategory}
         />
       )}
 
@@ -4469,6 +4491,14 @@ function ProfileTab({
   onConnectGmail,
   onDisconnectGmail,
   onGmailMode,
+  projects,
+  categories,
+  onAddProject,
+  onRenameProject,
+  onRemoveProject,
+  onAddCategory,
+  onRenameCategory,
+  onRemoveCategory,
 }: {
   name: string;
   bio: string;
@@ -4487,6 +4517,14 @@ function ProfileTab({
   onConnectGmail: () => void;
   onDisconnectGmail: () => void;
   onGmailMode: (mode: "draft" | "send") => void;
+  projects: Project[];
+  categories: Category[];
+  onAddProject: (name: string) => void;
+  onRenameProject: (id: string, name: string) => void;
+  onRemoveProject: (id: string) => void;
+  onAddCategory: (projectId: string, name: string) => void;
+  onRenameCategory: (id: string, name: string) => void;
+  onRemoveCategory: (id: string) => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -4766,6 +4804,20 @@ function ProfileTab({
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
+
+        <hr className="my-7 border-warm-border" />
+
+        {/* -------- Projects & categories, editable here as well as on Outreach -------- */}
+        <ProjectsCategoriesEditor
+          projects={projects}
+          categories={categories}
+          onAddProject={onAddProject}
+          onRenameProject={onRenameProject}
+          onRemoveProject={onRemoveProject}
+          onAddCategory={onAddCategory}
+          onRenameCategory={onRenameCategory}
+          onRemoveCategory={onRemoveCategory}
+        />
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
           <button
@@ -5130,6 +5182,188 @@ function WarnIcon() {
 }
 
 /* ---------------- List manager (pencil popover: add / rename / remove) ---------------- */
+// Inline, always-visible editor for the user's projects and their categories.
+// Lives on the Profile tab (the popover CategoryManager stays on Outreach).
+function ProjectsCategoriesEditor({
+  projects,
+  categories,
+  onAddProject,
+  onRenameProject,
+  onRemoveProject,
+  onAddCategory,
+  onRenameCategory,
+  onRemoveCategory,
+}: {
+  projects: Project[];
+  categories: Category[];
+  onAddProject: (name: string) => void;
+  onRenameProject: (id: string, name: string) => void;
+  onRemoveProject: (id: string) => void;
+  onAddCategory: (projectId: string, name: string) => void;
+  onRenameCategory: (id: string, name: string) => void;
+  onRemoveCategory: (id: string) => void;
+}) {
+  const [newProject, setNewProject] = useState("");
+  // One "new category" input value per project, keyed by project id.
+  const [newCat, setNewCat] = useState<Record<string, string>>({});
+
+  return (
+    <div>
+      <Label>Your projects and categories</Label>
+      <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
+        A project is usually one goal or one person you manage (say, an artist);
+        its categories are the kinds of people you search for. Edit them here or on
+        the Outreach tab, they stay in sync.
+      </p>
+
+      <div className="space-y-3">
+        {projects.map((p) => {
+          const cats = categories.filter((c) => c.projectId === p.id);
+          return (
+            <div
+              key={p.id}
+              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-warm-bg text-[11px] font-bold text-body/60"
+                  aria-hidden
+                >
+                  {p.name.trim().charAt(0).toUpperCase() || "?"}
+                </span>
+                <input
+                  defaultValue={p.name}
+                  key={p.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== p.name) onRenameProject(p.id, v);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  aria-label={`Project name for ${p.name}`}
+                  className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm font-bold text-ink outline-none transition hover:border-warm-border focus:border-coral"
+                />
+                {projects.length > 1 && (
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete the project "${p.name}" and its categories? Finds saved under it stay in your Finds list.`
+                        )
+                      )
+                        onRemoveProject(p.id);
+                    }}
+                    title={`Delete ${p.name}`}
+                    aria-label={`Delete project ${p.name}`}
+                    className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                  >
+                    <TrashIcon />
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-2.5 space-y-1.5 border-t border-warm-border pt-2.5">
+                {cats.length === 0 && (
+                  <p className="px-1 text-xs text-body/50">
+                    No categories yet. Add one below.
+                  </p>
+                )}
+                {cats.map((c) => (
+                  <div key={c.id} className="flex items-center gap-1.5">
+                    <span className="text-body/30" aria-hidden>
+                      ·
+                    </span>
+                    <input
+                      defaultValue={c.name}
+                      key={c.name}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v && v !== c.name) onRenameCategory(c.id, v);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                      }}
+                      aria-label={`Category name for ${c.name}`}
+                      className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1 text-sm text-ink outline-none transition hover:border-warm-border focus:border-coral"
+                    />
+                    {cats.length > 1 && (
+                      <button
+                        onClick={() => onRemoveCategory(c.id)}
+                        title={`Remove ${c.name}`}
+                        aria-label={`Remove category ${c.name}`}
+                        className="shrink-0 rounded-lg border border-warm-border p-1 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                      >
+                        <TrashIcon />
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div className="flex items-center gap-1.5 pt-1">
+                  <input
+                    value={newCat[p.id] || ""}
+                    onChange={(e) =>
+                      setNewCat((s) => ({ ...s, [p.id]: e.target.value }))
+                    }
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && (newCat[p.id] || "").trim()) {
+                        onAddCategory(p.id, newCat[p.id]);
+                        setNewCat((s) => ({ ...s, [p.id]: "" }));
+                      }
+                    }}
+                    placeholder="Add a category"
+                    className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
+                  />
+                  <button
+                    onClick={() => {
+                      if ((newCat[p.id] || "").trim()) {
+                        onAddCategory(p.id, newCat[p.id]);
+                        setNewCat((s) => ({ ...s, [p.id]: "" }));
+                      }
+                    }}
+                    disabled={!(newCat[p.id] || "").trim()}
+                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-bold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add a project */}
+      <div className="mt-3 flex items-center gap-1.5">
+        <input
+          value={newProject}
+          onChange={(e) => setNewProject(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newProject.trim()) {
+              onAddProject(newProject);
+              setNewProject("");
+            }
+          }}
+          placeholder="New project (e.g. another artist you manage)"
+          className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        />
+        <button
+          onClick={() => {
+            if (newProject.trim()) {
+              onAddProject(newProject);
+              setNewProject("");
+            }
+          }}
+          disabled={!newProject.trim()}
+          className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
+        >
+          Add project
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CategoryManager({
   cats,
   onAdd,
