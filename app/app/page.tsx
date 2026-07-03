@@ -4765,6 +4765,8 @@ function DashboardTab({
   goProfile: () => void;
   goFinds: () => void;
 }) {
+  // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
+  const [dashTab, setDashTab] = useState<"you" | "scout">("you");
   const learned = learnedFromFinds(finds);
   const insights = recentInsights(learned, coaching, editPairs);
   // Contacts you reached out to about a week ago that still haven't replied — a
@@ -4848,9 +4850,35 @@ function DashboardTab({
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
       <h1 className="font-serif text-[32px] font-normal tracking-tight text-ink">Dashboard</h1>
       <p className="mt-1 text-sm text-body">
-        Your outreach notebook — everything in one place.
+        {dashTab === "you"
+          ? "Your outreach notebook — everything in one place."
+          : "How Scout is doing across everyone using it."}
       </p>
 
+      {/* -------- Tab switcher -------- */}
+      <div className="mt-5 inline-flex rounded-xl border border-warm-border bg-white p-1 shadow-card">
+        {(
+          [
+            ["you", "You"],
+            ["scout", "Scout-wide"],
+          ] as const
+        ).map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setDashTab(val)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+              dashTab === val
+                ? "bg-brown text-white shadow-soft"
+                : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Follow-up reminder -------- */}
       {dueFollowUps > 0 && (
         <button
@@ -5267,6 +5295,11 @@ function DashboardTab({
         )}
       </section>
 
+      </>
+      )}
+
+      {dashTab === "scout" && (
+      <>
       {/* -------- Getting sharper across Scout (public, everyone) -------- */}
       {community && (community.patterns?.decidedFinds || 0) > 0 && (
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
@@ -5354,6 +5387,11 @@ function DashboardTab({
         );
       })()}
 
+      </>
+      )}
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
         <section className="mt-10">
@@ -5439,6 +5477,11 @@ function DashboardTab({
         </div>
       </section>
 
+      </>
+      )}
+
+      {dashTab === "scout" && (
+      <>
       {/* -------- How Scout learns from EVERYONE -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout gets better for everyone</h2>
@@ -5465,6 +5508,11 @@ function DashboardTab({
         </div>
       </section>
 
+      </>
+      )}
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Honesty note about reply tracking -------- */}
       <section className="mt-8 rounded-2xl border border-dashed border-warm-border bg-white/60 px-5 py-4">
         <div className="text-xs font-bold uppercase tracking-wider text-body/60">
@@ -5493,6 +5541,8 @@ function DashboardTab({
           Start scouting →
         </button>
       </section>
+      </>
+      )}
     </main>
   );
 }
