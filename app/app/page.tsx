@@ -2239,20 +2239,6 @@ function SideNav({
         </>
       ),
     },
-    ...(hasAccount
-      ? [
-          {
-            key: "account",
-            label: "Account",
-            icon: (
-              <>
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M5 20a7 7 0 0 1 14 0" />
-              </>
-            ),
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -2336,10 +2322,36 @@ function SideNav({
             ))}
           </select>
         )}
+        {hasAccount && (
+          <button
+            onClick={() => setTab("account")}
+            className={`mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              tab === "account"
+                ? "bg-brown text-white shadow-soft"
+                : "text-body hover:bg-brown-tint hover:text-brown-deep"
+            }`}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={tab === "account" ? "" : "opacity-80"}
+            >
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5 20a7 7 0 0 1 14 0" />
+            </svg>
+            Account
+          </button>
+        )}
         {showLogout && (
           <button
             onClick={onLogout}
-            className="mt-3 w-full rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-brown-tint"
+            className="mt-2 w-full rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-brown-tint"
           >
             Log out
           </button>
