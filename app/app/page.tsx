@@ -4780,28 +4780,31 @@ function TeamTab({
       ) : !workspace ? (
         /* -------- No workspace yet: create one -------- */
         <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
-          <h2 className="text-lg font-bold text-ink">Create your workspace</h2>
+          <h2 className="text-lg font-bold text-ink">Name your workspace</h2>
           <p className="mt-1 text-sm text-body/80">
-            A workspace is your company or crew. Invite teammates into it, then share
-            projects with them.
+            A workspace is your company or crew. Give it a name, then invite teammates
+            and share projects with them.
           </p>
-          <div className="mt-4 flex flex-wrap gap-2">
-            <input
-              value={wsName}
-              onChange={(e) => setWsName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && wsName.trim()) createWorkspace();
-              }}
-              placeholder="e.g. Cue Creative"
-              className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
-            <button
-              onClick={createWorkspace}
-              disabled={!wsName.trim() || !!busy}
-              className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-            >
-              {busy === "create" ? "Creating…" : "Create workspace"}
-            </button>
+          <div className="mt-4">
+            <Label>Workspace name</Label>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={wsName}
+                onChange={(e) => setWsName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && wsName.trim()) createWorkspace();
+                }}
+                placeholder="e.g. Cue Creative, or Kaitlyn's team"
+                className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+              <button
+                onClick={createWorkspace}
+                disabled={!wsName.trim() || !!busy}
+                className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {busy === "create" ? "Creating…" : "Create workspace"}
+              </button>
+            </div>
           </div>
         </section>
       ) : (
