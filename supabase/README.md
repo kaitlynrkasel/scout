@@ -20,6 +20,15 @@ so people can only read data for teams they belong to.
 > current version adds the missing `GRANT`s to the service role (some projects, with
 > the new `sb_secret_` keys, don't grant it by default). Re-running is safe.
 
+## If profiles won't save (people re-enter info every visit)
+
+Run [`supabase/fix-profile-saving.sql`](./fix-profile-saving.sql) once. Symptom:
+signed-in users can't save their profile or app state, so nothing persists across
+visits. Cause: the `authenticated` role (a logged-in user) was never granted access
+to the `profiles` / `user_state` tables, so every save fails with "permission denied
+for table profiles." This grants that role access to its own rows (RLS still limits
+each user to their own data). Safe to re-run.
+
 ## Anti-overexposure ledger (recommended)
 
 Run [`supabase/exposure.sql`](./exposure.sql) the same way (SQL Editor → paste → Run).
