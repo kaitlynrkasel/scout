@@ -140,7 +140,18 @@ interface Find {
   draft?: Draft;
   addedAt: number;
   gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
+  denyReason?: string; // why the user passed on this find
 }
+
+// Quick reasons offered when passing on a find (plus free-text "Other").
+const DENY_REASONS = [
+  "Wrong industry",
+  "Wrong role or level",
+  "Wrong location",
+  "No way to contact",
+  "Not a real prospect",
+  "Already reached out",
+];
 
 function normNameKey(s: string): string {
   return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -933,6 +944,19 @@ function ScoutTool({
   function setFindStatus(id: string, status: FindStatus) {
     saveFinds(finds.map((f) => (f.id === id ? { ...f, status } : f)));
   }
+  // Deny a find and record why (reason optional).
+  function denyFindWithReason(id: string, reason: string) {
+    saveFinds(
+      finds.map((f) =>
+        f.id === id
+          ? { ...f, status: "denied" as FindStatus, denyReason: reason.trim() || f.denyReason || "" }
+          : f
+      )
+    );
+  }
+  function setFindReason(id: string, reason: string) {
+    saveFinds(finds.map((f) => (f.id === id ? { ...f, denyReason: reason.trim() } : f)));
+  }
   function removeFind(id: string) {
     saveFinds(finds.filter((f) => f.id !== id));
   }
@@ -1119,9 +1143,10 @@ function ScoutTool({
   const selectedCount = visibleOpps.filter((o) => selected[o.id]).length;
   const toggle = (id: string, v: boolean) =>
     setSelected((s) => ({ ...s, [id]: v }));
-  // Deny a result: mark it "Not a fit" in the pipeline and drop it from the batch.
-  const denyOpp = (o: Opportunity) => {
-    setFindStatus(findKey(activeId, o), "denied");
+  // Deny a result: mark it "Not a fit" (with an optional reason) in the pipeline
+  // and drop it from the batch.
+  const denyOpp = (o: Opportunity, reason = "") => {
+    denyFindWithReason(findKey(activeId, o), reason);
     setSelected((s) => ({ ...s, [o.id]: false }));
   };
 
@@ -1523,7 +1548,8 @@ function ScoutTool({
           draftingId={findDraftingId}
           gmailBusyId={gmailBusyId}
           onDraft={draftFind}
-          onDeny={(f) => setFindStatus(f.id, "denied")}
+          onDeny={(f, reason) => denyFindWithReason(f.id, reason || "")}
+          onSetReason={(f, reason) => setFindReason(f.id, reason)}
           onReopen={(f) => setFindStatus(f.id, "new")}
           onMarkSent={(f) => setFindStatus(f.id, "sent")}
           onStatus={(f, s) => setFindStatus(f.id, s)}
@@ -1870,9 +1896,10 @@ function FindsList({
   opps: Opportunity[];
   selected: Record<string, boolean>;
   onApprove: (id: string, v: boolean) => void;
-  onDeny: (o: Opportunity) => void;
+  onDeny: (o: Opportunity, reason?: string) => void;
   roomy?: boolean;
 }) {
+  const [denyingId, setDenyingId] = useState("");
   return (
     <div className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`}>
       {opps.map((o) => {
@@ -1958,13 +1985,33 @@ function FindsList({
               >
                 {on ? "Approved ✓" : "Approve"}
               </button>
-              <button
-                onClick={() => onDeny(o)}
-                className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-              >
-                Deny
-              </button>
-              {on && (
+              {denyingId === o.id ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <DenyReasons
+                    onPick={(r) => {
+                      setDenyingId("");
+                      onDeny(o, r);
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      setDenyingId("");
+                      onDeny(o, "");
+                    }}
+                    className="text-[11px] font-semibold text-body/50 transition hover:text-accent"
+                  >
+                    Skip
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setDenyingId(o.id)}
+                  className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                >
+                  Deny
+                </button>
+              )}
+              {on && denyingId !== o.id && (
                 <span className="ml-auto text-[11px] font-medium text-accent">
                   Will be drafted
                 </span>
@@ -2013,6 +2060,56 @@ function ContactValue({
   );
 }
 
+/* ---------------- Deny reason picker (preset chips + free text) ---------------- */
+function DenyReasons({
+  current,
+  onPick,
+}: {
+  current?: string;
+  onPick: (reason: string) => void;
+}) {
+  const [other, setOther] = useState("");
+  const [showOther, setShowOther] = useState(false);
+  const isPreset = !current || DENY_REASONS.includes(current);
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {DENY_REASONS.map((r) => (
+        <button
+          key={r}
+          onClick={() => onPick(r)}
+          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+            current === r
+              ? "border-coral/50 bg-brand-gradient text-white"
+              : "border-warm-border bg-white text-body hover:bg-warm-bg"
+          }`}
+        >
+          {r}
+        </button>
+      ))}
+      {showOther || (current && !isPreset) ? (
+        <input
+          autoFocus
+          value={other || (current && !isPreset ? current : "")}
+          onChange={(e) => setOther(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && other.trim()) onPick(other.trim());
+          }}
+          onBlur={() => other.trim() && onPick(other.trim())}
+          placeholder="Other reason…"
+          className="min-w-[140px] rounded-full border border-warm-border px-2.5 py-1 text-[11px] text-ink outline-none focus:border-coral"
+        />
+      ) : (
+        <button
+          onClick={() => setShowOther(true)}
+          className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
+        >
+          Other…
+        </button>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
 function FindsTab({
   finds,
@@ -2024,6 +2121,7 @@ function FindsTab({
   gmailBusyId,
   onDraft,
   onDeny,
+  onSetReason,
   onReopen,
   onMarkSent,
   onStatus,
@@ -2043,7 +2141,8 @@ function FindsTab({
   draftingId: string;
   gmailBusyId: string;
   onDraft: (f: Find) => void;
-  onDeny: (f: Find) => void;
+  onDeny: (f: Find, reason?: string) => void;
+  onSetReason: (f: Find, reason: string) => void;
   onReopen: (f: Find) => void;
   onMarkSent: (f: Find) => void;
   onStatus: (f: Find, s: FindStatus) => void;
@@ -2153,7 +2252,8 @@ function FindsTab({
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
               onDraft={() => onDraft(f)}
-              onDeny={() => onDeny(f)}
+              onDeny={(reason) => onDeny(f, reason)}
+              onSetReason={(reason) => onSetReason(f, reason)}
               onReopen={() => onReopen(f)}
               onMarkSent={() => onMarkSent(f)}
               onStatus={(s) => onStatus(f, s)}
@@ -2207,6 +2307,7 @@ function FindCard({
   gmailBusy,
   onDraft,
   onDeny,
+  onSetReason,
   onReopen,
   onMarkSent,
   onStatus,
@@ -2219,7 +2320,8 @@ function FindCard({
   drafting: boolean;
   gmailBusy: boolean;
   onDraft: () => void;
-  onDeny: () => void;
+  onDeny: (reason?: string) => void;
+  onSetReason: (reason: string) => void;
   onReopen: () => void;
   onMarkSent: () => void;
   onStatus: (s: FindStatus) => void;
@@ -2233,6 +2335,7 @@ function FindCard({
   // Contacted (or beyond): hide the send/mark actions.
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
+  const [denying, setDenying] = useState(false); // reason picker shown pre-deny
 
   return (
     <div
@@ -2375,9 +2478,28 @@ function FindCard({
           >
             Reopen
           </button>
+        ) : denying ? (
+          <div className="ml-auto flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold text-body/60">Why pass?</span>
+            <DenyReasons
+              onPick={(r) => {
+                setDenying(false);
+                onDeny(r);
+              }}
+            />
+            <button
+              onClick={() => {
+                setDenying(false);
+                onDeny("");
+              }}
+              className="text-[11px] font-semibold text-body/50 transition hover:text-accent"
+            >
+              Skip
+            </button>
+          </div>
         ) : (
           <button
-            onClick={onDeny}
+            onClick={() => setDenying(true)}
             className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
           >
             Not a fit
@@ -2392,6 +2514,16 @@ function FindCard({
           </button>
         )}
       </div>
+
+      {/* Deny reason on passed finds — editable */}
+      {denied && (
+        <div className="mt-2.5 border-t border-warm-border pt-2.5">
+          <div className="mb-1.5 text-[11px] font-semibold text-body/60">
+            {find.denyReason ? "Reason you passed" : "Add a reason (optional)"}
+          </div>
+          <DenyReasons current={find.denyReason} onPick={(r) => onSetReason(r)} />
+        </div>
+      )}
     </div>
   );
 }
@@ -2453,6 +2585,14 @@ function learnedFromFinds(finds: Find[]) {
     replyRate,
     repliedCount,
     sentCount: sentish.length,
+    denyReasons: (() => {
+      const m: Record<string, number> = {};
+      for (const f of denied) {
+        const r = (f.denyReason || "").trim();
+        if (r) m[r] = (m[r] || 0) + 1;
+      }
+      return Object.entries(m).sort((a, b) => b[1] - a[1]);
+    })(),
   };
 }
 
@@ -2793,6 +2933,21 @@ function DashboardTab({
                   </div>
                 </div>
               </div>
+              {learned.denyReasons.length > 0 && (
+                <div className="mt-3 border-t border-warm-border pt-3">
+                  <div className="text-xs font-semibold text-body/60">Why you pass</div>
+                  <div className="mt-1.5 flex flex-wrap gap-1.5">
+                    {learned.denyReasons.slice(0, 6).map(([r, n]) => (
+                      <span
+                        key={r}
+                        className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                      >
+                        {r} · {n}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <p className="mt-3 text-xs text-body/60">
                 Scout uses these patterns to rank future finds toward the kind you
                 actually act on.
