@@ -34,9 +34,9 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
     goalPlaceholder: "e.g. remote marketing internships at music companies",
     aboutPlaceholder:
       "Your background, skills, school/role, and what you're looking for.",
-    exampleGoal: "remote marketing & communications internships in the music industry",
+    exampleGoal: "find me a job or internship in my field",
     exampleAbout:
-      "A Belmont music business junior with internship experience at Warner Music Group and BMI, strong in social media, writing, and catalog admin.",
+      "A professional with a few years of experience in marketing and communications, strong in social media, writing, and campaign strategy — open to full-time roles and stretch internships that build a new specialty.",
     queryTails: [
       "{goal} apply",
       "{goal} hiring",

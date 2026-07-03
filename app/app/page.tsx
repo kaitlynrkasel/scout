@@ -118,6 +118,13 @@ function suggestionsFor(useCase: string): { name: string; goal: string }[] {
   return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
 }
 
+// Bump this when a stored payload's shape changes. `runSchemaMigrations` below
+// reads the recorded version, walks any per-version steps, and writes the
+// current one back. Keeps localStorage evolvable without silently corrupting
+// data when the on-disk shape drifts from what the code expects.
+const SCHEMA_VERSION = 1;
+const SCHEMA_KEY = "scout_schema_version";
+
 const TPL_KEY = "scout_templates";
 const PROFILE_KEY = "scout_profile";
 const CAT_KEY = "scout_categories";
@@ -151,6 +158,18 @@ const TOUR_STEPS: TourStep[] = [
     target: "nav-outreach",
     title: "Find people & draft outreach",
     body: "Describe who you're trying to reach and Scout discovers matches, then drafts a message for each one in your voice. This is where most of your work happens.",
+  },
+  {
+    tab: "outreach",
+    target: "project-switcher",
+    title: "Projects: one workspace per goal",
+    body: "A project is a self-contained workspace — one per artist, client, or job hunt. Each keeps its own categories, finds, and context so pitches sound like they're really about that person.",
+  },
+  {
+    tab: "outreach",
+    target: "category-switcher",
+    title: "Categories: presets for each kind of search",
+    body: "Inside a project, categories are reusable search presets — e.g. \"press writers\" vs \"playlist curators\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
   },
   {
     tab: "finds",
@@ -202,6 +221,24 @@ function migrateLegacyKeys() {
   } catch {}
 }
 
+// Walk any pending schema migrations, then record the current version. Add a
+// case here when a stored payload's shape changes: read the old value, rewrite
+// it, and set the version so the migration only runs once.
+function runSchemaMigrations() {
+  try {
+    const raw = localStorage.getItem(SCHEMA_KEY);
+    const stored = raw ? Number(raw) : 0;
+    if (Number.isNaN(stored) || stored >= SCHEMA_VERSION) {
+      // Still record the current version so the next migration has a floor.
+      if (stored !== SCHEMA_VERSION) localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION));
+      return;
+    }
+    // Future migrations go here, e.g.:
+    // if (stored < 2) { /* rewrite FINDS_KEY entries to add a new field */ }
+    localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION));
+  } catch {}
+}
+
 interface Activity {
   searches: number;
   found: number;
@@ -210,12 +247,40 @@ interface Activity {
 }
 const ZERO_ACTIVITY: Activity = { searches: 0, found: 0, drafts: 0, copies: 0 };
 
+// A competitiveness self-rating shapes internship / job discovery so a first-time
+// applicant is pointed at accessible programs, not moonshot ones.
+type Competitiveness = "any" | "beginner" | "intermediate" | "competitive";
+type CompanySize = "any" | "small" | "big";
+
 interface Profile {
   name: string;
   bio: string;
   useCase: string; // free text; matched to a preset when it can be, else read as-is
   linkedin?: string;
+  // Optional personalization. Stored locally only for now (the Supabase
+  // `profiles` row keeps its original columns; these ride along in the browser's
+  // scout_profile blob and flow into aboutText so the LLM can use them).
+  age?: number;
+  college?: string;
+  location?: string;
+  companySize?: CompanySize;
+  competitiveness?: Competitiveness;
 }
+
+// Natural-language directives the LLM respects when they're appended to the
+// user's goal. Keeps the API surface unchanged.
+const COMPETITIVENESS_HINTS: Record<Exclude<Competitiveness, "any">, string> = {
+  beginner:
+    "Focus on beginner-friendly opportunities: open to freshmen/sophomores or early-career applicants, minimal prerequisites, low-to-moderate selectivity. Avoid ultra-selective programs (e.g. Google STEP, Meta University, Jane Street, top hedge-fund/consulting internships).",
+  intermediate:
+    "Focus on mid-tier opportunities: growing companies and established mid-size firms, standard interview loops, open to applicants with a few projects or a prior internship.",
+  competitive:
+    "Focus on highly competitive, prestigious opportunities: top-tier tech / finance / consulting internships (FAANG, Jane Street, McKinsey, etc.), selective research programs, and elite fellowships.",
+};
+const COMPANY_SIZE_HINTS: Record<Exclude<CompanySize, "any">, string> = {
+  small: "Prefer small companies, startups, and early-stage teams (under ~200 people).",
+  big: "Prefer large, established companies and well-known brands (Fortune 500, big tech, major agencies).",
+};
 // A project is a self-contained workspace: its own use case, its own context
 // (e.g. the specific artist you're reaching out for), and its own categories.
 // A manager runs one project per artist; a job seeker might have just one.
@@ -481,17 +546,33 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  // Per-search competitiveness override (defaults to the profile setting). "" =
+  // inherit from profile; anything else overrides for this search only.
+  const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
+  // When discovery started (ms epoch), so the progress bar can resume at the
+  // right % after tab switches — SearchProgress is scoped to the Outreach tab
+  // and remounts when the user comes back.
+  const [discoverStartedAt, setDiscoverStartedAt] = useState<number | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState("");
   const [apiReason, setApiReason] = useState<string | null>(null); // 'credits'|'auth'|'rate'
   const [opps, setOpps] = useState<Opportunity[]>([]);
+  // Per-candidate skip log surfaced from /api/discover, so the user (or you
+  // while iterating on the extract prompt) can see exactly what got filtered.
+  const [skipped, setSkipped] = useState<Array<{ title: string; url: string; reason: string }>>([]);
+  const [showSkipped, setShowSkipped] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  // Which outreach kind each draft is currently written for. Keyed by
+  // opportunityId. Defaults to the auto-picked channel when unset.
+  const [draftKind, setDraftKind] = useState<Record<string, string>>({});
+  // opportunityId currently being re-drafted after a kind change.
+  const [redraftBusyId, setRedraftBusyId] = useState("");
   const [stats, setStats] = useState("");
   const [expanded, setExpanded] = useState(false);
 
@@ -551,6 +632,7 @@ function ScoutTool({
   // (per-browser mode, or an account's very first login which then seeds the DB).
   useEffect(() => {
     migrateLegacyKeys();
+    runSchemaMigrations();
     const prof: Profile = initialProfile;
     let cats: Category[] = [];
     let projs: Project[] = [];
@@ -1181,6 +1263,8 @@ function ScoutTool({
     setStats("");
     setError("");
     setApiReason(null);
+    setSkipped([]);
+    setShowSkipped(false);
   }
 
   // Show the message from a failed API response, flagging credit/key/limit issues.
@@ -1263,15 +1347,62 @@ function ScoutTool({
   // Prefill identity fields after Scout reads a resume. Keeps a name the user
   // already typed; sets the inferred use case (which reseeds its categories).
   // Bio is set separately (immediately) so nothing is lost if parsing fails.
-  function autofillIdentity(name?: string, useCase?: string) {
-    if (name && name.trim()) {
-      setProfile((prev) => {
-        if (prev.name && prev.name.trim()) return prev; // don't overwrite theirs
-        const next = { ...prev, name: name.trim() };
-        onSaveProfile(next);
-        return next;
-      });
+  function autofillIdentity(
+    name?: string,
+    useCase?: string,
+    extras?: {
+      age?: number | null;
+      education?: string;
+      location?: string;
+      companySize?: string;
+      competitiveness?: string;
     }
+  ) {
+    // Only fill fields the user hasn't set — a resume drop never overwrites
+    // something they typed. Every field is optional coming from the API.
+    setProfile((prev) => {
+      const next: Profile = { ...prev };
+      let changed = false;
+      if (name && name.trim() && !(prev.name && prev.name.trim())) {
+        next.name = name.trim();
+        changed = true;
+      }
+      if (
+        typeof extras?.age === "number" &&
+        Number.isFinite(extras.age) &&
+        !prev.age
+      ) {
+        next.age = extras.age;
+        changed = true;
+      }
+      if (extras?.education && extras.education.trim() && !(prev.college && prev.college.trim())) {
+        next.college = extras.education.trim();
+        changed = true;
+      }
+      if (extras?.location && extras.location.trim() && !(prev.location && prev.location.trim())) {
+        next.location = extras.location.trim();
+        changed = true;
+      }
+      const size = extras?.companySize;
+      if (
+        (size === "any" || size === "small" || size === "big") &&
+        (!prev.companySize || prev.companySize === "any")
+      ) {
+        next.companySize = size;
+        changed = true;
+      }
+      const comp = extras?.competitiveness;
+      if (
+        (comp === "any" || comp === "beginner" || comp === "intermediate" || comp === "competitive") &&
+        (!prev.competitiveness || prev.competitiveness === "any")
+      ) {
+        next.competitiveness = comp;
+        changed = true;
+      }
+      if (!changed) return prev;
+      onSaveProfile(next);
+      return next;
+    });
     if (useCase && useCase.trim()) changeUseCase(useCase.trim());
   }
 
@@ -1437,6 +1568,15 @@ function ScoutTool({
     profile.name,
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
+    profile.age ? `Age: ${profile.age}` : "",
+    profile.college ? `Education: ${profile.college}` : "",
+    profile.location ? `Location: ${profile.location}` : "",
+    profile.companySize && profile.companySize !== "any"
+      ? `Prefers ${profile.companySize === "small" ? "small companies / startups" : "large, established companies"}`
+      : "",
+    profile.competitiveness && profile.competitiveness !== "any"
+      ? `Self-rated as a ${profile.competitiveness} applicant`
+      : "",
     activeProject && activeProject.context
       ? "This outreach is on behalf of / for: " + activeProject.context
       : "",
@@ -1888,6 +2028,7 @@ function ScoutTool({
       return;
     }
     resetResults();
+    setDiscoverStartedAt(Date.now());
     setDiscovering(true);
     try {
       // Teach the search from this project's history: avoid denied finds (with
@@ -1903,11 +2044,25 @@ function ScoutTool({
           .slice(0, 10)
           .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
       };
+      // For job/internship searches, layer in the competitiveness + company-size
+      // directives so the LLM narrows to the right tier of opportunity. The
+      // per-search override wins over the profile setting.
+      const jobish = isJobUseCaseClient(activeUseCase);
+      const compLevel: Competitiveness = jobish
+        ? (searchComp || profile.competitiveness || "any")
+        : "any";
+      const sizePref: CompanySize = jobish ? profile.companySize || "any" : "any";
+      const extras: string[] = [];
+      if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
+      if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
+      const goalForApi = extras.length
+        ? `${goal}\n\n${extras.join(" ")}`
+        : goal;
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          goal,
+          goal: goalForApi,
           about: aboutText,
           useCase: activeUseCase,
           feedback,
@@ -1922,6 +2077,7 @@ function ScoutTool({
       }
       setOpps(data.opportunities || []);
       setSelected({}); // nothing pre-approved — you approve who you want to reach
+      setSkipped(Array.isArray(data.skipped) ? data.skipped : []);
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
@@ -1932,6 +2088,7 @@ function ScoutTool({
       setError(e.message);
     } finally {
       setDiscovering(false);
+      setDiscoverStartedAt(null);
     }
   }
 
@@ -1988,6 +2145,58 @@ function ScoutTool({
     }
   }
 
+  // Rewrite a single existing draft for a different outreach kind (Email,
+  // LinkedIn message, Instagram DM, etc.). Called when the user changes the
+  // format dropdown on a draft card; only that one draft updates.
+  async function redraftAs(opportunityId: string, kind: string) {
+    setError("");
+    const opp =
+      opps.find((o) => o.id === opportunityId) ||
+      // Fallback for drafts surfaced from the finds pipeline.
+      finds.find((f) => f.draft?.opportunityId === opportunityId)?.opp;
+    if (!opp) return;
+    setDraftKind((m) => ({ ...m, [opportunityId]: kind }));
+    setRedraftBusyId(opportunityId);
+    try {
+      const res = await fetch("/api/draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opportunities: [opp],
+          about: aboutText,
+          useCase: activeUseCase,
+          templates: templatesFor(activeId, catId),
+          coaching,
+          editPairs,
+          signature,
+          kind,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        reportError(data);
+        return;
+      }
+      const newDraft: Draft | undefined = (data.drafts || [])[0];
+      if (!newDraft) return;
+      setDrafts((prev) =>
+        prev.map((d) => (d.opportunityId === opportunityId ? newDraft : d))
+      );
+      // Also persist onto the matching pipeline find so Finds stays in sync.
+      saveFinds(
+        finds.map((f) =>
+          f.draft?.opportunityId === opportunityId
+            ? { ...f, draft: newDraft, status: "drafted" }
+            : f
+        )
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRedraftBusyId("");
+    }
+  }
+
   // Results hide anyone denied here (denial flows to the Finds pipeline).
   const deniedFindIds = new Set(
     finds.filter((f) => f.status === "denied").map((f) => f.id)
@@ -2025,6 +2234,12 @@ function ScoutTool({
         onClose={endTour}
         onFinish={endTour}
       />
+      {discovering && tab !== "outreach" && (
+        <GlobalScoutStatus
+          startedAt={discoverStartedAt}
+          onGo={() => setTab("outreach")}
+        />
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
       <div className="flex flex-1 flex-col">
@@ -2041,7 +2256,10 @@ function ScoutTool({
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
-              <div className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]">
+              <div
+                data-tour="project-switcher"
+                className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]"
+              >
                 <div>
                   <Label>Project</Label>
                   <div className="relative">
@@ -2108,7 +2326,10 @@ function ScoutTool({
                 </div>
               </div>
 
-              <div className="grid gap-6 sm:grid-cols-[230px_1fr]">
+              <div
+                data-tour="category-switcher"
+                className="grid gap-6 sm:grid-cols-[230px_1fr]"
+              >
                 <div>
                   <Label>Category of search</Label>
                   <div className="relative">
@@ -2163,6 +2384,45 @@ function ScoutTool({
                 </div>
 
                 <div>
+                  {isJobUseCaseClient(activeUseCase) && (
+                    <div className="mb-3">
+                      <Label>Competitiveness</Label>
+                      <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+                        {(
+                          [
+                            ["", "From profile"],
+                            ["beginner", "Beginner-friendly"],
+                            ["intermediate", "Intermediate"],
+                            ["competitive", "Competitive"],
+                            ["any", "Any"],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <button
+                            key={val || "profile"}
+                            onClick={() => setSearchComp(val as any)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              searchComp === val
+                                ? "bg-white text-ink shadow-card"
+                                : "text-body/70 hover:text-ink"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1.5 text-xs text-body/70">
+                        {searchComp === ""
+                          ? `Using your profile setting${
+                              profile.competitiveness && profile.competitiveness !== "any"
+                                ? ` (${profile.competitiveness})`
+                                : ""
+                            }.`
+                          : searchComp === "any"
+                            ? "Any level — Scout won't filter by selectivity."
+                            : `Scout will focus on ${searchComp} opportunities for this search.`}
+                      </p>
+                    </div>
+                  )}
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <Label className="mb-0">Who are you looking for?</Label>
                     <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} />
@@ -2197,7 +2457,43 @@ function ScoutTool({
                   {discovering ? "Scouting…" : "Scout"}
                 </button>
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
+                {skipped.length > 0 && (
+                  <button
+                    onClick={() => setShowSkipped((v) => !v)}
+                    className="ml-auto text-xs font-semibold text-body/70 underline-offset-2 transition hover:text-brown-deep hover:underline"
+                  >
+                    {showSkipped ? "Hide" : "See"} what was filtered ({skipped.length})
+                  </button>
+                )}
               </div>
+              {showSkipped && skipped.length > 0 && (
+                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-warm-border bg-warm-bg/40 p-4 text-xs">
+                  <ul className="space-y-2">
+                    {skipped.map((s, i) => (
+                      <li key={i} className="flex gap-2 leading-relaxed">
+                        <span className="mt-0.5 shrink-0 rounded bg-brown-tint px-1.5 py-0.5 text-[10px] font-bold uppercase text-brown-deep">
+                          {s.reason}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-ink">
+                            {s.title || "(untitled)"}
+                          </div>
+                          {s.url && (
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="truncate block text-body/60 underline-offset-2 hover:underline"
+                            >
+                              {s.url}
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
             ) : (
               <ProfileGate onSetup={() => setTab("profile")} />
@@ -2229,21 +2525,9 @@ function ScoutTool({
             {discovering && (
               <div className="mt-8 flex items-start gap-3">
                 <Avatar />
-                <div className="relative max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3 shadow-card">
+                <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3.5 shadow-card">
                   <Tail side="left" />
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-semibold text-ink">
-                      Scout is searching
-                    </span>
-                    <span className="ml-1 flex gap-1">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blush [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral [animation-delay:300ms]" />
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-body">
-                    Reading the web and finding real contacts. About 30 to 60 seconds.
-                  </p>
+                  <SearchProgress active={discovering} startedAt={discoverStartedAt} />
                 </div>
               </div>
             )}
@@ -2346,9 +2630,15 @@ function ScoutTool({
                           <span className="font-semibold text-ink">
                             {opp?.name || "Draft"}
                           </span>
-                          <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                            {d.channelType}
-                          </span>
+                          <DraftKindPicker
+                            value={
+                              draftKind[d.opportunityId] ||
+                              (d.channelType === "email" ? "Email" : OUTREACH_KINDS[1])
+                            }
+                            options={OUTREACH_KINDS}
+                            busy={redraftBusyId === d.opportunityId}
+                            onChange={(k) => redraftAs(d.opportunityId, k)}
+                          />
                           {d.to && (
                             <span className="text-xs text-body/70">
                               → <ContactValue value={d.to} className="text-body/70" />
@@ -2503,9 +2793,19 @@ function ScoutTool({
           bio={profile.bio}
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
+          age={profile.age}
+          college={profile.college || ""}
+          location={profile.location || ""}
+          companySize={profile.companySize || "any"}
+          competitiveness={profile.competitiveness || "any"}
           onName={(v) => patchProfile({ name: v })}
           onBio={(v) => patchProfile({ bio: v })}
           onLinkedin={(v) => patchProfile({ linkedin: v })}
+          onAge={(v) => patchProfile({ age: v })}
+          onCollege={(v) => patchProfile({ college: v })}
+          onLocation={(v) => patchProfile({ location: v })}
+          onCompanySize={(v) => patchProfile({ companySize: v })}
+          onCompetitiveness={(v) => patchProfile({ competitiveness: v })}
           onUseCase={changeUseCase}
           onAutofill={autofillIdentity}
           canConfirm={profileComplete}
@@ -2656,6 +2956,199 @@ function ScoutTool({
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------------- Draft kind picker ----------------
+ * A small pill dropdown replacing the static "email/message" tag on a draft
+ * card. Choosing a new outreach kind re-drafts just that message for the new
+ * format (LinkedIn DM, cover letter, text message, etc.) via /api/draft. */
+function DraftKindPicker({
+  value,
+  options,
+  busy,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  busy: boolean;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="relative inline-flex items-center">
+      <select
+        value={value}
+        disabled={busy}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Change outreach format"
+        title="Change outreach format"
+        className="scout-select cursor-pointer appearance-none rounded-full bg-brand-gradient py-0.5 pl-3 pr-6 text-xs font-semibold text-white shadow-card outline-none transition hover:opacity-95 disabled:opacity-60"
+      >
+        {options.map((o) => (
+          <option key={o} value={o} className="text-ink">
+            {o}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-white"
+      >
+        {busy ? "…" : "▾"}
+      </span>
+    </label>
+  );
+}
+
+/* ---------------- Search progress bar ----------------
+ * Discovery takes ~30–60s and the API doesn't stream progress, so we show a
+ * synthetic bar that eases toward ~92% (fast at first, slow near the end) and
+ * rotates through stage labels. `startedAt` is a timestamp lifted to the parent
+ * so the bar computes progress from the real search start — that way switching
+ * tabs and coming back resumes at the correct percentage instead of restarting.
+ * When `active` flips false we snap to 100% before unmounting. */
+const SEARCH_STAGES = [
+  "Reading the web",
+  "Finding real contacts",
+  "Checking who fits",
+  "Ranking your matches",
+  "Almost there",
+];
+const SEARCH_TAU = 22000; // easing time constant — controls approach speed
+const SEARCH_CAP = 92; // hold here until the request actually finishes
+
+function searchPctFor(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  const t = Date.now() - startedAt;
+  return SEARCH_CAP * (1 - Math.exp(-t / SEARCH_TAU));
+}
+function searchStageFor(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  const t = Date.now() - startedAt;
+  return Math.min(SEARCH_STAGES.length - 1, Math.floor(t / 7000));
+}
+
+function SearchProgress({
+  active,
+  startedAt,
+}: {
+  active: boolean;
+  startedAt: number | null;
+}) {
+  // Transient display values — updated every animation frame directly on the
+  // DOM so we don't rerender the component 60×/sec. React state was churning
+  // the whole subtree; refs let CSS + textContent carry the update.
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const pctRef = useRef<HTMLSpanElement | null>(null);
+  const stageRef = useRef<HTMLSpanElement | null>(null);
+
+  const apply = (pctVal: number, stageIdx: number) => {
+    if (barRef.current) barRef.current.style.width = `${pctVal}%`;
+    if (pctRef.current) pctRef.current.textContent = `${Math.round(pctVal)}%`;
+    if (stageRef.current) stageRef.current.textContent = SEARCH_STAGES[stageIdx];
+  };
+
+  useEffect(() => {
+    if (!active) {
+      // Snap to full so the user sees the bar complete before it disappears.
+      apply(100, SEARCH_STAGES.length - 1);
+      return;
+    }
+    apply(searchPctFor(startedAt), searchStageFor(startedAt));
+    let raf = 0;
+    const tick = () => {
+      apply(searchPctFor(startedAt), searchStageFor(startedAt));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, startedAt]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-ink">Scout is searching</span>
+        <span
+          ref={pctRef}
+          className="ml-auto text-xs font-bold tabular-nums text-body/70"
+        >
+          {Math.round(searchPctFor(startedAt))}%
+        </span>
+      </div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brown-tint">
+        <div
+          ref={barRef}
+          className="h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+          style={{ width: `${searchPctFor(startedAt)}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-body">
+        <span ref={stageRef}>{SEARCH_STAGES[searchStageFor(startedAt)]}</span>… Usually 30
+        to 60 seconds.
+      </p>
+    </div>
+  );
+}
+
+/* ---------------- Global search chip ----------------
+ * A compact status pill that stays pinned in the bottom-right whenever a
+ * discovery request is in flight, on every tab. Clicking it takes the user
+ * back to Outreach where the full progress card lives. */
+function GlobalScoutStatus({
+  startedAt,
+  onGo,
+}: {
+  startedAt: number | null;
+  onGo: () => void;
+}) {
+  // Same trick as SearchProgress — write to the DOM directly in the RAF tick
+  // so the chip doesn't rerender every frame.
+  const fillRef = useRef<HTMLSpanElement | null>(null);
+  const pctRef = useRef<HTMLSpanElement | null>(null);
+
+  const apply = (v: number) => {
+    if (fillRef.current) fillRef.current.style.width = `${v}%`;
+    if (pctRef.current) pctRef.current.textContent = `${Math.round(v)}%`;
+  };
+
+  useEffect(() => {
+    apply(searchPctFor(startedAt));
+    let raf = 0;
+    const tick = () => {
+      apply(searchPctFor(startedAt));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startedAt]);
+
+  return (
+    <button
+      onClick={onGo}
+      title="Back to Outreach"
+      className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-warm-border bg-white/95 px-3.5 py-2 shadow-soft backdrop-blur transition hover:border-brown/40 hover:shadow-card"
+    >
+      <span className="relative flex h-5 w-5 items-center justify-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-brown/30" />
+        <span className="relative h-2 w-2 rounded-full bg-brown" />
+      </span>
+      <span className="text-xs font-bold text-ink">Scouting</span>
+      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-brown-tint">
+        <span
+          ref={fillRef}
+          className="block h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+          style={{ width: `${searchPctFor(startedAt)}%` }}
+        />
+      </span>
+      <span
+        ref={pctRef}
+        className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70"
+      >
+        {Math.round(searchPctFor(startedAt))}%
+      </span>
+    </button>
   );
 }
 
@@ -6273,9 +6766,19 @@ function ProfileTab({
   bio,
   linkedin,
   useCase,
+  age,
+  college,
+  location,
+  companySize,
+  competitiveness,
   onName,
   onBio,
   onLinkedin,
+  onAge,
+  onCollege,
+  onLocation,
+  onCompanySize,
+  onCompetitiveness,
   onUseCase,
   onAutofill,
   canConfirm,
@@ -6312,11 +6815,31 @@ function ProfileTab({
   bio: string;
   linkedin: string;
   useCase: string;
+  age?: number;
+  college: string;
+  location: string;
+  companySize: CompanySize;
+  competitiveness: Competitiveness;
   onName: (v: string) => void;
   onBio: (v: string) => void;
   onLinkedin: (v: string) => void;
+  onAge: (v: number | undefined) => void;
+  onCollege: (v: string) => void;
+  onLocation: (v: string) => void;
+  onCompanySize: (v: CompanySize) => void;
+  onCompetitiveness: (v: Competitiveness) => void;
   onUseCase: (v: string) => void;
-  onAutofill: (name?: string, useCase?: string) => void;
+  onAutofill: (
+    name?: string,
+    useCase?: string,
+    extras?: {
+      age?: number | null;
+      education?: string;
+      location?: string;
+      companySize?: string;
+      competitiveness?: string;
+    }
+  ) => void;
   canConfirm: boolean;
   onConfirm: () => void;
   mailboxAvailable: boolean;
@@ -6406,8 +6929,21 @@ function ProfileTab({
       // Build a signature from the resume, but only if the user hasn't set one
       // (never clobber an edited signature).
       if (res.ok && data.signature && !signature.trim()) onSignature(data.signature);
-      if (res.ok && (data.name || data.useCase)) {
-        onAutofill(data.name, data.useCase);
+      const hasExtras =
+        data &&
+        (data.age != null ||
+          !!String(data.education || "").trim() ||
+          !!String(data.location || "").trim() ||
+          !!String(data.companySize || "").trim() ||
+          !!String(data.competitiveness || "").trim());
+      if (res.ok && (data.name || data.useCase || hasExtras)) {
+        onAutofill(data.name, data.useCase, {
+          age: typeof data.age === "number" ? data.age : null,
+          education: data.education || "",
+          location: data.location || "",
+          companySize: data.companySize || "",
+          competitiveness: data.competitiveness || "",
+        });
         setAutofilled(true);
         setNote("Scout filled these in for you. Edit anything that's off.");
       } else if (res.ok) {
@@ -6637,6 +7173,111 @@ function ProfileTab({
               profile <span className="font-semibold">from</span> LinkedIn, upload your
               LinkedIn PDF above or paste your About section below.
             </p>
+          </div>
+        </div>
+
+        {/* -------- About you: personalization Scout weaves into search + drafts -------- */}
+        <div className="mt-7 rounded-2xl border border-warm-border bg-warm-bg/40 p-5">
+          <div className="mb-3">
+            <h3 className="text-sm font-extrabold tracking-tight text-ink">About you</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-body/70">
+              Optional. Scout uses these to match you with the right opportunities
+              and to sound like you in outreach.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label>Age</Label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={13}
+                max={100}
+                value={age ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  onAge(v === "" ? undefined : Number(v));
+                }}
+                placeholder="e.g. 20"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>School or education</Label>
+              <input
+                value={college}
+                onChange={(e) => onCollege(e.target.value)}
+                placeholder="e.g. USC junior, MFA 2022, self-taught"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>Location</Label>
+              <input
+                value={location}
+                onChange={(e) => onLocation(e.target.value)}
+                placeholder="e.g. Los Angeles, CA"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <Label>Company size you want</Label>
+              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                {(
+                  [
+                    ["any", "Any"],
+                    ["small", "Small / startup"],
+                    ["big", "Big / established"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => onCompanySize(val)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      companySize === val
+                        ? "bg-brown text-white shadow-soft"
+                        : "text-body/70 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Competitiveness</Label>
+              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                {(
+                  [
+                    ["any", "Any"],
+                    ["beginner", "Beginner"],
+                    ["intermediate", "Intermediate"],
+                    ["competitive", "Competitive"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => onCompetitiveness(val)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      competitiveness === val
+                        ? "bg-brown text-white shadow-soft"
+                        : "text-body/70 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                First-time applicant? Pick <span className="font-semibold">Beginner</span> —
+                Scout will skip the ultra-selective programs and surface ones you can
+                realistically land.
+              </p>
+            </div>
           </div>
         </div>
 

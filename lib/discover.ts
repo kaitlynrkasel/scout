@@ -253,6 +253,14 @@ async function extract(
     `blog posts about how to reach out, news articles, login/paywall pages, pay-to-play services, off-industry results, and ` +
     `the user themselves. A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
     `an article teaching you how to network is NOT. ` +
+    `MENTIONED IS NOT ENOUGH: if the source is about a PROGRAM, EVENT, ORGANIZATION, or EMPLOYER and only mentions a person ` +
+    `by name in passing — no personal profile page, no interview with them, no direct contact channel — set is_relevant to false. ` +
+    `For target_type "person", the source must EITHER be about the person themselves (their profile page, an interview with ` +
+    `them, coverage of their own career) OR give a direct contact channel (email or LinkedIn URL / handle). Otherwise it's ` +
+    `not a real point of contact. ` +
+    `WHY_IT_FITS DISCIPLINE: must be a specific true detail about THE PERSON'S OWN work, career, projects, or interests — ` +
+    `not about their employer or program. If you can only describe the program they work at, that's a sign this isn't a real ` +
+    `prospect; set is_relevant false. ` +
     `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER); if clearly outside their industry ` +
     `or level, set is_relevant false. Reserve fit_score above 0.7 for results matching BOTH the goal and the user's ` +
     `specific industry/sub-field; give 0.3 or below to off-industry ones.`;
@@ -278,6 +286,15 @@ async function extract(
   }
 }
 
+// One candidate that discover() considered but dropped, plus the human-readable
+// reason. Surfaced in the UI's "See what was filtered" panel so we can debug
+// prompt/filter tweaks without re-running full searches.
+export interface SkippedCandidate {
+  title: string;
+  url: string;
+  reason: string;
+}
+
 export interface DiscoverResult {
   opportunities: Opportunity[];
   searched: number;
@@ -285,6 +302,7 @@ export interface DiscoverResult {
   skippedDupes: number;
   skippedNotFit: number;
   skippedCapped: number; // dropped because too many other users already contacted them
+  skipped: SkippedCandidate[]; // per-candidate log of what got dropped and why
 }
 
 export async function discover(
@@ -303,6 +321,14 @@ export async function discover(
     (feedback?.avoid || []).map((a) => normName(a.name)).filter(Boolean)
   );
 
+  // Per-candidate log of what got skipped and why. Populated at every skip
+  // point below so the UI can show a "See what was filtered" panel.
+  const skipped: SkippedCandidate[] = [];
+  const logSkip = (title: string, url: string, reason: string) => {
+    // Cap so a huge candidate pool doesn't balloon the response.
+    if (skipped.length < 60) skipped.push({ title: title || "", url: url || "", reason });
+  };
+
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
   const seenLinks = new Set<string>();
@@ -310,9 +336,19 @@ export async function discover(
     if (candidates.length >= maxItems * 4) break;
     const results = await tavilySearch(q, 8);
     for (const r of results) {
-      if (looksLikeAdvice(r.title)) continue; // skip how-to / advice pages
+      if (looksLikeAdvice(r.title)) {
+        logSkip(r.title, r.url, "title looks like advice / how-to");
+        continue;
+      }
       const k = canonicalLink(r.url) || urlHost(r.url);
-      if (!k || seenLinks.has(k)) continue;
+      if (!k) {
+        logSkip(r.title, r.url, "no usable URL");
+        continue;
+      }
+      if (seenLinks.has(k)) {
+        logSkip(r.title, r.url, "duplicate link");
+        continue;
+      }
       seenLinks.add(k);
       candidates.push(r);
     }
@@ -336,25 +372,65 @@ export async function discover(
       if (opps.length >= maxItems) break;
       const rec = recs[j];
       const cand = batch[j];
-      if (!rec || rec.isRelevant === false || !String((rec as any).name || "").trim()) {
+      if (!rec) {
         skippedNotFit++;
+        logSkip(cand.title, cand.url, "extractor returned nothing");
+        continue;
+      }
+      if (rec.isRelevant === false) {
+        skippedNotFit++;
+        logSkip(cand.title, cand.url, "extractor marked not relevant");
+        continue;
+      }
+      if (!String((rec as any).name || "").trim()) {
+        skippedNotFit++;
+        logSkip(cand.title, cand.url, "extractor found no name");
         continue;
       }
       const ttype = String((rec as any).target_type || "").toLowerCase();
       // Drop advice/guide content, and for networking require an actual person.
-      if (ttype === "other" || (networking && ttype && ttype !== "person")) {
+      if (ttype === "other") {
         skippedNotFit++;
+        logSkip(cand.title, cand.url, 'target_type "other" (advice/guide)');
+        continue;
+      }
+      if (networking && ttype && ttype !== "person") {
+        skippedNotFit++;
+        logSkip(cand.title, cand.url, `not a person (target_type "${ttype}") for a networking search`);
         continue;
       }
       const r = rec as any;
+      // Backstop for the "name mentioned in an article about their program" case:
+      // if we've got a person with no email, no LinkedIn/handle, and no known
+      // channel, there's no real way to reach them — skip. Company Portal / staff
+      // pages / etc. still pass because their channel isn't "Unknown".
+      if (ttype === "person") {
+        const channel = String(r.channel || "").toLowerCase();
+        const reachable =
+          !!String(r.contact_email || "").trim() ||
+          !!String(r.contact_handle || "").trim() ||
+          (channel && channel !== "unknown");
+        if (!reachable) {
+          skippedNotFit++;
+          logSkip(cand.title, cand.url, "person with no reachable channel (probably mentioned in passing)");
+          continue;
+        }
+      }
       const nm = normName(r.name);
       const host = urlHost(r.url || cand.url);
       if (nm && deniedNames.has(nm)) {
         skippedDupes++;
+        logSkip(cand.title, cand.url, `you denied "${r.name}" before`);
         continue; // already rejected this exact one before
       }
-      if ((nm && knownNames.has(nm)) || (host && knownHosts.has(host))) {
+      if (nm && knownNames.has(nm)) {
         skippedDupes++;
+        logSkip(cand.title, cand.url, `duplicate name: ${r.name}`);
+        continue;
+      }
+      if (host && knownHosts.has(host)) {
+        skippedDupes++;
+        logSkip(cand.title, cand.url, `another find already on ${host}`);
         continue;
       }
       if (nm) knownNames.add(nm);
@@ -460,7 +536,15 @@ export async function discover(
       if (capped.size) {
         kept = opps.filter((o) => {
           const k = targetKey(o);
-          return !k || !capped.has(k);
+          if (k && capped.has(k)) {
+            logSkip(
+              o.name,
+              o.url,
+              "capped: many other Scout users already reached out to this contact"
+            );
+            return false;
+          }
+          return true;
         });
         skippedCapped = opps.length - kept.length;
       }
@@ -476,5 +560,6 @@ export async function discover(
     skippedDupes,
     skippedNotFit,
     skippedCapped,
+    skipped,
   };
 }
