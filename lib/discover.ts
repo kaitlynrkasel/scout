@@ -380,6 +380,42 @@ export async function discover(
     }
   }
 
+  // The same company can slip past name/host dedup by appearing both as a generic
+  // entry ("Round Hill Music") and a specific posting ("Round Hill Music, Copyright
+  // Internship"), often from different pages/hosts. For job/internship hunts, where
+  // you want one entry per employer, collapse by company (outlet), keeping the most
+  // specific (a posting title beats the bare company name).
+  if (isJobUseCase(useCase)) {
+    const specificity = (o: Opportunity) => {
+      const on = normName(o.outlet || "");
+      const nn = normName(o.name || "");
+      return on && nn && nn !== on ? 1 : 0; // name says more than just the company
+    };
+    const byOutlet = new Map<string, Opportunity>();
+    const collapsed: Opportunity[] = [];
+    for (const o of opps) {
+      const key = normName(o.outlet || "");
+      if (!key) {
+        collapsed.push(o);
+        continue;
+      }
+      const existing = byOutlet.get(key);
+      if (!existing) {
+        byOutlet.set(key, o);
+        collapsed.push(o);
+        continue;
+      }
+      skippedDupes++;
+      if (specificity(o) > specificity(existing)) {
+        const i = collapsed.indexOf(existing);
+        if (i >= 0) collapsed[i] = o;
+        byOutlet.set(key, o);
+      }
+    }
+    opps.length = 0;
+    opps.push(...collapsed);
+  }
+
   // Best-fit first.
   opps.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0));
 
