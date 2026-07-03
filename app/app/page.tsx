@@ -598,6 +598,10 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  // Is the signed-in user on the owner allowlist? Drives whether the Account
+  // tab shows an "Admin" link into /admin. The Insights view itself lives on
+  // its own route so customers never see any hint of it in the sidebar.
+  const [isOwner, setIsOwner] = useState(false);
   // Per-search competitiveness override (defaults to the profile setting). "" =
   // inherit from profile; anything else overrides for this search only.
   const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
@@ -842,6 +846,31 @@ function ScoutTool({
       /* localStorage unavailable — skip the tour rather than crash */
     }
   }, []);
+
+  // Probe /api/admin/whoami on load. Server never leaks the allowlist —
+  // returns { owner: false } for anyone not on it, so a normal customer
+  // gets no hint the admin surface exists.
+  useEffect(() => {
+    if (!getToken) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/admin/whoami", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const body = await res.json();
+        if (!cancelled) setIsOwner(!!body?.owner);
+      } catch {
+        /* silent — user is just treated as non-owner */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getToken]);
 
 
   function startTour() {
@@ -2909,6 +2938,29 @@ function ScoutTool({
             onDeleteAccount={deleteAccount}
             onLogout={onLogout}
           />
+
+          {isOwner && (
+            <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="max-w-md">
+                  <h2 className="text-base font-extrabold tracking-tight text-ink">
+                    Team admin
+                  </h2>
+                  <p className="mt-1.5 text-sm leading-relaxed text-body">
+                    Aggregate view of every user's denials, approvals, and
+                    reasons — the signal for tuning Scout's discovery. Only
+                    visible to owners.
+                  </p>
+                </div>
+                <a
+                  href="/admin"
+                  className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+                >
+                  Open admin →
+                </a>
+              </div>
+            </section>
+          )}
         </main>
       )}
 
