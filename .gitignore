@@ -16,3 +16,7 @@ tsconfig.tsbuildinfo
 
 # Dev-only Tavily response cache (see lib/tavily.ts)
 .scout-cache/
+
+# Python bytecode caches (from skill scripts)
+__pycache__/
+*.pyc
