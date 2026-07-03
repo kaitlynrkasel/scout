@@ -5946,6 +5946,76 @@ function UseCaseCombo({
 }
 
 /* ---------------- Gmail connection card ---------------- */
+// Shown when no mailbox is connected: one "Connect email" button that reveals a
+// Gmail / Outlook choice, instead of two separate provider cards.
+function ConnectEmailCard({
+  note,
+  onConnectGmail,
+  onConnectOutlook,
+}: {
+  note: string;
+  onConnectGmail: () => void;
+  onConnectOutlook: () => void;
+}) {
+  const [choosing, setChoosing] = useState(false);
+  return (
+    <section className="mt-5 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 7 9 6 9-6" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-ink">Send from your email</div>
+          <p className="mt-0.5 text-sm leading-relaxed text-body">
+            Connect your email so Scout can put a ready-to-go draft in your inbox, or
+            send it for you, straight from your own address.
+          </p>
+        </div>
+        {choosing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={onConnectGmail}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+            >
+              Gmail
+            </button>
+            <button
+              onClick={onConnectOutlook}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+            >
+              Outlook
+            </button>
+            <button
+              onClick={() => setChoosing(false)}
+              className="text-xs font-semibold text-body/50 transition hover:text-accent"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setChoosing(true)}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Connect email
+          </button>
+        )}
+      </div>
+      {choosing && (
+        <p className="mt-3 text-xs text-body/60">Which email provider do you use?</p>
+      )}
+      {note && (
+        <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/70 px-4 py-2.5 text-xs font-medium text-ink">
+          {note}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function MailboxCard({
   provider,
   conn,
@@ -6254,22 +6324,35 @@ function ProfileTab({
 
       {mailboxAvailable && (
         <>
-          <MailboxCard
-            provider="gmail"
-            conn={gmail}
-            note={gmailNote}
-            onConnect={onConnectGmail}
-            onDisconnect={onDisconnectGmail}
-            onMode={onGmailMode}
-          />
-          <MailboxCard
-            provider="outlook"
-            conn={outlook}
-            note={outlookNote}
-            onConnect={onConnectOutlook}
-            onDisconnect={onDisconnectOutlook}
-            onMode={onOutlookMode}
-          />
+          {/* Neither connected: one "Connect email" card that lets you choose. Once a
+              mailbox is connected, its own card shows (with send mode + disconnect). */}
+          {!gmail.connected && !outlook.connected && (
+            <ConnectEmailCard
+              note={gmailNote || outlookNote}
+              onConnectGmail={onConnectGmail}
+              onConnectOutlook={onConnectOutlook}
+            />
+          )}
+          {gmail.connected && (
+            <MailboxCard
+              provider="gmail"
+              conn={gmail}
+              note={gmailNote}
+              onConnect={onConnectGmail}
+              onDisconnect={onDisconnectGmail}
+              onMode={onGmailMode}
+            />
+          )}
+          {outlook.connected && (
+            <MailboxCard
+              provider="outlook"
+              conn={outlook}
+              note={outlookNote}
+              onConnect={onConnectOutlook}
+              onDisconnect={onDisconnectOutlook}
+              onMode={onOutlookMode}
+            />
+          )}
         </>
       )}
 
