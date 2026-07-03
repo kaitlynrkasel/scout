@@ -57,6 +57,25 @@ function looksLikeAdvice(title: string): boolean {
   );
 }
 
+// Podcast episodes, video clips, and interview transcripts almost never make
+// the person reachable — being a guest on a show isn't a contact channel.
+// Filtered before extraction so we don't waste Claude calls on obvious dead
+// ends. Own-account URLs on these hosts (a channel page, a profile) can still
+// be legit, so we only skip individual-episode / individual-video URLs.
+function looksLikePodcastOrVideoClip(url: string): boolean {
+  const u = String(url || "").toLowerCase();
+  if (!u) return false;
+  // Podcast hosts — episode pages are the whole point of these hosts.
+  if (/(^|\.)(buzzsprout|anchor\.fm|podbean|libsyn|transistor\.fm|captivate\.fm|simplecast|blubrry)\.com/.test(u))
+    return true;
+  if (/podcasts\.apple\.com\/[a-z-]+\/podcast\/.+\/id\d+\?i=\d+/.test(u)) return true; // apple episode url
+  if (/open\.spotify\.com\/episode\//.test(u)) return true;
+  if (/soundcloud\.com\/[^/]+\/[^/]+/.test(u)) return true; // individual soundcloud track, not a profile
+  if (/(youtube\.com\/watch\?|youtu\.be\/)/.test(u)) return true; // individual youtube video
+  if (/vimeo\.com\/\d+(?:\b|$)/.test(u)) return true; // individual vimeo video (numeric id)
+  return false;
+}
+
 // Plan smart, industry-aligned search queries from the goal + the user's actual
 // profile (their field, sub-specialty, seniority, city are inferred from ABOUT).
 // This is what makes results match the user's industry instead of being generic.
@@ -261,9 +280,19 @@ async function extract(
     `WHY_IT_FITS DISCIPLINE: must be a specific true detail about THE PERSON'S OWN work, career, projects, or interests — ` +
     `not about their employer or program. If you can only describe the program they work at, that's a sign this isn't a real ` +
     `prospect; set is_relevant false. ` +
-    `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER); if clearly outside their industry ` +
-    `or level, set is_relevant false. Reserve fit_score above 0.7 for results matching BOTH the goal and the user's ` +
-    `specific industry/sub-field; give 0.3 or below to off-industry ones.`;
+    `PODCASTS / INTERVIEWS / VIDEO CLIPS: episodes, YouTube videos, and interview transcripts almost never make the person ` +
+    `reachable. If the source is a podcast episode or a video and the person is just the guest — no direct email, no LinkedIn ` +
+    `linked from the page, no contact channel — set is_relevant false. Being interviewed on a podcast is not a way to be reached. ` +
+    `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their ` +
+    `industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. ` +
+    `Never surface cross-industry hits unless the goal explicitly asks for that other industry. ` +
+    `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly in a different region / country / ` +
+    `far-away city, penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty. ` +
+    `TIME WINDOW ALIGNMENT: if the user's GOAL specifies a semester or year (e.g. "Fall 2026 internships", "summer 2027 roles"), ` +
+    `and the posting is clearly for a different window (already-closed 2024 posting, or the wrong semester), set is_relevant ` +
+    `false. Don't invent a mismatch when the posting's timing is unclear — only reject when the source explicitly says the wrong ` +
+    `window. Reserve fit_score above 0.7 for results matching goal + industry + location + time window; give 0.3 or below when ` +
+    `two or more of those are off.`;
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
@@ -338,6 +367,10 @@ export async function discover(
     for (const r of results) {
       if (looksLikeAdvice(r.title)) {
         logSkip(r.title, r.url, "title looks like advice / how-to");
+        continue;
+      }
+      if (looksLikePodcastOrVideoClip(r.url)) {
+        logSkip(r.title, r.url, "podcast episode or video clip (guest ≠ contact channel)");
         continue;
       }
       const k = canonicalLink(r.url) || urlHost(r.url);

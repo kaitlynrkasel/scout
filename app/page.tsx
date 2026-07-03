@@ -167,6 +167,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Meet the team */}
+      <MeetTheTeam />
+
       {/* CTA */}
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="relative overflow-hidden rounded-3xl bg-brand-gradient px-8 py-14 text-center shadow-soft">
@@ -297,5 +300,120 @@ function HowStep({ n, title, body }: { n: string; title: string; body: string })
       <h3 className="mt-4 text-[16px] font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-[13px] leading-relaxed text-body">{body}</p>
     </div>
+  );
+}
+
+// ------------------- Meet the team -------------------
+// Each card shows the human + a placeholder for their dog's drawn portrait.
+// Swap DogPortrait's `src` in for a real illustration when the drawings land.
+const TEAM: { name: string; role: string; blurb: string; dogName: string }[] = [
+  {
+    name: "Kaitlyn Kasel",
+    role: "Founder",
+    blurb: "Building the thing she wished existed while running her artist's outreach by hand.",
+    dogName: "Scout",
+  },
+  {
+    name: "Meraki Kasel",
+    role: "Team",
+    blurb: "TBD — add a short line about Meraki here.",
+    dogName: "TBD",
+  },
+  {
+    name: "Suri Kasel",
+    role: "Team",
+    blurb: "TBD — add a short line about Suri here.",
+    dogName: "TBD",
+  },
+];
+
+function MeetTheTeam() {
+  return (
+    <section id="team" className="border-t border-warm-border bg-warm-bg/40">
+      <div className="mx-auto max-w-6xl px-6 py-20">
+        <div className="max-w-2xl">
+          <h2 className="text-3xl font-extrabold tracking-tight text-ink">
+            Meet the <span className="brand-text">team</span>
+          </h2>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            The humans building Scout, plus the dogs supervising every commit.
+          </p>
+        </div>
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+          {TEAM.map((m) => (
+            <TeamCard key={m.name} {...m} />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function TeamCard({
+  name,
+  role,
+  blurb,
+  dogName,
+}: {
+  name: string;
+  role: string;
+  blurb: string;
+  dogName: string;
+}) {
+  return (
+    <div className="flex flex-col overflow-hidden rounded-3xl border border-warm-border bg-white shadow-card transition hover:-translate-y-0.5 hover:shadow-soft">
+      {/* Portrait slot — swap DogPortrait for an <img src=... /> once the
+          drawn illustrations exist. Fixed aspect ratio so cards stay aligned. */}
+      <div className="relative aspect-[4/3] w-full bg-brand-gradient/10">
+        <div className="absolute inset-0 flex items-center justify-center">
+          <DogPortrait />
+        </div>
+        <span className="absolute bottom-3 right-3 rounded-full bg-white/95 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-brown-deep shadow-card">
+          {dogName}
+        </span>
+      </div>
+      <div className="flex flex-1 flex-col p-5">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-accent">
+          {role}
+        </div>
+        <div className="mt-1 text-lg font-extrabold tracking-tight text-ink">
+          {name}
+        </div>
+        <p className="mt-2 text-sm leading-relaxed text-body">{blurb}</p>
+      </div>
+    </div>
+  );
+}
+
+// Placeholder line-drawing of a dog head. Simple enough to feel intentional
+// while the real illustrations get commissioned. Replace this whole component
+// with an <Image src="/team-dogs/<name>.png" ... /> per person when ready.
+function DogPortrait() {
+  return (
+    <svg
+      viewBox="0 0 120 120"
+      width="88"
+      height="88"
+      fill="none"
+      stroke="#7a4c2b"
+      strokeWidth="2.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+      className="opacity-80"
+    >
+      {/* head */}
+      <path d="M30 55c0-14 13-24 30-24s30 10 30 24v10c0 12-8 22-20 26h-20c-12-4-20-14-20-26z" />
+      {/* ears — floppy */}
+      <path d="M30 45c-8 0-14 6-14 14s5 12 14 12" />
+      <path d="M90 45c8 0 14 6 14 14s-5 12-14 12" />
+      {/* eyes */}
+      <circle cx="48" cy="62" r="1.8" fill="#7a4c2b" />
+      <circle cx="72" cy="62" r="1.8" fill="#7a4c2b" />
+      {/* snout */}
+      <path d="M48 80c3 4 8 6 12 6s9-2 12-6" />
+      {/* nose */}
+      <ellipse cx="60" cy="76" rx="4.5" ry="3" fill="#7a4c2b" />
+    </svg>
   );
 }
