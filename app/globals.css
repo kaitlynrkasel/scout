@@ -48,6 +48,51 @@ body::after {
   -webkit-text-fill-color: transparent;
 }
 
+/* ---- Notebook motif: paper depth, taped note, folder tabs, index cards ---- */
+
+/* Soft stacked-paper depth for cards. */
+.paper-card {
+  box-shadow: 0 2px 0 #ddcfb4, 0 18px 30px -22px rgba(60, 42, 24, 0.3);
+}
+
+/* Ruled-paper "note" with a strip of tape at the top. */
+.note-paper {
+  background-image: repeating-linear-gradient(
+    #fffffb,
+    #fffffb 33px,
+    #ece0c6 34px
+  );
+}
+.note-paper::before {
+  content: "";
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%) rotate(-2deg);
+  width: 74px;
+  height: 18px;
+  background: rgba(200, 184, 153, 0.45);
+  border: 1px dashed rgba(124, 88, 55, 0.32);
+}
+
+/* Folder tab that sits on top of a panel. */
+.folder-tab {
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+}
+
+/* Small colored flap on an index card. */
+.idx-flap::before {
+  content: "";
+  position: absolute;
+  top: -1px;
+  left: 18px;
+  width: 44px;
+  height: 6px;
+  background: #c8b899;
+  border-radius: 0 0 4px 4px;
+}
+
 /* Refined native select with a warm-brown chevron. */
 select.scout-select {
   appearance: none;

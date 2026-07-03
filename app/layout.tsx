@@ -13,6 +13,13 @@ const outfit = localFont({
   display: "swap",
 });
 
+// Young Serif — warm, field-guide display face used for headings only.
+const youngSerif = localFont({
+  src: [{ path: "./fonts/YoungSerif-Regular.ttf", weight: "400", style: "normal" }],
+  variable: "--font-serif",
+  display: "swap",
+});
+
 export const metadata: Metadata = {
   title: "Scout — AI Outreach Engine",
   description:
@@ -21,7 +28,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={outfit.variable}>
+    <html lang="en" className={`${outfit.variable} ${youngSerif.variable}`}>
       <body>{children}</body>
     </html>
   );

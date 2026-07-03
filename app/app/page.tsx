@@ -5036,14 +5036,6 @@ function DashboardTab({
     replied: finds.filter((f) => f.status === "replied").length,
     denied: finds.filter((f) => f.status === "denied").length,
   };
-  const pipeMax = Math.max(
-    1,
-    pipe.new,
-    pipe.drafted,
-    pipe.sent,
-    pipe.replied,
-    pipe.denied
-  );
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -5107,9 +5099,9 @@ function DashboardTab({
 
   return (
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
-      <h1 className="text-2xl font-extrabold tracking-tight text-ink">Dashboard</h1>
+      <h1 className="font-serif text-[32px] font-normal tracking-tight text-ink">Dashboard</h1>
       <p className="mt-1 text-sm text-body">
-        How your outreach is going, and how Scout is getting sharper for you.
+        Your outreach notebook — everything in one place.
       </p>
 
       {/* -------- Follow-up reminder -------- */}
@@ -5118,8 +5110,8 @@ function DashboardTab({
           onClick={goFinds}
           className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-sage/50 bg-sage/10 p-4 text-left transition hover:bg-sage/15"
         >
-          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sage/20 text-base">
-            🔔
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sage/20 text-sage">
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
           </span>
           <span className="flex-1">
             <span className="block text-sm font-bold text-ink">
@@ -5158,99 +5150,111 @@ function DashboardTab({
         />
       </section>
 
-      {/* -------- Taste learning + pipeline -------- */}
-      <section className="mt-4 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <div className="rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
-          <h2 className="text-sm font-extrabold text-ink">
-            What Scout is learning about your taste
-          </h2>
-          <p className="mt-0.5 text-xs text-muted">
-            Built from the finds you keep and pass on, all your own data.
-          </p>
-          {learned.decided === 0 ? (
-            <p className="mt-6 text-sm leading-relaxed text-body/70">
-              Nothing learned yet. As you draft messages and set aside finds that
-              aren&apos;t a fit, your deny rate and preferences show up here.
-            </p>
-          ) : (
-            <>
-              <div className="mt-4 flex items-end gap-3">
-                <span className="text-4xl font-extrabold tracking-tight text-ink">
-                  {Math.round(learned.denyRate * 100)}%
-                </span>
-                <div className="pb-1">
-                  <div className="text-xs font-bold uppercase tracking-wider text-muted">
+      {/* -------- Overview panel: taste note + pipeline checklist -------- */}
+      <section className="mt-6">
+        <div className="ml-1 flex">
+          <span className="folder-tab border border-b-0 border-warm-border bg-surface px-5 py-2.5 text-sm font-bold text-ink">
+            Overview
+          </span>
+        </div>
+        <div className="rounded-2xl rounded-tl-none border border-warm-border bg-surface p-5 shadow-card paper-card sm:p-6">
+          <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
+            {/* Taste note — taped ruled paper */}
+            <div className="note-paper relative rounded-xl border border-warm-border p-5 sm:p-6">
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
+                What Scout is learning about your taste
+              </div>
+              {learned.decided === 0 ? (
+                <p className="mt-4 text-sm leading-relaxed text-body/70">
+                  Nothing learned yet. As you draft messages and set aside finds that
+                  aren&apos;t a fit, your deny rate and preferences show up here.
+                </p>
+              ) : (
+                <>
+                  <div className="mt-2 flex items-baseline gap-3">
+                    <span className="text-5xl font-extrabold tracking-tight text-ink">
+                      {Math.round(learned.denyRate * 100)}%
+                    </span>
+                    {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
+                      <span
+                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${
+                          learned.trend.delta < 0
+                            ? "bg-sage/15 text-sage-deep"
+                            : "bg-warm-bg text-muted"
+                        }`}
+                      >
+                        {learned.trend.delta < 0 ? "↓" : "↑"} from{" "}
+                        {Math.round(learned.trend.early * 100)}%
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 text-[11px] font-bold uppercase tracking-wider text-muted">
                     Deny rate
                   </div>
-                  {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
-                    <div
-                      className={`text-xs font-bold ${
-                        learned.trend.delta < 0 ? "text-sage" : "text-muted"
+                  <p className="mt-3 max-w-sm text-sm leading-relaxed text-body/80">
+                    {learned.trend
+                      ? learned.trend.delta < -0.01
+                        ? "Fewer of Scout's finds are misses now than when you started — it's getting your taste."
+                        : learned.trend.delta > 0.01
+                        ? "Recent finds are landing less often. Adjusting your goal wording or project context can sharpen them."
+                        : "Holding steady as Scout learns what fits."
+                      : `You've set aside ${learned.denied} of ${learned.decided} you reviewed. A trend appears once you've reviewed a few more.`}
+                  </p>
+                </>
+              )}
+              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
+                <div className="text-xs text-body/70">
+                  ~{timeSaved} <span className="text-muted">saved (est.)</span>, about 6 min
+                  per message.
+                </div>
+                <button
+                  onClick={goOutreach}
+                  className="ml-auto rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
+                >
+                  Find more opportunities
+                </button>
+              </div>
+            </div>
+
+            {/* Pipeline checklist */}
+            <div>
+              <h2 className="font-serif text-lg font-normal text-ink">Pipeline</h2>
+              <div className="mt-3">
+                {(
+                  [
+                    { label: "New finds", n: pipe.new },
+                    { label: "Drafted", n: pipe.drafted },
+                    { label: "Sent", n: pipe.sent },
+                    { label: "Replied", n: pipe.replied },
+                  ] as const
+                ).map((r, i, arr) => (
+                  <div
+                    key={r.label}
+                    className={`flex items-center gap-3 py-2.5 ${
+                      i < arr.length - 1 ? "border-b border-dashed border-warm-border" : ""
+                    }`}
+                  >
+                    <span
+                      className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-2 ${
+                        r.n > 0 ? "border-brown bg-brown" : "border-clay"
                       }`}
                     >
-                      {learned.trend.delta < 0 ? "▼ down" : "▲ up"} from{" "}
-                      {Math.round(learned.trend.early * 100)}%
-                    </div>
-                  )}
-                </div>
+                      {r.n > 0 && (
+                        <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                      )}
+                    </span>
+                    <span className="flex-1 text-sm font-medium text-ink">{r.label}</span>
+                    <span className="text-sm font-extrabold tabular-nums text-ink">{r.n}</span>
+                  </div>
+                ))}
               </div>
-              <p className="mt-3 text-xs leading-relaxed text-body/70">
-                {learned.trend
-                  ? learned.trend.delta < -0.01
-                    ? "Fewer of Scout's finds are misses now than when you started, it's getting your taste."
-                    : learned.trend.delta > 0.01
-                    ? "Recent finds are landing less often. Adjusting your goal wording or project context can sharpen them."
-                    : "Holding steady as Scout learns what fits."
-                  : `You've set aside ${learned.denied} of ${learned.decided} you reviewed. A trend appears once you've reviewed a few more.`}
-              </p>
-            </>
-          )}
-          <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
-            <div className="text-xs text-body/70">
-              ~{timeSaved} <span className="text-muted">saved (est.)</span>, about 6 min
-              per message.
+              <div className="mt-3 border-t border-warm-border pt-3 text-xs text-body/70">
+                <b className="text-ink">
+                  {pipe.new} {pipe.new === 1 ? "person" : "people"}
+                </b>{" "}
+                waiting for you in Finds.
+              </div>
             </div>
-            <button
-              onClick={goOutreach}
-              className="ml-auto rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
-            >
-              Find more opportunities
-            </button>
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
-          <h2 className="text-sm font-extrabold text-ink">Your pipeline</h2>
-          <p className="mt-0.5 text-xs text-muted">Finds across every project</p>
-          <div className="mt-4 grid gap-3">
-            {(
-              [
-                { label: "New", n: pipe.new, color: "bg-brown-tint" },
-                { label: "Drafted", n: pipe.drafted, color: "bg-brown" },
-                { label: "Sent", n: pipe.sent, color: "bg-brown-deep" },
-                { label: "Replied", n: pipe.replied, color: "bg-sage" },
-                { label: "Denied", n: pipe.denied, color: "bg-danger" },
-              ] as const
-            ).map((r) => (
-              <div key={r.label} className="flex items-center gap-3 text-sm">
-                <span className="w-16 text-xs font-semibold text-body">{r.label}</span>
-                <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-brown-tint">
-                  <span
-                    className={`block h-full rounded-full ${r.color}`}
-                    style={{ width: `${Math.round((r.n / pipeMax) * 100)}%` }}
-                  />
-                </span>
-                <span className="w-6 text-right text-xs font-extrabold text-ink">
-                  {r.n}
-                </span>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 border-t border-warm-border pt-3 text-xs text-body/70">
-            <b className="text-ink">
-              {pipe.new} {pipe.new === 1 ? "person" : "people"}
-            </b>{" "}
-            waiting for you in Finds.
           </div>
         </div>
       </section>
@@ -5265,7 +5269,7 @@ function DashboardTab({
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
         <section className="mt-10">
-          <h2 className="text-lg font-bold text-ink">Your fit and preferences</h2>
+          <h2 className="font-serif text-xl font-normal text-ink">Your fit and preferences</h2>
           <p className="mt-1 text-sm text-body/80">
             The fit level and channels you gravitate toward, learned from the finds
             you keep and pass on.
@@ -5390,7 +5394,7 @@ function DashboardTab({
       {/* -------- Your projects -------- */}
       <section className="mt-10">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-ink">Your projects</h2>
+          <h2 className="font-serif text-xl font-normal text-ink">Your projects</h2>
           <button
             onClick={goOutreach}
             className="text-xs font-bold text-accent transition hover:underline"
@@ -5409,9 +5413,9 @@ function DashboardTab({
               return (
                 <div
                   key={p.id}
-                  className="flex items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card"
                 >
-                  <span className="h-10 w-10 shrink-0 rounded-xl bg-brand-gradient" />
+                  <span className="h-10 w-10 shrink-0 rounded-xl bg-brown" />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold text-ink">{p.name}</div>
                     <div className="truncate text-xs text-muted">
@@ -5427,7 +5431,7 @@ function DashboardTab({
 
       {/* -------- You vs the community (real aggregate averages) -------- */}
       <section className="mt-10">
-        <h2 className="text-lg font-bold text-ink">You vs the community</h2>
+        <h2 className="font-serif text-xl font-normal text-ink">You vs the community</h2>
         <p className="mt-1 text-sm text-body/80">
           How you compare to everyone else using Scout. Aggregate averages only,
           never anyone&apos;s private data.
@@ -5477,7 +5481,7 @@ function DashboardTab({
 
       {/* -------- What Scout has learned about YOU lately (individual) -------- */}
       <section className="mt-10">
-        <h2 className="text-lg font-bold text-ink">What Scout has learned about you</h2>
+        <h2 className="font-serif text-xl font-normal text-ink">What Scout has learned about you</h2>
         <p className="mt-1 text-sm text-body/80">
           Recent, private-to-you signals Scout picks up as you work. These steer who it
           finds and how it drafts.
@@ -5490,10 +5494,10 @@ function DashboardTab({
                 className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
               >
                 <span
-                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-xs text-sage"
+                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-sage"
                   aria-hidden
                 >
-                  ✦
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18" /></svg>
                 </span>
                 <div>
                   <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
@@ -5519,7 +5523,7 @@ function DashboardTab({
       {/* -------- Getting sharper across Scout (public, everyone) -------- */}
       {community && (community.patterns?.decidedFinds || 0) > 0 && (
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
-          <h2 className="text-lg font-bold text-ink">Getting sharper across Scout</h2>
+          <h2 className="font-serif text-xl font-normal text-ink">Getting sharper across Scout</h2>
           <p className="mt-1 text-sm text-body/80">
             Scout learns from everyone&apos;s decisions (anonymously, in aggregate). The
             more the community decides, the better it matches for all of you.
@@ -5582,7 +5586,7 @@ function DashboardTab({
         if (!tips.length) return null;
         return (
           <section className="mt-8 rounded-3xl border border-sage/40 bg-sage/10 p-6">
-            <h2 className="text-lg font-bold text-ink">People like you</h2>
+            <h2 className="font-serif text-xl font-normal text-ink">People like you</h2>
             <p className="mt-1 text-sm text-body/80">
               Patterns from {c.users} other{" "}
               {c.users === 1 ? "person" : "people"} doing{" "}
