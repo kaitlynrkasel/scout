@@ -148,6 +148,20 @@ interface Find {
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
+  application?: {
+    overview?: string;
+    howToApply?: string;
+    components: any[]; // { title, kind, prompt, constraints, required, draft?, action? }
+    generatedAt: number;
+  };
+}
+
+// Does this use case look like a job / internship hunt? Mirrors the server's
+// isJobUseCase so the client can offer full-application drafting for those.
+function isJobUseCaseClient(useCase: string): boolean {
+  return /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application)/i.test(
+    useCase || ""
+  );
 }
 
 // Quick reasons offered when passing on a find (plus free-text "Other").
@@ -385,6 +399,7 @@ function ScoutTool({
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
   const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
+  const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
 
   // ---- Gmail connection ----
   const [gmail, setGmail] = useState<{
@@ -1173,6 +1188,65 @@ function ScoutTool({
     }
   }
 
+  // Read a specific internship/job posting and draft every written application
+  // component (cover letter, essays, short answers) from the user's profile.
+  async function draftApplicationFor(find: Find) {
+    if (!find.opp.url) {
+      setRepliesNote("This opening has no link to read.");
+      return;
+    }
+    setApplyingId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/application", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: find.opp.url,
+          name: find.opp.name,
+          outlet: find.opp.outlet,
+          about: aboutText,
+          useCase: activeUseCase,
+          coaching,
+          editPairs,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't read that application.");
+        return;
+      }
+      const components = Array.isArray(j.components) ? j.components : [];
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? {
+                ...f,
+                application: {
+                  overview: j.overview || "",
+                  howToApply: j.howToApply || "",
+                  components,
+                  generatedAt: Date.now(),
+                },
+              }
+            : f
+        )
+      );
+      const drafted = components.filter((c: any) => c.draft).length;
+      setRepliesNote(
+        components.length
+          ? `Read ${find.opp.name}'s application: ${components.length} ${
+              components.length === 1 ? "item" : "items"
+            }${drafted ? `, drafted ${drafted} for you` : ""}. See the card.`
+          : `Read ${find.opp.name}, but couldn't find specific application requirements on the page.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't read that application.");
+    } finally {
+      setApplyingId("");
+    }
+  }
+
   // Draft a short follow-up nudge for a sent-but-unanswered find. If it went out
   // via Gmail, the nudge is written as an in-thread reply.
   async function followUpFind(find: Find) {
@@ -1844,6 +1918,9 @@ function ScoutTool({
           scanningId={scanningId}
           onFollowUp={followUpFind}
           followUpId={followUpId}
+          jobMode={isJobUseCaseClient(activeUseCase)}
+          onDraftApplication={draftApplicationFor}
+          applyingId={applyingId}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -2469,6 +2546,9 @@ function FindsTab({
   scanningId,
   onFollowUp,
   followUpId,
+  jobMode,
+  onDraftApplication,
+  applyingId,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2495,6 +2575,9 @@ function FindsTab({
   scanningId: string;
   onFollowUp: (f: Find) => void;
   followUpId: string;
+  jobMode: boolean;
+  onDraftApplication: (f: Find) => void;
+  applyingId: string;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -2611,6 +2694,9 @@ function FindsTab({
               scanning={scanningId === f.id}
               onFollowUp={() => onFollowUp(f)}
               followUpBusy={followUpId === f.id}
+              jobMode={jobMode}
+              onDraftApplication={() => onDraftApplication(f)}
+              applying={applyingId === f.id}
             />
           ))}
         </div>
@@ -2651,6 +2737,115 @@ function FindStatusBadge({
   );
 }
 
+// The read-out of an internship/job application: an overview, how to apply, and
+// every component, with Scout's draft for the written ones and a to-do for the
+// rest. Each drafted piece is copyable; "Copy all" grabs the whole packet.
+function ApplicationPacket({
+  app,
+  onCopy,
+}: {
+  app: NonNullable<Find["application"]>;
+  onCopy: () => void;
+}) {
+  const [copied, setCopied] = useState("");
+  const components = app.components || [];
+  const drafted = components.filter((c: any) => c.draft);
+  const todos = components.filter((c: any) => !c.draft);
+
+  const copy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    onCopy();
+    setCopied(key);
+    setTimeout(() => setCopied(""), 1500);
+  };
+  const copyAll = () => {
+    const all = drafted
+      .map((c: any) => `${c.title}\n${"-".repeat(c.title.length)}\n${c.draft}`)
+      .join("\n\n\n");
+    copy(all, "__all");
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-wider text-accent">
+          Application
+        </span>
+        {app.overview && <span className="text-xs text-body/80">{app.overview}</span>}
+        {drafted.length > 1 && (
+          <button
+            onClick={copyAll}
+            className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-white"
+          >
+            {copied === "__all" ? "Copied!" : "Copy all"}
+          </button>
+        )}
+      </div>
+
+      {app.howToApply && (
+        <div className="mt-1.5 text-xs leading-relaxed text-body">
+          <span className="font-semibold">How to apply: </span>
+          {app.howToApply}
+        </div>
+      )}
+
+      {components.length === 0 && (
+        <p className="mt-2 text-xs text-body/60">
+          No specific written requirements were listed on the page.
+        </p>
+      )}
+
+      {/* Drafted written components */}
+      <div className="mt-2.5 space-y-2.5">
+        {drafted.map((c: any, i: number) => (
+          <div key={`d${i}`} className="rounded-lg border border-warm-border bg-white p-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-sm font-bold text-ink">{c.title}</span>
+              {c.constraints && (
+                <span className="text-[11px] text-body/60">{c.constraints}</span>
+              )}
+              <button
+                onClick={() => copy(c.draft, `d${i}`)}
+                className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+              >
+                {copied === `d${i}` ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            {c.prompt && c.prompt !== c.title && (
+              <div className="mt-0.5 text-[11px] italic text-body/60">{c.prompt}</div>
+            )}
+            <pre className="mt-1.5 whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
+              {c.draft}
+            </pre>
+          </div>
+        ))}
+      </div>
+
+      {/* Things the applicant must supply themselves */}
+      {todos.length > 0 && (
+        <div className="mt-2.5 border-t border-warm-border pt-2.5">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-body/50">
+            You&apos;ll also need to provide
+          </div>
+          <ul className="space-y-1">
+            {todos.map((c: any, i: number) => (
+              <li key={`t${i}`} className="flex items-start gap-1.5 text-xs text-body">
+                <span className="mt-0.5 text-body/40" aria-hidden>
+                  ▢
+                </span>
+                <span>
+                  <span className="font-semibold text-ink">{c.title}.</span>
+                  {c.action ? ` ${c.action}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindCard({
   find,
   gmail,
@@ -2670,6 +2865,9 @@ function FindCard({
   scanning,
   onFollowUp,
   followUpBusy,
+  jobMode,
+  onDraftApplication,
+  applying,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
@@ -2689,6 +2887,9 @@ function FindCard({
   scanning: boolean;
   onFollowUp: () => void;
   followUpBusy: boolean;
+  jobMode: boolean;
+  onDraftApplication: () => void;
+  applying: boolean;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -2829,6 +3030,11 @@ function FindCard({
         </div>
       )}
 
+      {/* Full application packet (job/internship) */}
+      {find.application && (
+        <ApplicationPacket app={find.application} onCopy={onCopy} />
+      )}
+
       {/* Actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {find.status === "new" && (
@@ -2838,6 +3044,22 @@ function FindCard({
             className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
           >
             {drafting ? "Drafting…" : "Draft a message"}
+          </button>
+        )}
+
+        {/* Job/internship: read the posting and draft the whole application */}
+        {jobMode && o.url && !denied && (
+          <button
+            onClick={onDraftApplication}
+            disabled={applying}
+            title="Read this posting's requirements and draft every written part from your profile"
+            className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+          >
+            {applying
+              ? "Reading the application…"
+              : find.application
+              ? "Redo application"
+              : "Draft full application"}
           </button>
         )}
 
