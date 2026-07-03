@@ -17,6 +17,7 @@ Rebrand to a **warm-brown + cream** palette, clean and inviting, not overwhelmin
 - Design tokens live in `tailwind.config.ts` + `app/globals.css`; older names
   (`coral`/`blush`/`accent`/`warm-*`) are remapped to browns so the whole app
   shifts palette centrally.
-- The Scout **logo is a placeholder** (dashed slot in the sidebar) — Kaitlyn/owner
-  will supply the real mark (dog-nose motif). Do not generate a logo.
+- The Scout **logo** is the owner's brushed dog-nose mark at `public/scout-logo.png`
+  (also the favicon at `app/icon.png`). Every logo spot (sidebar, footer, landing
+  nav, avatar) points at that one asset; to update the mark, replace that file.
 - Clickable design reference: `design/redesign-mock.html`.

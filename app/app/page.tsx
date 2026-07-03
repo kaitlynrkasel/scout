@@ -1806,14 +1806,9 @@ function SideNav({
 
   return (
     <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col gap-1 border-r border-warm-border bg-surface p-4">
-      <div className="flex items-center gap-3 px-2 pb-4 pt-1">
-        {/* Logo placeholder — swap this slot for the real Scout mark. */}
-        <span
-          aria-hidden
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-dashed border-warm-border bg-brown-tint text-[7px] font-bold uppercase leading-none tracking-wide text-muted"
-        >
-          Logo
-        </span>
+      <div className="flex items-center gap-2.5 px-2 pb-4 pt-1">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/scout-logo.png" alt="Scout" width={36} height={36} className="h-9 w-9" />
         <span className="text-xl font-extrabold tracking-tight text-ink">Scout</span>
       </div>
 
@@ -4751,38 +4746,16 @@ function HeroArt() {
 }
 
 function Logo({ small = false, white = false }: { small?: boolean; white?: boolean }) {
-  const s = small ? 18 : 24;
-  if (white) {
-    return (
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path
-          d="M6 7.5h12a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1h-6.5L8 17.6A.45.45 0 0 1 7.3 17.2V15H6a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1Z"
-          stroke="white"
-          strokeWidth="1.6"
-          fill="none"
-          strokeLinejoin="round"
-        />
-        <path d="M8 10.2h8 M8 12.4h5" stroke="white" strokeWidth="1.5" strokeLinecap="round" />
-      </svg>
-    );
-  }
+  const s = white ? 18 : small ? 18 : 24;
   return (
-    <svg width={s} height={s} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="cc-grad" x1="0" y1="0" x2="24" y2="24">
-          <stop stopColor="#7a5b41" />
-          <stop offset="1" stopColor="#5e4530" />
-        </linearGradient>
-      </defs>
-      <rect width="24" height="24" rx="7" fill="url(#cc-grad)" />
-      <path
-        d="M6 7.5h12a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1h-6.5L8 17.6A.45.45 0 0 1 7.3 17.2V15H6a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1Z"
-        stroke="white"
-        strokeWidth="1.5"
-        fill="none"
-        strokeLinejoin="round"
-      />
-      <path d="M8 10.2h8 M8 12.4h5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/scout-logo.png"
+      alt="Scout"
+      width={s}
+      height={s}
+      // On a brown background (the Avatar), tint the brown mark to white.
+      className={white ? "[filter:brightness(0)_invert(1)]" : ""}
+    />
   );
 }
