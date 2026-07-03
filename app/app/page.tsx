@@ -3304,6 +3304,24 @@ function ApplicationPacket({
   );
 }
 
+// Card color by status, and for sent outreach, by how long it's gone unanswered:
+// fresh sends stay neutral, warm to amber as they age, then coral once a
+// follow-up is due. Replied is a calm green; denied fades out. (Class strings are
+// literal so Tailwind keeps them.)
+function findCardTone(find: Find): string {
+  if (find.status === "denied") return "border-warm-border bg-white/60 opacity-70";
+  if (find.status === "replied") return "border-sage/50 bg-sage/10";
+  if (find.status === "sent") {
+    const days = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
+    if (days >= 7 && !find.lastFollowUpAt) return "border-coral/50 bg-coral/10"; // follow-up due
+    if (days >= 7) return "border-amber-300/60 bg-amber-50/70"; // followed up, still waiting
+    if (days >= 4) return "border-amber-300/50 bg-amber-50/60"; // aging
+    return "border-sage/30 bg-white"; // fresh send
+  }
+  if (find.status === "drafted") return "border-coral/30 bg-warm-bg/40"; // draft ready
+  return "border-warm-border bg-white"; // new
+}
+
 function FindCard({
   find,
   gmail,
@@ -3372,12 +3390,8 @@ function FindCard({
 
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-card transition ${
-        denied
-          ? "border-warm-border bg-white/60 opacity-70"
-          : find.pinned
-          ? "border-coral/40 bg-warm-bg/40 ring-1 ring-coral/20"
-          : "border-warm-border bg-white"
+      className={`rounded-2xl border p-4 shadow-card transition ${findCardTone(find)} ${
+        find.pinned ? "ring-1 ring-coral/30" : ""
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
