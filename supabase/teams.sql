@@ -86,6 +86,19 @@ create index if not exists workspace_members_user_idx on public.workspace_member
 create index if not exists shared_project_members_user_idx on public.shared_project_members (user_id);
 create index if not exists workspace_invites_email_idx on public.workspace_invites (email);
 
+-- ---------- Grants ----------
+-- The app's server routes read and write team data with the service-role key.
+-- Some Supabase projects (especially with the new sb_secret_ API keys) do NOT
+-- grant the service_role table privileges by default, which shows up as
+-- "permission denied for table workspaces" even though the key is valid. These
+-- grants give the trusted backend role access (it still bypasses RLS), and the
+-- ALTER DEFAULT PRIVILEGES lines make sure future tables are covered too.
+grant usage on schema public to service_role;
+grant all privileges on all tables in schema public to service_role;
+grant all privileges on all sequences in schema public to service_role;
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
+
 -- ---------- Membership helpers (security definer avoids RLS recursion) ----------
 
 create or replace function public.is_workspace_member(wid uuid)

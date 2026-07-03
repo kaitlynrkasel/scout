@@ -15,6 +15,11 @@ That creates: `workspaces`, `workspace_members`, `workspace_invites`,
 `shared_projects`, `shared_project_members`, `shared_finds`, plus row-level-security
 so people can only read data for teams they belong to.
 
+> **If you already ran an earlier version of this file** and creating a workspace
+> fails with **"permission denied for table workspaces"**, re-run `teams.sql`. The
+> current version adds the missing `GRANT`s to the service role (some projects, with
+> the new `sb_secret_` keys, don't grant it by default). Re-running is safe.
+
 No new environment variables are needed — Teams reuses the same Supabase keys already
 in `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`).
