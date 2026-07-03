@@ -9,6 +9,31 @@ import { resolveTemplate, GENERIC } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import type { Opportunity } from "./types";
 
+// What the user has taught Scout by denying / keeping past finds. Fed into query
+// planning and extraction so the search learns their taste over time.
+export interface DiscoverFeedback {
+  avoid?: { name: string; reason: string }[]; // denied finds + why
+  favor?: { name: string; why: string }[]; // kept / drafted finds + why they fit
+}
+
+// Compact "learned from your feedback" block for the Claude prompts.
+function feedbackBlock(feedback?: DiscoverFeedback): string {
+  const avoid = (feedback?.avoid || []).filter((a) => a && (a.name || a.reason)).slice(0, 12);
+  const favor = (feedback?.favor || []).filter((f) => f && f.name).slice(0, 10);
+  let s = "";
+  if (favor.length) {
+    s +=
+      "\n\nWORKED BEFORE — the user KEPT and reached out to these, so favor results like them:\n" +
+      favor.map((f) => `- ${f.name}${f.why ? ` (${f.why})` : ""}`).join("\n");
+  }
+  if (avoid.length) {
+    s +=
+      "\n\nREJECTED BEFORE — the user passed on these; treat the reasons as firm rules and steer away from similar results:\n" +
+      avoid.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n");
+  }
+  return s;
+}
+
 function buildQueries(goal: string, useCase: string): string[] {
   const tails = resolveTemplate(useCase)?.queryTails || GENERIC.queryTails;
   const g = goal.trim();
@@ -38,7 +63,8 @@ function looksLikeAdvice(title: string): boolean {
 async function planQueries(
   goal: string,
   about: string,
-  useCase: string
+  useCase: string,
+  feedback?: DiscoverFeedback
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -78,7 +104,8 @@ async function planQueries(
     "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
     "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
   const user =
-    `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}`;
+    `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
+    feedbackBlock(feedback);
 
   try {
     const parsed: any = parseJsonLoose(await claudeJson(sys, user));
@@ -197,7 +224,8 @@ async function extract(
   cand: TavilyResult,
   goal: string,
   about: string,
-  useCase: string
+  useCase: string,
+  feedback?: DiscoverFeedback
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
   const noun = (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
   const sys =
@@ -222,8 +250,9 @@ async function extract(
     `why_it_fits (one specific, true detail about them tied to the user's field, used to personalize outreach; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
+  const learned = feedbackBlock(feedback);
   const user =
-    `${ctx}\n${fields}\n\nSEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 2800)}`;
+    `${ctx}\n${fields}${learned}\n\nSEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 2800)}`;
   try {
     return parseJsonLoose(await claudeJson(sys, user));
   } catch (e) {
@@ -244,10 +273,15 @@ export async function discover(
   goal: string,
   about: string,
   useCase: string,
-  maxItems = 10
+  maxItems = 10,
+  feedback?: DiscoverFeedback
 ): Promise<DiscoverResult> {
-  const queries = await planQueries(goal, about, useCase);
+  const queries = await planQueries(goal, about, useCase, feedback);
   const networking = isNetworkingUseCase(useCase);
+  // Skip anyone the user already denied by name — never resurface a rejected find.
+  const deniedNames = new Set(
+    (feedback?.avoid || []).map((a) => normName(a.name)).filter(Boolean)
+  );
 
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
@@ -276,7 +310,7 @@ export async function discover(
   for (let i = 0; i < candidates.length && opps.length < maxItems; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
     const recs = await Promise.all(
-      batch.map((c) => extract(c, goal, about, useCase))
+      batch.map((c) => extract(c, goal, about, useCase, feedback))
     );
     for (let j = 0; j < recs.length; j++) {
       if (opps.length >= maxItems) break;
@@ -295,6 +329,10 @@ export async function discover(
       const r = rec as any;
       const nm = normName(r.name);
       const host = urlHost(r.url || cand.url);
+      if (nm && deniedNames.has(nm)) {
+        skippedDupes++;
+        continue; // already rejected this exact one before
+      }
       if ((nm && knownNames.has(nm)) || (host && knownHosts.has(host))) {
         skippedDupes++;
         continue;

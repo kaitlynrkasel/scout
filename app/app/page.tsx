@@ -1064,10 +1064,23 @@ function ScoutTool({
     resetResults();
     setDiscovering(true);
     try {
+      // Teach the search from this project's history: avoid denied finds (with
+      // reasons), favor the ones the user kept/drafted.
+      const projFinds = finds.filter((f) => f.projectId === activeId);
+      const feedback = {
+        avoid: projFinds
+          .filter((f) => f.status === "denied")
+          .slice(0, 15)
+          .map((f) => ({ name: f.opp.name, reason: f.denyReason || "" })),
+        favor: projFinds
+          .filter((f) => f.status !== "denied" && f.status !== "new")
+          .slice(0, 10)
+          .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
+      };
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, useCase: activeUseCase }),
+        body: JSON.stringify({ goal, about: aboutText, useCase: activeUseCase, feedback }),
       });
       const data = await res.json();
       if (!res.ok) {
