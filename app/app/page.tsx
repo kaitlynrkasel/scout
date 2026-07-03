@@ -6,6 +6,7 @@ import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
+import { Reveal, CountUp } from "./motion";
 import Tutorial, { type TourStep } from "./Tutorial";
 import { fileToText } from "@/lib/fileText";
 import {
@@ -2329,7 +2330,7 @@ function ScoutTool({
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-extrabold tracking-tight text-ink">Outreach</h1>
+            <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">Outreach</h1>
             <p className="mt-1 text-sm text-body">
               Find the right people and draft messages in your voice.
             </p>
@@ -2924,7 +2925,7 @@ function ScoutTool({
 
       {tab === "account" && accountEmail && (
         <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
             Your <span className="brand-text">account</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -2966,7 +2967,7 @@ function ScoutTool({
 
       {tab === "settings" && (
         <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
             <span className="brand-text">Settings</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -3816,7 +3817,7 @@ function FindsTab({
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
             Your <span className="brand-text">finds</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -4873,7 +4874,7 @@ function DashboardTab({
       )}
 
       {/* -------- Activity (real counts) -------- */}
-      <section className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Reveal as="section" className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile
           n={activity.searches}
           label="Searches run"
@@ -4894,7 +4895,7 @@ function DashboardTab({
           label="Taken to send"
           icon={<path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6z" />}
         />
-      </section>
+      </Reveal>
 
       {/* -------- Overview panel: taste note + pipeline checklist -------- */}
       <section className="mt-6">
@@ -5148,7 +5149,7 @@ function DashboardTab({
             Go to Outreach →
           </button>
         </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        <Reveal className="mt-4 grid gap-3 sm:grid-cols-2">
           {projects.length === 0 ? (
             <p className="text-sm text-muted">No projects yet.</p>
           ) : (
@@ -5172,7 +5173,7 @@ function DashboardTab({
               );
             })
           )}
-        </div>
+        </Reveal>
       </section>
 
       {/* -------- You vs the community (real aggregate averages) -------- */}
@@ -5866,7 +5867,9 @@ function StatTile({
           {icon}
         </svg>
       </span>
-      <div className="text-3xl font-extrabold tracking-tight text-ink">{n}</div>
+      <div className="text-3xl font-extrabold tracking-tight text-ink">
+        <CountUp value={n} />
+      </div>
       <div className="mt-1 text-xs font-semibold text-body">{label}</div>
     </div>
   );
@@ -6089,7 +6092,7 @@ function TeamTab({
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
         Your <span className="brand-text">team</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -6444,7 +6447,7 @@ function TemplatesTab({
   };
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
         Your <span className="brand-text">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -7096,7 +7099,7 @@ function ProfileTab({
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
