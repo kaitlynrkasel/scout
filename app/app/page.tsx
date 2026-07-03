@@ -60,6 +60,20 @@ const GENERIC_SUGGESTIONS: { name: string; goal: string }[] = [
   { name: "Partners", goal: "people or organizations who could partner with me" },
 ];
 
+// Drop duplicate categories within the same project (same trimmed, case-folded
+// name), keeping the first. Cleans up any dupes seeded across earlier sessions.
+function dedupeCats<T extends { name: string; projectId: string }>(cats: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const c of cats) {
+    const key = `${c.projectId}::${String(c.name || "").trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 // Suggested categories for a use case: tailored set for a preset, generic otherwise.
 function suggestionsFor(useCase: string): { name: string; goal: string }[] {
   return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
@@ -524,6 +538,15 @@ function ScoutTool({
       saveCats(cats);
     }
     if (!projs.some((p) => p.id === active)) active = projs[0].id;
+
+    // Clean up any duplicate categories from earlier seeding before showing them.
+    const cleaned = dedupeCats(cats);
+    if (cleaned.length !== cats.length) {
+      cats = cleaned;
+      try {
+        localStorage.setItem(CAT_KEY, JSON.stringify(cats));
+      } catch {}
+    }
 
     setProfile(prof);
     setProjects(projs);
@@ -1157,6 +1180,11 @@ function ScoutTool({
   function addCategoryToProject(projectId: string, name: string, goal = "") {
     const nm = name.trim();
     if (!nm) return;
+    // Don't add a category this project already has (same name, case-insensitive).
+    const exists = categories.some(
+      (c) => c.projectId === projectId && c.name.trim().toLowerCase() === nm.toLowerCase()
+    );
+    if (exists) return;
     const c: Category = {
       id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: nm,
