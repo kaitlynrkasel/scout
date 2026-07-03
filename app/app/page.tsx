@@ -1698,7 +1698,8 @@ function ScoutTool({
   // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
   const [repliesBusy, setRepliesBusy] = useState(false);
   const [repliesNote, setRepliesNote] = useState("");
-  async function checkReplies() {
+  async function checkReplies(opts?: { silent?: boolean }) {
+    const silent = !!opts?.silent;
     if (!getToken) return;
     const token = await getToken();
     if (!token) return;
@@ -1713,13 +1714,14 @@ function ScoutTool({
       .slice(0, 20)
       .map((f) => ({ id: f.id, threadId: f.outlookThreadId }));
     if (!gmailCands.length && !outlookCands.length) {
-      setRepliesNote(
-        "Nothing to check yet. Send a message through Gmail or Outlook first and replies get tracked automatically."
-      );
+      if (!silent)
+        setRepliesNote(
+          "Nothing to check yet. Send a message through Gmail or Outlook first and replies get tracked automatically."
+        );
       return;
     }
     setRepliesBusy(true);
-    setRepliesNote("");
+    if (!silent) setRepliesNote("");
     // Ask each connected provider about its own threads, then merge the results.
     const ask = async (path: string, threads: any[]) => {
       if (!threads.length) return { replied: [] as string[], checked: 0, error: "" };
@@ -1750,18 +1752,40 @@ function ScoutTool({
             repliedSet.has(f.id) ? { ...f, status: "replied" as FindStatus } : f
           )
         );
-        setRepliesNote(
-          `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
-        );
+        if (!silent)
+          setRepliesNote(
+            `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
+          );
       } else if (err) {
-        setRepliesNote(err);
+        if (!silent) setRepliesNote(err);
       } else {
-        setRepliesNote(`No new replies yet (checked ${g.checked + o.checked}).`);
+        if (!silent) setRepliesNote(`No new replies yet (checked ${g.checked + o.checked}).`);
       }
     } finally {
       setRepliesBusy(false);
     }
   }
+
+  // Automatically scan the connected inbox for replies when you open Finds or the
+  // Dashboard, so answered outreach gets marked "replied" (and drops off the
+  // follow-up list) without clicking anything. Throttled to avoid hammering the
+  // mailbox; uses the same headers-only permission granted when you connect.
+  const lastReplyScanRef = useRef(0);
+  useEffect(() => {
+    if (!activeMailbox.connected || !getToken) return;
+    if (tab !== "finds" && tab !== "dashboard") return;
+    if (Date.now() - lastReplyScanRef.current < 3 * 60 * 1000) return;
+    const hasTrackable = finds.some(
+      (f) =>
+        (f.gmailThreadId || f.outlookThreadId) &&
+        f.status !== "replied" &&
+        f.status !== "denied"
+    );
+    if (!hasTrackable) return;
+    lastReplyScanRef.current = Date.now();
+    checkReplies({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, activeMailbox.connected]);
 
   async function runDiscover() {
     if (!profileComplete) {
@@ -3043,9 +3067,10 @@ function FindsTab({
             <button
               onClick={onCheckReplies}
               disabled={repliesBusy}
+              title="Scout checks your inbox for replies automatically; this checks right now."
               className="rounded-xl border border-warm-border bg-white px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
             >
-              {repliesBusy ? "Checking…" : "Check for replies"}
+              {repliesBusy ? "Checking…" : "Check replies now"}
             </button>
           )}
           <button
