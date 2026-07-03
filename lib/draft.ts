@@ -77,6 +77,31 @@ function requirementsBlock(requirements?: string): string {
   );
 }
 
+// Map a user-facing OUTREACH_KINDS label to the internal channelType + a
+// contact target picked from the opp. When the user overrides the format from
+// the draft card, this decides how to route it (email vs message body, which
+// contact field wins). Falls back to pickChannel(opp) when no kind is set.
+function routeForKind(
+  opp: Opportunity,
+  kind: string | undefined
+): { channelType: Draft["channelType"]; to: string; kindLabel: string } {
+  const k = String(kind || "").trim().toLowerCase();
+  if (!k) {
+    const p = pickChannel(opp);
+    return { channelType: p.channelType, to: p.to, kindLabel: "" };
+  }
+  const emailish = k === "email" || k === "cover letter";
+  if (emailish) {
+    return { channelType: "email", to: opp.contactEmail || "", kindLabel: kind! };
+  }
+  // DMs / text / other — write as a short note; prefer a handle, else fall back.
+  return {
+    channelType: "message",
+    to: opp.contactHandle || opp.contactEmail || "",
+    kindLabel: kind!,
+  };
+}
+
 export async function draftFor(
   opp: Opportunity,
   about: string,
@@ -87,6 +112,7 @@ export async function draftFor(
     editPairs?: { before: string; after: string }[];
     requirements?: string;
     signature?: string;
+    kind?: string; // one of OUTREACH_KINDS; overrides auto-picked channel
   } = {}
 ): Promise<Draft> {
   const templates = opts.templates || [];
@@ -94,7 +120,7 @@ export async function draftFor(
   const signature = String(opts.signature || "").trim();
   const t = resolveTemplate(useCase);
   const draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
-  const { channelType, to } = pickChannel(opp);
+  const { channelType, to, kindLabel } = routeForKind(opp, opts.kind);
 
   const sys =
     `You write outreach for someone whose use case is "${useCase}". ` +
@@ -116,17 +142,45 @@ export async function draftFor(
   const purpose = `PURPOSE / STYLE of this message: ${draftStyle}`;
 
   let task: string;
+  const isCoverLetter = kindLabel.toLowerCase() === "cover letter";
+  const dmLabel = (() => {
+    const k = kindLabel.toLowerCase();
+    if (k.includes("linkedin")) return "LinkedIn message";
+    if (k.includes("instagram")) return "Instagram DM";
+    if (k.includes("tiktok")) return "TikTok DM";
+    if (k.includes("twitter") || k.includes(" x ") || k === "x / twitter dm")
+      return "X / Twitter DM";
+    if (k.includes("text")) return "text message";
+    return ""; // generic
+  })();
   if (channelType === "email") {
-    task =
-      `Write an EMAIL. Return JSON {subject, body}. ` +
-      `subject = honest, specific, low-key, no em-dashes. ` +
-      (signature
-        ? `body = greeting + 2 to 3 short paragraphs + a brief closing line only (like "Thanks," or "Best,"). Do NOT add the sender's name, title, or any signature block, one is appended automatically. `
-        : `body = greeting + 2 to 3 short paragraphs + a sign-off, the WHOLE message, ready to send. `) +
-      `Open with the specific personalized line if a real note exists; otherwise a genuine specific reason for reaching out. Then the ask from PURPOSE.`;
+    if (isCoverLetter) {
+      task =
+        `Write a COVER LETTER as an email. Return JSON {subject, body}. ` +
+        `subject = a role-specific line like "Application: <role> at <company>" or the requested subject if given. ` +
+        (signature
+          ? `body = a full cover letter (4 to 6 short paragraphs): greeting, why this specific role/company, 1 to 2 concrete matches between the sender's experience and what's needed, a closing paragraph reiterating fit, then a brief closing line only ("Sincerely,"). Do NOT add the sender's name or signature block, one is appended automatically. `
+          : `body = a full cover letter (4 to 6 short paragraphs) ending with a sign-off, the WHOLE message, ready to send. `) +
+        `Formal but warm, first person, specific to the recipient.`;
+    } else {
+      task =
+        `Write an EMAIL. Return JSON {subject, body}. ` +
+        `subject = honest, specific, low-key, no em-dashes. ` +
+        (signature
+          ? `body = greeting + 2 to 3 short paragraphs + a brief closing line only (like "Thanks," or "Best,"). Do NOT add the sender's name, title, or any signature block, one is appended automatically. `
+          : `body = greeting + 2 to 3 short paragraphs + a sign-off, the WHOLE message, ready to send. `) +
+        `Open with the specific personalized line if a real note exists; otherwise a genuine specific reason for reaching out. Then the ask from PURPOSE.`;
+    }
   } else {
+    const formatHint = dmLabel
+      ? `a ${dmLabel}`
+      : channelType === "message"
+        ? "a LinkedIn / DM note"
+        : "a form / message note";
+    // SMS is looser and shorter than other DMs; other DMs are 2-4 sentences.
+    const length = dmLabel === "text message" ? "1 to 2 sentences, very informal" : "2 to 4 sentences";
     task =
-      `Write a SHORT ${channelType === "message" ? "LinkedIn / DM" : "form / message"} note (2 to 4 sentences). ` +
+      `Write ${formatHint} (${length}). ` +
       `Return JSON {subject, body} with subject empty. ` +
       `body = a warm, genuine note reflecting PURPOSE, with the personalized line if real.`;
   }

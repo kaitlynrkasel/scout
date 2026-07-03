@@ -564,6 +564,11 @@ function ScoutTool({
   const [opps, setOpps] = useState<Opportunity[]>([]);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
+  // Which outreach kind each draft is currently written for. Keyed by
+  // opportunityId. Defaults to the auto-picked channel when unset.
+  const [draftKind, setDraftKind] = useState<Record<string, string>>({});
+  // opportunityId currently being re-drafted after a kind change.
+  const [redraftBusyId, setRedraftBusyId] = useState("");
   const [stats, setStats] = useState("");
   const [expanded, setExpanded] = useState(false);
 
@@ -2133,6 +2138,58 @@ function ScoutTool({
     }
   }
 
+  // Rewrite a single existing draft for a different outreach kind (Email,
+  // LinkedIn message, Instagram DM, etc.). Called when the user changes the
+  // format dropdown on a draft card; only that one draft updates.
+  async function redraftAs(opportunityId: string, kind: string) {
+    setError("");
+    const opp =
+      opps.find((o) => o.id === opportunityId) ||
+      // Fallback for drafts surfaced from the finds pipeline.
+      finds.find((f) => f.draft?.opportunityId === opportunityId)?.opp;
+    if (!opp) return;
+    setDraftKind((m) => ({ ...m, [opportunityId]: kind }));
+    setRedraftBusyId(opportunityId);
+    try {
+      const res = await fetch("/api/draft", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opportunities: [opp],
+          about: aboutText,
+          useCase: activeUseCase,
+          templates: templatesFor(activeId, catId),
+          coaching,
+          editPairs,
+          signature,
+          kind,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        reportError(data);
+        return;
+      }
+      const newDraft: Draft | undefined = (data.drafts || [])[0];
+      if (!newDraft) return;
+      setDrafts((prev) =>
+        prev.map((d) => (d.opportunityId === opportunityId ? newDraft : d))
+      );
+      // Also persist onto the matching pipeline find so Finds stays in sync.
+      saveFinds(
+        finds.map((f) =>
+          f.draft?.opportunityId === opportunityId
+            ? { ...f, draft: newDraft, status: "drafted" }
+            : f
+        )
+      );
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRedraftBusyId("");
+    }
+  }
+
   // Results hide anyone denied here (denial flows to the Finds pipeline).
   const deniedFindIds = new Set(
     finds.filter((f) => f.status === "denied").map((f) => f.id)
@@ -2530,9 +2587,15 @@ function ScoutTool({
                           <span className="font-semibold text-ink">
                             {opp?.name || "Draft"}
                           </span>
-                          <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                            {d.channelType}
-                          </span>
+                          <DraftKindPicker
+                            value={
+                              draftKind[d.opportunityId] ||
+                              (d.channelType === "email" ? "Email" : OUTREACH_KINDS[1])
+                            }
+                            options={OUTREACH_KINDS}
+                            busy={redraftBusyId === d.opportunityId}
+                            onChange={(k) => redraftAs(d.opportunityId, k)}
+                          />
                           {d.to && (
                             <span className="text-xs text-body/70">
                               → <ContactValue value={d.to} className="text-body/70" />
@@ -2850,6 +2913,47 @@ function ScoutTool({
         </div>
       )}
     </div>
+  );
+}
+
+/* ---------------- Draft kind picker ----------------
+ * A small pill dropdown replacing the static "email/message" tag on a draft
+ * card. Choosing a new outreach kind re-drafts just that message for the new
+ * format (LinkedIn DM, cover letter, text message, etc.) via /api/draft. */
+function DraftKindPicker({
+  value,
+  options,
+  busy,
+  onChange,
+}: {
+  value: string;
+  options: string[];
+  busy: boolean;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <label className="relative inline-flex items-center">
+      <select
+        value={value}
+        disabled={busy}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label="Change outreach format"
+        title="Change outreach format"
+        className="scout-select cursor-pointer appearance-none rounded-full bg-brand-gradient py-0.5 pl-3 pr-6 text-xs font-semibold text-white shadow-card outline-none transition hover:opacity-95 disabled:opacity-60"
+      >
+        {options.map((o) => (
+          <option key={o} value={o} className="text-ink">
+            {o}
+          </option>
+        ))}
+      </select>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute right-1.5 top-1/2 -translate-y-1/2 text-[10px] text-white"
+      >
+        {busy ? "…" : "▾"}
+      </span>
+    </label>
   );
 }
 
