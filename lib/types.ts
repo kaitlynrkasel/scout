@@ -47,6 +47,7 @@ export interface Draft {
   subject: string;
   body: string;
   whyItFits: string;
+  attachResume?: boolean; // suggested default for attaching the user's resume
 }
 
 // An outreach template: how a given KIND of message (email, LinkedIn note,

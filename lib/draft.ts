@@ -153,5 +153,28 @@ export async function draftFor(
     subject: noDash(gen?.subject || ""),
     body: noDash(gen?.body || "(could not generate a draft for this one — try again)"),
     whyItFits: opp.whyItFits,
+    // Suggest attaching the resume by default when this is an email AND it reads
+    // like a job/internship application, or the recipient asks for a resume/CV.
+    // The user can always toggle it; DMs/forms can't carry an attachment.
+    attachResume:
+      channelType === "email" && suggestsResume(useCase, requirements, opp),
   };
+}
+
+// Does this outreach call for a resume? Job/internship use cases, or an explicit
+// resume/CV ask in the recipient's requirements or the reason we're reaching out.
+function suggestsResume(
+  useCase: string,
+  requirements: string,
+  opp: Opportunity
+): boolean {
+  const jobLike =
+    resolveTemplate(useCase)?.key === "jobs" ||
+    /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application|candidate|position|role)/i.test(
+      useCase
+    );
+  const asksResume = /\b(resume|résumé|cv|curriculum vitae)\b/i.test(
+    `${requirements} ${opp.whyItFits || ""}`
+  );
+  return jobLike || asksResume;
 }

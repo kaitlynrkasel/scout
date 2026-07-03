@@ -75,6 +75,7 @@ const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
 const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
+const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -397,6 +398,7 @@ function ScoutTool({
   // before/after voice deltas learned from drafts they hand-edited.
   const [coaching, setCoaching] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
+  const [resumeFile, setResumeFile] = useState<{ name: string; dataUrl: string } | null>(null);
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
   const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
   const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
@@ -434,6 +436,7 @@ function ScoutTool({
     let savedFinds: Find[] = [];
     let coach: string[] = [];
     let edits: { before: string; after: string }[] = [];
+    let resume: { name: string; dataUrl: string } | null = null;
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -444,6 +447,7 @@ function ScoutTool({
       savedFinds = initialState.finds || [];
       coach = initialState.coaching || [];
       edits = initialState.editPairs || [];
+      resume = initialState.resumeFile || null;
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -476,12 +480,17 @@ function ScoutTool({
         const e = localStorage.getItem(EDITS_KEY);
         if (e) edits = JSON.parse(e);
       } catch {}
+      try {
+        const rf = localStorage.getItem(RESUME_KEY);
+        if (rf) resume = JSON.parse(rf);
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
     setFinds(Array.isArray(savedFinds) ? savedFinds : []);
     setCoaching(Array.isArray(coach) ? coach : []);
     setEditPairs(Array.isArray(edits) ? edits : []);
+    setResumeFile(resume && resume.dataUrl ? resume : null);
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -536,9 +545,10 @@ function ScoutTool({
       finds,
       coaching,
       editPairs,
+      resumeFile,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -603,6 +613,28 @@ function ScoutTool({
       localStorage.setItem(EDITS_KEY, JSON.stringify(n));
     } catch {}
   };
+  const saveResumeFile = (n: { name: string; dataUrl: string } | null) => {
+    setResumeFile(n);
+    try {
+      if (n) localStorage.setItem(RESUME_KEY, JSON.stringify(n));
+      else localStorage.removeItem(RESUME_KEY);
+    } catch {}
+  };
+  // Keep an uploaded resume FILE (as a data URL) so it can be attached to emails.
+  // Capped at ~5MB so we don't bloat account state; larger files are declined.
+  async function storeResumeFile(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      setError("That resume file is over 5MB. Attach a smaller PDF.");
+      return;
+    }
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ""));
+      r.onerror = () => reject(new Error("read failed"));
+      r.readAsDataURL(file);
+    });
+    if (dataUrl) saveResumeFile({ name: file.name, dataUrl });
+  }
   // Record how the user rewrote a draft. Only keep it if the change is real
   // (not a trivial tweak) so we teach voice, not noise. Newest 6 retained.
   const recordEdit = (before: string, after: string) => {
@@ -764,6 +796,11 @@ function ScoutTool({
     if (!token) return null;
     setError("");
     setGmailBusyId(d.opportunityId);
+    // Attach the resume only when this email opted in AND we actually have one.
+    const attachment =
+      d.channelType === "email" && d.attachResume && resumeFile
+        ? { name: resumeFile.name, dataUrl: resumeFile.dataUrl }
+        : undefined;
     try {
       const r = await fetch("/api/gmail/send", {
         method: "POST",
@@ -773,6 +810,7 @@ function ScoutTool({
           subject: d.subject,
           body: d.body,
           threadId: threadId || undefined,
+          attachment,
         }),
       });
       const j = await r.json();
@@ -1138,6 +1176,15 @@ function ScoutTool({
   function markContacted(id: string) {
     setFindStatus(id, "sent");
   }
+  // Toggle whether this find's email draft attaches the resume.
+  function setFindAttach(find: Find, on: boolean) {
+    saveFinds(
+      finds.map((f) =>
+        f.id === find.id && f.draft ? { ...f, draft: { ...f.draft, attachResume: on } } : f
+      )
+    );
+  }
+
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
   function editFindDraft(find: Find, subject: string, body: string) {
     const prevBody = find.draft?.body || "";
@@ -1968,6 +2015,8 @@ function ScoutTool({
           jobMode={isJobUseCaseClient(activeUseCase)}
           onDraftApplication={draftApplicationFor}
           applyingId={applyingId}
+          hasResume={!!resumeFile}
+          onToggleAttach={setFindAttach}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -2056,6 +2105,9 @@ function ScoutTool({
           onRemoveCategories={removeCategoriesBulk}
           onReorderCategories={reorderCategoriesInProject}
           onDeriveGoal={deriveCategoryGoal}
+          resumeFileName={resumeFile?.name || ""}
+          onResumeFile={storeResumeFile}
+          onClearResume={() => saveResumeFile(null)}
         />
       )}
 
@@ -2612,6 +2664,8 @@ function FindsTab({
   jobMode,
   onDraftApplication,
   applyingId,
+  hasResume,
+  onToggleAttach,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2641,6 +2695,8 @@ function FindsTab({
   jobMode: boolean;
   onDraftApplication: (f: Find) => void;
   applyingId: string;
+  hasResume: boolean;
+  onToggleAttach: (f: Find, on: boolean) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -2760,6 +2816,8 @@ function FindsTab({
               jobMode={jobMode}
               onDraftApplication={() => onDraftApplication(f)}
               applying={applyingId === f.id}
+              hasResume={hasResume}
+              onToggleAttach={(on) => onToggleAttach(f, on)}
             />
           ))}
         </div>
@@ -2931,6 +2989,8 @@ function FindCard({
   jobMode,
   onDraftApplication,
   applying,
+  hasResume,
+  onToggleAttach,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
@@ -2953,6 +3013,8 @@ function FindCard({
   jobMode: boolean;
   onDraftApplication: () => void;
   applying: boolean;
+  hasResume: boolean;
+  onToggleAttach: (on: boolean) => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -3042,6 +3104,35 @@ function FindCard({
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
             {d.body}
           </pre>
+          {/* Attach-resume toggle (email only). Default comes from the draft API. */}
+          {d.channelType === "email" &&
+            (hasResume ? (
+              <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-body">
+                <input
+                  type="checkbox"
+                  checked={!!d.attachResume}
+                  onChange={(e) => onToggleAttach(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brown"
+                />
+                <span>
+                  Attach my resume
+                  {d.attachResume && (
+                    <span className="ml-1 text-sage" aria-hidden>
+                      📎
+                    </span>
+                  )}
+                </span>
+                <span className="text-body/50">
+                  {d.attachResume
+                    ? "(Scout suggested this for you)"
+                    : ""}
+                </span>
+              </label>
+            ) : d.attachResume ? (
+              <p className="mt-2.5 text-[11px] text-body/60">
+                This looks like it wants a resume. Add one in your Profile to attach it.
+              </p>
+            ) : null)}
           <button
             onClick={() => {
               setEditSubject(d.subject || "");
@@ -5467,6 +5558,9 @@ function ProfileTab({
   onRemoveCategories,
   onReorderCategories,
   onDeriveGoal,
+  resumeFileName,
+  onResumeFile,
+  onClearResume,
 }: {
   name: string;
   bio: string;
@@ -5496,6 +5590,9 @@ function ProfileTab({
   onRemoveCategories: (ids: string[]) => void;
   onReorderCategories: (projectId: string, orderedIds: string[]) => void;
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+  resumeFileName: string;
+  onResumeFile: (file: File) => void;
+  onClearResume: () => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -5650,7 +5747,23 @@ function ProfileTab({
                 : "Drop your resume or LinkedIn PDF here, or click to upload"
             }
             onText={(t) => readAndFill(t)}
+            onFile={(f) => onResumeFile(f)}
           />
+        )}
+
+        {/* Resume kept for email attachments */}
+        {resumeFileName && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
+            <span aria-hidden>📎</span>
+            <span className="font-semibold">{resumeFileName}</span>
+            <span className="text-body/70">saved to attach to emails when you choose</span>
+            <button
+              onClick={onClearResume}
+              className="ml-auto font-semibold text-body/50 transition hover:text-accent"
+            >
+              Remove
+            </button>
+          </div>
         )}
 
         <p className="mt-2 text-xs leading-relaxed text-body/70">
@@ -5904,10 +6017,12 @@ function AccountCard({
 /* ---------------- Reusable file drop (resume, cover letters) ---------------- */
 function FileDrop({
   onText,
+  onFile,
   label = "Drop a file here, or click to upload",
   accept = ".pdf,.docx,.html,.htm,.txt,.md",
 }: {
   onText: (text: string) => void;
+  onFile?: (file: File) => void; // also hand back the raw file (e.g. to attach later)
   label?: string;
   accept?: string;
 }) {
@@ -5920,6 +6035,7 @@ function FileDrop({
     setErr("");
     setReading(true);
     try {
+      if (onFile) onFile(file);
       const text = await fileToText(file);
       if (text) onText(text);
       else setErr("That file had no readable text, try pasting it instead.");
