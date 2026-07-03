@@ -210,12 +210,40 @@ interface Activity {
 }
 const ZERO_ACTIVITY: Activity = { searches: 0, found: 0, drafts: 0, copies: 0 };
 
+// A competitiveness self-rating shapes internship / job discovery so a first-time
+// applicant is pointed at accessible programs, not moonshot ones.
+type Competitiveness = "any" | "beginner" | "intermediate" | "competitive";
+type CompanySize = "any" | "small" | "big";
+
 interface Profile {
   name: string;
   bio: string;
   useCase: string; // free text; matched to a preset when it can be, else read as-is
   linkedin?: string;
+  // Optional personalization. Stored locally only for now (the Supabase
+  // `profiles` row keeps its original columns; these ride along in the browser's
+  // scout_profile blob and flow into aboutText so the LLM can use them).
+  age?: number;
+  college?: string;
+  location?: string;
+  companySize?: CompanySize;
+  competitiveness?: Competitiveness;
 }
+
+// Natural-language directives the LLM respects when they're appended to the
+// user's goal. Keeps the API surface unchanged.
+const COMPETITIVENESS_HINTS: Record<Exclude<Competitiveness, "any">, string> = {
+  beginner:
+    "Focus on beginner-friendly opportunities: open to freshmen/sophomores or early-career applicants, minimal prerequisites, low-to-moderate selectivity. Avoid ultra-selective programs (e.g. Google STEP, Meta University, Jane Street, top hedge-fund/consulting internships).",
+  intermediate:
+    "Focus on mid-tier opportunities: growing companies and established mid-size firms, standard interview loops, open to applicants with a few projects or a prior internship.",
+  competitive:
+    "Focus on highly competitive, prestigious opportunities: top-tier tech / finance / consulting internships (FAANG, Jane Street, McKinsey, etc.), selective research programs, and elite fellowships.",
+};
+const COMPANY_SIZE_HINTS: Record<Exclude<CompanySize, "any">, string> = {
+  small: "Prefer small companies, startups, and early-stage teams (under ~200 people).",
+  big: "Prefer large, established companies and well-known brands (Fortune 500, big tech, major agencies).",
+};
 // A project is a self-contained workspace: its own use case, its own context
 // (e.g. the specific artist you're reaching out for), and its own categories.
 // A manager runs one project per artist; a job seeker might have just one.
@@ -481,6 +509,9 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  // Per-search competitiveness override (defaults to the profile setting). "" =
+  // inherit from profile; anything else overrides for this search only.
+  const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
@@ -1441,6 +1472,15 @@ function ScoutTool({
     profile.name,
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
+    profile.age ? `Age: ${profile.age}` : "",
+    profile.college ? `College: ${profile.college}` : "",
+    profile.location ? `Location: ${profile.location}` : "",
+    profile.companySize && profile.companySize !== "any"
+      ? `Prefers ${profile.companySize === "small" ? "small companies / startups" : "large, established companies"}`
+      : "",
+    profile.competitiveness && profile.competitiveness !== "any"
+      ? `Self-rated as a ${profile.competitiveness} applicant`
+      : "",
     activeProject && activeProject.context
       ? "This outreach is on behalf of / for: " + activeProject.context
       : "",
@@ -1908,11 +1948,25 @@ function ScoutTool({
           .slice(0, 10)
           .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
       };
+      // For job/internship searches, layer in the competitiveness + company-size
+      // directives so the LLM narrows to the right tier of opportunity. The
+      // per-search override wins over the profile setting.
+      const jobish = isJobUseCaseClient(activeUseCase);
+      const compLevel: Competitiveness = jobish
+        ? (searchComp || profile.competitiveness || "any")
+        : "any";
+      const sizePref: CompanySize = jobish ? profile.companySize || "any" : "any";
+      const extras: string[] = [];
+      if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
+      if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
+      const goalForApi = extras.length
+        ? `${goal}\n\n${extras.join(" ")}`
+        : goal;
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          goal,
+          goal: goalForApi,
           about: aboutText,
           useCase: activeUseCase,
           feedback,
@@ -2175,6 +2229,45 @@ function ScoutTool({
                 </div>
 
                 <div>
+                  {isJobUseCaseClient(activeUseCase) && (
+                    <div className="mb-3">
+                      <Label>Competitiveness</Label>
+                      <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+                        {(
+                          [
+                            ["", "From profile"],
+                            ["beginner", "Beginner-friendly"],
+                            ["intermediate", "Intermediate"],
+                            ["competitive", "Competitive"],
+                            ["any", "Any"],
+                          ] as const
+                        ).map(([val, label]) => (
+                          <button
+                            key={val || "profile"}
+                            onClick={() => setSearchComp(val as any)}
+                            className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                              searchComp === val
+                                ? "bg-white text-ink shadow-card"
+                                : "text-body/70 hover:text-ink"
+                            }`}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="mt-1.5 text-xs text-body/70">
+                        {searchComp === ""
+                          ? `Using your profile setting${
+                              profile.competitiveness && profile.competitiveness !== "any"
+                                ? ` (${profile.competitiveness})`
+                                : ""
+                            }.`
+                          : searchComp === "any"
+                            ? "Any level — Scout won't filter by selectivity."
+                            : `Scout will focus on ${searchComp} opportunities for this search.`}
+                      </p>
+                    </div>
+                  )}
                   <div className="mb-1 flex items-center justify-between gap-2">
                     <Label className="mb-0">Who are you looking for?</Label>
                     <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} />
@@ -2503,9 +2596,19 @@ function ScoutTool({
           bio={profile.bio}
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
+          age={profile.age}
+          college={profile.college || ""}
+          location={profile.location || ""}
+          companySize={profile.companySize || "any"}
+          competitiveness={profile.competitiveness || "any"}
           onName={(v) => patchProfile({ name: v })}
           onBio={(v) => patchProfile({ bio: v })}
           onLinkedin={(v) => patchProfile({ linkedin: v })}
+          onAge={(v) => patchProfile({ age: v })}
+          onCollege={(v) => patchProfile({ college: v })}
+          onLocation={(v) => patchProfile({ location: v })}
+          onCompanySize={(v) => patchProfile({ companySize: v })}
+          onCompetitiveness={(v) => patchProfile({ competitiveness: v })}
           onUseCase={changeUseCase}
           onAutofill={autofillIdentity}
           canConfirm={profileComplete}
@@ -6398,9 +6501,19 @@ function ProfileTab({
   bio,
   linkedin,
   useCase,
+  age,
+  college,
+  location,
+  companySize,
+  competitiveness,
   onName,
   onBio,
   onLinkedin,
+  onAge,
+  onCollege,
+  onLocation,
+  onCompanySize,
+  onCompetitiveness,
   onUseCase,
   onAutofill,
   canConfirm,
@@ -6437,9 +6550,19 @@ function ProfileTab({
   bio: string;
   linkedin: string;
   useCase: string;
+  age?: number;
+  college: string;
+  location: string;
+  companySize: CompanySize;
+  competitiveness: Competitiveness;
   onName: (v: string) => void;
   onBio: (v: string) => void;
   onLinkedin: (v: string) => void;
+  onAge: (v: number | undefined) => void;
+  onCollege: (v: string) => void;
+  onLocation: (v: string) => void;
+  onCompanySize: (v: CompanySize) => void;
+  onCompetitiveness: (v: Competitiveness) => void;
   onUseCase: (v: string) => void;
   onAutofill: (name?: string, useCase?: string) => void;
   canConfirm: boolean;
@@ -6762,6 +6885,111 @@ function ProfileTab({
               profile <span className="font-semibold">from</span> LinkedIn, upload your
               LinkedIn PDF above or paste your About section below.
             </p>
+          </div>
+        </div>
+
+        {/* -------- About you: personalization Scout weaves into search + drafts -------- */}
+        <div className="mt-7 rounded-2xl border border-warm-border bg-warm-bg/40 p-5">
+          <div className="mb-3">
+            <h3 className="text-sm font-extrabold tracking-tight text-ink">About you</h3>
+            <p className="mt-0.5 text-xs leading-relaxed text-body/70">
+              Optional. Scout uses these to match you with the right opportunities
+              and to sound like you in outreach.
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div>
+              <Label>Age</Label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={13}
+                max={100}
+                value={age ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  onAge(v === "" ? undefined : Number(v));
+                }}
+                placeholder="e.g. 20"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>College</Label>
+              <input
+                value={college}
+                onChange={(e) => onCollege(e.target.value)}
+                placeholder="e.g. USC, sophomore"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>Location</Label>
+              <input
+                value={location}
+                onChange={(e) => onLocation(e.target.value)}
+                placeholder="e.g. Los Angeles, CA"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
+            <div>
+              <Label>Company size you want</Label>
+              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                {(
+                  [
+                    ["any", "Any"],
+                    ["small", "Small / startup"],
+                    ["big", "Big / established"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => onCompanySize(val)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      companySize === val
+                        ? "bg-brown text-white shadow-soft"
+                        : "text-body/70 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label>Competitiveness</Label>
+              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                {(
+                  [
+                    ["any", "Any"],
+                    ["beginner", "Beginner"],
+                    ["intermediate", "Intermediate"],
+                    ["competitive", "Competitive"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val}
+                    onClick={() => onCompetitiveness(val)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      competitiveness === val
+                        ? "bg-brown text-white shadow-soft"
+                        : "text-body/70 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                First-time applicant? Pick <span className="font-semibold">Beginner</span> —
+                Scout will skip the ultra-selective programs and surface ones you can
+                realistically land.
+              </p>
+            </div>
           </div>
         </div>
 
