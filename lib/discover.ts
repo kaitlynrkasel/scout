@@ -23,6 +23,14 @@ function isNetworkingUseCase(useCase: string): boolean {
   return /\b(network|coffee|mentor|connect|advice|informational)/i.test(useCase);
 }
 
+// Obvious how-to / advice / listicle pages — never actual prospects. Filtered
+// before extraction so we don't waste calls turning guides into "opportunities".
+function looksLikeAdvice(title: string): boolean {
+  return /\b(how to|how i|tips?|a guide|guide to|ways to|steps to|best practices|advice|templates?|examples?|what to say|do'?s and don'?ts|ultimate guide|complete guide)\b/i.test(
+    String(title || "")
+  );
+}
+
 // Plan smart, industry-aligned search queries from the goal + the user's actual
 // profile (their field, sub-specialty, seniority, city are inferred from ABOUT).
 // This is what makes results match the user's industry instead of being generic.
@@ -48,10 +56,13 @@ async function planQueries(
       "(labels, agencies, startups, brands in that field) and add the user's city or a hub city for that industry.";
   } else if (networking) {
     guidance =
-      "Target findable PEOPLE to network with in the user's exact field. Each query should combine a specific ROLE TITLE " +
-      "+ the user's industry/sub-field + an org type + a place + a findability signal (e.g. " +
-      "'A&R coordinator indie label Nashville LinkedIn', 'music marketing manager record label email', " +
-      "'Belmont music business alumni A&R'). Aim at real individuals with titles, not company homepages.";
+      "Target findable, REAL INDIVIDUAL PEOPLE to network with in the user's exact field, people with names and titles " +
+      "you could actually reach out to. Each query combines a specific ROLE TITLE + the user's industry/sub-field + an " +
+      "org type + a place + a findability signal (e.g. 'A&R coordinator indie label Nashville LinkedIn', " +
+      "'music marketing manager record label email', 'Belmont music business alumni A&R'). Prefer queries that surface " +
+      "LinkedIn profiles, company team/staff/about pages, conference speaker lists, and roster or directory pages. " +
+      "NEVER write queries that would return advice, how-to, tips, guides, or 'X ways to network' articles, do NOT use " +
+      "the words 'how to', 'tips', 'guide', 'advice', 'template', or 'examples'.";
   } else {
     guidance =
       "Combine the goal with the user's specific field, sub-specialty, seniority and city so results match their industry.";
@@ -190,16 +201,21 @@ async function extract(
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
   const noun = (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
   const sys =
-    `You are a research assistant. From a web search result, extract a structured record of one ${noun || "target"} ` +
-    `the user could reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
+    `You are a research assistant. From a web search result, extract a structured record of ONE REAL, SPECIFIC ${noun || "target"} ` +
+    `the user could actually reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
     `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
-    `INDUSTRY ALIGNMENT IS CRITICAL: judge the result against the user's actual field/industry (from ABOUT THE USER). ` +
-    `If it is clearly OUTSIDE their industry or level, set is_relevant to false. Reserve fit_score above 0.7 for results ` +
-    `that clearly match BOTH the goal and the user's specific industry/sub-field; give 0.3 or below to off-industry ones. ` +
-    `Set is_relevant to false for: news articles, generic "top 10" listicles with no specific target, login/paywall pages, ` +
-    `pay-to-play services, off-industry results, and the user themselves.`;
+    `THE RESULT MUST BE AN ACTUAL PROSPECT, not content about outreach. Set is_relevant to false (and target_type "other") ` +
+    `for anything that is ADVICE or GENERAL CONTENT rather than a specific reachable person or organization: how-to guides, ` +
+    `"tips"/"advice"/"best practices" articles, "X ways to network" or "top 10" listicles, template/example collections, ` +
+    `blog posts about how to reach out, news articles, login/paywall pages, pay-to-play services, off-industry results, and ` +
+    `the user themselves. A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
+    `an article teaching you how to network is NOT. ` +
+    `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER); if clearly outside their industry ` +
+    `or level, set is_relevant false. Reserve fit_score above 0.7 for results matching BOTH the goal and the user's ` +
+    `specific industry/sub-field; give 0.3 or below to off-industry ones.`;
   const fields =
-    `Fields: is_relevant (bool), name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
+    `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
+    `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `url (best link), location, fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
@@ -231,6 +247,7 @@ export async function discover(
   maxItems = 10
 ): Promise<DiscoverResult> {
   const queries = await planQueries(goal, about, useCase);
+  const networking = isNetworkingUseCase(useCase);
 
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
@@ -239,6 +256,7 @@ export async function discover(
     if (candidates.length >= maxItems * 4) break;
     const results = await tavilySearch(q, 8);
     for (const r of results) {
+      if (looksLikeAdvice(r.title)) continue; // skip how-to / advice pages
       const k = canonicalLink(r.url) || urlHost(r.url);
       if (!k || seenLinks.has(k)) continue;
       seenLinks.add(k);
@@ -265,6 +283,12 @@ export async function discover(
       const rec = recs[j];
       const cand = batch[j];
       if (!rec || rec.isRelevant === false || !String((rec as any).name || "").trim()) {
+        skippedNotFit++;
+        continue;
+      }
+      const ttype = String((rec as any).target_type || "").toLowerCase();
+      // Drop advice/guide content, and for networking require an actual person.
+      if (ttype === "other" || (networking && ttype && ttype !== "person")) {
         skippedNotFit++;
         continue;
       }
