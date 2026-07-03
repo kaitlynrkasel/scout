@@ -31,3 +31,15 @@ export function bearerToken(req: Request): string | null {
 export async function userIdFromReq(req: Request): Promise<string | null> {
   return userIdFromToken(bearerToken(req));
 }
+
+// Like userIdFromReq, but also returns the caller's email (needed for team
+// membership rows and email-addressed invites). Null if the token is invalid.
+export async function userFromReq(
+  req: Request
+): Promise<{ id: string; email: string } | null> {
+  const token = bearerToken(req);
+  if (!supabaseAdmin || !token) return null;
+  const { data, error } = await supabaseAdmin.auth.getUser(token);
+  if (error || !data?.user) return null;
+  return { id: data.user.id, email: (data.user.email || "").toLowerCase() };
+}

@@ -73,6 +73,8 @@ const ACTIVE_KEY = "scout_active_project";
 const ACT_KEY = "scout_activity";
 const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
+const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
+const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -135,6 +137,7 @@ type FindStatus = "new" | "drafted" | "sent" | "replied" | "denied";
 interface Find {
   id: string; // stable dedup key: project + normalized name + host
   projectId: string;
+  categoryId?: string; // which category's search surfaced this (for template scope)
   status: FindStatus;
   opp: Opportunity;
   draft?: Draft;
@@ -142,6 +145,24 @@ interface Find {
   gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
   outlookThreadId?: string; // Outlook conversation id — enables reply tracking
   denyReason?: string; // why the user passed on this find
+  requirements?: string; // what this target asks for (pasted or found by deep-scan)
+  sentAt?: number; // when the outreach actually went out (drives follow-up timing)
+  lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
+  scanned?: boolean; // deep-scan has already run on this find's site
+  application?: {
+    overview?: string;
+    howToApply?: string;
+    components: any[]; // { title, kind, prompt, constraints, required, draft?, action? }
+    generatedAt: number;
+  };
+}
+
+// Does this use case look like a job / internship hunt? Mirrors the server's
+// isJobUseCase so the client can offer full-application drafting for those.
+function isJobUseCaseClient(useCase: string): boolean {
+  return /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application)/i.test(
+    useCase || ""
+  );
 }
 
 // Quick reasons offered when passing on a find (plus free-text "Other").
@@ -341,7 +362,7 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "templates" | "profile" | "account"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account"
   >("dashboard");
 
   // ---- Outreach state ----
@@ -363,6 +384,8 @@ function ScoutTool({
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
+  const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
+  const [mtCategoryId, setMtCategoryId] = useState(""); // "" = all categories in project
   const [profile, setProfile] = useState<Profile>(initialProfile);
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -371,6 +394,13 @@ function ScoutTool({
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindStatus | "all">("new");
   const [findDraftingId, setFindDraftingId] = useState(""); // find being drafted
+  // Coaching directives the user approved (applied to every draft) + the
+  // before/after voice deltas learned from drafts they hand-edited.
+  const [coaching, setCoaching] = useState<string[]>([]);
+  const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
+  const [scanningId, setScanningId] = useState(""); // find being deep-scanned
+  const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
+  const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
 
   // ---- Gmail connection ----
   const [gmail, setGmail] = useState<{
@@ -411,6 +441,8 @@ function ScoutTool({
     let tpls: OutreachTemplate[] = [];
     let act: Partial<Activity> | null = null;
     let savedFinds: Find[] = [];
+    let coach: string[] = [];
+    let edits: { before: string; after: string }[] = [];
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -419,6 +451,8 @@ function ScoutTool({
       tpls = initialState.templates || [];
       act = initialState.activity || null;
       savedFinds = initialState.finds || [];
+      coach = initialState.coaching || [];
+      edits = initialState.editPairs || [];
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -443,10 +477,20 @@ function ScoutTool({
         const f = localStorage.getItem(FINDS_KEY);
         if (f) savedFinds = JSON.parse(f);
       } catch {}
+      try {
+        const c = localStorage.getItem(COACH_KEY);
+        if (c) coach = JSON.parse(c);
+      } catch {}
+      try {
+        const e = localStorage.getItem(EDITS_KEY);
+        if (e) edits = JSON.parse(e);
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
     setFinds(Array.isArray(savedFinds) ? savedFinds : []);
+    setCoaching(Array.isArray(coach) ? coach : []);
+    setEditPairs(Array.isArray(edits) ? edits : []);
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -492,9 +536,18 @@ function ScoutTool({
   // templates, projects, categories, and activity follow the user across devices.
   useEffect(() => {
     if (!onSaveState || !hydratedRef.current) return;
-    onSaveState({ templates: myTemplates, projects, categories, activeId, activity, finds });
+    onSaveState({
+      templates: myTemplates,
+      projects,
+      categories,
+      activeId,
+      activity,
+      finds,
+      coaching,
+      editPairs,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -537,6 +590,37 @@ function ScoutTool({
     try {
       localStorage.setItem(FINDS_KEY, JSON.stringify(n));
     } catch {}
+  };
+  const saveCoaching = (n: string[]) => {
+    setCoaching(n);
+    try {
+      localStorage.setItem(COACH_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  // Approve a dashboard tip: dedupe, keep the most recent 8 (draft.ts caps there).
+  const addCoaching = (tip: string) => {
+    const t = String(tip || "").trim();
+    if (!t) return;
+    saveCoaching([t, ...coaching.filter((c) => c.toLowerCase() !== t.toLowerCase())].slice(0, 8));
+  };
+  const removeCoaching = (tip: string) => {
+    saveCoaching(coaching.filter((c) => c !== tip));
+  };
+  const saveEditPairs = (n: { before: string; after: string }[]) => {
+    setEditPairs(n);
+    try {
+      localStorage.setItem(EDITS_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  // Record how the user rewrote a draft. Only keep it if the change is real
+  // (not a trivial tweak) so we teach voice, not noise. Newest 6 retained.
+  const recordEdit = (before: string, after: string) => {
+    const a = String(after || "").trim();
+    const b = String(before || "").trim();
+    if (!a || a === b) return;
+    // Skip near-identical edits (a couple of chars) to avoid teaching noise.
+    if (Math.abs(a.length - b.length) < 8 && a.slice(0, 40) === b.slice(0, 40)) return;
+    saveEditPairs([{ before: b, after: a }, ...editPairs].slice(0, 6));
   };
   // Bump real activity counters (searches run, people found, drafts written,
   // drafts copied to send). Honest usage, no invented metrics.
@@ -707,7 +791,10 @@ function ScoutTool({
   // mode ("draft"/"send") on success, or null on failure. Also stores the Gmail
   // thread id on the matching pipeline find (and flips it to sent when sending),
   // so replies in that thread can be tracked later.
-  const sendViaGmail = async (d: Draft): Promise<"draft" | "send" | null> => {
+  const sendViaGmail = async (
+    d: Draft,
+    threadId?: string
+  ): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
     if (!token) return null;
@@ -717,7 +804,12 @@ function ScoutTool({
       const r = await fetch("/api/gmail/send", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
+        body: JSON.stringify({
+          to: d.to,
+          subject: d.subject,
+          body: d.body,
+          threadId: threadId || undefined,
+        }),
       });
       const j = await r.json();
       if (r.ok) {
@@ -730,6 +822,7 @@ function ScoutTool({
                   ...f,
                   gmailThreadId: j.threadId || f.gmailThreadId,
                   status: (j.mode === "send" ? "sent" : f.status) as FindStatus,
+                  sentAt: j.mode === "send" && !f.sentAt ? Date.now() : f.sentAt,
                 }
               : f
           );
@@ -857,8 +950,13 @@ function ScoutTool({
         label: "",
       };
 
-  const sendViaMailbox = (d: Draft): Promise<"draft" | "send" | null> =>
-    activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d);
+  // threadId threads a Gmail follow-up into an existing conversation (Outlook
+  // threading isn't wired yet, so it ignores it).
+  const sendViaMailbox = (
+    d: Draft,
+    threadId?: string
+  ): Promise<"draft" | "send" | null> =>
+    activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d, threadId);
 
   const saveProjectsRaw = (n: Project[]) => {
     try {
@@ -1014,6 +1112,67 @@ function ScoutTool({
     resetResults();
   }
 
+  // Add a category to a SPECIFIC project (used by the Profile editor, where you
+  // may be editing a project that isn't the active one). An optional goal lets
+  // the caller pass a known search goal (from a suggestion or derived from the
+  // name) so discovery understands what the category is looking for.
+  function addCategoryToProject(projectId: string, name: string, goal = "") {
+    const nm = name.trim();
+    if (!nm) return;
+    const c: Category = {
+      id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: nm,
+      goal: goal || "",
+      projectId,
+    };
+    saveCats([...categories, c]);
+  }
+
+  // Reorder a project's categories to match the given id order (drag and drop).
+  function reorderCategoriesInProject(projectId: string, orderedIds: string[]) {
+    const mine = categories.filter((c) => c.projectId === projectId);
+    const byId = new Map(mine.map((c) => [c.id, c] as const));
+    const seq = orderedIds.map((id) => byId.get(id)).filter(Boolean) as Category[];
+    for (const c of mine) if (!orderedIds.includes(c.id)) seq.push(c); // safety
+    let i = 0;
+    // Rewrite this project's slots in place, leaving other projects untouched.
+    const next = categories.map((c) => (c.projectId === projectId ? seq[i++] : c));
+    saveCats(next);
+  }
+
+  // Delete several categories at once (multi-select). Keeps the active category
+  // valid if it was among those removed.
+  function removeCategoriesBulk(ids: string[]) {
+    const set = new Set(ids);
+    const next = categories.filter((c) => !set.has(c.id));
+    saveCats(next);
+    if (set.has(catId)) {
+      const mine = next.filter((c) => c.projectId === activeId);
+      if (mine.length) {
+        setCatId(mine[0].id);
+        setGoal(mine[0].goal);
+      } else {
+        setCatId("");
+      }
+    }
+  }
+
+  // Ask the API to turn a typed category name into a concrete search goal so
+  // discovery knows who to look for. Falls back to the raw name on any failure.
+  async function deriveCategoryGoal(name: string, useCase: string): Promise<string> {
+    try {
+      const res = await fetch("/api/category-goal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, useCase, about: aboutText }),
+      });
+      const j = await res.json();
+      return (j && j.goal) || name;
+    } catch {
+      return name;
+    }
+  }
+
   // Category manager (pencil): rename a category in the dropdown.
   function renameCategory(id: string, name: string) {
     const nm = name.trim();
@@ -1038,10 +1197,28 @@ function ScoutTool({
   function addTemplate() {
     if (!mtText.trim()) return;
     saveTpls([
-      { id: `${Date.now()}`, channel: mtChannel, text: mtText.trim() },
+      {
+        id: `${Date.now()}`,
+        channel: mtChannel,
+        text: mtText.trim(),
+        // Only record a scope when one was chosen; a category implies its project.
+        ...(mtProjectId ? { projectId: mtProjectId } : {}),
+        ...(mtProjectId && mtCategoryId ? { categoryId: mtCategoryId } : {}),
+      },
       ...myTemplates,
     ]);
     setMtText("");
+  }
+
+  // Which templates apply when drafting for a given project + category. Global
+  // templates (no projectId) always apply; project-scoped ones apply to that
+  // project; category-scoped ones only when that exact category is in play.
+  function templatesFor(projectId: string, categoryId?: string): OutreachTemplate[] {
+    return myTemplates.filter((t) => {
+      if (t.projectId && t.projectId !== projectId) return false;
+      if (t.categoryId && t.categoryId !== (categoryId || "")) return false;
+      return true;
+    });
   }
 
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
@@ -1081,14 +1258,55 @@ function ScoutTool({
       const id = findKey(activeId, o);
       if (existing.has(id)) continue;
       existing.add(id);
-      fresh.push({ id, projectId: activeId, status: "new", opp: o, addedAt: Date.now() });
+      fresh.push({
+        id,
+        projectId: activeId,
+        categoryId: catId || undefined,
+        status: "new",
+        opp: o,
+        addedAt: Date.now(),
+      });
     }
     if (fresh.length) saveFinds([...fresh, ...finds]);
     return fresh.length;
   }
 
   function setFindStatus(id: string, status: FindStatus) {
-    saveFinds(finds.map((f) => (f.id === id ? { ...f, status } : f)));
+    saveFinds(
+      finds.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              status,
+              // Stamp when it first goes to "sent" so follow-up timing has a clock.
+              sentAt: status === "sent" && !f.sentAt ? Date.now() : f.sentAt,
+            }
+          : f
+      )
+    );
+  }
+  // Mark contacted from the button — same as setting status to sent.
+  function markContacted(id: string) {
+    setFindStatus(id, "sent");
+  }
+  // Save a hand-edited draft AND learn the before→after delta for future drafts.
+  function editFindDraft(find: Find, subject: string, body: string) {
+    const prevBody = find.draft?.body || "";
+    recordEdit(prevBody, body);
+    saveFinds(
+      finds.map((f) =>
+        f.id === find.id && f.draft
+          ? {
+              ...f,
+              draft: {
+                ...f.draft,
+                subject: subject,
+                body: body,
+              },
+            }
+          : f
+      )
+    );
   }
   // Deny a find and record why (reason optional).
   function denyFindWithReason(id: string, reason: string) {
@@ -1107,6 +1325,176 @@ function ScoutTool({
     saveFinds(finds.filter((f) => f.id !== id));
   }
 
+  // Deep-scan a find's site for a specific contact + submission requirements.
+  async function deepScanFind(find: Find) {
+    if (!find.opp.url) {
+      setRepliesNote("This find has no page to scan.");
+      return;
+    }
+    setScanningId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/deep-scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: find.opp.url,
+          name: find.opp.name,
+          outlet: find.opp.outlet,
+          goal,
+          useCase: activeUseCase,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't scan that site.");
+        return;
+      }
+      const c = j.contact || {};
+      const gotContact = !!(c.email || c.name || c.handle);
+      const gotReqs = !!(j.requirements || "").trim();
+      saveFinds(
+        finds.map((f) => {
+          if (f.id !== find.id) return f;
+          const opp = { ...f.opp };
+          // Only fill gaps — never overwrite a contact we already trust.
+          if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
+          if (c.name && !opp.contactName) opp.contactName = c.name;
+          if (c.role && !opp.contactRole) opp.contactRole = c.role;
+          if (c.handle && !opp.contactHandle) opp.contactHandle = c.handle;
+          if (c.email && (!opp.channel || /unknown/i.test(opp.channel)))
+            opp.channel = "Email";
+          return {
+            ...f,
+            opp,
+            requirements: gotReqs ? j.requirements : f.requirements,
+            scanned: true,
+          };
+        })
+      );
+      setRepliesNote(
+        gotContact || gotReqs
+          ? `Scanned ${find.opp.name}.${gotContact ? " Found a contact." : ""}${
+              gotReqs ? " Pulled their requirements." : ""
+            } Draft again to use it.`
+          : `Scanned ${find.opp.name}, but found no specific contact or requirements on the page.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't scan that site.");
+    } finally {
+      setScanningId("");
+    }
+  }
+
+  // Read a specific internship/job posting and draft every written application
+  // component (cover letter, essays, short answers) from the user's profile.
+  async function draftApplicationFor(find: Find) {
+    if (!find.opp.url) {
+      setRepliesNote("This opening has no link to read.");
+      return;
+    }
+    setApplyingId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/application", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: find.opp.url,
+          name: find.opp.name,
+          outlet: find.opp.outlet,
+          about: aboutText,
+          useCase: activeUseCase,
+          coaching,
+          editPairs,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't read that application.");
+        return;
+      }
+      const components = Array.isArray(j.components) ? j.components : [];
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? {
+                ...f,
+                application: {
+                  overview: j.overview || "",
+                  howToApply: j.howToApply || "",
+                  components,
+                  generatedAt: Date.now(),
+                },
+              }
+            : f
+        )
+      );
+      const drafted = components.filter((c: any) => c.draft).length;
+      setRepliesNote(
+        components.length
+          ? `Read ${find.opp.name}'s application: ${components.length} ${
+              components.length === 1 ? "item" : "items"
+            }${drafted ? `, drafted ${drafted} for you` : ""}. See the card.`
+          : `Read ${find.opp.name}, but couldn't find specific application requirements on the page.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't read that application.");
+    } finally {
+      setApplyingId("");
+    }
+  }
+
+  // Draft a short follow-up nudge for a sent-but-unanswered find. If it went out
+  // via Gmail, the nudge is written as an in-thread reply.
+  async function followUpFind(find: Find) {
+    setFollowUpId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/draft-followup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opp: find.opp,
+          about: aboutText,
+          useCase: activeUseCase,
+          firstMessage: find.draft ? { subject: find.draft.subject, body: find.draft.body } : null,
+          inThread: !!find.gmailThreadId,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't draft a follow-up.");
+        return;
+      }
+      const followDraft: Draft = {
+        opportunityId: find.opp.id,
+        to: find.draft?.to || find.opp.contactEmail || "",
+        channelType: find.draft?.channelType || "email",
+        subject: j.subject || (find.draft?.subject ? `Re: ${find.draft.subject}` : ""),
+        body: j.body || "",
+        whyItFits: find.opp.whyItFits,
+      };
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? { ...f, draft: followDraft, lastFollowUpAt: Date.now() }
+            : f
+        )
+      );
+      bumpActivity({ drafts: 1 });
+      setRepliesNote(
+        `Wrote a follow-up to ${find.opp.name}. It's on the card, ready to ${
+          find.gmailThreadId && gmail.connected ? "send in-thread" : "copy or send"
+        }.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't draft a follow-up.");
+    } finally {
+      setFollowUpId("");
+    }
+  }
+
   // Draft a message for a single find and store it on that find.
   async function draftFind(find: Find) {
     setError("");
@@ -1116,10 +1504,12 @@ function ScoutTool({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          opportunities: [find.opp],
+          opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
           about: aboutText,
           useCase: activeUseCase,
-          templates: myTemplates,
+          templates: templatesFor(find.projectId, find.categoryId),
+          coaching,
+          editPairs,
         }),
       });
       const data = await res.json();
@@ -1147,7 +1537,9 @@ function ScoutTool({
   // (thread id + sent status), so nothing more to do here.
   async function sendFindViaGmail(find: Find) {
     if (!find.draft) return;
-    await sendViaMailbox(find.draft);
+    // If this find already has a thread (e.g. a follow-up on an earlier send),
+    // thread the new message into it instead of starting a new one.
+    await sendViaMailbox(find.draft, find.gmailThreadId);
   }
 
   // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
@@ -1277,7 +1669,9 @@ function ScoutTool({
           opportunities: chosen,
           about: aboutText,
           useCase: activeUseCase,
-          templates: myTemplates,
+          templates: templatesFor(activeId, catId),
+          coaching,
+          editPairs,
         }),
       });
       const data = await res.json();
@@ -1341,6 +1735,8 @@ function ScoutTool({
         onLogout={onLogout}
       />
       <div className="flex min-w-0 flex-1 flex-col">
+      {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
+      <div className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
@@ -1726,11 +2122,19 @@ function ScoutTool({
           onDeny={(f, reason) => denyFindWithReason(f.id, reason || "")}
           onSetReason={(f, reason) => setFindReason(f.id, reason)}
           onReopen={(f) => setFindStatus(f.id, "new")}
-          onMarkSent={(f) => setFindStatus(f.id, "sent")}
+          onMarkSent={(f) => markContacted(f.id)}
           onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
           onCopy={() => bumpActivity({ copies: 1 })}
+          onEditDraft={editFindDraft}
+          onDeepScan={deepScanFind}
+          scanningId={scanningId}
+          onFollowUp={followUpFind}
+          followUpId={followUpId}
+          jobMode={isJobUseCaseClient(activeUseCase)}
+          onDraftApplication={draftApplicationFor}
+          applyingId={applyingId}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -1747,9 +2151,23 @@ function ScoutTool({
           categoriesCount={categories.length}
           finds={finds}
           community={community}
+          coaching={coaching}
+          editPairs={editPairs}
+          onApplyTip={addCoaching}
+          onRemoveTip={removeCoaching}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
+          goFinds={() => setTab("finds")}
+        />
+      )}
+
+      {tab === "team" && (
+        <TeamTab
+          getToken={getToken}
+          accountEmail={accountEmail || ""}
+          projects={projects}
+          finds={finds}
         />
       )}
 
@@ -1763,6 +2181,15 @@ function ScoutTool({
           add={addTemplate}
           list={myTemplates}
           remove={(id) => saveTpls(myTemplates.filter((s) => s.id !== id))}
+          projects={projects}
+          categories={categories}
+          scopeProjectId={mtProjectId}
+          scopeCategoryId={mtCategoryId}
+          setScopeProjectId={(id) => {
+            setMtProjectId(id);
+            setMtCategoryId(""); // switching project clears the category choice
+          }}
+          setScopeCategoryId={setMtCategoryId}
         />
       )}
 
@@ -1790,6 +2217,17 @@ function ScoutTool({
           onConnectOutlook={connectOutlook}
           onDisconnectOutlook={disconnectOutlook}
           onOutlookMode={setOutlookMode}
+          projects={projects}
+          categories={categories}
+          onAddProject={addProject}
+          onRenameProject={renameProject}
+          onRemoveProject={removeProject}
+          onAddCategory={addCategoryToProject}
+          onRenameCategory={renameCategory}
+          onRemoveCategory={removeCategory}
+          onRemoveCategories={removeCategoriesBulk}
+          onReorderCategories={reorderCategoriesInProject}
+          onDeriveGoal={deriveCategoryGoal}
         />
       )}
 
@@ -1811,6 +2249,8 @@ function ScoutTool({
           />
         </main>
       )}
+
+      </div>
 
       {/* ---------------- Footer ---------------- */}
       <footer className="border-t border-warm-border bg-white/70">
@@ -1933,6 +2373,22 @@ function SideNav({
       badge: newFindCount,
       icon: <path d="M20 7 9 18l-5-5" />,
     },
+    ...(hasAccount
+      ? [
+          {
+            key: "team",
+            label: "Team",
+            icon: (
+              <>
+                <circle cx="9" cy="8" r="3.2" />
+                <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+                <circle cx="17.5" cy="9.5" r="2.6" />
+                <path d="M15 20a6 6 0 0 1 6.5-5.6" />
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       key: "templates",
       label: "Templates",
@@ -1955,20 +2411,6 @@ function SideNav({
         </>
       ),
     },
-    ...(hasAccount
-      ? [
-          {
-            key: "account",
-            label: "Account",
-            icon: (
-              <>
-                <circle cx="12" cy="8" r="3.5" />
-                <path d="M5 20a7 7 0 0 1 14 0" />
-              </>
-            ),
-          },
-        ]
-      : []),
   ];
 
   return (
@@ -2052,10 +2494,36 @@ function SideNav({
             ))}
           </select>
         )}
+        {hasAccount && (
+          <button
+            onClick={() => setTab("account")}
+            className={`mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              tab === "account"
+                ? "bg-brown text-white shadow-soft"
+                : "text-body hover:bg-brown-tint hover:text-brown-deep"
+            }`}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={tab === "account" ? "" : "opacity-80"}
+            >
+              <circle cx="12" cy="8" r="3.5" />
+              <path d="M5 20a7 7 0 0 1 14 0" />
+            </svg>
+            Account
+          </button>
+        )}
         {showLogout && (
           <button
             onClick={onLogout}
-            className="mt-3 w-full rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-brown-tint"
+            className="mt-2 w-full rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-brown-tint"
           >
             Log out
           </button>
@@ -2308,6 +2776,14 @@ function FindsTab({
   onRemove,
   onSendGmail,
   onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanningId,
+  onFollowUp,
+  followUpId,
+  jobMode,
+  onDraftApplication,
+  applyingId,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2329,6 +2805,14 @@ function FindsTab({
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
   onCopy: () => void;
+  onEditDraft: (f: Find, subject: string, body: string) => void;
+  onDeepScan: (f: Find) => void;
+  scanningId: string;
+  onFollowUp: (f: Find) => void;
+  followUpId: string;
+  jobMode: boolean;
+  onDraftApplication: (f: Find) => void;
+  applyingId: string;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -2376,7 +2860,7 @@ function FindsTab({
             onClick={goOutreach}
             className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
           >
-            Find more
+            Find opportunities
           </button>
         </div>
       </div>
@@ -2443,6 +2927,14 @@ function FindsTab({
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
               onCopy={onCopy}
+              onEditDraft={(subject, body) => onEditDraft(f, subject, body)}
+              onDeepScan={() => onDeepScan(f)}
+              scanning={scanningId === f.id}
+              onFollowUp={() => onFollowUp(f)}
+              followUpBusy={followUpId === f.id}
+              jobMode={jobMode}
+              onDraftApplication={() => onDraftApplication(f)}
+              applying={applyingId === f.id}
             />
           ))}
         </div>
@@ -2483,6 +2975,115 @@ function FindStatusBadge({
   );
 }
 
+// The read-out of an internship/job application: an overview, how to apply, and
+// every component, with Scout's draft for the written ones and a to-do for the
+// rest. Each drafted piece is copyable; "Copy all" grabs the whole packet.
+function ApplicationPacket({
+  app,
+  onCopy,
+}: {
+  app: NonNullable<Find["application"]>;
+  onCopy: () => void;
+}) {
+  const [copied, setCopied] = useState("");
+  const components = app.components || [];
+  const drafted = components.filter((c: any) => c.draft);
+  const todos = components.filter((c: any) => !c.draft);
+
+  const copy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    onCopy();
+    setCopied(key);
+    setTimeout(() => setCopied(""), 1500);
+  };
+  const copyAll = () => {
+    const all = drafted
+      .map((c: any) => `${c.title}\n${"-".repeat(c.title.length)}\n${c.draft}`)
+      .join("\n\n\n");
+    copy(all, "__all");
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-bold uppercase tracking-wider text-accent">
+          Application
+        </span>
+        {app.overview && <span className="text-xs text-body/80">{app.overview}</span>}
+        {drafted.length > 1 && (
+          <button
+            onClick={copyAll}
+            className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-white"
+          >
+            {copied === "__all" ? "Copied!" : "Copy all"}
+          </button>
+        )}
+      </div>
+
+      {app.howToApply && (
+        <div className="mt-1.5 text-xs leading-relaxed text-body">
+          <span className="font-semibold">How to apply: </span>
+          {app.howToApply}
+        </div>
+      )}
+
+      {components.length === 0 && (
+        <p className="mt-2 text-xs text-body/60">
+          No specific written requirements were listed on the page.
+        </p>
+      )}
+
+      {/* Drafted written components */}
+      <div className="mt-2.5 space-y-2.5">
+        {drafted.map((c: any, i: number) => (
+          <div key={`d${i}`} className="rounded-lg border border-warm-border bg-white p-3">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="text-sm font-bold text-ink">{c.title}</span>
+              {c.constraints && (
+                <span className="text-[11px] text-body/60">{c.constraints}</span>
+              )}
+              <button
+                onClick={() => copy(c.draft, `d${i}`)}
+                className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+              >
+                {copied === `d${i}` ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            {c.prompt && c.prompt !== c.title && (
+              <div className="mt-0.5 text-[11px] italic text-body/60">{c.prompt}</div>
+            )}
+            <pre className="mt-1.5 whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
+              {c.draft}
+            </pre>
+          </div>
+        ))}
+      </div>
+
+      {/* Things the applicant must supply themselves */}
+      {todos.length > 0 && (
+        <div className="mt-2.5 border-t border-warm-border pt-2.5">
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-body/50">
+            You&apos;ll also need to provide
+          </div>
+          <ul className="space-y-1">
+            {todos.map((c: any, i: number) => (
+              <li key={`t${i}`} className="flex items-start gap-1.5 text-xs text-body">
+                <span className="mt-0.5 text-body/40" aria-hidden>
+                  ▢
+                </span>
+                <span>
+                  <span className="font-semibold text-ink">{c.title}.</span>
+                  {c.action ? ` ${c.action}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindCard({
   find,
   gmail,
@@ -2497,6 +3098,14 @@ function FindCard({
   onRemove,
   onSendGmail,
   onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanning,
+  onFollowUp,
+  followUpBusy,
+  jobMode,
+  onDraftApplication,
+  applying,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -2511,6 +3120,14 @@ function FindCard({
   onRemove: () => void;
   onSendGmail: () => void;
   onCopy: () => void;
+  onEditDraft: (subject: string, body: string) => void;
+  onDeepScan: () => void;
+  scanning: boolean;
+  onFollowUp: () => void;
+  followUpBusy: boolean;
+  jobMode: boolean;
+  onDraftApplication: () => void;
+  applying: boolean;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -2519,6 +3136,13 @@ function FindCard({
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
+  const [editing, setEditing] = useState(false); // draft edit mode
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
+  // How long since the outreach went out, for the follow-up nudge.
+  const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
+  const followUpReady =
+    find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
 
   return (
     <div
@@ -2574,16 +3198,79 @@ function FindCard({
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
       )}
 
-      {/* Stored draft */}
-      {d && (
+      {/* What this target asks for (pasted or found by deep-scan) */}
+      {find.requirements && (
+        <div className="mt-2 rounded-xl border border-sage/40 bg-sage/10 p-2.5 text-xs leading-relaxed text-brown-deep">
+          <span className="font-bold">What they ask for: </span>
+          {find.requirements}
+        </div>
+      )}
+
+      {/* Stored draft — read view or inline editor */}
+      {d && !editing && (
         <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 p-3">
           {d.subject && (
-            <div className="mb-1.5 text-sm font-semibold text-ink">{d.subject}</div>
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <div className="text-sm font-semibold text-ink">{d.subject}</div>
+            </div>
           )}
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
             {d.body}
           </pre>
+          <button
+            onClick={() => {
+              setEditSubject(d.subject || "");
+              setEditBody(d.body || "");
+              setEditing(true);
+            }}
+            className="mt-2 text-[11px] font-semibold text-accent transition hover:underline"
+          >
+            Edit this draft
+          </button>
         </div>
+      )}
+      {d && editing && (
+        <div className="mt-3 rounded-xl border border-coral/40 bg-white p-3">
+          {d.channelType === "email" && (
+            <input
+              value={editSubject}
+              onChange={(e) => setEditSubject(e.target.value)}
+              placeholder="Subject"
+              className="mb-2 w-full rounded-lg border border-warm-border px-2.5 py-1.5 text-sm font-semibold text-ink outline-none focus:ring-2 focus:ring-coral/20"
+            />
+          )}
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={Math.min(16, Math.max(6, editBody.split("\n").length + 1))}
+            className="w-full rounded-lg border border-warm-border px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-coral/20"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={() => {
+                onEditDraft(editSubject, editBody);
+                setEditing(false);
+              }}
+              className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Cancel
+            </button>
+            <span className="text-[11px] text-body/50">
+              Scout learns from your edits and writes more like this next time.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Full application packet (job/internship) */}
+      {find.application && (
+        <ApplicationPacket app={find.application} onCopy={onCopy} />
       )}
 
       {/* Actions */}
@@ -2595,6 +3282,34 @@ function FindCard({
             className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
           >
             {drafting ? "Drafting…" : "Draft a message"}
+          </button>
+        )}
+
+        {/* Job/internship: read the posting and draft the whole application */}
+        {jobMode && o.url && !denied && (
+          <button
+            onClick={onDraftApplication}
+            disabled={applying}
+            title="Read this posting's requirements and draft every written part from your profile"
+            className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+          >
+            {applying
+              ? "Reading the application…"
+              : find.application
+              ? "Redo application"
+              : "Draft full application"}
+          </button>
+        )}
+
+        {/* Deep-scan: read their site for a real contact + what they ask for */}
+        {o.url && !denied && !done && (
+          <button
+            onClick={onDeepScan}
+            disabled={scanning}
+            title="Read this page for a specific contact and any submission requirements"
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            {scanning ? "Scanning…" : find.scanned ? "Re-scan site" : "Scan for contact"}
           </button>
         )}
 
@@ -2645,6 +3360,35 @@ function FindCard({
           >
             Mark contacted
           </button>
+        )}
+
+        {/* Follow-up nudge on sent-but-no-reply finds */}
+        {find.status === "sent" && (
+          <button
+            onClick={onFollowUp}
+            disabled={followUpBusy}
+            title={
+              find.gmailThreadId
+                ? "Draft a short in-thread nudge"
+                : "Draft a short follow-up you can send"
+            }
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold shadow-card transition disabled:opacity-50 ${
+              followUpReady
+                ? "bg-brand-gradient text-white hover:opacity-95"
+                : "border border-warm-border text-body hover:bg-warm-bg"
+            }`}
+          >
+            {followUpBusy
+              ? "Writing…"
+              : find.lastFollowUpAt
+              ? "Draft another nudge"
+              : "Draft a follow-up"}
+          </button>
+        )}
+        {followUpReady && (
+          <span className="text-[11px] font-semibold text-sage">
+            It&apos;s been about a week, a nudge helps
+          </span>
         )}
 
         {denied ? (
@@ -2779,6 +3523,81 @@ function learnedFromFinds(finds: Find[]) {
   };
 }
 
+// Concrete, honestly-derived things Scout has learned about THIS user recently,
+// each only shown when the real data supports it. Individual + private.
+function recentInsights(
+  learned: ReturnType<typeof learnedFromFinds>,
+  coaching: string[],
+  editPairs: { before: string; after: string }[]
+): { text: string; basis: string }[] {
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const out: { text: string; basis: string }[] = [];
+
+  // Channel preference: what you act on vs pass on.
+  const topKept = learned.keptChannels[0]?.[0];
+  const topDenied = learned.deniedChannels[0]?.[0];
+  if (topKept && learned.kept >= 3) {
+    out.push({
+      text:
+        topDenied && topDenied !== topKept
+          ? `You reach out to ${topKept} contacts and tend to pass on ${topDenied} ones.`
+          : `You reach out most through ${topKept}.`,
+      basis: `${learned.kept} you kept`,
+    });
+  }
+
+  // Fit sweet spot.
+  if (learned.keptFit != null && learned.deniedFit != null && learned.keptFit > learned.deniedFit) {
+    out.push({
+      text: `Your sweet spot is around ${pct(learned.keptFit)} fit; you pass on ones near ${pct(learned.deniedFit)}.`,
+      basis: `${learned.decided} decisions`,
+    });
+  }
+
+  // Improving trend (deny rate dropping over time).
+  if (learned.trend && learned.trend.delta < -0.05) {
+    out.push({
+      text: `Your matches are landing more often lately: deny rate ${pct(learned.trend.early)} then ${pct(learned.trend.recent)}.`,
+      basis: "earlier vs recent finds",
+    });
+  }
+
+  // Top reason you pass.
+  const topReason = learned.denyReasons[0];
+  if (topReason && topReason[1] >= 2) {
+    out.push({
+      text: `Most often you pass because: ${topReason[0].toLowerCase()}. Scout steers away from those.`,
+      basis: `${topReason[1]} times`,
+    });
+  }
+
+  // Reply tracking.
+  if (learned.replyRate != null && learned.sentCount >= 2) {
+    out.push({
+      text: `${learned.repliedCount} of ${learned.sentCount} tracked messages got a reply.`,
+      basis: "Gmail reply tracking",
+    });
+  }
+
+  // Voice learned from edits.
+  if (editPairs.length > 0) {
+    out.push({
+      text: `Scout has learned your writing voice from ${editPairs.length} edit${editPairs.length === 1 ? "" : "s"} you made to drafts.`,
+      basis: "your rewrites",
+    });
+  }
+
+  // Coaching turned into standing rules.
+  if (coaching.length > 0) {
+    out.push({
+      text: `${coaching.length} coaching rule${coaching.length === 1 ? "" : "s"} you approved now shape${coaching.length === 1 ? "s" : ""} every draft.`,
+      basis: "your dashboard",
+    });
+  }
+
+  return out;
+}
+
 /* ---------------- Dashboard tab ---------------- */
 function DashboardTab({
   activity,
@@ -2788,9 +3607,14 @@ function DashboardTab({
   categoriesCount,
   finds,
   community,
+  coaching,
+  editPairs,
+  onApplyTip,
+  onRemoveTip,
   goOutreach,
   goTemplates,
   goProfile,
+  goFinds,
 }: {
   activity: Activity;
   profile: Profile;
@@ -2799,11 +3623,26 @@ function DashboardTab({
   categoriesCount: number;
   finds: Find[];
   community: CommunityStats | null;
+  coaching: string[];
+  editPairs: { before: string; after: string }[];
+  onApplyTip: (tip: string) => void;
+  onRemoveTip: (tip: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
+  goFinds: () => void;
 }) {
   const learned = learnedFromFinds(finds);
+  const insights = recentInsights(learned, coaching, editPairs);
+  // Contacts you reached out to about a week ago that still haven't replied — a
+  // gentle nudge roughly doubles response rates, so surface them here.
+  const dueFollowUps = finds.filter(
+    (f) =>
+      f.status === "sent" &&
+      f.sentAt &&
+      Date.now() - f.sentAt >= 7 * 86400000 &&
+      !f.lastFollowUpAt
+  ).length;
   const pipe = {
     new: finds.filter((f) => f.status === "new").length,
     drafted: finds.filter((f) => f.status === "drafted").length,
@@ -2887,6 +3726,28 @@ function DashboardTab({
         How your outreach is going, and how Scout is getting sharper for you.
       </p>
 
+      {/* -------- Follow-up reminder -------- */}
+      {dueFollowUps > 0 && (
+        <button
+          onClick={goFinds}
+          className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-sage/50 bg-sage/10 p-4 text-left transition hover:bg-sage/15"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sage/20 text-base">
+            🔔
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-bold text-ink">
+              {dueFollowUps} {dueFollowUps === 1 ? "contact is" : "contacts are"} due
+              for a follow-up
+            </span>
+            <span className="block text-xs text-body/80">
+              You reached out about a week ago with no reply yet. A short nudge helps.
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-bold text-sage">Review →</span>
+        </button>
+      )}
+
       {/* -------- Activity (real counts) -------- */}
       <section className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile
@@ -2967,7 +3828,7 @@ function DashboardTab({
               onClick={goOutreach}
               className="ml-auto rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
             >
-              Scout more people
+              Find more opportunities
             </button>
           </div>
         </div>
@@ -3228,10 +4089,124 @@ function DashboardTab({
         )}
       </section>
 
+      {/* -------- What Scout has learned about YOU lately (individual) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">What Scout has learned about you</h2>
+        <p className="mt-1 text-sm text-body/80">
+          Recent, private-to-you signals Scout picks up as you work. These steer who it
+          finds and how it drafts.
+        </p>
+        {insights.length ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {insights.map((ins) => (
+              <div
+                key={ins.text}
+                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+              >
+                <span
+                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-xs text-sage"
+                  aria-hidden
+                >
+                  ✦
+                </span>
+                <div>
+                  <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                    {ins.basis}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+            Nothing learned yet. As you keep, pass on, and edit finds, real insights about
+            your taste and voice show up here.{" "}
+            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
+              Work a few finds
+            </button>{" "}
+            to get started.
+          </p>
+        )}
+      </section>
+
+      {/* -------- Getting sharper across Scout (public, everyone) -------- */}
+      {community && (community.patterns?.decidedFinds || 0) > 0 && (
+        <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
+          <h2 className="text-lg font-bold text-ink">Getting sharper across Scout</h2>
+          <p className="mt-1 text-sm text-body/80">
+            Scout learns from everyone&apos;s decisions (anonymously, in aggregate). The
+            more the community decides, the better it matches for all of you.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-8">
+            <div>
+              <div className="text-2xl font-extrabold text-ink">
+                {(community.patterns?.decidedFinds || 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-body/70">community decisions learned from</div>
+            </div>
+            <div>
+              <div className="text-2xl font-extrabold text-ink">
+                {(community.users + 1).toLocaleString()}
+              </div>
+              <div className="text-xs text-body/70">
+                {community.users + 1 === 1 ? "person" : "people"} using Scout
+              </div>
+            </div>
+            {community.patterns?.channels?.[0] && (
+              <div>
+                <div className="text-2xl font-extrabold text-ink">
+                  {Math.round(community.patterns.channels[0].keptRate * 100)}%
+                </div>
+                <div className="text-xs text-body/70">
+                  of {community.patterns.channels[0].channel.toLowerCase()} finds get acted on
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-body/50">
+            Aggregate only, never anyone&apos;s individual data. Numbers grow and steady as
+            the community does.
+          </p>
+        </section>
+      )}
+
+      {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
+      {coaching.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-bold text-ink">Coaching you turned on</h2>
+          <p className="mt-1 text-sm text-body/80">
+            Scout follows these in every draft it writes for you. Remove any that
+            stop feeling right.
+          </p>
+          <div className="mt-4 space-y-2">
+            {coaching.map((c) => (
+              <div
+                key={c}
+                className="flex items-start gap-3 rounded-2xl border border-sage/40 bg-sage/10 p-4"
+              >
+                <span className="mt-0.5 text-sage" aria-hidden>
+                  ✓
+                </span>
+                <p className="flex-1 text-sm text-ink">{c}</p>
+                <button
+                  onClick={() => onRemoveTip(c)}
+                  className="shrink-0 text-xs font-semibold text-body/50 hover:text-ink"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* -------- Outreach advice: what's working for others + proven playbook -------- */}
       <OutreachAdvice
         community={community}
         finds={finds}
+        coaching={coaching}
+        onApplyTip={onApplyTip}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
       />
@@ -3343,16 +4318,37 @@ function DashboardTab({
 function OutreachAdvice({
   community,
   finds,
+  coaching,
+  onApplyTip,
   goOutreach,
   goTemplates,
 }: {
   community: CommunityStats | null;
   finds: Find[];
+  coaching: string[];
+  onApplyTip: (tip: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
 }) {
   const p = community?.patterns;
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const isApplied = (s: string) =>
+    coaching.some((c) => c.trim().toLowerCase() === s.trim().toLowerCase());
+  // A small "turn this into a standing rule" control shown on each coachable tip.
+  const ApplyTip = ({ tip }: { tip: string }) =>
+    isApplied(tip) ? (
+      <span className="shrink-0 rounded-lg bg-sage/15 px-2.5 py-1 text-[11px] font-semibold text-sage">
+        Applied ✓
+      </span>
+    ) : (
+      <button
+        onClick={() => onApplyTip(tip)}
+        className="shrink-0 rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
+        title="Scout will follow this in every draft it writes for you"
+      >
+        Apply to my drafts
+      </button>
+    );
 
   // ---- Tailored coaching on the user's own drafts ----
   // Newest drafts from the pipeline, with whether they were actually sent.
@@ -3529,7 +4525,10 @@ function OutreachAdvice({
                       key={t.title}
                       className="rounded-2xl border border-coral/30 bg-white p-4 shadow-card"
                     >
-                      <div className="text-sm font-bold text-ink">{t.title}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-sm font-bold text-ink">{t.title}</div>
+                        <ApplyTip tip={t.advice} />
+                      </div>
                       <p className="mt-1 text-xs leading-relaxed text-body">{t.advice}</p>
                     </div>
                   ))}
@@ -3556,7 +4555,10 @@ function OutreachAdvice({
                 key={tip.title}
                 className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
               >
-                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-sm font-bold text-ink">{tip.title}</div>
+                  <ApplyTip tip={tip.body} />
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
                 <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
                   Based on {tip.basis}
@@ -3585,14 +4587,17 @@ function OutreachAdvice({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="text-sm font-bold text-ink">{tip.title}</div>
-                {tip.cta && (
-                  <button
-                    onClick={tip.cta.go}
-                    className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
-                  >
-                    {tip.cta.label}
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <ApplyTip tip={tip.body} />
+                  {tip.cta && (
+                    <button
+                      onClick={tip.cta.go}
+                      className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+                    >
+                      {tip.cta.label}
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
             </div>
@@ -3722,6 +4727,497 @@ function SendAction({ draft, onUse }: { draft: Draft; onUse: () => void }) {
   return null;
 }
 
+/* ---------------- Team tab (workspaces + shared projects + shared finds) ---------------- */
+function TeamTab({
+  getToken,
+  accountEmail,
+  projects,
+  finds,
+}: {
+  getToken?: () => Promise<string | null>;
+  accountEmail: string;
+  projects: Project[];
+  finds: Find[];
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [ctx, setCtx] = useState<{ workspaces: any[]; invites: any[] }>({
+    workspaces: [],
+    invites: [],
+  });
+  const [wsName, setWsName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [sharedProjects, setSharedProjects] = useState<any[]>([]);
+  const [shareChoice, setShareChoice] = useState("");
+  const [openId, setOpenId] = useState("");
+  const [sharedFinds, setSharedFinds] = useState<any[]>([]);
+  const [recs, setRecs] = useState<any[]>([]);
+
+  const workspace = ctx.workspaces[0] || null;
+
+  async function authFetch(url: string, opts: any = {}) {
+    const token = getToken ? await getToken() : null;
+    if (!token) throw new Error("Please sign in to use teams.");
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        ...(opts.headers || {}),
+        authorization: `Bearer ${token}`,
+        ...(opts.body ? { "content-type": "application/json" } : {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  }
+
+  async function loadCtx() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await authFetch("/api/team/workspace");
+      const wss = data.workspaces || [];
+      setCtx({ workspaces: wss, invites: data.invites || [] });
+      if (wss[0]) {
+        const p = await authFetch(`/api/team/project?workspaceId=${wss[0].id}`);
+        setSharedProjects(p.projects || []);
+      } else {
+        setSharedProjects([]);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    loadCtx();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function run(label: string, fn: () => Promise<void>) {
+    setBusy(label);
+    setNote("");
+    setError("");
+    try {
+      await fn();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const createWorkspace = () =>
+    run("create", async () => {
+      await authFetch("/api/team/workspace", {
+        method: "POST",
+        body: JSON.stringify({ name: wsName }),
+      });
+      setWsName("");
+      await loadCtx();
+    });
+
+  const invite = () =>
+    run("invite", async () => {
+      await authFetch("/api/team/invite", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail }),
+      });
+      setNote(`Invited ${inviteEmail.trim()}. They'll see it when they sign in.`);
+      setInviteEmail("");
+      await loadCtx();
+    });
+
+  const accept = (workspaceId: string) =>
+    run("accept-" + workspaceId, async () => {
+      await authFetch("/api/team/accept", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId }),
+      });
+      await loadCtx();
+    });
+
+  // Share a local project (with its current finds) into the workspace.
+  const shareProject = () =>
+    run("share", async () => {
+      const p = projects.find((x) => x.id === shareChoice);
+      if (!p) throw new Error("Pick a project to share.");
+      const seed = finds
+        .filter((f) => f.projectId === p.id)
+        .map((f) => ({
+          dedupKey: f.id,
+          opp: f.opp,
+          status: f.status,
+          draft: f.draft || null,
+          requirements: f.requirements || null,
+          gmailThreadId: f.gmailThreadId || null,
+          denyReason: f.denyReason || null,
+        }));
+      await authFetch("/api/team/project", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          name: p.name,
+          useCase: p.useCase,
+          context: p.context || "",
+          finds: seed,
+        }),
+      });
+      setNote(`Shared "${p.name}" with your team${seed.length ? ` (${seed.length} finds)` : ""}.`);
+      setShareChoice("");
+      await loadCtx();
+    });
+
+  const openProject = (id: string) =>
+    run("open-" + id, async () => {
+      setOpenId(id);
+      const [f, r] = await Promise.all([
+        authFetch(`/api/team/finds?projectId=${id}`),
+        authFetch(`/api/team/project?recommendationsFor=${id}`),
+      ]);
+      setSharedFinds(f.finds || []);
+      setRecs(r.recommendations || []);
+    });
+
+  const patchFind = (findId: string, patch: any) =>
+    run("find-" + findId, async () => {
+      const data = await authFetch("/api/team/finds/update", {
+        method: "POST",
+        body: JSON.stringify({ findId, ...patch }),
+      });
+      setSharedFinds((prev) => prev.map((x) => (x.id === findId ? data.find : x)));
+    });
+
+  const addTeammate = (userId: string) =>
+    run("add-" + userId, async () => {
+      await authFetch("/api/team/project/members", {
+        method: "POST",
+        body: JSON.stringify({ sharedProjectId: openId, addUserIds: [userId] }),
+      });
+      await openProject(openId);
+      await loadCtx();
+    });
+
+  const emailShort = (e: string) => (e || "").split("@")[0] || e;
+  const alreadyShared = new Set(sharedProjects.map((p) => p.name.toLowerCase()));
+  const shareable = projects.filter((p) => !alreadyShared.has(p.name.toLowerCase()));
+
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12">
+      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+        Your <span className="brand-text">team</span>
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        Share a project with teammates so you all see the same finds and who is
+        working on what. No two people pitch the same contact twice.
+      </p>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
+      {note && (
+        <div className="mt-4 rounded-xl border border-sage/40 bg-sage/10 px-4 py-2.5 text-sm text-brown-deep">
+          {note}
+        </div>
+      )}
+
+      {/* Invites addressed to me */}
+      {ctx.invites.length > 0 && (
+        <section className="mt-6 space-y-2">
+          {ctx.invites.map((inv) => (
+            <div
+              key={inv.id}
+              className="flex flex-wrap items-center gap-3 rounded-2xl border border-sage/50 bg-sage/10 p-4"
+            >
+              <span className="flex-1 text-sm text-ink">
+                You&apos;ve been invited to{" "}
+                <span className="font-bold">{inv.workspaceName}</span>.
+              </span>
+              <button
+                onClick={() => accept(inv.workspaceId)}
+                disabled={!!busy}
+                className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {busy === "accept-" + inv.workspaceId ? "Joining…" : "Join"}
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {loading ? (
+        <p className="mt-8 text-sm text-body/60">Loading your team…</p>
+      ) : !workspace ? (
+        /* -------- No workspace yet: create one -------- */
+        <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+          <h2 className="text-lg font-bold text-ink">Name your workspace</h2>
+          <p className="mt-1 text-sm text-body/80">
+            A workspace is your company or crew. Give it a name, then invite teammates
+            and share projects with them.
+          </p>
+          <div className="mt-4">
+            <Label>Workspace name</Label>
+            <div className="flex flex-wrap gap-2">
+              <input
+                value={wsName}
+                onChange={(e) => setWsName(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && wsName.trim()) createWorkspace();
+                }}
+                placeholder="e.g. Cue Creative, or Kaitlyn's team"
+                className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+              <button
+                onClick={createWorkspace}
+                disabled={!wsName.trim() || !!busy}
+                className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {busy === "create" ? "Creating…" : "Create workspace"}
+              </button>
+            </div>
+          </div>
+        </section>
+      ) : (
+        <>
+          {/* -------- Workspace: members + invite -------- */}
+          <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-ink">{workspace.name}</h2>
+              <span className="text-xs font-semibold text-body/60">
+                {workspace.members?.length || 1}{" "}
+                {(workspace.members?.length || 1) === 1 ? "member" : "members"}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(workspace.members || []).map((m: any) => (
+                <span
+                  key={m.user_id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-warm-border bg-warm-bg px-3 py-1 text-xs font-medium text-ink"
+                  title={m.email}
+                >
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-brand-gradient text-[9px] font-bold text-white">
+                    {emailShort(m.email).charAt(0).toUpperCase()}
+                  </span>
+                  {m.email === accountEmail ? "You" : emailShort(m.email)}
+                  {m.role === "owner" && (
+                    <span className="text-[9px] font-bold uppercase text-body/50">owner</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
+              <input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && inviteEmail.trim()) invite();
+                }}
+                placeholder="Invite a teammate by email (inside or outside your company)"
+                className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+              <button
+                onClick={invite}
+                disabled={!inviteEmail.trim() || !!busy}
+                className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+              >
+                {busy === "invite" ? "Inviting…" : "Invite"}
+              </button>
+            </div>
+          </section>
+
+          {/* -------- Shared projects -------- */}
+          <section className="mt-6">
+            <h2 className="text-lg font-bold text-ink">Shared projects</h2>
+            {sharedProjects.length === 0 ? (
+              <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+                Nothing shared yet. Share one of your projects below and its finds become
+                a shared pipeline your team works from together.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {sharedProjects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-ink">{p.name}</span>
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
+                        {(p.members || []).length} on the team
+                      </span>
+                      <button
+                        onClick={() => (openId === p.id ? setOpenId("") : openProject(p.id))}
+                        disabled={busy === "open-" + p.id}
+                        className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+                      >
+                        {busy === "open-" + p.id
+                          ? "Opening…"
+                          : openId === p.id
+                          ? "Hide"
+                          : "Open shared finds"}
+                      </button>
+                    </div>
+
+                    {openId === p.id && (
+                      <div className="mt-3 border-t border-warm-border pt-3">
+                        {/* Add teammates from the workspace */}
+                        {recs.length > 0 && (
+                          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-body/60">
+                              Add from your workspace:
+                            </span>
+                            {recs.map((m: any) => (
+                              <button
+                                key={m.user_id}
+                                onClick={() => addTeammate(m.user_id)}
+                                disabled={!!busy}
+                                className="rounded-full border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10 disabled:opacity-50"
+                              >
+                                + {emailShort(m.email)}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {sharedFinds.length === 0 ? (
+                          <p className="text-xs text-body/60">
+                            No shared finds yet in this project.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {sharedFinds.map((f) => (
+                              <SharedFindRow
+                                key={f.id}
+                                f={f}
+                                accountEmail={accountEmail}
+                                busy={busy === "find-" + f.id}
+                                onClaim={(claim) => patchFind(f.id, { claim })}
+                                onStatus={(status) => patchFind(f.id, { status })}
+                                emailShort={emailShort}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Share a project */}
+            {shareable.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4">
+                <span className="text-sm font-semibold text-ink">Share a project:</span>
+                <select
+                  value={shareChoice}
+                  onChange={(e) => setShareChoice(e.target.value)}
+                  className="scout-select min-w-[180px] rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+                >
+                  <option value="">Pick a project…</option>
+                  {shareable.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={shareProject}
+                  disabled={!shareChoice || !!busy}
+                  className="rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                >
+                  {busy === "share" ? "Sharing…" : "Share with team"}
+                </button>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
+// One row in a shared pipeline: the prospect, who's on it, and its status.
+function SharedFindRow({
+  f,
+  accountEmail,
+  busy,
+  onClaim,
+  onStatus,
+  emailShort,
+}: {
+  f: any;
+  accountEmail: string;
+  busy: boolean;
+  onClaim: (claim: boolean) => void;
+  onStatus: (status: FindStatus) => void;
+  emailShort: (e: string) => string;
+}) {
+  const opp = f.opp || {};
+  const mine = f.claimed_email && f.claimed_email === accountEmail;
+  return (
+    <div className="rounded-xl border border-warm-border bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink">
+          {opp.url ? (
+            <a href={opp.url} target="_blank" rel="noreferrer" className="hover:text-accent">
+              {opp.name}
+            </a>
+          ) : (
+            opp.name
+          )}
+        </span>
+        {opp.outlet && <span className="text-xs text-body/70">{opp.outlet}</span>}
+        <select
+          value={f.status}
+          onChange={(e) => onStatus(e.target.value as FindStatus)}
+          disabled={busy}
+          title="Set status"
+          className="ml-auto cursor-pointer appearance-none rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-bold text-body outline-none"
+        >
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        {f.claimed_email ? (
+          <span
+            className={`font-semibold ${mine ? "text-sage" : "text-accent"}`}
+            title={f.claimed_email}
+          >
+            {mine ? "You're on this" : `${emailShort(f.claimed_email)} is on this`}
+          </span>
+        ) : (
+          <span className="text-body/50">Unclaimed</span>
+        )}
+        {f.added_email && (
+          <span className="text-body/50">added by {emailShort(f.added_email)}</span>
+        )}
+        <button
+          onClick={() => onClaim(!mine)}
+          disabled={busy}
+          className={`ml-auto rounded-lg px-2.5 py-1 font-semibold transition disabled:opacity-50 ${
+            mine
+              ? "border border-warm-border text-body/60 hover:bg-warm-bg"
+              : "bg-brand-gradient text-white hover:opacity-95"
+          }`}
+        >
+          {busy ? "…" : mine ? "Release" : f.claimed_email ? "Take over" : "I'll take it"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Templates tab ---------------- */
 function TemplatesTab({
   kinds,
@@ -3732,6 +5228,12 @@ function TemplatesTab({
   add,
   list,
   remove,
+  projects,
+  categories,
+  scopeProjectId,
+  scopeCategoryId,
+  setScopeProjectId,
+  setScopeCategoryId,
 }: {
   kinds: string[];
   channel: string;
@@ -3741,7 +5243,23 @@ function TemplatesTab({
   add: () => void;
   list: OutreachTemplate[];
   remove: (id: string) => void;
+  projects: Project[];
+  categories: Category[];
+  scopeProjectId: string;
+  scopeCategoryId: string;
+  setScopeProjectId: (id: string) => void;
+  setScopeCategoryId: (id: string) => void;
 }) {
+  const scopeCats = categories.filter((c) => c.projectId === scopeProjectId);
+  // Human label for where a saved template applies.
+  const scopeLabel = (t: OutreachTemplate): string => {
+    if (!t.projectId) return "All projects";
+    const proj = projects.find((p) => p.id === t.projectId);
+    const projName = proj?.name || "a project";
+    if (!t.categoryId) return projName;
+    const cat = categories.find((c) => c.id === t.categoryId);
+    return `${projName} · ${cat?.name || "a category"}`;
+  };
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-3xl font-extrabold tracking-tight text-ink">
@@ -3750,8 +5268,8 @@ function TemplatesTab({
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Set up how each kind of message should sound, an email, a LinkedIn note, an
         Instagram DM. When Scout drafts outreach, it uses the right format and
-        your voice for each channel.
-        <span className="text-body/60"> (Saved on this device.)</span>
+        your voice for each channel. Keep a template global, or assign it to a
+        specific project or category so each artist gets their own voice.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -3788,6 +5306,43 @@ function TemplatesTab({
             />
           </div>
         </div>
+        <div className="mt-6 border-t border-warm-border pt-5">
+          <Label>Where it applies</Label>
+          <div className="mt-1 grid gap-3 sm:grid-cols-2">
+            <select
+              value={scopeProjectId}
+              onChange={(e) => setScopeProjectId(e.target.value)}
+              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            >
+              <option value="">All projects</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+            <select
+              value={scopeCategoryId}
+              onChange={(e) => setScopeCategoryId(e.target.value)}
+              disabled={!scopeProjectId}
+              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 disabled:opacity-50"
+            >
+              <option value="">
+                {scopeProjectId ? "All categories in this project" : "Pick a project first"}
+              </option>
+              {scopeCats.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-body/80">
+            Scope this voice to one project (say, a specific artist) or a single
+            category within it. Leave it on <span className="font-semibold">All projects</span> to
+            use it everywhere.
+          </p>
+        </div>
         <div className="mt-5">
           <button
             onClick={add}
@@ -3815,9 +5370,18 @@ function TemplatesTab({
                 key={s.id}
                 className="rounded-2xl border border-warm-border bg-white p-5 shadow-card"
               >
-                <div className="mb-2.5 flex items-center gap-2">
+                <div className="mb-2.5 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
                     {s.channel}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      s.projectId
+                        ? "border-sage/50 bg-sage/10 text-sage"
+                        : "border-warm-border bg-warm-bg text-body/70"
+                    }`}
+                  >
+                    {scopeLabel(s)}
                   </span>
                   <button
                     onClick={() => remove(s.id)}
@@ -4075,6 +5639,17 @@ function ProfileTab({
   onConnectOutlook,
   onDisconnectOutlook,
   onOutlookMode,
+  projects,
+  categories,
+  onAddProject,
+  onRenameProject,
+  onRemoveProject,
+  onAddCategory,
+  onRenameCategory,
+  onRemoveCategory,
+  onRemoveCategories,
+  onReorderCategories,
+  onDeriveGoal,
 }: {
   name: string;
   bio: string;
@@ -4098,6 +5673,17 @@ function ProfileTab({
   onConnectOutlook: () => void;
   onDisconnectOutlook: () => void;
   onOutlookMode: (mode: "draft" | "send") => void;
+  projects: Project[];
+  categories: Category[];
+  onAddProject: (name: string) => void;
+  onRenameProject: (id: string, name: string) => void;
+  onRemoveProject: (id: string) => void;
+  onAddCategory: (projectId: string, name: string, goal?: string) => void;
+  onRenameCategory: (id: string, name: string) => void;
+  onRemoveCategory: (id: string) => void;
+  onRemoveCategories: (ids: string[]) => void;
+  onReorderCategories: (projectId: string, orderedIds: string[]) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -4309,26 +5895,8 @@ function ProfileTab({
         <p className="mt-2 text-xs leading-relaxed text-body/70">
           Type anything, a job hunt, finding a band member, press for a product, investors.
           Pick a suggestion if one fits, or just describe it in your own words and Scout
-          will figure out who to look for.
+          will figure out who to look for. Manage your categories in the editor below.
         </p>
-        <div className="mt-3 rounded-xl bg-warm-bg/70 px-4 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-            Suggested categories
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {suggestionsFor(useCase).map((s) => (
-              <span
-                key={s.name}
-                className="rounded-full border border-warm-border bg-white px-3 py-1 text-xs font-medium text-ink"
-              >
-                {s.name}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2.5 text-xs text-body/70">
-            These appear on the Outreach tab. You can add or remove any of them there.
-          </p>
-        </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
@@ -4370,11 +5938,41 @@ function ProfileTab({
           <textarea
             value={bio}
             onChange={(e) => onBio(e.target.value)}
+            onPaste={(e) => {
+              // Pasting a resume / bio / About section auto-fills your name and
+              // use case, no button needed. Only for a substantial paste, so a
+              // stray word or URL doesn't kick off a parse.
+              const pasted = (e.clipboardData?.getData("text") || "")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (parsing || pasted.length < 120) return;
+              const el = e.currentTarget;
+              // Let the paste land in the box (onChange updates bio), then parse
+              // the full contents without re-setting the bio we just updated.
+              setTimeout(() => readAndFill(el.value, false), 0);
+            }}
             rows={11}
-            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Then tap 'Read this & fill in my profile'. The more you give, the more personal your outreach becomes."
+            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
+
+        <hr className="my-7 border-warm-border" />
+
+        {/* -------- Projects & categories, editable here as well as on Outreach -------- */}
+        <ProjectsCategoriesEditor
+          projects={projects}
+          categories={categories}
+          onAddProject={onAddProject}
+          onRenameProject={onRenameProject}
+          onRemoveProject={onRemoveProject}
+          onAddCategory={onAddCategory}
+          onRenameCategory={onRenameCategory}
+          onRemoveCategory={onRemoveCategory}
+          onRemoveCategories={onRemoveCategories}
+          onReorderCategories={onReorderCategories}
+          onDeriveGoal={onDeriveGoal}
+        />
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
           <button
@@ -4739,6 +6337,351 @@ function WarnIcon() {
 }
 
 /* ---------------- List manager (pencil popover: add / rename / remove) ---------------- */
+// One project's categories: drag to reorder, click to multi-select and delete,
+// rename inline, and add your own (suggestions + free text, with the goal the
+// search will use derived so the API understands what to look for).
+function ProjectCategoryList({
+  project,
+  cats,
+  onRename,
+  onRemoveMany,
+  onReorder,
+  onAdd,
+  onDeriveGoal,
+}: {
+  project: Project;
+  cats: Category[];
+  onRename: (id: string, name: string) => void;
+  onRemoveMany: (ids: string[]) => void;
+  onReorder: (orderedIds: string[]) => void;
+  onAdd: (name: string, goal?: string) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dragId, setDragId] = useState("");
+  const [overId, setOverId] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addText, setAddText] = useState("");
+  const [deriving, setDeriving] = useState(false);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const deleteSelected = () => {
+    onRemoveMany([...selected]);
+    setSelected(new Set());
+  };
+  const drop = (targetId: string) => {
+    if (dragId && dragId !== targetId) {
+      const order = cats.map((c) => c.id).filter((id) => id !== dragId);
+      const at = order.indexOf(targetId);
+      order.splice(at < 0 ? order.length : at, 0, dragId);
+      onReorder(order);
+    }
+    setDragId("");
+    setOverId("");
+  };
+  const submitFree = async () => {
+    const name = addText.trim();
+    if (!name || deriving) return;
+    setDeriving(true);
+    try {
+      const goal = await onDeriveGoal(name, project.useCase);
+      onAdd(name, goal);
+      setAddText("");
+    } finally {
+      setDeriving(false);
+    }
+  };
+
+  const existing = new Set(cats.map((c) => c.name.trim().toLowerCase()));
+  const suggestions = suggestionsFor(project.useCase).filter(
+    (s) => !existing.has(s.name.trim().toLowerCase())
+  );
+
+  return (
+    <div>
+      {/* Multi-select toolbar */}
+      {selected.size > 0 && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-warm-bg px-2.5 py-1.5 text-xs">
+          <span className="font-semibold text-ink">{selected.size} selected</span>
+          <button
+            onClick={deleteSelected}
+            className="rounded-md bg-brand-gradient px-2.5 py-1 font-bold text-white transition hover:opacity-95"
+          >
+            Delete
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="font-semibold text-body/60 transition hover:text-ink"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {cats.length === 0 && (
+        <p className="px-1 text-xs text-body/50">No categories yet. Add one below.</p>
+      )}
+
+      <ul className="space-y-1">
+        {cats.map((c) => {
+          const isSel = selected.has(c.id);
+          return (
+            <li
+              key={c.id}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragId) setOverId(c.id);
+              }}
+              onDrop={() => drop(c.id)}
+              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition ${
+                overId === c.id && dragId !== c.id ? "bg-coral/10 ring-1 ring-coral/30" : ""
+              } ${isSel ? "bg-sage/10" : ""}`}
+            >
+              <span
+                draggable
+                onDragStart={() => setDragId(c.id)}
+                onDragEnd={() => {
+                  setDragId("");
+                  setOverId("");
+                }}
+                title="Drag to reorder"
+                aria-label="Drag to reorder"
+                className="cursor-grab select-none px-0.5 text-body/40 active:cursor-grabbing"
+              >
+                ⠿
+              </span>
+              <input
+                type="checkbox"
+                checked={isSel}
+                onChange={() => toggle(c.id)}
+                aria-label={`Select ${c.name}`}
+                className="h-3.5 w-3.5 shrink-0 accent-brown"
+              />
+              <input
+                defaultValue={c.name}
+                key={c.name}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== c.name) onRename(c.id, v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                aria-label={`Category name for ${c.name}`}
+                className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-sm text-ink outline-none transition hover:border-warm-border focus:border-coral"
+              />
+              <button
+                onClick={() => onRemoveMany([c.id])}
+                title={`Remove ${c.name}`}
+                aria-label={`Remove category ${c.name}`}
+                className="shrink-0 rounded-md border border-warm-border p-1 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+              >
+                <TrashIcon />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Add: a plus that opens suggestions + free text */}
+      {!addOpen ? (
+        <button
+          onClick={() => setAddOpen(true)}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-warm-border px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+        >
+          <span className="text-sm leading-none">+</span> Add a category
+        </button>
+      ) : (
+        <div className="mt-2 rounded-xl border border-warm-border bg-warm-bg/40 p-2.5">
+          {suggestions.length > 0 && (
+            <>
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-body/50">
+                Suggestions
+              </div>
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.name}
+                    onClick={() => onAdd(s.name, s.goal)}
+                    title={s.goal}
+                    className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:border-coral/40 hover:bg-warm-bg"
+                  >
+                    + {s.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="flex items-center gap-1.5">
+            <input
+              value={addText}
+              onChange={(e) => setAddText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitFree();
+              }}
+              placeholder="Or type your own (Scout figures out who to find)"
+              className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
+            />
+            <button
+              onClick={submitFree}
+              disabled={!addText.trim() || deriving}
+              className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40"
+            >
+              {deriving ? "Reading…" : "Add"}
+            </button>
+            <button
+              onClick={() => {
+                setAddOpen(false);
+                setAddText("");
+              }}
+              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-body/60 transition hover:text-ink"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Inline, always-visible editor for the user's projects and their categories.
+// Lives on the Profile tab (the popover CategoryManager stays on Outreach).
+function ProjectsCategoriesEditor({
+  projects,
+  categories,
+  onAddProject,
+  onRenameProject,
+  onRemoveProject,
+  onAddCategory,
+  onRenameCategory,
+  onRemoveCategory,
+  onRemoveCategories,
+  onReorderCategories,
+  onDeriveGoal,
+}: {
+  projects: Project[];
+  categories: Category[];
+  onAddProject: (name: string) => void;
+  onRenameProject: (id: string, name: string) => void;
+  onRemoveProject: (id: string) => void;
+  onAddCategory: (projectId: string, name: string, goal?: string) => void;
+  onRenameCategory: (id: string, name: string) => void;
+  onRemoveCategory: (id: string) => void;
+  onRemoveCategories: (ids: string[]) => void;
+  onReorderCategories: (projectId: string, orderedIds: string[]) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+}) {
+  const [newProject, setNewProject] = useState("");
+
+  return (
+    <div>
+      <Label>Your projects and categories</Label>
+      <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
+        A project is usually one goal or one person you manage (say, an artist);
+        its categories are the kinds of people you search for. Drag to reorder,
+        click to select and delete, or add your own. Synced with the Outreach tab.
+      </p>
+
+      <div className="space-y-3">
+        {projects.map((p) => {
+          const cats = categories.filter((c) => c.projectId === p.id);
+          return (
+            <div
+              key={p.id}
+              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            >
+              <div className="flex items-center gap-2">
+                <span
+                  className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-warm-bg text-[11px] font-bold text-body/60"
+                  aria-hidden
+                >
+                  {p.name.trim().charAt(0).toUpperCase() || "?"}
+                </span>
+                <input
+                  defaultValue={p.name}
+                  key={p.name}
+                  onBlur={(e) => {
+                    const v = e.target.value.trim();
+                    if (v && v !== p.name) onRenameProject(p.id, v);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") e.currentTarget.blur();
+                  }}
+                  aria-label={`Project name for ${p.name}`}
+                  className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm font-bold text-ink outline-none transition hover:border-warm-border focus:border-coral"
+                />
+                {projects.length > 1 && (
+                  <button
+                    onClick={() => {
+                      if (
+                        window.confirm(
+                          `Delete the project "${p.name}" and its categories? Finds saved under it stay in your Finds list.`
+                        )
+                      )
+                        onRemoveProject(p.id);
+                    }}
+                    title={`Delete ${p.name}`}
+                    aria-label={`Delete project ${p.name}`}
+                    className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                  >
+                    <TrashIcon />
+                  </button>
+                )}
+              </div>
+
+              <div className="mt-2.5 border-t border-warm-border pt-2.5">
+                <ProjectCategoryList
+                  project={p}
+                  cats={cats}
+                  onRename={onRenameCategory}
+                  onRemoveMany={onRemoveCategories}
+                  onReorder={(orderedIds) => onReorderCategories(p.id, orderedIds)}
+                  onAdd={(name, goal) => onAddCategory(p.id, name, goal)}
+                  onDeriveGoal={onDeriveGoal}
+                />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add a project */}
+      <div className="mt-3 flex items-center gap-1.5">
+        <input
+          value={newProject}
+          onChange={(e) => setNewProject(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newProject.trim()) {
+              onAddProject(newProject);
+              setNewProject("");
+            }
+          }}
+          placeholder="New project (e.g. another artist you manage)"
+          className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        />
+        <button
+          onClick={() => {
+            if (newProject.trim()) {
+              onAddProject(newProject);
+              setNewProject("");
+            }
+          }}
+          disabled={!newProject.trim()}
+          className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
+        >
+          Add project
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CategoryManager({
   cats,
   onAdd,

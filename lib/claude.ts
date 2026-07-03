@@ -91,8 +91,24 @@ function escapeRawControlCharsInJsonStrings(s: string): string {
   return out;
 }
 
-// Strip em/en dashes from anything that goes out — a dead giveaway of AI writing.
-// Ported from noDash() in 17_Email.gs.
+// Strip em/en dashes from anything that goes out, a dead giveaway of AI writing.
+// The user's rule is absolute: no em dashes in any generated draft, ever. This is
+// the safety net under the prompt instruction, so even if the model slips one in
+// it never reaches the reader. (User-typed edits are never run through this.)
+// Ported/hardened from noDash() in 17_Email.gs.
 export function noDash(s: string): string {
-  return String(s == null ? "" : s).replace(/\s*[‒–—―−]\s*/g, ", ");
+  return (
+    String(s == null ? "" : s)
+      // Every real dash character: em —, en –, figure ‒, horizontal bar ―,
+      // minus −, plus the small/fullwidth variants, with any surrounding
+      // whitespace, collapses to a comma.
+      .replace(/\s*[‒–—―−﹘﹣－]\s*/g, ", ")
+      // A spaced double-hyphen used as an em-dash stand-in ("soon -- Kaitlyn"),
+      // but never a "-- " email signature delimiter (that sits at a line start).
+      .replace(/(\S) +-- +(?=\S)/g, "$1, ")
+      // Tidy artifacts the replacement can create.
+      .replace(/ +,/g, ",")
+      .replace(/,\s*,/g, ", ")
+      .replace(/^\s*,\s+/, "")
+  );
 }

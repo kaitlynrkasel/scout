@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
   if (!uid || !supabaseAdmin) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
-  const { to, subject, body, mode: modeOverride } = await req.json();
+  const { to, subject, body, mode: modeOverride, threadId } = await req.json();
   if (!to || !EMAIL_RE.test(String(to))) {
     return NextResponse.json(
       { error: "This draft has no email address to send to." },
@@ -45,6 +45,7 @@ export async function POST(req: NextRequest) {
       subject: String(subject || ""),
       body: String(body || ""),
       mode,
+      threadId: threadId ? String(threadId) : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
