@@ -28,6 +28,7 @@ export async function loadProfile(userId: string): Promise<DbProfile | null> {
     .select("name, bio, use_case, linkedin")
     .eq("id", userId)
     .maybeSingle();
+  if (error) console.warn("loadProfile failed:", error.message);
   if (error || !data) return null;
   return {
     name: data.name || "",
@@ -37,10 +38,15 @@ export async function loadProfile(userId: string): Promise<DbProfile | null> {
   };
 }
 
-// Upsert the signed-in user's profile row.
-export async function saveProfile(userId: string, p: DbProfile): Promise<void> {
-  if (!supabase) return;
-  await supabase.from("profiles").upsert({
+// Upsert the signed-in user's profile row. Returns an error message on failure
+// (e.g. missing grants/RLS) instead of silently swallowing it, so a broken save
+// is visible rather than looking like it worked.
+export async function saveProfile(
+  userId: string,
+  p: DbProfile
+): Promise<string | null> {
+  if (!supabase) return null;
+  const { error } = await supabase.from("profiles").upsert({
     id: userId,
     name: p.name,
     bio: p.bio,
@@ -48,6 +54,11 @@ export async function saveProfile(userId: string, p: DbProfile): Promise<void> {
     linkedin: p.linkedin || "",
     updated_at: new Date().toISOString(),
   });
+  if (error) {
+    console.error("saveProfile failed:", error.message);
+    return error.message;
+  }
+  return null;
 }
 
 // The rest of the user's app state (templates, projects, categories, activity)
@@ -62,6 +73,8 @@ export interface AppState {
   finds?: any[];
   coaching?: string[]; // approved dashboard tips, applied to every draft
   editPairs?: { before: string; after: string }[]; // learn-from-edits voice deltas
+  resumeFile?: { name: string; dataUrl: string } | null; // resume to attach to emails
+  signature?: string; // email signature appended to drafted emails
 }
 
 export async function loadState(userId: string): Promise<AppState | null> {
@@ -71,15 +84,24 @@ export async function loadState(userId: string): Promise<AppState | null> {
     .select("data")
     .eq("user_id", userId)
     .maybeSingle();
+  if (error) console.warn("loadState failed:", error.message);
   if (error || !data) return null;
   return (data.data || {}) as AppState;
 }
 
-export async function saveState(userId: string, state: AppState): Promise<void> {
-  if (!supabase) return;
-  await supabase.from("user_state").upsert({
+export async function saveState(
+  userId: string,
+  state: AppState
+): Promise<string | null> {
+  if (!supabase) return null;
+  const { error } = await supabase.from("user_state").upsert({
     user_id: userId,
     data: state,
     updated_at: new Date().toISOString(),
   });
+  if (error) {
+    console.error("saveState failed:", error.message);
+    return error.message;
+  }
+  return null;
 }

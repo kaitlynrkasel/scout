@@ -15,6 +15,30 @@ That creates: `workspaces`, `workspace_members`, `workspace_invites`,
 `shared_projects`, `shared_project_members`, `shared_finds`, plus row-level-security
 so people can only read data for teams they belong to.
 
+> **If you already ran an earlier version of this file** and creating a workspace
+> fails with **"permission denied for table workspaces"**, re-run `teams.sql`. The
+> current version adds the missing `GRANT`s to the service role (some projects, with
+> the new `sb_secret_` keys, don't grant it by default). Re-running is safe.
+
+## If profiles won't save (people re-enter info every visit)
+
+Run [`supabase/fix-profile-saving.sql`](./fix-profile-saving.sql) once. Symptom:
+signed-in users can't save their profile or app state, so nothing persists across
+visits. Cause: the `authenticated` role (a logged-in user) was never granted access
+to the `profiles` / `user_state` tables, so every save fails with "permission denied
+for table profiles." This grants that role access to its own rows (RLS still limits
+each user to their own data). Safe to re-run.
+
+## Anti-overexposure ledger (recommended)
+
+Run [`supabase/exposure.sql`](./exposure.sql) the same way (SQL Editor → paste → Run).
+It adds one internal table, `target_contacts`, that lets Scout stop surfacing the
+same contact once too many different users have already reached out to them — so
+the tool can't turn into a spam machine. It's aggregate-only (a normalized contact
+key + which user reached them, never message content) and RLS-locked so only the
+server can read it. Until you run it, discovery still works normally; it just
+doesn't apply the cross-user cap yet.
+
 No new environment variables are needed — Teams reuses the same Supabase keys already
 in `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`).

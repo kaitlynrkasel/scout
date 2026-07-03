@@ -7,6 +7,7 @@ import { claudeJson, parseJsonLoose } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC } from "./templates";
 import { ApiCreditError } from "./apiErrors";
+import { targetKey, cappedKeys } from "./exposure";
 import type { Opportunity } from "./types";
 
 // What the user has taught Scout by denying / keeping past finds. Fed into query
@@ -64,7 +65,9 @@ async function planQueries(
   goal: string,
   about: string,
   useCase: string,
-  feedback?: DiscoverFeedback
+  feedback?: DiscoverFeedback,
+  salt?: string,
+  cohortHint?: string
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -100,6 +103,18 @@ async function planQueries(
     "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
     "these from ABOUT THE USER — do not ask). " +
     guidance +
+    // Push the long tail: avoid the same few famous targets everyone contacts.
+    " CRITICAL for relevance and to avoid spamming the same inboxes: favor NICHE, specific, less-obvious targets that " +
+    "closely fit THIS user's exact sub-field, city, genre, stage and angle. Deliberately AVOID the handful of biggest, " +
+    "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
+    "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
+    "rather than broad. " +
+    (salt
+      ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
+        "two people with a similar goal get different, equally-relevant results instead of the same list. "
+      : "") +
+    // Aggregate "people like you" guidance from similar users (never individual data).
+    (cohortHint ? `PEOPLE-LIKE-YOU SIGNAL (aggregate, use as a soft steer not a rule): ${cohortHint} ` : "") +
     ` The current year is ${year}; for any dated query use ${year} or ${year + 1} (the current or upcoming cycle), never a past year. ` +
     "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
     "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
@@ -246,7 +261,9 @@ async function extract(
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
-    `url (best link), location, fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
+    `url (best link), location, ` +
+    `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
+    `fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
     `why_it_fits (one specific, true detail about them tied to the user's field, used to personalize outreach; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
@@ -267,6 +284,7 @@ export interface DiscoverResult {
   candidates: number;
   skippedDupes: number;
   skippedNotFit: number;
+  skippedCapped: number; // dropped because too many other users already contacted them
 }
 
 export async function discover(
@@ -274,9 +292,11 @@ export async function discover(
   about: string,
   useCase: string,
   maxItems = 10,
-  feedback?: DiscoverFeedback
+  feedback?: DiscoverFeedback,
+  salt?: string,
+  cohortHint?: string
 ): Promise<DiscoverResult> {
-  const queries = await planQueries(goal, about, useCase, feedback);
+  const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name — never resurface a rejected find.
   const deniedNames = new Set(
@@ -354,12 +374,49 @@ export async function discover(
         contactRole: r.contact_role || "",
         contactHandle: r.contact_handle || "",
         location: r.location || "",
+        timezone: r.timezone || "",
         fitScore: fit,
         whyItFits: r.why_it_fits || "",
         sourceTitle: cand.title || "",
         sourceSnippet: String(cand.content || "").slice(0, 220),
       });
     }
+  }
+
+  // The same company can slip past name/host dedup by appearing both as a generic
+  // entry ("Round Hill Music") and a specific posting ("Round Hill Music, Copyright
+  // Internship"), often from different pages/hosts. For job/internship hunts, where
+  // you want one entry per employer, collapse by company (outlet), keeping the most
+  // specific (a posting title beats the bare company name).
+  if (isJobUseCase(useCase)) {
+    const specificity = (o: Opportunity) => {
+      const on = normName(o.outlet || "");
+      const nn = normName(o.name || "");
+      return on && nn && nn !== on ? 1 : 0; // name says more than just the company
+    };
+    const byOutlet = new Map<string, Opportunity>();
+    const collapsed: Opportunity[] = [];
+    for (const o of opps) {
+      const key = normName(o.outlet || "");
+      if (!key) {
+        collapsed.push(o);
+        continue;
+      }
+      const existing = byOutlet.get(key);
+      if (!existing) {
+        byOutlet.set(key, o);
+        collapsed.push(o);
+        continue;
+      }
+      skippedDupes++;
+      if (specificity(o) > specificity(existing)) {
+        const i = collapsed.indexOf(existing);
+        if (i >= 0) collapsed[i] = o;
+        byOutlet.set(key, o);
+      }
+    }
+    opps.length = 0;
+    opps.push(...collapsed);
   }
 
   // Best-fit first.
@@ -388,11 +445,36 @@ export async function discover(
     });
   }
 
+  // Hard cap: drop any target already contacted by too many other users recently,
+  // so the same inboxes don't get blasted across profiles. Fail-open (if the
+  // ledger is unreachable, nothing is dropped).
+  //
+  // IMPORTANT: only cap PERSONAL outreach (networking, PR, individual contacts).
+  // Job/internship postings are MEANT to receive many applicants, so there is no
+  // cap on those — everyone can and should apply to the same opening.
+  let kept = opps;
+  let skippedCapped = 0;
+  if (!isJobUseCase(useCase)) {
+    try {
+      const capped = await cappedKeys(opps.map((o) => targetKey(o)));
+      if (capped.size) {
+        kept = opps.filter((o) => {
+          const k = targetKey(o);
+          return !k || !capped.has(k);
+        });
+        skippedCapped = opps.length - kept.length;
+      }
+    } catch {
+      kept = opps;
+    }
+  }
+
   return {
-    opportunities: opps,
+    opportunities: kept,
     searched: queries.length + enrichSearches,
     candidates: candidates.length,
     skippedDupes,
     skippedNotFit,
+    skippedCapped,
   };
 }

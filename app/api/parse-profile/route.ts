@@ -27,12 +27,19 @@ export async function POST(req: NextRequest) {
       "name = the person's full name (or the company name if this is a company document); empty if unclear. " +
       "use_case = a short phrase (2 to 5 words) for what this person would most likely use an outreach tool for, " +
       "e.g. 'Job / Internship search', 'Networking', 'Music PR / Playlisting', 'Sales / lead generation', " +
-      "'Recruiting / hiring', 'Fundraising / investors', 'Press & media outreach'. Choose the single best fit.";
-    const user = `Fields: name (string), use_case (string).\n\nDOCUMENT:\n${t}`;
+      "'Recruiting / hiring', 'Fundraising / investors', 'Press & media outreach'. Choose the single best fit. " +
+      "signature = a short professional email signature built ONLY from details that actually appear in the document: " +
+      "the person's name on the first line, then their current title/role and company if present, then contact lines " +
+      "(email, phone) and any links (LinkedIn, website), each on its own line. NEVER invent an email, phone number, " +
+      "title, company, or link. If only the name is present, the signature is just the name. Plain text with real " +
+      "newline characters between lines, no markdown, no em-dashes.";
+    const user =
+      `Fields: name (string), use_case (string), signature (string with newlines).\n\nDOCUMENT:\n${t}`;
     const parsed = parseJsonLoose(await claudeJson(sys, user));
     return NextResponse.json({
       name: String(parsed?.name || "").trim(),
       useCase: String(parsed?.use_case || parsed?.useCase || "").trim(),
+      signature: String(parsed?.signature || "").trim(),
     });
   } catch (e: any) {
     if (e instanceof ApiCreditError) {

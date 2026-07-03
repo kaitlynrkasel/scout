@@ -6,7 +6,14 @@ import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
+import Tutorial, { type TourStep } from "./Tutorial";
 import { fileToText } from "@/lib/fileText";
+import {
+  guessTimezone,
+  isBusinessHours,
+  localTimeLabel,
+  nextBusinessLabel,
+} from "@/lib/businessHours";
 import {
   authEnabled,
   supabase,
@@ -61,6 +68,51 @@ const GENERIC_SUGGESTIONS: { name: string; goal: string }[] = [
   { name: "Partners", goal: "people or organizations who could partner with me" },
 ];
 
+// A stable per-user seed so discovery varies results between people (less overlap,
+// less spam). Signed-in users key off their email; others get a persistent
+// per-browser id.
+function outreachSalt(accountEmail?: string): string {
+  if (accountEmail) return accountEmail;
+  try {
+    let s = localStorage.getItem("scout_salt");
+    if (!s) {
+      s = Math.random().toString(36).slice(2, 12);
+      localStorage.setItem("scout_salt", s);
+    }
+    return s;
+  } catch {
+    return "anon";
+  }
+}
+
+// A compact, aggregate "people like you" directive for the query planner, derived
+// from the cohort patterns. Empty when there's no real cohort yet.
+function cohortHintFrom(community: CommunityStats | null): string {
+  const c = community?.cohort;
+  if (!c) return "";
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const bits: string[] = [];
+  const top = c.patterns.channels?.[0];
+  if (top) bits.push(`reach people most through ${top.channel} (${pct(top.keptRate)} acted on)`);
+  if (c.patterns.fitKept != null) bits.push(`favor a strong, specific fit around ${pct(c.patterns.fitKept)}`);
+  if (!bits.length) return "";
+  return `Others doing "${c.useCase}" like this user tend to ${bits.join(" and ")}. Lean toward targets like that, while still keeping results niche and varied.`;
+}
+
+// Drop duplicate categories within the same project (same trimmed, case-folded
+// name), keeping the first. Cleans up any dupes seeded across earlier sessions.
+function dedupeCats<T extends { name: string; projectId: string }>(cats: T[]): T[] {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const c of cats) {
+    const key = `${c.projectId}::${String(c.name || "").trim().toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(c);
+  }
+  return out;
+}
+
 // Suggested categories for a use case: tailored set for a preset, generic otherwise.
 function suggestionsFor(useCase: string): { name: string; goal: string }[] {
   return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
@@ -76,6 +128,54 @@ const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
 const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
+const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
+const SIG_KEY = "scout_signature"; // email signature appended to drafts
+const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished or skipped
+
+// Guided intro tour. Each step spotlights a sidebar item (matched by its
+// data-tour id) and switches to that tab so the real screen shows behind.
+const TOUR_STEPS: TourStep[] = [
+  {
+    tab: "dashboard",
+    title: "Welcome to Scout 👋",
+    body: "Scout finds the right people and opportunities, then drafts warm, personalized outreach in your own voice. Here's a 60-second tour of how it works.",
+  },
+  {
+    tab: "dashboard",
+    target: "nav-dashboard",
+    title: "Your Dashboard",
+    body: "Your home base — a snapshot of activity, saved templates, and coaching tips that sharpen every draft over time.",
+  },
+  {
+    tab: "outreach",
+    target: "nav-outreach",
+    title: "Find people & draft outreach",
+    body: "Describe who you're trying to reach and Scout discovers matches, then drafts a message for each one in your voice. This is where most of your work happens.",
+  },
+  {
+    tab: "finds",
+    target: "nav-finds",
+    title: "Review your Finds",
+    body: "Everyone Scout surfaces lands here. Approve the good ones, deny the rest, and send drafts straight from your connected mailbox.",
+  },
+  {
+    tab: "templates",
+    target: "nav-templates",
+    title: "Save Templates",
+    body: "Keep reusable message templates per channel, project, or category. Scout blends them with your voice so drafts start from something you trust.",
+  },
+  {
+    tab: "profile",
+    target: "nav-profile",
+    title: "Set up your Profile",
+    body: "Add your name and a short bio so Scout knows who's reaching out and can write as you. Connect Gmail or Outlook here to send in one click.",
+  },
+  {
+    tab: "dashboard",
+    title: "You're all set 🎉",
+    body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from “Take a tour” at the bottom of the sidebar.",
+  },
+];
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -150,6 +250,7 @@ interface Find {
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
+  pinned?: boolean; // pinned to the top of the finds list
   application?: {
     overview?: string;
     howToApply?: string;
@@ -201,6 +302,18 @@ interface CommunityStats {
     fitDenied: number | null;
     contextEffect: { withContext: number | null; withoutContext: number | null } | null;
   };
+  // "People like you": patterns from users who share your use case (loose cohort).
+  cohort?: {
+    users: number;
+    useCase: string;
+    patterns: {
+      decidedFinds: number;
+      channels: { channel: string; total: number; keptRate: number }[];
+      fitKept: number | null;
+      fitDenied: number | null;
+      contextEffect: { withContext: number | null; withoutContext: number | null } | null;
+    };
+  } | null;
 }
 
 const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
@@ -363,10 +476,11 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings"
   >("dashboard");
 
   // ---- Outreach state ----
+  const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
@@ -399,6 +513,8 @@ function ScoutTool({
   // before/after voice deltas learned from drafts they hand-edited.
   const [coaching, setCoaching] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
+  const [resumeFile, setResumeFile] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [signature, setSignature] = useState(""); // email signature appended to drafts
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
   const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
   const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
@@ -444,6 +560,8 @@ function ScoutTool({
     let savedFinds: Find[] = [];
     let coach: string[] = [];
     let edits: { before: string; after: string }[] = [];
+    let resume: { name: string; dataUrl: string } | null = null;
+    let sig = "";
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -454,6 +572,8 @@ function ScoutTool({
       savedFinds = initialState.finds || [];
       coach = initialState.coaching || [];
       edits = initialState.editPairs || [];
+      resume = initialState.resumeFile || null;
+      sig = initialState.signature || "";
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -486,12 +606,21 @@ function ScoutTool({
         const e = localStorage.getItem(EDITS_KEY);
         if (e) edits = JSON.parse(e);
       } catch {}
+      try {
+        const rf = localStorage.getItem(RESUME_KEY);
+        if (rf) resume = JSON.parse(rf);
+      } catch {}
+      try {
+        sig = localStorage.getItem(SIG_KEY) || "";
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
     setFinds(Array.isArray(savedFinds) ? savedFinds : []);
     setCoaching(Array.isArray(coach) ? coach : []);
     setEditPairs(Array.isArray(edits) ? edits : []);
+    setResumeFile(resume && resume.dataUrl ? resume : null);
+    setSignature(typeof sig === "string" ? sig : "");
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -516,6 +645,15 @@ function ScoutTool({
       saveCats(cats);
     }
     if (!projs.some((p) => p.id === active)) active = projs[0].id;
+
+    // Clean up any duplicate categories from earlier seeding before showing them.
+    const cleaned = dedupeCats(cats);
+    if (cleaned.length !== cats.length) {
+      cats = cleaned;
+      try {
+        localStorage.setItem(CAT_KEY, JSON.stringify(cats));
+      } catch {}
+    }
 
     setProfile(prof);
     setProjects(projs);
@@ -546,15 +684,42 @@ function ScoutTool({
       finds,
       coaching,
       editPairs,
+      resumeFile,
+      signature,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
   useEffect(() => {
     hydratedRef.current = true;
   }, []);
+
+  // Auto-launch the intro tour once, for first-time users. Runs after mount so
+  // the sidebar targets exist to spotlight.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) {
+        const t = setTimeout(() => setTourOpen(true), 400);
+        return () => clearTimeout(t);
+      }
+    } catch {
+      /* localStorage unavailable — skip the tour rather than crash */
+    }
+  }, []);
+
+  function startTour() {
+    setTourOpen(true);
+  }
+  function endTour() {
+    setTourOpen(false);
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
 
   function seedForProject(projectId: string, uc: string): Category[] {
     return suggestionsFor(uc).map((s, i) => ({
@@ -613,6 +778,34 @@ function ScoutTool({
       localStorage.setItem(EDITS_KEY, JSON.stringify(n));
     } catch {}
   };
+  const saveResumeFile = (n: { name: string; dataUrl: string } | null) => {
+    setResumeFile(n);
+    try {
+      if (n) localStorage.setItem(RESUME_KEY, JSON.stringify(n));
+      else localStorage.removeItem(RESUME_KEY);
+    } catch {}
+  };
+  const saveSignature = (n: string) => {
+    setSignature(n);
+    try {
+      localStorage.setItem(SIG_KEY, n);
+    } catch {}
+  };
+  // Keep an uploaded resume FILE (as a data URL) so it can be attached to emails.
+  // Capped at ~5MB so we don't bloat account state; larger files are declined.
+  async function storeResumeFile(file: File) {
+    if (file.size > 5 * 1024 * 1024) {
+      setError("That resume file is over 5MB. Attach a smaller file.");
+      return;
+    }
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result || ""));
+      r.onerror = () => reject(new Error("read failed"));
+      r.readAsDataURL(file);
+    });
+    if (dataUrl) saveResumeFile({ name: file.name, dataUrl });
+  }
   // Record how the user rewrote a draft. Only keep it if the change is real
   // (not a trivial tweak) so we teach voice, not noise. Newest 6 retained.
   const recordEdit = (before: string, after: string) => {
@@ -669,9 +862,10 @@ function ScoutTool({
     const token = await getToken();
     if (!token) return;
     try {
-      const r = await fetch("/api/community-stats", {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const r = await fetch(
+        `/api/community-stats?useCase=${encodeURIComponent(activeUseCase || "")}`,
+        { headers: { authorization: `Bearer ${token}` } }
+      );
       if (r.ok) setCommunity(await r.json());
     } catch {}
   };
@@ -801,6 +995,11 @@ function ScoutTool({
     if (!token) return null;
     setError("");
     setGmailBusyId(d.opportunityId);
+    // Attach the resume only when this email opted in AND we actually have one.
+    const attachment =
+      d.channelType === "email" && d.attachResume && resumeFile
+        ? { name: resumeFile.name, dataUrl: resumeFile.dataUrl }
+        : undefined;
     try {
       const r = await fetch("/api/gmail/send", {
         method: "POST",
@@ -810,6 +1009,7 @@ function ScoutTool({
           subject: d.subject,
           body: d.body,
           threadId: threadId || undefined,
+          attachment,
         }),
       });
       const j = await r.json();
@@ -1120,6 +1320,11 @@ function ScoutTool({
   function addCategoryToProject(projectId: string, name: string, goal = "") {
     const nm = name.trim();
     if (!nm) return;
+    // Don't add a category this project already has (same name, case-insensitive).
+    const exists = categories.some(
+      (c) => c.projectId === projectId && c.name.trim().toLowerCase() === nm.toLowerCase()
+    );
+    if (exists) return;
     const c: Category = {
       id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: nm,
@@ -1289,7 +1494,22 @@ function ScoutTool({
   // Mark contacted from the button — same as setting status to sent.
   function markContacted(id: string) {
     setFindStatus(id, "sent");
+    const f = finds.find((x) => x.id === id);
+    if (f) recordExposure(f.opp); // contacted -> feed the shared ledger
   }
+  // Pin/unpin a find so it sorts to the top of the list.
+  function togglePin(id: string) {
+    saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
+  }
+  // Toggle whether this find's email draft attaches the resume.
+  function setFindAttach(find: Find, on: boolean) {
+    saveFinds(
+      finds.map((f) =>
+        f.id === find.id && f.draft ? { ...f, draft: { ...f.draft, attachResume: on } } : f
+      )
+    );
+  }
+
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
   function editFindDraft(find: Find, subject: string, body: string) {
     const prevBody = find.draft?.body || "";
@@ -1325,6 +1545,31 @@ function ScoutTool({
   function removeFind(id: string) {
     saveFinds(finds.filter((f) => f.id !== id));
   }
+
+  // Tell the shared ledger this user is pursuing a contact, so it isn't
+  // over-surfaced to everyone else. Fire-and-forget; no-op for signed-out users.
+  // Only personal outreach counts — job/internship openings are meant to get many
+  // applicants, so they're never capped and never recorded.
+  const recordExposure = (opp: Opportunity) => {
+    if (!getToken || isJobUseCaseClient(activeUseCase)) return;
+    getToken()
+      .then((token) => {
+        if (!token) return;
+        fetch("/api/exposure/record", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            opp: {
+              contactEmail: opp.contactEmail,
+              name: opp.name,
+              outlet: opp.outlet,
+              url: opp.url,
+            },
+          }),
+        }).catch(() => {});
+      })
+      .catch(() => {});
+  };
 
   // Deep-scan a find's site for a specific contact + submission requirements.
   async function deepScanFind(find: Find) {
@@ -1511,6 +1756,7 @@ function ScoutTool({
           templates: templatesFor(find.projectId, find.categoryId),
           coaching,
           editPairs,
+          signature,
         }),
       });
       const data = await res.json();
@@ -1526,6 +1772,7 @@ function ScoutTool({
           )
         );
         bumpActivity({ drafts: 1 });
+        recordExposure(find.opp); // pursuing this contact -> feed the shared ledger
       }
     } catch (e: any) {
       setError(e.message);
@@ -1546,7 +1793,8 @@ function ScoutTool({
   // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
   const [repliesBusy, setRepliesBusy] = useState(false);
   const [repliesNote, setRepliesNote] = useState("");
-  async function checkReplies() {
+  async function checkReplies(opts?: { silent?: boolean }) {
+    const silent = !!opts?.silent;
     if (!getToken) return;
     const token = await getToken();
     if (!token) return;
@@ -1561,13 +1809,14 @@ function ScoutTool({
       .slice(0, 20)
       .map((f) => ({ id: f.id, threadId: f.outlookThreadId }));
     if (!gmailCands.length && !outlookCands.length) {
-      setRepliesNote(
-        "Nothing to check yet. Send a message through Gmail or Outlook first and replies get tracked automatically."
-      );
+      if (!silent)
+        setRepliesNote(
+          "Nothing to check yet. Send a message through Gmail or Outlook first and replies get tracked automatically."
+        );
       return;
     }
     setRepliesBusy(true);
-    setRepliesNote("");
+    if (!silent) setRepliesNote("");
     // Ask each connected provider about its own threads, then merge the results.
     const ask = async (path: string, threads: any[]) => {
       if (!threads.length) return { replied: [] as string[], checked: 0, error: "" };
@@ -1598,18 +1847,40 @@ function ScoutTool({
             repliedSet.has(f.id) ? { ...f, status: "replied" as FindStatus } : f
           )
         );
-        setRepliesNote(
-          `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
-        );
+        if (!silent)
+          setRepliesNote(
+            `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
+          );
       } else if (err) {
-        setRepliesNote(err);
+        if (!silent) setRepliesNote(err);
       } else {
-        setRepliesNote(`No new replies yet (checked ${g.checked + o.checked}).`);
+        if (!silent) setRepliesNote(`No new replies yet (checked ${g.checked + o.checked}).`);
       }
     } finally {
       setRepliesBusy(false);
     }
   }
+
+  // Automatically scan the connected inbox for replies when you open Finds or the
+  // Dashboard, so answered outreach gets marked "replied" (and drops off the
+  // follow-up list) without clicking anything. Throttled to avoid hammering the
+  // mailbox; uses the same headers-only permission granted when you connect.
+  const lastReplyScanRef = useRef(0);
+  useEffect(() => {
+    if (!activeMailbox.connected || !getToken) return;
+    if (tab !== "finds" && tab !== "dashboard") return;
+    if (Date.now() - lastReplyScanRef.current < 3 * 60 * 1000) return;
+    const hasTrackable = finds.some(
+      (f) =>
+        (f.gmailThreadId || f.outlookThreadId) &&
+        f.status !== "replied" &&
+        f.status !== "denied"
+    );
+    if (!hasTrackable) return;
+    lastReplyScanRef.current = Date.now();
+    checkReplies({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, activeMailbox.connected]);
 
   async function runDiscover() {
     if (!profileComplete) {
@@ -1635,7 +1906,14 @@ function ScoutTool({
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, useCase: activeUseCase, feedback }),
+        body: JSON.stringify({
+          goal,
+          about: aboutText,
+          useCase: activeUseCase,
+          feedback,
+          salt: outreachSalt(accountEmail),
+          cohortHint: cohortHintFrom(community),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1673,6 +1951,7 @@ function ScoutTool({
           templates: templatesFor(activeId, catId),
           coaching,
           editPairs,
+          signature,
         }),
       });
       const data = await res.json();
@@ -1697,6 +1976,10 @@ function ScoutTool({
             return dr ? { ...f, draft: dr, status: "drafted" } : f;
           })
         );
+        // Feed the shared ledger for each contact we just drafted for.
+        chosen
+          .filter((o) => draftByOppId.has(o.id))
+          .forEach((o) => recordExposure(o));
       }
     } catch (e: any) {
       setError(e.message);
@@ -1734,6 +2017,13 @@ function ScoutTool({
         onSelectProject={selectProject}
         showLogout={!!showLogout}
         onLogout={onLogout}
+      />
+      <Tutorial
+        open={tourOpen}
+        steps={TOUR_STEPS}
+        setTab={setTab as (t: string) => void}
+        onClose={endTour}
+        onFinish={endTour}
       />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
@@ -1796,7 +2086,14 @@ function ScoutTool({
                 </div>
 
                 <div>
-                  <Label>Who this outreach is for (optional)</Label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <Label className="mb-0">Who this outreach is for (optional)</Label>
+                    <MicButton
+                      onAppend={(t) =>
+                        setProjectContext(activeId, joinSpoken(activeProject?.context || "", t))
+                      }
+                    />
+                  </div>
                   <textarea
                     value={activeProject?.context || ""}
                     onChange={(e) => setProjectContext(activeId, e.target.value)}
@@ -1866,7 +2163,10 @@ function ScoutTool({
                 </div>
 
                 <div>
-                  <Label>Who are you looking for?</Label>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <Label className="mb-0">Who are you looking for?</Label>
+                    <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} />
+                  </div>
                   <textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
@@ -2136,6 +2436,9 @@ function ScoutTool({
           jobMode={isJobUseCaseClient(activeUseCase)}
           onDraftApplication={draftApplicationFor}
           applyingId={applyingId}
+          hasResume={!!resumeFile}
+          onToggleAttach={setFindAttach}
+          onTogglePin={togglePin}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -2229,6 +2532,11 @@ function ScoutTool({
           onRemoveCategories={removeCategoriesBulk}
           onReorderCategories={reorderCategoriesInProject}
           onDeriveGoal={deriveCategoryGoal}
+          resumeFileName={resumeFile?.name || ""}
+          onResumeFile={storeResumeFile}
+          onClearResume={() => saveResumeFile(null)}
+          signature={signature}
+          onSignature={saveSignature}
         />
       )}
 
@@ -2248,6 +2556,38 @@ function ScoutTool({
             onDeleteAccount={deleteAccount}
             onLogout={onLogout}
           />
+        </main>
+      )}
+
+      {tab === "settings" && (
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            <span className="brand-text">Settings</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Small preferences that shape how Scout shows up for you.
+          </p>
+
+          <section className="mt-8 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-md">
+                <h2 className="text-base font-extrabold tracking-tight text-ink">
+                  Introduction tour
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-body">
+                  A quick 60-second walkthrough that highlights each part of the app.
+                  It pops up automatically the first time you sign in — replay it here
+                  anytime.
+                </p>
+              </div>
+              <button
+                onClick={startTour}
+                className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+              >
+                Show the tour
+              </button>
+            </div>
+          </section>
         </main>
       )}
 
@@ -2437,6 +2777,7 @@ function SideNav({
           return (
             <button
               key={it.key}
+              data-tour={`nav-${it.key}`}
               onClick={() => setTab(it.key)}
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
@@ -2522,6 +2863,30 @@ function SideNav({
             Account
           </button>
         )}
+        <button
+          onClick={() => setTab("settings")}
+          className={`mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            tab === "settings"
+              ? "bg-brown text-white shadow-soft"
+              : "text-body hover:bg-brown-tint hover:text-brown-deep"
+          }`}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={tab === "settings" ? "" : "opacity-80"}
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+          Settings
+        </button>
         {showLogout && (
           <button
             onClick={onLogout}
@@ -2633,10 +2998,13 @@ function FindsList({
                     : "border border-warm-border text-body hover:bg-warm-bg"
                 }`}
               >
-                {on ? "Approved ✓" : "Approve"}
+                {on ? "Approved" : "Approve"}
               </button>
               {denyingId === o.id ? (
                 <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-body/45">
+                    Why? optional, but a reason helps Scout learn faster
+                  </span>
                   <DenyReasons
                     onPick={(r) => {
                       setDenyingId("");
@@ -2786,6 +3154,9 @@ function FindsTab({
   jobMode,
   onDraftApplication,
   applyingId,
+  hasResume,
+  onToggleAttach,
+  onTogglePin,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2815,6 +3186,9 @@ function FindsTab({
   jobMode: boolean;
   onDraftApplication: (f: Find) => void;
   applyingId: string;
+  hasResume: boolean;
+  onToggleAttach: (f: Find, on: boolean) => void;
+  onTogglePin: (id: string) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -2832,7 +3206,12 @@ function FindsTab({
   );
   const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
     .slice()
-    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
+    // Pinned finds first, then best-fit.
+    .sort(
+      (a, b) =>
+        (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+        (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
+    );
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -2853,9 +3232,10 @@ function FindsTab({
             <button
               onClick={onCheckReplies}
               disabled={repliesBusy}
+              title="Scout checks your inbox for replies automatically; this checks right now."
               className="rounded-xl border border-warm-border bg-white px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
             >
-              {repliesBusy ? "Checking…" : "Check for replies"}
+              {repliesBusy ? "Checking…" : "Check replies now"}
             </button>
           )}
           <button
@@ -2937,6 +3317,9 @@ function FindsTab({
               jobMode={jobMode}
               onDraftApplication={() => onDraftApplication(f)}
               applying={applyingId === f.id}
+              hasResume={hasResume}
+              onToggleAttach={(on) => onToggleAttach(f, on)}
+              onTogglePin={() => onTogglePin(f.id)}
             />
           ))}
         </div>
@@ -3086,6 +3469,24 @@ function ApplicationPacket({
   );
 }
 
+// Card color by status, and for sent outreach, by how long it's gone unanswered:
+// fresh sends stay neutral, warm to amber as they age, then coral once a
+// follow-up is due. Replied is a calm green; denied fades out. (Class strings are
+// literal so Tailwind keeps them.)
+function findCardTone(find: Find): string {
+  if (find.status === "denied") return "border-warm-border bg-white/60 opacity-70";
+  if (find.status === "replied") return "border-sage/50 bg-sage/10";
+  if (find.status === "sent") {
+    const days = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
+    if (days >= 7 && !find.lastFollowUpAt) return "border-coral/50 bg-coral/10"; // follow-up due
+    if (days >= 7) return "border-amber-300/60 bg-amber-50/70"; // followed up, still waiting
+    if (days >= 4) return "border-amber-300/50 bg-amber-50/60"; // aging
+    return "border-sage/30 bg-white"; // fresh send
+  }
+  if (find.status === "drafted") return "border-coral/30 bg-warm-bg/40"; // draft ready
+  return "border-warm-border bg-white"; // new
+}
+
 function FindCard({
   find,
   gmail,
@@ -3108,6 +3509,9 @@ function FindCard({
   jobMode,
   onDraftApplication,
   applying,
+  hasResume,
+  onToggleAttach,
+  onTogglePin,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -3130,6 +3534,9 @@ function FindCard({
   jobMode: boolean;
   onDraftApplication: () => void;
   applying: boolean;
+  hasResume: boolean;
+  onToggleAttach: (on: boolean) => void;
+  onTogglePin: () => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -3138,6 +3545,7 @@ function FindCard({
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
+  const [sendGuard, setSendGuard] = useState<null | { local: string; next: string }>(null);
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
@@ -3146,10 +3554,35 @@ function FindCard({
   const followUpReady =
     find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
 
+  // Send timing: a real delivery to a person outside their business hours gets a
+  // heads-up first. Applications (jobs/internships) always send immediately, and
+  // "create draft" mode isn't a delivery so it's never held.
+  const recipientTz = o.timezone || guessTimezone(o.location);
+  const isApplication = jobMode || !!find.application;
+  const afterHours =
+    gmail.sendMode === "send" &&
+    !isApplication &&
+    !!recipientTz &&
+    !isBusinessHours(recipientTz);
+  const doSend = () => {
+    setSendGuard(null);
+    onSendGmail();
+  };
+  const attemptSend = () => {
+    if (afterHours) {
+      setSendGuard({
+        local: localTimeLabel(recipientTz),
+        next: nextBusinessLabel(recipientTz),
+      });
+    } else {
+      onSendGmail();
+    }
+  };
+
   return (
     <div
-      className={`rounded-2xl border p-4 shadow-card transition ${
-        denied ? "border-warm-border bg-white/60 opacity-70" : "border-warm-border bg-white"
+      className={`rounded-2xl border p-4 shadow-card transition ${findCardTone(find)} ${
+        find.pinned ? "ring-1 ring-coral/30" : ""
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -3171,6 +3604,45 @@ function FindCard({
         <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
           {o.channel}
         </span>
+        {recipientTz && (
+          <span
+            title={`${o.name}'s local time${
+              isBusinessHours(recipientTz) ? "" : " — outside business hours"
+            }`}
+            className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              isBusinessHours(recipientTz)
+                ? "border-warm-border bg-warm-bg text-body/70"
+                : "border-amber-300/60 bg-amber-50 text-amber-800"
+            }`}
+          >
+            🕐 {localTimeLabel(recipientTz)} their time
+          </span>
+        )}
+        <button
+          onClick={onTogglePin}
+          title={find.pinned ? "Unpin" : "Pin to top"}
+          aria-label={find.pinned ? "Unpin find" : "Pin find to top"}
+          aria-pressed={!!find.pinned}
+          className={`ml-auto shrink-0 rounded-lg border p-1 transition ${
+            find.pinned
+              ? "border-coral/40 bg-coral/10 text-accent"
+              : "border-transparent text-body/40 hover:border-warm-border hover:bg-warm-bg hover:text-accent"
+          }`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill={find.pinned ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 17v5" />
+            <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+          </svg>
+        </button>
       </div>
 
       {(o.outlet || o.location) && (
@@ -3219,6 +3691,35 @@ function FindCard({
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
             {d.body}
           </pre>
+          {/* Attach-resume toggle (email only). Default comes from the draft API. */}
+          {d.channelType === "email" &&
+            (hasResume ? (
+              <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-body">
+                <input
+                  type="checkbox"
+                  checked={!!d.attachResume}
+                  onChange={(e) => onToggleAttach(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-brown"
+                />
+                <span>
+                  Attach my resume
+                  {d.attachResume && (
+                    <span className="ml-1 text-sage" aria-hidden>
+                      📎
+                    </span>
+                  )}
+                </span>
+                <span className="text-body/50">
+                  {d.attachResume
+                    ? "(Scout suggested this for you)"
+                    : ""}
+                </span>
+              </label>
+            ) : d.attachResume ? (
+              <p className="mt-2.5 text-[11px] text-body/60">
+                This looks like it wants a resume. Add one in your Profile to attach it.
+              </p>
+            ) : null)}
           <button
             onClick={() => {
               setEditSubject(d.subject || "");
@@ -3319,7 +3820,7 @@ function FindCard({
           <>
             {gmail.connected && emailDraft && !done ? (
               <button
-                onClick={onSendGmail}
+                onClick={attemptSend}
                 disabled={gmailBusy}
                 className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
               >
@@ -3410,6 +3911,9 @@ function FindCard({
         ) : denying ? (
           <div className="ml-auto flex flex-wrap items-center gap-1.5">
             <span className="text-[11px] font-semibold text-body/60">Why pass?</span>
+            <span className="text-[10px] text-body/45">
+              optional, but a reason helps Scout learn faster
+            </span>
             <DenyReasons
               onPick={(r) => {
                 setDenying(false);
@@ -3444,11 +3948,38 @@ function FindCard({
         )}
       </div>
 
+      {/* Business-hours heads-up before an out-of-hours send */}
+      {sendGuard && (
+        <div className="mt-2.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900">
+          It&apos;s <span className="font-bold">{sendGuard.local}</span> for {o.name}
+          {o.location ? ` in ${o.location}` : ""}, outside business hours. Emails
+          landing at a good time get read more. Best to send around{" "}
+          <span className="font-bold">{sendGuard.next}</span> their time.
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setSendGuard(null)}
+              className="rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-card transition hover:opacity-95"
+            >
+              Wait for business hours
+            </button>
+            <button
+              onClick={doSend}
+              disabled={gmailBusy}
+              className="rounded-lg border border-amber-400/60 bg-white px-3 py-1.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              Send anyway
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Deny reason on passed finds — editable */}
       {denied && (
         <div className="mt-2.5 border-t border-warm-border pt-2.5">
           <div className="mb-1.5 text-[11px] font-semibold text-body/60">
-            {find.denyReason ? "Reason you passed" : "Add a reason (optional)"}
+            {find.denyReason
+              ? "Reason you passed"
+              : "Add a reason (optional, but it helps Scout learn faster)"}
           </div>
           <DenyReasons current={find.denyReason} onPick={(r) => onSetReason(r)} />
         </div>
@@ -4172,6 +4703,52 @@ function DashboardTab({
           </p>
         </section>
       )}
+
+      {/* -------- People like you (cohort patterns) -------- */}
+      {(() => {
+        const c = community?.cohort;
+        if (!c) return null;
+        const pct = (v: number) => `${Math.round(v * 100)}%`;
+        const top = c.patterns.channels?.[0];
+        const fitK = c.patterns.fitKept;
+        const fitD = c.patterns.fitDenied;
+        const tips: string[] = [];
+        if (top)
+          tips.push(
+            `They act on ${top.channel.toLowerCase()} contacts most (${pct(top.keptRate)} kept). Scout leans toward finding those for you.`
+          );
+        if (fitK != null && fitD != null && fitK > fitD)
+          tips.push(
+            `Their sweet spot is around ${pct(fitK)} fit; they pass on ones near ${pct(fitD)}.`
+          );
+        const ce = c.patterns.contextEffect;
+        if (ce && ce.withContext != null && ce.withoutContext != null && ce.withContext < ce.withoutContext)
+          tips.push(
+            `They miss less when they add project context (${pct(ce.withContext)} deny vs ${pct(ce.withoutContext)} without).`
+          );
+        if (!tips.length) return null;
+        return (
+          <section className="mt-8 rounded-3xl border border-sage/40 bg-sage/10 p-6">
+            <h2 className="text-lg font-bold text-ink">People like you</h2>
+            <p className="mt-1 text-sm text-body/80">
+              Patterns from {c.users} other{" "}
+              {c.users === 1 ? "person" : "people"} doing{" "}
+              <span className="font-semibold">{c.useCase}</span>. Scout uses these to steer
+              who it finds for you. Aggregate only, never anyone&apos;s individual data.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {tips.map((t) => (
+                <li key={t} className="flex items-start gap-2 text-sm text-ink">
+                  <span className="mt-0.5 text-sage" aria-hidden>
+                    ✦
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
@@ -5294,7 +5871,10 @@ function TemplatesTab({
             </p>
           </div>
           <div>
-            <Label>Show us how you write it</Label>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <Label className="mb-0">Show us how you write it</Label>
+              <MicButton onAppend={(t) => setText(joinSpoken(text, t))} />
+            </div>
             <FileDrop
               label="Drop a cover letter or example file, or click to upload"
               onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
@@ -5503,6 +6083,76 @@ function UseCaseCombo({
 }
 
 /* ---------------- Gmail connection card ---------------- */
+// Shown when no mailbox is connected: one "Connect email" button that reveals a
+// Gmail / Outlook choice, instead of two separate provider cards.
+function ConnectEmailCard({
+  note,
+  onConnectGmail,
+  onConnectOutlook,
+}: {
+  note: string;
+  onConnectGmail: () => void;
+  onConnectOutlook: () => void;
+}) {
+  const [choosing, setChoosing] = useState(false);
+  return (
+    <section className="mt-5 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <div className="flex flex-wrap items-start gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
+            <rect x="3" y="5" width="18" height="14" rx="2" />
+            <path d="m3 7 9 6 9-6" />
+          </svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-[15px] font-bold text-ink">Send from your email</div>
+          <p className="mt-0.5 text-sm leading-relaxed text-body">
+            Connect your email so Scout can put a ready-to-go draft in your inbox, or
+            send it for you, straight from your own address.
+          </p>
+        </div>
+        {choosing ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              onClick={onConnectGmail}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+            >
+              Gmail
+            </button>
+            <button
+              onClick={onConnectOutlook}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+            >
+              Outlook
+            </button>
+            <button
+              onClick={() => setChoosing(false)}
+              className="text-xs font-semibold text-body/50 transition hover:text-accent"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setChoosing(true)}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Connect email
+          </button>
+        )}
+      </div>
+      {choosing && (
+        <p className="mt-3 text-xs text-body/60">Which email provider do you use?</p>
+      )}
+      {note && (
+        <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/70 px-4 py-2.5 text-xs font-medium text-ink">
+          {note}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function MailboxCard({
   provider,
   conn,
@@ -5652,6 +6302,11 @@ function ProfileTab({
   onRemoveCategories,
   onReorderCategories,
   onDeriveGoal,
+  resumeFileName,
+  onResumeFile,
+  onClearResume,
+  signature,
+  onSignature,
 }: {
   name: string;
   bio: string;
@@ -5686,10 +6341,35 @@ function ProfileTab({
   onRemoveCategories: (ids: string[]) => void;
   onReorderCategories: (projectId: string, orderedIds: string[]) => void;
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+  resumeFileName: string;
+  onResumeFile: (file: File) => void;
+  onClearResume: () => void;
+  signature: string;
+  onSignature: (v: string) => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
+  const [buildingSig, setBuildingSig] = useState(false);
+  // Build an email signature from the resume/bio text (explicit, overwrites the
+  // current one; the user can edit after).
+  async function buildSignatureFromResume() {
+    const t = bio.trim();
+    if (!t || buildingSig) return;
+    setBuildingSig(true);
+    try {
+      const res = await fetch("/api/parse-profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: t }),
+      });
+      const data = await res.json();
+      if (res.ok && data.signature) onSignature(data.signature);
+    } catch {}
+    finally {
+      setBuildingSig(false);
+    }
+  }
   // Individual vs company changes how you fill your profile (resume vs website).
   const [kind, setKind] = useState<"individual" | "company">("individual");
   const [website, setWebsite] = useState("");
@@ -5723,6 +6403,9 @@ function ProfileTab({
         body: JSON.stringify({ text: t }),
       });
       const data = await res.json();
+      // Build a signature from the resume, but only if the user hasn't set one
+      // (never clobber an edited signature).
+      if (res.ok && data.signature && !signature.trim()) onSignature(data.signature);
       if (res.ok && (data.name || data.useCase)) {
         onAutofill(data.name, data.useCase);
         setAutofilled(true);
@@ -5778,22 +6461,35 @@ function ProfileTab({
 
       {mailboxAvailable && (
         <>
-          <MailboxCard
-            provider="gmail"
-            conn={gmail}
-            note={gmailNote}
-            onConnect={onConnectGmail}
-            onDisconnect={onDisconnectGmail}
-            onMode={onGmailMode}
-          />
-          <MailboxCard
-            provider="outlook"
-            conn={outlook}
-            note={outlookNote}
-            onConnect={onConnectOutlook}
-            onDisconnect={onDisconnectOutlook}
-            onMode={onOutlookMode}
-          />
+          {/* Neither connected: one "Connect email" card that lets you choose. Once a
+              mailbox is connected, its own card shows (with send mode + disconnect). */}
+          {!gmail.connected && !outlook.connected && (
+            <ConnectEmailCard
+              note={gmailNote || outlookNote}
+              onConnectGmail={onConnectGmail}
+              onConnectOutlook={onConnectOutlook}
+            />
+          )}
+          {gmail.connected && (
+            <MailboxCard
+              provider="gmail"
+              conn={gmail}
+              note={gmailNote}
+              onConnect={onConnectGmail}
+              onDisconnect={onDisconnectGmail}
+              onMode={onGmailMode}
+            />
+          )}
+          {outlook.connected && (
+            <MailboxCard
+              provider="outlook"
+              conn={outlook}
+              note={outlookNote}
+              onConnect={onConnectOutlook}
+              onDisconnect={onDisconnectOutlook}
+              onMode={onOutlookMode}
+            />
+          )}
         </>
       )}
 
@@ -5848,10 +6544,28 @@ function ProfileTab({
             label={
               parsing
                 ? "Reading and filling in your profile…"
-                : "Drop your resume or LinkedIn PDF here, or click to upload"
+                : "Drop your resume or LinkedIn here, or click to upload"
             }
+            accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
+            hint="PDF, image (JPG/PNG), Word (.docx), HTML, or text"
             onText={(t) => readAndFill(t)}
+            onFile={(f) => onResumeFile(f)}
           />
+        )}
+
+        {/* Resume kept for email attachments */}
+        {resumeFileName && (
+          <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
+            <span aria-hidden>📎</span>
+            <span className="font-semibold">{resumeFileName}</span>
+            <span className="text-body/70">saved to attach to emails when you choose</span>
+            <button
+              onClick={onClearResume}
+              className="ml-auto font-semibold text-body/50 transition hover:text-accent"
+            >
+              Remove
+            </button>
+          </div>
         )}
 
         <p className="mt-2 text-xs leading-relaxed text-body/70">
@@ -5929,13 +6643,16 @@ function ProfileTab({
         <div className="mt-5">
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <Label className="mb-0">Resume, LinkedIn, or bio</Label>
-            <button
-              onClick={() => readAndFill(bio, false)}
-              disabled={!bio.trim() || parsing}
-              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
-            >
-              {parsing ? "Reading…" : "Read this & fill in my profile"}
-            </button>
+            <div className="flex items-center gap-1.5">
+              <MicButton onAppend={(t) => onBio(joinSpoken(bio, t))} />
+              <button
+                onClick={() => readAndFill(bio, false)}
+                disabled={!bio.trim() || parsing}
+                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+              >
+                {parsing ? "Reading…" : "Read this & fill in my profile"}
+              </button>
+            </div>
           </div>
           <textarea
             value={bio}
@@ -5957,6 +6674,37 @@ function ProfileTab({
             placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
+        </div>
+
+        {/* -------- Email signature -------- */}
+        <div className="mt-5">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <Label className="mb-0">Email signature</Label>
+            <button
+              onClick={buildSignatureFromResume}
+              disabled={!bio.trim() || buildingSig}
+              title="Build a signature from your resume / bio (you can edit it after)"
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              {buildingSig
+                ? "Building…"
+                : signature.trim()
+                ? "Rebuild from resume"
+                : "Build from my resume"}
+            </button>
+          </div>
+          <textarea
+            value={signature}
+            onChange={(e) => onSignature(e.target.value)}
+            rows={4}
+            placeholder={"e.g.\nKaitlyn Kasel\nManager, Cue Creative\nkaitlyn@cuecreative.com · (615) 555-0142"}
+            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+          <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+            Added to the end of every email Scout drafts for you. Build it from your
+            resume above, then edit freely. Leave blank to let Scout sign off with just
+            your name. Only used on emails, not DMs.
+          </p>
         </div>
 
         <hr className="my-7 border-warm-border" />
@@ -6103,24 +6851,134 @@ function AccountCard({
 }
 
 /* ---------------- Reusable file drop (resume, cover letters) ---------------- */
+// Append spoken text to an existing value with sensible spacing.
+function joinSpoken(prev: string, add: string): string {
+  const a = String(prev || "");
+  const b = String(add || "").trim();
+  if (!b) return a;
+  return (a && !/\s$/.test(a) ? a + " " : a) + b;
+}
+
+// Voice dictation button using the browser's built-in Web Speech API (no external
+// service). Renders nothing on browsers that don't support it. Calls onAppend with
+// each finalized phrase so the caller can add it to a text field.
+function MicButton({
+  onAppend,
+  className = "",
+}: {
+  onAppend: (text: string) => void;
+  className?: string;
+}) {
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SR =
+      typeof window !== "undefined" &&
+      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
+    setSupported(!!SR);
+    return () => {
+      try {
+        recRef.current?.stop();
+      } catch {}
+    };
+  }, []);
+
+  function start() {
+    const SR = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) return;
+    const rec = new SR();
+    rec.continuous = true;
+    rec.interimResults = false; // append only finalized phrases, once each
+    rec.lang = "en-US";
+    rec.onresult = (e: any) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal && r[0]?.transcript) onAppend(r[0].transcript.trim());
+      }
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    try {
+      rec.start();
+      setListening(true);
+    } catch {}
+  }
+  function stop() {
+    try {
+      recRef.current?.stop();
+    } catch {}
+    setListening(false);
+  }
+
+  if (!supported) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => (listening ? stop() : start())}
+      title={listening ? "Stop dictation" : "Dictate with your voice"}
+      aria-label={listening ? "Stop dictation" : "Dictate with your voice"}
+      aria-pressed={listening}
+      className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
+        listening
+          ? "border-coral bg-coral/10 text-accent"
+          : "border-warm-border text-body/70 hover:bg-warm-bg"
+      } ${className}`}
+    >
+      <svg
+        width="12"
+        height="12"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className={listening ? "animate-pulse" : ""}
+      >
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
+      </svg>
+      {listening ? "Listening…" : "Dictate"}
+    </button>
+  );
+}
+
 function FileDrop({
   onText,
+  onFile,
   label = "Drop a file here, or click to upload",
   accept = ".pdf,.docx,.html,.htm,.txt,.md",
+  hint = "PDF, Word (.docx), HTML, or text file",
 }: {
   onText: (text: string) => void;
+  onFile?: (file: File) => void; // also hand back the raw file (e.g. to attach later)
   label?: string;
   accept?: string;
+  hint?: string;
 }) {
   const [reading, setReading] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handle(file?: File | null) {
     if (!file) return;
     setErr("");
+    setNote("");
     setReading(true);
     try {
+      if (onFile) onFile(file);
+      // Images (jpg/png/etc.) can be attached but not read for text (no OCR).
+      const isImage =
+        file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|gif)$/i.test(file.name);
+      if (isImage) {
+        if (onFile) setNote(`Saved “${file.name}” to attach to your emails.`);
+        else setErr("That's an image, which can't be read as text. Upload a PDF or paste the text.");
+        return;
+      }
       const text = await fileToText(file);
       if (text) onText(text);
       else setErr("That file had no readable text, try pasting it instead.");
@@ -6151,7 +7009,8 @@ function FileDrop({
       <div className="text-sm font-semibold text-ink">
         {reading ? "Reading…" : label}
       </div>
-      <div className="mt-0.5 text-xs text-body/70">PDF, Word (.docx), HTML, or text file</div>
+      <div className="mt-0.5 text-xs text-body/70">{hint}</div>
+      {note && <div className="mt-1.5 text-xs font-semibold text-sage">{note}</div>}
       {err && <div className="mt-1.5 text-xs font-semibold text-accent">{err}</div>}
     </div>
   );

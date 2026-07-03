@@ -129,21 +129,57 @@ function encodeHeader(v: string): string {
     : v;
 }
 
+export interface MailAttachment {
+  name: string;
+  mime: string; // e.g. application/pdf
+  dataBase64: string; // raw base64 (no data: prefix)
+}
+
 function buildRaw(
   from: string,
   to: string,
   subject: string,
-  body: string
+  body: string,
+  attachment?: MailAttachment
 ): string {
-  const headers = [
+  const baseHeaders = [
     `From: ${from}`,
     `To: ${to}`,
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",
-    'Content-Type: text/plain; charset="UTF-8"',
   ];
-  const msg = headers.join("\r\n") + "\r\n\r\n" + body;
-  return Buffer.from(msg).toString("base64url");
+
+  // No attachment: a plain-text message, as before.
+  if (!attachment) {
+    const msg =
+      [...baseHeaders, 'Content-Type: text/plain; charset="UTF-8"'].join("\r\n") +
+      "\r\n\r\n" +
+      body;
+    return Buffer.from(msg).toString("base64url");
+  }
+
+  // With an attachment: a multipart/mixed message (text part + file part).
+  const boundary = "scout_boundary_" + Buffer.from(from + to).toString("hex").slice(0, 16);
+  const safeName = attachment.name.replace(/["\\\r\n]/g, "_") || "resume.pdf";
+  // Gmail wants base64 body lines wrapped at 76 chars.
+  const wrapped = attachment.dataBase64.replace(/[\r\n]/g, "").replace(/.{1,76}/g, "$&\r\n");
+  const parts = [
+    baseHeaders.join("\r\n"),
+    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    'Content-Type: text/plain; charset="UTF-8"',
+    "",
+    body,
+    `--${boundary}`,
+    `Content-Type: ${attachment.mime || "application/octet-stream"}; name="${safeName}"`,
+    "Content-Transfer-Encoding: base64",
+    `Content-Disposition: attachment; filename="${safeName}"`,
+    "",
+    wrapped,
+    `--${boundary}--`,
+  ];
+  return Buffer.from(parts.join("\r\n")).toString("base64url");
 }
 
 // Create a draft in the user's inbox, or send outright. Returns the Gmail
@@ -156,9 +192,10 @@ export async function gmailSendOrDraft(opts: {
   body: string;
   mode: "send" | "draft";
   threadId?: string; // when set, the message is placed in that existing thread
+  attachment?: MailAttachment; // optional file (e.g. the user's resume)
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
-  const raw = buildRaw(opts.from, opts.to, opts.subject, opts.body);
+  const raw = buildRaw(opts.from, opts.to, opts.subject, opts.body, opts.attachment);
   const url =
     opts.mode === "send"
       ? "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
