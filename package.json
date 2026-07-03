@@ -13,9 +13,11 @@
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "@supabase/supabase-js": "^2.110.0",
+    "@types/papaparse": "^5.5.2",
     "gsap": "^3.15.0",
     "mammoth": "^1.12.0",
     "next": "^14.2.35",
+    "papaparse": "^5.5.4",
     "pdfjs-dist": "^6.1.200",
     "react": "18.3.1",
     "react-dom": "18.3.1",

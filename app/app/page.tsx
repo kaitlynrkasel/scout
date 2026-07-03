@@ -8,6 +8,7 @@ import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
 import { Reveal, CountUp } from "./motion";
 import Tutorial, { type TourStep } from "./Tutorial";
+import ImportOutreach from "./ImportOutreach";
 import { fileToText } from "@/lib/fileText";
 import {
   guessTimezone,
@@ -643,6 +644,7 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  const [importOpen, setImportOpen] = useState(false); // CSV import modal open?
   // Is the signed-in user on the owner allowlist? Drives whether the Account
   // tab shows an "Admin" link into /admin. The Insights view itself lives on
   // its own route so customers never see any hint of it in the sidebar.
@@ -1755,6 +1757,21 @@ function ScoutTool({
     return fresh.length;
   }
 
+  // Merge pre-built Find records (from the CSV importer) into the existing
+  // pipeline, skipping anything that would collide with an id already saved.
+  // Returns the count actually added so the importer can report it.
+  function importFinds(imported: Find[]): number {
+    const existing = new Set(finds.map((f) => f.id));
+    const fresh: Find[] = [];
+    for (const f of imported) {
+      if (existing.has(f.id)) continue;
+      existing.add(f.id);
+      fresh.push(f);
+    }
+    if (fresh.length) saveFinds([...fresh, ...finds]);
+    return fresh.length;
+  }
+
   function setFindStatus(id: string, status: FindStatus) {
     saveFinds(
       finds.map((f) =>
@@ -2372,6 +2389,13 @@ function ScoutTool({
         onClose={endTour}
         onFinish={endTour}
       />
+      <ImportOutreach
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImport={importFinds}
+        projects={projects}
+        activeProjectId={activeId}
+      />
       {discovering && tab !== "outreach" && (
         <GlobalScoutStatus
           startedAt={discoverStartedAt}
@@ -2891,6 +2915,7 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
+          openImport={() => setImportOpen(true)}
         />
       )}
 
@@ -4803,6 +4828,7 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
+  openImport,
 }: {
   activity: Activity;
   profile: Profile;
@@ -4819,6 +4845,7 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
+  openImport: () => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -4956,8 +4983,30 @@ function DashboardTab({
         </button>
       )}
 
+      {/* -------- Import your existing outreach -------- */}
+      <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-extrabold text-ink">
+            Already reaching out somewhere else?
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+            Drop in a CSV of who you've already contacted. Scout won't resurface
+            them and starts learning what a fit looks like for you.
+          </p>
+        </div>
+        <button
+          onClick={openImport}
+          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+        >
+          Import a CSV
+        </button>
+      </section>
+
       {/* -------- Activity (real counts) -------- */}
-      <Reveal as="section" className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Reveal as="section" className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile
           n={activity.searches}
           label="Searches run"
