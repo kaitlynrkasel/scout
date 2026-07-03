@@ -15,7 +15,7 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
       "A sentence or two about you — who you are and what you're hoping to learn.",
     exampleGoal: "A&R and artist development people at indie labels in Nashville",
     exampleAbout:
-      "I'm a Belmont music business student and founder of a small artist-development company, hoping to learn from people doing A&R.",
+      "I run marketing for a small indie beauty brand and I'm hoping to learn from people doing partnerships and PR at bigger consumer brands.",
     queryTails: [
       "{goal} LinkedIn",
       "people who work in {goal}",

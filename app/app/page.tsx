@@ -6308,7 +6308,7 @@ function TeamTab({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && wsName.trim()) createWorkspace();
                 }}
-                placeholder="e.g. Cue Creative, or Kaitlyn's team"
+                placeholder="e.g. Acme Studio, or the marketing team"
                 className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
               <button
@@ -7423,7 +7423,7 @@ function ProfileTab({
             <input
               value={name}
               onChange={(e) => onName(e.target.value)}
-              placeholder="e.g. Kaitlyn Kasel, or Belt Creative"
+              placeholder="e.g. Alex Rivera, or Acme Studio"
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
           </div>
@@ -7605,7 +7605,7 @@ function ProfileTab({
             value={signature}
             onChange={(e) => onSignature(e.target.value)}
             rows={4}
-            placeholder={"e.g.\nKaitlyn Kasel\nManager, Cue Creative\nkaitlyn@cuecreative.com · (615) 555-0142"}
+            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@acmestudio.com · (555) 010-0142"}
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-body/70">
