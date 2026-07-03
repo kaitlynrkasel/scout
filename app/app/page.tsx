@@ -1447,6 +1447,8 @@ function ScoutTool({
         onLogout={onLogout}
       />
       <div className="flex min-w-0 flex-1 flex-col">
+      {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
+      <div className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
@@ -1947,6 +1949,8 @@ function ScoutTool({
           />
         </main>
       )}
+
+      </div>
 
       {/* ---------------- Footer ---------------- */}
       <footer className="border-t border-warm-border bg-white/70">
