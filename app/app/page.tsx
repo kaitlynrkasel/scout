@@ -459,6 +459,48 @@ function AuthedShell() {
   const [initialState, setInitialState] = useState<AppState | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The latest state payloads pending a debounced write. Kept in refs so the
+  // visibilitychange flush below can find them regardless of which render
+  // last called onSaveProfile / onSaveState.
+  const pendingProfile = useRef<Profile | null>(null);
+  const pendingState = useRef<AppState | null>(null);
+
+  // When the tab is about to go away (backgrounded, minimized, phone locked,
+  // navigated), fire any pending saves immediately. visibilitychange==hidden
+  // is the reliable cross-browser signal — beforeunload gets killed on mobile.
+  useEffect(() => {
+    if (!supabase) return;
+    const flush = () => {
+      if (document.visibilityState !== "hidden") return;
+      const uid = session?.user?.id;
+      if (!uid) return;
+      if (saveTimer.current && pendingProfile.current) {
+        clearTimeout(saveTimer.current);
+        saveTimer.current = null;
+        const n = pendingProfile.current;
+        pendingProfile.current = null;
+        dbSaveProfile(uid, {
+          name: n.name,
+          bio: n.bio,
+          useCase: n.useCase,
+          linkedin: n.linkedin || "",
+        });
+      }
+      if (stateTimer.current && pendingState.current) {
+        clearTimeout(stateTimer.current);
+        stateTimer.current = null;
+        const s = pendingState.current;
+        pendingState.current = null;
+        dbSaveState(uid, s);
+      }
+    };
+    document.addEventListener("visibilitychange", flush);
+    window.addEventListener("pagehide", flush);
+    return () => {
+      document.removeEventListener("visibilitychange", flush);
+      window.removeEventListener("pagehide", flush);
+    };
+  }, [session?.user?.id]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -502,15 +544,20 @@ function AuthedShell() {
       key={session.user.id}
       initialProfile={initial}
       onSaveProfile={(n) => {
+        pendingProfile.current = n;
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(() => {
+          const payload = pendingProfile.current;
+          pendingProfile.current = null;
+          saveTimer.current = null;
+          if (!payload) return;
           dbSaveProfile(session.user.id, {
-            name: n.name,
-            bio: n.bio,
-            useCase: n.useCase,
-            linkedin: n.linkedin || "",
+            name: payload.name,
+            bio: payload.bio,
+            useCase: payload.useCase,
+            linkedin: payload.linkedin || "",
           });
-        }, 700);
+        }, 250);
       }}
       onLogout={() => supabase?.auth.signOut()}
       showLogout
@@ -520,10 +567,15 @@ function AuthedShell() {
       }}
       initialState={initialState}
       onSaveState={(s) => {
+        pendingState.current = s;
         if (stateTimer.current) clearTimeout(stateTimer.current);
         stateTimer.current = setTimeout(() => {
-          dbSaveState(session.user.id, s);
-        }, 800);
+          const payload = pendingState.current;
+          pendingState.current = null;
+          stateTimer.current = null;
+          if (!payload) return;
+          dbSaveState(session.user.id, payload);
+        }, 250);
       }}
       accountEmail={session.user.email || ""}
     />
@@ -541,12 +593,11 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "insights"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings"
   >("dashboard");
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
-  const [isOwner, setIsOwner] = useState(false); // owner-only Insights tab visible?
   // Per-search competitiveness override (defaults to the profile setting). "" =
   // inherit from profile; anything else overrides for this search only.
   const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
@@ -792,30 +843,6 @@ function ScoutTool({
     }
   }, []);
 
-  // Ask the server whether the signed-in user is on the owner allowlist. Only
-  // then do we render the Insights nav item. Server never leaks the list, so a
-  // regular signed-in user just gets { owner: false } back.
-  useEffect(() => {
-    if (!getToken) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const res = await fetch("/api/admin/whoami", {
-          headers: { authorization: `Bearer ${token}` },
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (!cancelled) setIsOwner(!!data?.owner);
-      } catch {
-        /* silent — user is just treated as non-owner */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [getToken]);
 
   function startTour() {
     setTourOpen(true);
@@ -2247,7 +2274,6 @@ function ScoutTool({
         templatesCount={myTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
-        isOwner={isOwner}
         projects={projects}
         activeId={activeId}
         onSelectProject={selectProject}
@@ -2918,10 +2944,6 @@ function ScoutTool({
         </main>
       )}
 
-      {tab === "insights" && isOwner && (
-        <InsightsTab getToken={getToken} />
-      )}
-
       </div>
 
       {/* ---------------- Footer ---------------- */}
@@ -2990,397 +3012,6 @@ function ScoutTool({
   );
 }
 
-/* ---------------- Owner-only Insights tab ----------------
- * Aggregate view of deny reasons, top denied hosts, per-use-case deny rates,
- * and the raw denial log across every user's stored state. Data comes from
- * /api/admin/insights which gates on the SCOUT_OWNER_EMAILS allowlist. Only
- * mounts when the parent knows the caller is an owner. */
-interface AdminInsights {
-  totals: {
-    users: number;
-    users_with_state_rows: number;
-    finds: number;
-    new: number;
-    denied: number;
-    approved: number;
-    drafted: number;
-    sent: number;
-    replied: number;
-  };
-  denyReasons: { reason: string; count: number; examples: string[] }[];
-  denyByHost: { host: string; count: number }[];
-  denyRateByUseCase: { useCase: string; total: number; denied: number; rate: number }[];
-  funnel: { finds: number; drafted: number; sent: number; replied: number };
-  denials: {
-    name: string;
-    host: string;
-    url: string;
-    reason: string;
-    useCase: string;
-    addedAt: number;
-  }[];
-  perUser: {
-    userId: string;
-    finds: number;
-    denied: number;
-    approved: number;
-    updatedAt: string;
-    hasFindsField: boolean;
-    useCase: string;
-  }[];
-  generatedAt: string;
-}
-
-function InsightsTab({
-  getToken,
-}: {
-  getToken?: () => Promise<string | null>;
-}) {
-  const [data, setData] = useState<AdminInsights | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [q, setQ] = useState(""); // free-text filter over the raw denial list
-
-  async function load() {
-    if (!getToken) return;
-    setBusy(true);
-    setError("");
-    try {
-      const token = await getToken();
-      if (!token) throw new Error("Not signed in");
-      const res = await fetch("/api/admin/insights", {
-        headers: { authorization: `Bearer ${token}` },
-      });
-      const body = await res.json();
-      if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`);
-      setData(body);
-    } catch (e: any) {
-      setError(e?.message || "Failed to load insights.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const filtered = data?.denials.filter((d) => {
-    if (!q.trim()) return true;
-    const s = q.toLowerCase();
-    return (
-      d.name.toLowerCase().includes(s) ||
-      d.reason.toLowerCase().includes(s) ||
-      d.host.toLowerCase().includes(s) ||
-      d.useCase.toLowerCase().includes(s)
-    );
-  }) || [];
-
-  function copyDenialsJSON() {
-    if (!data) return;
-    navigator.clipboard.writeText(JSON.stringify(data.denials, null, 2));
-  }
-
-  return (
-    <main className="mx-auto w-full max-w-6xl px-6 py-10">
-      <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
-            <span className="brand-text">Insights</span>
-          </h1>
-          <p className="mt-1 text-sm text-body">
-            Owner-only. Every user's denials, approvals, and reasons — the
-            signal for tuning the extract prompt and filter.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={load}
-            disabled={busy}
-            className="rounded-xl border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-brown-tint disabled:opacity-50"
-          >
-            {busy ? "Loading…" : "Refresh"}
-          </button>
-          <button
-            onClick={copyDenialsJSON}
-            disabled={!data}
-            className="rounded-xl bg-brown px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
-          >
-            Copy denials JSON
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </div>
-      )}
-
-      {!data && !error && busy && (
-        <div className="rounded-2xl border border-warm-border bg-white p-6 text-sm text-body">
-          Aggregating across all users…
-        </div>
-      )}
-
-      {data && (
-        <>
-          {/* Top-line totals. "State rows" is every user_state row we can see
-              (including ones with no finds saved yet); "Users" is only those
-              with at least one find. If these two diverge a lot, some users'
-              finds aren't landing in Supabase. */}
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              [
-                "State rows / Users",
-                `${data.totals.users_with_state_rows} / ${data.totals.users}`,
-              ],
-              ["Finds", data.totals.finds],
-              ["Denied", data.totals.denied],
-              ["Approved", data.totals.approved],
-              ["Drafted", data.totals.drafted],
-              ["Sent", data.totals.sent],
-              ["Replied", data.totals.replied],
-              [
-                "Deny rate",
-                data.totals.finds
-                  ? `${Math.round((data.totals.denied / data.totals.finds) * 100)}%`
-                  : "—",
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={String(label)}
-                className="rounded-2xl border border-warm-border bg-white p-4"
-              >
-                <div className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
-                  {label}
-                </div>
-                <div className="mt-1 text-2xl font-extrabold text-ink tabular-nums">
-                  {value}
-                </div>
-              </div>
-            ))}
-          </section>
-
-          {/* Per-user drill-down. If a tester's row is missing here entirely,
-              their client never synced to Supabase (incognito, signed out, or
-              a different Supabase project). If their row is here but shows 0
-              finds, the finds array isn't being saved. */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-              Per-user (sorted by finds)
-            </h2>
-            <p className="mt-1 text-xs text-body/70">
-              Every row in <code>user_state</code>. Missing testers ⇒ their state
-              never hit Supabase.
-            </p>
-            <div className="mt-3 max-h-64 overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
-                    <th className="py-1">User</th>
-                    <th className="py-1 text-right">Finds</th>
-                    <th className="py-1 text-right">Denied</th>
-                    <th className="py-1 text-right">Approved</th>
-                    <th className="py-1">Use case</th>
-                    <th className="py-1">Has finds field?</th>
-                    <th className="py-1">Last saved</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.perUser.map((u) => (
-                    <tr key={u.userId} className="border-t border-warm-border align-top">
-                      <td className="py-1.5 pr-2 font-mono text-[11px] text-body/80">
-                        {u.userId}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right font-bold tabular-nums text-ink">
-                        {u.finds}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">
-                        {u.denied}
-                      </td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">
-                        {u.approved}
-                      </td>
-                      <td className="py-1.5 pr-2 text-body/80">
-                        {u.useCase || "—"}
-                      </td>
-                      <td className="py-1.5 pr-2 text-body/80">
-                        {u.hasFindsField ? "yes" : (
-                          <span className="font-bold text-red-600">no</span>
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-2 text-body/60">
-                        {u.updatedAt ? new Date(u.updatedAt).toLocaleString() : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                  {data.perUser.length === 0 && (
-                    <tr>
-                      <td colSpan={7} className="py-3 text-sm text-body/60">
-                        No user_state rows found at all.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          {/* Deny reasons + top denied hosts side by side */}
-          <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <section className="rounded-2xl border border-warm-border bg-white p-5">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-                Top deny reasons
-              </h2>
-              <ul className="mt-3 space-y-2 text-sm">
-                {data.denyReasons.slice(0, 15).map((r) => (
-                  <li key={r.reason} className="flex items-start gap-3">
-                    <span className="mt-0.5 w-10 shrink-0 rounded-lg bg-brown-tint px-2 py-0.5 text-center text-xs font-extrabold text-brown-deep tabular-nums">
-                      {r.count}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="font-semibold text-ink">{r.reason}</div>
-                      {r.examples.length > 0 && (
-                        <div className="mt-0.5 text-xs text-body/70">
-                          e.g. {r.examples.join(", ")}
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-                {data.denyReasons.length === 0 && (
-                  <li className="text-sm text-body/60">No denials yet.</li>
-                )}
-              </ul>
-            </section>
-
-            <section className="rounded-2xl border border-warm-border bg-white p-5">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-                Top denied hosts
-              </h2>
-              <ul className="mt-3 space-y-1.5 text-sm">
-                {data.denyByHost.map((h) => (
-                  <li key={h.host} className="flex items-center gap-3">
-                    <span className="w-10 shrink-0 rounded-lg bg-brown-tint px-2 py-0.5 text-center text-xs font-extrabold text-brown-deep tabular-nums">
-                      {h.count}
-                    </span>
-                    <span className="truncate font-semibold text-ink">{h.host}</span>
-                  </li>
-                ))}
-                {data.denyByHost.length === 0 && (
-                  <li className="text-sm text-body/60">No hosts yet.</li>
-                )}
-              </ul>
-            </section>
-          </div>
-
-          {/* Deny rate per use case */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
-            <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-              Deny rate by use case
-            </h2>
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs font-bold uppercase tracking-wide text-muted">
-                  <th className="py-1">Use case</th>
-                  <th className="py-1 text-right">Finds</th>
-                  <th className="py-1 text-right">Denied</th>
-                  <th className="py-1 text-right">Rate</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.denyRateByUseCase.map((row) => (
-                  <tr key={row.useCase} className="border-t border-warm-border">
-                    <td className="py-2 font-semibold text-ink">{row.useCase}</td>
-                    <td className="py-2 text-right tabular-nums text-body">
-                      {row.total}
-                    </td>
-                    <td className="py-2 text-right tabular-nums text-body">
-                      {row.denied}
-                    </td>
-                    <td className="py-2 text-right tabular-nums font-extrabold text-brown-deep">
-                      {Math.round(row.rate * 100)}%
-                    </td>
-                  </tr>
-                ))}
-                {data.denyRateByUseCase.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-3 text-sm text-body/60">
-                      No use case data yet.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </section>
-
-          {/* Raw denial log with search */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-                Raw denials ({data.denials.length}, newest first)
-              </h2>
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Filter by name / reason / host / use case"
-                className="w-64 rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-brown"
-              />
-            </div>
-            <div className="mt-3 max-h-[520px] overflow-y-auto">
-              <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
-                    <th className="py-1">Name</th>
-                    <th className="py-1">Reason</th>
-                    <th className="py-1">Host</th>
-                    <th className="py-1">Use case</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((d, i) => (
-                    <tr key={i} className="border-t border-warm-border align-top">
-                      <td className="py-1.5 pr-2 font-semibold text-ink">{d.name}</td>
-                      <td className="py-1.5 pr-2 text-body">{d.reason}</td>
-                      <td className="py-1.5 pr-2 text-body/80">
-                        {d.url ? (
-                          <a
-                            href={d.url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline-offset-2 hover:underline"
-                          >
-                            {d.host || d.url}
-                          </a>
-                        ) : (
-                          d.host
-                        )}
-                      </td>
-                      <td className="py-1.5 pr-2 text-body/80">{d.useCase}</td>
-                    </tr>
-                  ))}
-                  {filtered.length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="py-3 text-sm text-body/60">
-                        No matches.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-
-          <p className="mt-4 text-[11px] text-body/60">
-            Generated {new Date(data.generatedAt).toLocaleString()}
-          </p>
-        </>
-      )}
-    </main>
-  );
-}
 
 /* ---------------- Draft kind picker ----------------
  * A small pill dropdown replacing the static "email/message" tag on a draft
@@ -3583,7 +3214,6 @@ function SideNav({
   templatesCount,
   profileHasBio,
   hasAccount,
-  isOwner,
   projects,
   activeId,
   onSelectProject,
@@ -3596,7 +3226,6 @@ function SideNav({
   templatesCount: number;
   profileHasBio: boolean;
   hasAccount: boolean;
-  isOwner?: boolean;
   projects: Project[];
   activeId: string;
   onSelectProject: (id: string) => void;
@@ -3644,22 +3273,6 @@ function SideNav({
                 <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
                 <circle cx="17.5" cy="9.5" r="2.6" />
                 <path d="M15 20a6 6 0 0 1 6.5-5.6" />
-              </>
-            ),
-          },
-        ]
-      : []),
-    ...(isOwner
-      ? [
-          {
-            key: "insights",
-            label: "Insights",
-            icon: (
-              <>
-                <path d="M4 20V10" />
-                <path d="M10 20V4" />
-                <path d="M16 20v-7" />
-                <path d="M22 20H2" />
               </>
             ),
           },
