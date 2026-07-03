@@ -6,7 +6,7 @@ import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
-import { Reveal, CountUp } from "./motion";
+import { Reveal, CountUp, FadeIn } from "./motion";
 import Tutorial, { type TourStep } from "./Tutorial";
 import ImportOutreach from "./ImportOutreach";
 import { fileToText } from "@/lib/fileText";
@@ -3596,7 +3596,7 @@ function FindsList({
 }) {
   const [denyingId, setDenyingId] = useState("");
   return (
-    <div className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`}>
+    <Reveal className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`} stagger={0.05}>
       {opps.map((o) => {
         const on = !!selected[o.id];
         return (
@@ -3718,7 +3718,7 @@ function FindsList({
           </div>
         );
       })}
-    </div>
+    </Reveal>
   );
 }
 
@@ -6267,7 +6267,7 @@ function TeamTab({
 
       {/* Invites addressed to me */}
       {ctx.invites.length > 0 && (
-        <section className="mt-6 space-y-2">
+        <Reveal as="section" className="mt-6 space-y-2" stagger={0.05}>
           {ctx.invites.map((inv) => (
             <div
               key={inv.id}
@@ -6286,7 +6286,7 @@ function TeamTab({
               </button>
             </div>
           ))}
-        </section>
+        </Reveal>
       )}
 
       {loading ? (
@@ -6706,7 +6706,7 @@ function TemplatesTab({
             DM, and every draft will match that style.
           </div>
         ) : (
-          <div className="space-y-3">
+          <Reveal className="space-y-3" stagger={0.05}>
             {list.map((s) => (
               <div
                 key={s.id}
@@ -6737,7 +6737,7 @@ function TemplatesTab({
                 </pre>
               </div>
             ))}
-          </div>
+          </Reveal>
         )}
       </section>
     </main>
@@ -7296,7 +7296,7 @@ function ProfileTab({
         </>
       )}
 
-      <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
         {/* -------- Individual vs company: resume drop or website -------- */}
         <div className="mb-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(["individual", "company"] as const).map((k) => (
@@ -7646,7 +7646,7 @@ function ProfileTab({
               : "Add your name to continue. A resume or bio is optional, it just makes messages more personal."}
           </span>
         </div>
-      </section>
+      </FadeIn>
     </main>
   );
 }

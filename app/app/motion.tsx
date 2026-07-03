@@ -57,6 +57,47 @@ export function Reveal({
 }
 
 /**
+ * FadeIn — fades and lifts a single element in as one block when it scrolls into
+ * view (no per-child stagger). Good for forms/cards where staggering fields would
+ * feel gimmicky. Respects prefers-reduced-motion.
+ */
+export function FadeIn({
+  as,
+  children,
+  y = 16,
+  ...rest
+}: {
+  as?: ElementType;
+  children: React.ReactNode;
+  y?: number;
+  className?: string;
+}) {
+  const Tag = (as || "div") as ElementType;
+  const ref = useRef<HTMLElement>(null);
+
+  useGSAP(
+    () => {
+      const el = ref.current;
+      if (!el || prefersReducedMotion()) return;
+      gsap.from(el, {
+        opacity: 0,
+        y,
+        duration: 0.5,
+        ease: "power2.out",
+        scrollTrigger: { trigger: el, start: "top 90%", once: true },
+      });
+    },
+    { scope: ref },
+  );
+
+  return (
+    <Tag ref={ref} {...rest}>
+      {children}
+    </Tag>
+  );
+}
+
+/**
  * CountUp — animates a number from 0 to `value` once it scrolls into view.
  * Falls back to the final value immediately under reduced-motion.
  */
