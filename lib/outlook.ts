@@ -170,3 +170,42 @@ export async function outlookSendOrDraft(opts: {
 
   return { id, threadId, mode: opts.mode };
 }
+
+// Which of these conversations have a reply (a message from someone other than the
+// user)? Reads only From + isDraft on the messages in each conversation, via the
+// Mail.ReadWrite scope the connection already has (no extra consent needed).
+export async function outlookConversationsWithReplies(
+  refreshToken: string,
+  userEmail: string,
+  conversationIds: string[]
+): Promise<Set<string>> {
+  const at = await accessTokenFromRefresh(refreshToken);
+  const me = userEmail.toLowerCase();
+  const replied = new Set<string>();
+  for (const cid of conversationIds.slice(0, 20)) {
+    const params = new URLSearchParams({
+      $filter: `conversationId eq '${cid.replace(/'/g, "''")}'`,
+      $select: "from,isDraft,sentDateTime",
+      $top: "25",
+    });
+    const r = await fetch(`${GRAPH}/me/messages?${params.toString()}`, {
+      headers: { authorization: `Bearer ${at}` },
+    });
+    if (r.status === 403) {
+      const body = await r.text();
+      throw Object.assign(new Error("insufficient scope: " + body), {
+        needsReconnect: true,
+      });
+    }
+    if (!r.ok) continue; // conversation gone/inaccessible — skip, don't fail the batch
+    const j = await r.json();
+    const msgs = j.value || [];
+    const hasReply = msgs.some((m: any) => {
+      if (m.isDraft) return false;
+      const addr = String(m.from?.emailAddress?.address || "").toLowerCase();
+      return addr && addr !== me;
+    });
+    if (hasReply) replied.add(cid);
+  }
+  return replied;
+}

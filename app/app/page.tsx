@@ -140,6 +140,7 @@ interface Find {
   draft?: Draft;
   addedAt: number;
   gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
+  outlookThreadId?: string; // Outlook conversation id — enables reply tracking
   denyReason?: string; // why the user passed on this find
 }
 
@@ -804,19 +805,21 @@ function ScoutTool({
       if (r.ok) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
-        if (j.mode === "send") {
-          setFinds((prev) => {
-            const next = prev.map((f) =>
-              f.draft?.opportunityId === d.opportunityId
-                ? { ...f, status: "sent" as FindStatus }
-                : f
-            );
-            try {
-              localStorage.setItem(FINDS_KEY, JSON.stringify(next));
-            } catch {}
-            return next;
-          });
-        }
+        setFinds((prev) => {
+          const next = prev.map((f) =>
+            f.draft?.opportunityId === d.opportunityId
+              ? {
+                  ...f,
+                  outlookThreadId: j.threadId || f.outlookThreadId,
+                  status: (j.mode === "send" ? "sent" : f.status) as FindStatus,
+                }
+              : f
+          );
+          try {
+            localStorage.setItem(FINDS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
         return j.mode as "draft" | "send";
       }
       reportError(j);
@@ -1147,53 +1150,69 @@ function ScoutTool({
     await sendViaMailbox(find.draft);
   }
 
-  // ---- Reply tracking: check tracked Gmail threads for responses ----
+  // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
   const [repliesBusy, setRepliesBusy] = useState(false);
   const [repliesNote, setRepliesNote] = useState("");
   async function checkReplies() {
     if (!getToken) return;
     const token = await getToken();
     if (!token) return;
-    const candidates = finds
-      .filter(
-        (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
-      )
+    const untracked = (f: Find) =>
+      f.status !== "replied" && f.status !== "denied";
+    const gmailCands = finds
+      .filter((f) => f.gmailThreadId && untracked(f))
       .slice(0, 20)
       .map((f) => ({ id: f.id, threadId: f.gmailThreadId }));
-    if (!candidates.length) {
+    const outlookCands = finds
+      .filter((f) => f.outlookThreadId && untracked(f))
+      .slice(0, 20)
+      .map((f) => ({ id: f.id, threadId: f.outlookThreadId }));
+    if (!gmailCands.length && !outlookCands.length) {
       setRepliesNote(
-        "Nothing to check yet. Send a message through Gmail first and replies get tracked automatically."
+        "Nothing to check yet. Send a message through Gmail or Outlook first and replies get tracked automatically."
       );
       return;
     }
     setRepliesBusy(true);
     setRepliesNote("");
-    try {
-      const r = await fetch("/api/gmail/replies", {
-        method: "POST",
-        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ threads: candidates }),
-      });
-      const j = await r.json();
-      if (r.ok) {
-        const replied: string[] = j.replied || [];
-        if (replied.length) {
-          saveFinds(
-            finds.map((f) =>
-              replied.includes(f.id) ? { ...f, status: "replied" as FindStatus } : f
-            )
-          );
-          setRepliesNote(
-            `${replied.length} ${replied.length === 1 ? "reply" : "replies"} found and marked.`
-          );
-        } else {
-          setRepliesNote(`No new replies yet (checked ${j.checked || candidates.length}).`);
-        }
-      } else {
-        setRepliesNote(j.error || "Couldn't check for replies.");
+    // Ask each connected provider about its own threads, then merge the results.
+    const ask = async (path: string, threads: any[]) => {
+      if (!threads.length) return { replied: [] as string[], checked: 0, error: "" };
+      try {
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ threads }),
+        });
+        const j = await r.json();
+        return r.ok
+          ? { replied: (j.replied || []) as string[], checked: j.checked || threads.length, error: "" }
+          : { replied: [] as string[], checked: 0, error: j.error || "Couldn't check for replies." };
+      } catch (e: any) {
+        return { replied: [] as string[], checked: 0, error: e?.message || "Couldn't check for replies." };
       }
-    } catch (e: any) {
-      setRepliesNote(e?.message || "Couldn't check for replies.");
+    };
+    try {
+      const [g, o] = await Promise.all([
+        ask("/api/gmail/replies", gmailCands),
+        ask("/api/outlook/replies", outlookCands),
+      ]);
+      const repliedSet = new Set<string>([...g.replied, ...o.replied]);
+      const err = g.error || o.error;
+      if (repliedSet.size) {
+        saveFinds(
+          finds.map((f) =>
+            repliedSet.has(f.id) ? { ...f, status: "replied" as FindStatus } : f
+          )
+        );
+        setRepliesNote(
+          `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
+        );
+      } else if (err) {
+        setRepliesNote(err);
+      } else {
+        setRepliesNote(`No new replies yet (checked ${g.checked + o.checked}).`);
+      }
     } finally {
       setRepliesBusy(false);
     }
@@ -2320,7 +2339,10 @@ function FindsTab({
     counts[s] = finds.filter((f) => f.status === s).length;
   }
   const trackable = finds.some(
-    (f) => f.gmailThreadId && f.status !== "replied" && f.status !== "denied"
+    (f) =>
+      (f.gmailThreadId || f.outlookThreadId) &&
+      f.status !== "replied" &&
+      f.status !== "denied"
   );
   const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
     .slice()
