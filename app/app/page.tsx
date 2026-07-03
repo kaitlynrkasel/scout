@@ -2229,21 +2229,9 @@ function ScoutTool({
             {discovering && (
               <div className="mt-8 flex items-start gap-3">
                 <Avatar />
-                <div className="relative max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3 shadow-card">
+                <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3.5 shadow-card">
                   <Tail side="left" />
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-sm font-semibold text-ink">
-                      Scout is searching
-                    </span>
-                    <span className="ml-1 flex gap-1">
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blush [animation-delay:150ms]" />
-                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral [animation-delay:300ms]" />
-                    </span>
-                  </div>
-                  <p className="mt-1 text-xs text-body">
-                    Reading the web and finding real contacts. About 30 to 60 seconds.
-                  </p>
+                  <SearchProgress active={discovering} />
                 </div>
               </div>
             )}
@@ -2655,6 +2643,74 @@ function ScoutTool({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------------- Search progress bar ----------------
+ * Discovery takes ~30–60s and the API doesn't stream progress, so we show a
+ * synthetic bar that eases toward ~92% over ~55s (fast at first, slow near the
+ * end) and rotates through stage labels so the user sees Scout thinking. When
+ * `active` flips false, we snap to 100% and hold briefly before unmounting. */
+function SearchProgress({ active }: { active: boolean }) {
+  const STAGES = [
+    "Reading the web",
+    "Finding real contacts",
+    "Checking who fits",
+    "Ranking your matches",
+    "Almost there",
+  ];
+  const [pct, setPct] = useState(0);
+  const [stage, setStage] = useState(0);
+  const startRef = useRef<number>(0);
+
+  useEffect(() => {
+    if (!active) {
+      // Snap to full so the user sees the bar complete before it disappears.
+      setPct(100);
+      return;
+    }
+    startRef.current = performance.now();
+    setPct(0);
+    setStage(0);
+    const TAU = 22000; // easing time constant — controls how fast we approach 92%
+    const CAP = 92; // hold here until the request actually finishes
+    let raf = 0;
+    const tick = () => {
+      const t = performance.now() - startRef.current;
+      // 1 - e^(-t/tau): fast climb early, slow near the cap
+      const eased = CAP * (1 - Math.exp(-t / TAU));
+      setPct(eased);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const stageIv = setInterval(() => {
+      setStage((s) => Math.min(STAGES.length - 1, s + 1));
+    }, 7000);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearInterval(stageIv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active]);
+
+  return (
+    <div>
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-semibold text-ink">Scout is searching</span>
+        <span className="ml-auto text-xs font-bold tabular-nums text-body/70">
+          {Math.round(pct)}%
+        </span>
+      </div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brown-tint">
+        <div
+          className="h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <p className="mt-2 text-xs text-body">
+        {STAGES[stage]}… Usually 30 to 60 seconds.
+      </p>
     </div>
   );
 }
