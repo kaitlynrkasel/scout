@@ -1735,7 +1735,6 @@ function ScoutTool({
         showLogout={!!showLogout}
         onLogout={onLogout}
       />
-      <CornerDog />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
       <div className="flex flex-1 flex-col">
@@ -2255,7 +2254,8 @@ function ScoutTool({
       </div>
 
       {/* ---------------- Footer ---------------- */}
-      <footer className="border-t border-warm-border bg-white/70">
+      <footer className="relative border-t border-warm-border bg-white/70">
+        <CornerDog />
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
           <span className="font-semibold text-ink">
