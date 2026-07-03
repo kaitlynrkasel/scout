@@ -118,6 +118,13 @@ function suggestionsFor(useCase: string): { name: string; goal: string }[] {
   return SUGGESTED[ucKey(useCase)] || GENERIC_SUGGESTIONS;
 }
 
+// Bump this when a stored payload's shape changes. `runSchemaMigrations` below
+// reads the recorded version, walks any per-version steps, and writes the
+// current one back. Keeps localStorage evolvable without silently corrupting
+// data when the on-disk shape drifts from what the code expects.
+const SCHEMA_VERSION = 1;
+const SCHEMA_KEY = "scout_schema_version";
+
 const TPL_KEY = "scout_templates";
 const PROFILE_KEY = "scout_profile";
 const CAT_KEY = "scout_categories";
@@ -199,6 +206,24 @@ function migrateLegacyKeys() {
       if (localStorage.getItem(newKey) === null) localStorage.setItem(newKey, val);
       localStorage.removeItem(oldKey);
     }
+  } catch {}
+}
+
+// Walk any pending schema migrations, then record the current version. Add a
+// case here when a stored payload's shape changes: read the old value, rewrite
+// it, and set the version so the migration only runs once.
+function runSchemaMigrations() {
+  try {
+    const raw = localStorage.getItem(SCHEMA_KEY);
+    const stored = raw ? Number(raw) : 0;
+    if (Number.isNaN(stored) || stored >= SCHEMA_VERSION) {
+      // Still record the current version so the next migration has a floor.
+      if (stored !== SCHEMA_VERSION) localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION));
+      return;
+    }
+    // Future migrations go here, e.g.:
+    // if (stored < 2) { /* rewrite FINDS_KEY entries to add a new field */ }
+    localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION));
   } catch {}
 }
 
@@ -586,6 +611,7 @@ function ScoutTool({
   // (per-browser mode, or an account's very first login which then seeds the DB).
   useEffect(() => {
     migrateLegacyKeys();
+    runSchemaMigrations();
     const prof: Profile = initialProfile;
     let cats: Category[] = [];
     let projs: Project[] = [];
