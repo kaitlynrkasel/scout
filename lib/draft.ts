@@ -44,12 +44,52 @@ function templateBlock(
   );
 }
 
+// Coaching directives the user approved from their dashboard — applied to every draft.
+function coachingBlock(coaching?: string[]): string {
+  const c = (coaching || []).map((s) => String(s || "").trim()).filter(Boolean).slice(0, 8);
+  if (!c.length) return "";
+  return (
+    "\n\nCOACHING the user approved (follow ALL of these in this message):\n" +
+    c.map((d) => `- ${d}`).join("\n")
+  );
+}
+
+// The strongest voice signal: how the user rewrote earlier drafts. Learn the delta.
+function editBlock(editPairs?: { before: string; after: string }[]): string {
+  const p = (editPairs || []).filter((x) => x && x.after).slice(0, 4);
+  if (!p.length) return "";
+  return (
+    "\n\nMOST IMPORTANT — corrections the user made to earlier drafts. Study what changed from BEFORE " +
+    "(what the engine wrote) to AFTER (how the user rewrote it): the tone, cuts, softening, length, openings/closings. " +
+    "Proactively make those same kinds of changes and match that tone here. Do NOT copy the content, copy the pattern:\n" +
+    p.map((x, i) => `${i + 1}. BEFORE: ${x.before.slice(0, 500)}\n   AFTER: ${x.after.slice(0, 500)}`).join("\n\n")
+  );
+}
+
+// What this specific target asks for (pasted by the user or found by deep-scan).
+function requirementsBlock(requirements?: string): string {
+  const r = String(requirements || "").trim();
+  if (!r) return "";
+  return (
+    "\n\nREQUIREMENTS this specific recipient asks for (make the message satisfy them exactly — " +
+    "put a requested detail in the subject, hit a requested length/format, mention what they ask to mention): " +
+    r.replace(/\s+/g, " ").slice(0, 900)
+  );
+}
+
 export async function draftFor(
   opp: Opportunity,
   about: string,
   useCase: string,
-  templates: OutreachTemplate[] = []
+  opts: {
+    templates?: OutreachTemplate[];
+    coaching?: string[];
+    editPairs?: { before: string; after: string }[];
+    requirements?: string;
+  } = {}
 ): Promise<Draft> {
+  const templates = opts.templates || [];
+  const requirements = opts.requirements || (opp as any).requirements || "";
   const t = resolveTemplate(useCase);
   const draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
   const { channelType, to } = pickChannel(opp);
@@ -88,13 +128,17 @@ export async function draftFor(
   }
 
   const tpl = templateBlock(templates, channelType);
+  const extras =
+    requirementsBlock(requirements) +
+    coachingBlock(opts.coaching) +
+    editBlock(opts.editPairs);
 
   let gen: any = null;
   try {
     gen = parseJsonLoose(
       await claudeJson(
         sys,
-        `${sender}\n\n${recipient}\n\n${purpose}\n\n${task}${tpl}`
+        `${sender}\n\n${recipient}\n\n${purpose}\n\n${task}${tpl}${extras}`
       )
     );
   } catch (e) {

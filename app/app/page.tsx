@@ -73,6 +73,8 @@ const ACTIVE_KEY = "scout_active_project";
 const ACT_KEY = "scout_activity";
 const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
+const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
+const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -141,6 +143,10 @@ interface Find {
   addedAt: number;
   gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
   denyReason?: string; // why the user passed on this find
+  requirements?: string; // what this target asks for (pasted or found by deep-scan)
+  sentAt?: number; // when the outreach actually went out (drives follow-up timing)
+  lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
+  scanned?: boolean; // deep-scan has already run on this find's site
 }
 
 // Quick reasons offered when passing on a find (plus free-text "Other").
@@ -370,6 +376,12 @@ function ScoutTool({
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindStatus | "all">("new");
   const [findDraftingId, setFindDraftingId] = useState(""); // find being drafted
+  // Coaching directives the user approved (applied to every draft) + the
+  // before/after voice deltas learned from drafts they hand-edited.
+  const [coaching, setCoaching] = useState<string[]>([]);
+  const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
+  const [scanningId, setScanningId] = useState(""); // find being deep-scanned
+  const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
 
   // ---- Gmail connection ----
   const [gmail, setGmail] = useState<{
@@ -402,6 +414,8 @@ function ScoutTool({
     let tpls: OutreachTemplate[] = [];
     let act: Partial<Activity> | null = null;
     let savedFinds: Find[] = [];
+    let coach: string[] = [];
+    let edits: { before: string; after: string }[] = [];
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -410,6 +424,8 @@ function ScoutTool({
       tpls = initialState.templates || [];
       act = initialState.activity || null;
       savedFinds = initialState.finds || [];
+      coach = initialState.coaching || [];
+      edits = initialState.editPairs || [];
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -434,10 +450,20 @@ function ScoutTool({
         const f = localStorage.getItem(FINDS_KEY);
         if (f) savedFinds = JSON.parse(f);
       } catch {}
+      try {
+        const c = localStorage.getItem(COACH_KEY);
+        if (c) coach = JSON.parse(c);
+      } catch {}
+      try {
+        const e = localStorage.getItem(EDITS_KEY);
+        if (e) edits = JSON.parse(e);
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
     setFinds(Array.isArray(savedFinds) ? savedFinds : []);
+    setCoaching(Array.isArray(coach) ? coach : []);
+    setEditPairs(Array.isArray(edits) ? edits : []);
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -483,9 +509,18 @@ function ScoutTool({
   // templates, projects, categories, and activity follow the user across devices.
   useEffect(() => {
     if (!onSaveState || !hydratedRef.current) return;
-    onSaveState({ templates: myTemplates, projects, categories, activeId, activity, finds });
+    onSaveState({
+      templates: myTemplates,
+      projects,
+      categories,
+      activeId,
+      activity,
+      finds,
+      coaching,
+      editPairs,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -528,6 +563,37 @@ function ScoutTool({
     try {
       localStorage.setItem(FINDS_KEY, JSON.stringify(n));
     } catch {}
+  };
+  const saveCoaching = (n: string[]) => {
+    setCoaching(n);
+    try {
+      localStorage.setItem(COACH_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  // Approve a dashboard tip: dedupe, keep the most recent 8 (draft.ts caps there).
+  const addCoaching = (tip: string) => {
+    const t = String(tip || "").trim();
+    if (!t) return;
+    saveCoaching([t, ...coaching.filter((c) => c.toLowerCase() !== t.toLowerCase())].slice(0, 8));
+  };
+  const removeCoaching = (tip: string) => {
+    saveCoaching(coaching.filter((c) => c !== tip));
+  };
+  const saveEditPairs = (n: { before: string; after: string }[]) => {
+    setEditPairs(n);
+    try {
+      localStorage.setItem(EDITS_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  // Record how the user rewrote a draft. Only keep it if the change is real
+  // (not a trivial tweak) so we teach voice, not noise. Newest 6 retained.
+  const recordEdit = (before: string, after: string) => {
+    const a = String(after || "").trim();
+    const b = String(before || "").trim();
+    if (!a || a === b) return;
+    // Skip near-identical edits (a couple of chars) to avoid teaching noise.
+    if (Math.abs(a.length - b.length) < 8 && a.slice(0, 40) === b.slice(0, 40)) return;
+    saveEditPairs([{ before: b, after: a }, ...editPairs].slice(0, 6));
   };
   // Bump real activity counters (searches run, people found, drafts written,
   // drafts copied to send). Honest usage, no invented metrics.
@@ -671,7 +737,10 @@ function ScoutTool({
   // mode ("draft"/"send") on success, or null on failure. Also stores the Gmail
   // thread id on the matching pipeline find (and flips it to sent when sending),
   // so replies in that thread can be tracked later.
-  const sendViaGmail = async (d: Draft): Promise<"draft" | "send" | null> => {
+  const sendViaGmail = async (
+    d: Draft,
+    threadId?: string
+  ): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
     if (!token) return null;
@@ -681,7 +750,12 @@ function ScoutTool({
       const r = await fetch("/api/gmail/send", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
+        body: JSON.stringify({
+          to: d.to,
+          subject: d.subject,
+          body: d.body,
+          threadId: threadId || undefined,
+        }),
       });
       const j = await r.json();
       if (r.ok) {
@@ -694,6 +768,7 @@ function ScoutTool({
                   ...f,
                   gmailThreadId: j.threadId || f.gmailThreadId,
                   status: (j.mode === "send" ? "sent" : f.status) as FindStatus,
+                  sentAt: j.mode === "send" && !f.sentAt ? Date.now() : f.sentAt,
                 }
               : f
           );
@@ -942,7 +1017,41 @@ function ScoutTool({
   }
 
   function setFindStatus(id: string, status: FindStatus) {
-    saveFinds(finds.map((f) => (f.id === id ? { ...f, status } : f)));
+    saveFinds(
+      finds.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              status,
+              // Stamp when it first goes to "sent" so follow-up timing has a clock.
+              sentAt: status === "sent" && !f.sentAt ? Date.now() : f.sentAt,
+            }
+          : f
+      )
+    );
+  }
+  // Mark contacted from the button — same as setting status to sent.
+  function markContacted(id: string) {
+    setFindStatus(id, "sent");
+  }
+  // Save a hand-edited draft AND learn the before→after delta for future drafts.
+  function editFindDraft(find: Find, subject: string, body: string) {
+    const prevBody = find.draft?.body || "";
+    recordEdit(prevBody, body);
+    saveFinds(
+      finds.map((f) =>
+        f.id === find.id && f.draft
+          ? {
+              ...f,
+              draft: {
+                ...f.draft,
+                subject: subject,
+                body: body,
+              },
+            }
+          : f
+      )
+    );
   }
   // Deny a find and record why (reason optional).
   function denyFindWithReason(id: string, reason: string) {
@@ -961,6 +1070,117 @@ function ScoutTool({
     saveFinds(finds.filter((f) => f.id !== id));
   }
 
+  // Deep-scan a find's site for a specific contact + submission requirements.
+  async function deepScanFind(find: Find) {
+    if (!find.opp.url) {
+      setRepliesNote("This find has no page to scan.");
+      return;
+    }
+    setScanningId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/deep-scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: find.opp.url,
+          name: find.opp.name,
+          outlet: find.opp.outlet,
+          goal,
+          useCase: activeUseCase,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't scan that site.");
+        return;
+      }
+      const c = j.contact || {};
+      const gotContact = !!(c.email || c.name || c.handle);
+      const gotReqs = !!(j.requirements || "").trim();
+      saveFinds(
+        finds.map((f) => {
+          if (f.id !== find.id) return f;
+          const opp = { ...f.opp };
+          // Only fill gaps — never overwrite a contact we already trust.
+          if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
+          if (c.name && !opp.contactName) opp.contactName = c.name;
+          if (c.role && !opp.contactRole) opp.contactRole = c.role;
+          if (c.handle && !opp.contactHandle) opp.contactHandle = c.handle;
+          if (c.email && (!opp.channel || /unknown/i.test(opp.channel)))
+            opp.channel = "Email";
+          return {
+            ...f,
+            opp,
+            requirements: gotReqs ? j.requirements : f.requirements,
+            scanned: true,
+          };
+        })
+      );
+      setRepliesNote(
+        gotContact || gotReqs
+          ? `Scanned ${find.opp.name}.${gotContact ? " Found a contact." : ""}${
+              gotReqs ? " Pulled their requirements." : ""
+            } Draft again to use it.`
+          : `Scanned ${find.opp.name}, but found no specific contact or requirements on the page.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't scan that site.");
+    } finally {
+      setScanningId("");
+    }
+  }
+
+  // Draft a short follow-up nudge for a sent-but-unanswered find. If it went out
+  // via Gmail, the nudge is written as an in-thread reply.
+  async function followUpFind(find: Find) {
+    setFollowUpId(find.id);
+    setRepliesNote("");
+    try {
+      const res = await fetch("/api/draft-followup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opp: find.opp,
+          about: aboutText,
+          useCase: activeUseCase,
+          firstMessage: find.draft ? { subject: find.draft.subject, body: find.draft.body } : null,
+          inThread: !!find.gmailThreadId,
+        }),
+      });
+      const j = await res.json();
+      if (!res.ok) {
+        setRepliesNote(j.error || "Couldn't draft a follow-up.");
+        return;
+      }
+      const followDraft: Draft = {
+        opportunityId: find.opp.id,
+        to: find.draft?.to || find.opp.contactEmail || "",
+        channelType: find.draft?.channelType || "email",
+        subject: j.subject || (find.draft?.subject ? `Re: ${find.draft.subject}` : ""),
+        body: j.body || "",
+        whyItFits: find.opp.whyItFits,
+      };
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? { ...f, draft: followDraft, lastFollowUpAt: Date.now() }
+            : f
+        )
+      );
+      bumpActivity({ drafts: 1 });
+      setRepliesNote(
+        `Wrote a follow-up to ${find.opp.name}. It's on the card, ready to ${
+          find.gmailThreadId && gmail.connected ? "send in-thread" : "copy or send"
+        }.`
+      );
+    } catch (e: any) {
+      setRepliesNote(e?.message || "Couldn't draft a follow-up.");
+    } finally {
+      setFollowUpId("");
+    }
+  }
+
   // Draft a message for a single find and store it on that find.
   async function draftFind(find: Find) {
     setError("");
@@ -970,10 +1190,12 @@ function ScoutTool({
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          opportunities: [find.opp],
+          opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
           about: aboutText,
           useCase: activeUseCase,
           templates: myTemplates,
+          coaching,
+          editPairs,
         }),
       });
       const data = await res.json();
@@ -1001,7 +1223,9 @@ function ScoutTool({
   // (thread id + sent status), so nothing more to do here.
   async function sendFindViaGmail(find: Find) {
     if (!find.draft) return;
-    await sendViaGmail(find.draft);
+    // If this find already has a Gmail thread (e.g. a follow-up on an earlier
+    // send), thread the new message into it instead of starting a new one.
+    await sendViaGmail(find.draft, find.gmailThreadId);
   }
 
   // ---- Reply tracking: check tracked Gmail threads for responses ----
@@ -1116,6 +1340,8 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           templates: myTemplates,
+          coaching,
+          editPairs,
         }),
       });
       const data = await res.json();
@@ -1564,11 +1790,16 @@ function ScoutTool({
           onDeny={(f, reason) => denyFindWithReason(f.id, reason || "")}
           onSetReason={(f, reason) => setFindReason(f.id, reason)}
           onReopen={(f) => setFindStatus(f.id, "new")}
-          onMarkSent={(f) => setFindStatus(f.id, "sent")}
+          onMarkSent={(f) => markContacted(f.id)}
           onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
           onCopy={() => bumpActivity({ copies: 1 })}
+          onEditDraft={editFindDraft}
+          onDeepScan={deepScanFind}
+          scanningId={scanningId}
+          onFollowUp={followUpFind}
+          followUpId={followUpId}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -1585,9 +1816,13 @@ function ScoutTool({
           categoriesCount={categories.length}
           finds={finds}
           community={community}
+          coaching={coaching}
+          onApplyTip={addCoaching}
+          onRemoveTip={removeCoaching}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
+          goFinds={() => setTab("finds")}
         />
       )}
 
@@ -2136,6 +2371,11 @@ function FindsTab({
   onRemove,
   onSendGmail,
   onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanningId,
+  onFollowUp,
+  followUpId,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2157,6 +2397,11 @@ function FindsTab({
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
   onCopy: () => void;
+  onEditDraft: (f: Find, subject: string, body: string) => void;
+  onDeepScan: (f: Find) => void;
+  scanningId: string;
+  onFollowUp: (f: Find) => void;
+  followUpId: string;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -2268,6 +2513,11 @@ function FindsTab({
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
               onCopy={onCopy}
+              onEditDraft={(subject, body) => onEditDraft(f, subject, body)}
+              onDeepScan={() => onDeepScan(f)}
+              scanning={scanningId === f.id}
+              onFollowUp={() => onFollowUp(f)}
+              followUpBusy={followUpId === f.id}
             />
           ))}
         </div>
@@ -2322,6 +2572,11 @@ function FindCard({
   onRemove,
   onSendGmail,
   onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanning,
+  onFollowUp,
+  followUpBusy,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send" };
@@ -2336,6 +2591,11 @@ function FindCard({
   onRemove: () => void;
   onSendGmail: () => void;
   onCopy: () => void;
+  onEditDraft: (subject: string, body: string) => void;
+  onDeepScan: () => void;
+  scanning: boolean;
+  onFollowUp: () => void;
+  followUpBusy: boolean;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -2344,6 +2604,13 @@ function FindCard({
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
+  const [editing, setEditing] = useState(false); // draft edit mode
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
+  // How long since the outreach went out, for the follow-up nudge.
+  const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
+  const followUpReady =
+    find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
 
   return (
     <div
@@ -2399,15 +2666,73 @@ function FindCard({
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
       )}
 
-      {/* Stored draft */}
-      {d && (
+      {/* What this target asks for (pasted or found by deep-scan) */}
+      {find.requirements && (
+        <div className="mt-2 rounded-xl border border-sage/40 bg-sage/10 p-2.5 text-xs leading-relaxed text-brown-deep">
+          <span className="font-bold">What they ask for: </span>
+          {find.requirements}
+        </div>
+      )}
+
+      {/* Stored draft — read view or inline editor */}
+      {d && !editing && (
         <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 p-3">
           {d.subject && (
-            <div className="mb-1.5 text-sm font-semibold text-ink">{d.subject}</div>
+            <div className="mb-1.5 flex items-start justify-between gap-2">
+              <div className="text-sm font-semibold text-ink">{d.subject}</div>
+            </div>
           )}
           <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-body">
             {d.body}
           </pre>
+          <button
+            onClick={() => {
+              setEditSubject(d.subject || "");
+              setEditBody(d.body || "");
+              setEditing(true);
+            }}
+            className="mt-2 text-[11px] font-semibold text-accent transition hover:underline"
+          >
+            Edit this draft
+          </button>
+        </div>
+      )}
+      {d && editing && (
+        <div className="mt-3 rounded-xl border border-coral/40 bg-white p-3">
+          {d.channelType === "email" && (
+            <input
+              value={editSubject}
+              onChange={(e) => setEditSubject(e.target.value)}
+              placeholder="Subject"
+              className="mb-2 w-full rounded-lg border border-warm-border px-2.5 py-1.5 text-sm font-semibold text-ink outline-none focus:ring-2 focus:ring-coral/20"
+            />
+          )}
+          <textarea
+            value={editBody}
+            onChange={(e) => setEditBody(e.target.value)}
+            rows={Math.min(16, Math.max(6, editBody.split("\n").length + 1))}
+            className="w-full rounded-lg border border-warm-border px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-coral/20"
+          />
+          <div className="mt-2 flex items-center gap-2">
+            <button
+              onClick={() => {
+                onEditDraft(editSubject, editBody);
+                setEditing(false);
+              }}
+              className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+            >
+              Save
+            </button>
+            <button
+              onClick={() => setEditing(false)}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Cancel
+            </button>
+            <span className="text-[11px] text-body/50">
+              Scout learns from your edits and writes more like this next time.
+            </span>
+          </div>
         </div>
       )}
 
@@ -2420,6 +2745,18 @@ function FindCard({
             className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
           >
             {drafting ? "Drafting…" : "Draft a message"}
+          </button>
+        )}
+
+        {/* Deep-scan: read their site for a real contact + what they ask for */}
+        {o.url && !denied && !done && (
+          <button
+            onClick={onDeepScan}
+            disabled={scanning}
+            title="Read this page for a specific contact and any submission requirements"
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            {scanning ? "Scanning…" : find.scanned ? "Re-scan site" : "Scan for contact"}
           </button>
         )}
 
@@ -2470,6 +2807,35 @@ function FindCard({
           >
             Mark contacted
           </button>
+        )}
+
+        {/* Follow-up nudge on sent-but-no-reply finds */}
+        {find.status === "sent" && (
+          <button
+            onClick={onFollowUp}
+            disabled={followUpBusy}
+            title={
+              find.gmailThreadId
+                ? "Draft a short in-thread nudge"
+                : "Draft a short follow-up you can send"
+            }
+            className={`rounded-lg px-3 py-1.5 text-xs font-bold shadow-card transition disabled:opacity-50 ${
+              followUpReady
+                ? "bg-brand-gradient text-white hover:opacity-95"
+                : "border border-warm-border text-body hover:bg-warm-bg"
+            }`}
+          >
+            {followUpBusy
+              ? "Writing…"
+              : find.lastFollowUpAt
+              ? "Draft another nudge"
+              : "Draft a follow-up"}
+          </button>
+        )}
+        {followUpReady && (
+          <span className="text-[11px] font-semibold text-sage">
+            It&apos;s been about a week, a nudge helps
+          </span>
         )}
 
         {denied ? (
@@ -2613,9 +2979,13 @@ function DashboardTab({
   categoriesCount,
   finds,
   community,
+  coaching,
+  onApplyTip,
+  onRemoveTip,
   goOutreach,
   goTemplates,
   goProfile,
+  goFinds,
 }: {
   activity: Activity;
   profile: Profile;
@@ -2624,11 +2994,24 @@ function DashboardTab({
   categoriesCount: number;
   finds: Find[];
   community: CommunityStats | null;
+  coaching: string[];
+  onApplyTip: (tip: string) => void;
+  onRemoveTip: (tip: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
+  goFinds: () => void;
 }) {
   const learned = learnedFromFinds(finds);
+  // Contacts you reached out to about a week ago that still haven't replied — a
+  // gentle nudge roughly doubles response rates, so surface them here.
+  const dueFollowUps = finds.filter(
+    (f) =>
+      f.status === "sent" &&
+      f.sentAt &&
+      Date.now() - f.sentAt >= 7 * 86400000 &&
+      !f.lastFollowUpAt
+  ).length;
   const pipe = {
     new: finds.filter((f) => f.status === "new").length,
     drafted: finds.filter((f) => f.status === "drafted").length,
@@ -2711,6 +3094,28 @@ function DashboardTab({
       <p className="mt-1 text-sm text-body">
         How your outreach is going, and how Scout is getting sharper for you.
       </p>
+
+      {/* -------- Follow-up reminder -------- */}
+      {dueFollowUps > 0 && (
+        <button
+          onClick={goFinds}
+          className="mt-5 flex w-full items-center gap-3 rounded-2xl border border-sage/50 bg-sage/10 p-4 text-left transition hover:bg-sage/15"
+        >
+          <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-sage/20 text-base">
+            🔔
+          </span>
+          <span className="flex-1">
+            <span className="block text-sm font-bold text-ink">
+              {dueFollowUps} {dueFollowUps === 1 ? "contact is" : "contacts are"} due
+              for a follow-up
+            </span>
+            <span className="block text-xs text-body/80">
+              You reached out about a week ago with no reply yet. A short nudge helps.
+            </span>
+          </span>
+          <span className="shrink-0 text-xs font-bold text-sage">Review →</span>
+        </button>
+      )}
 
       {/* -------- Activity (real counts) -------- */}
       <section className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
@@ -3053,10 +3458,42 @@ function DashboardTab({
         )}
       </section>
 
+      {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
+      {coaching.length > 0 && (
+        <section className="mt-10">
+          <h2 className="text-lg font-bold text-ink">Coaching you turned on</h2>
+          <p className="mt-1 text-sm text-body/80">
+            Scout follows these in every draft it writes for you. Remove any that
+            stop feeling right.
+          </p>
+          <div className="mt-4 space-y-2">
+            {coaching.map((c) => (
+              <div
+                key={c}
+                className="flex items-start gap-3 rounded-2xl border border-sage/40 bg-sage/10 p-4"
+              >
+                <span className="mt-0.5 text-sage" aria-hidden>
+                  ✓
+                </span>
+                <p className="flex-1 text-sm text-ink">{c}</p>
+                <button
+                  onClick={() => onRemoveTip(c)}
+                  className="shrink-0 text-xs font-semibold text-body/50 hover:text-ink"
+                >
+                  Remove
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* -------- Outreach advice: what's working for others + proven playbook -------- */}
       <OutreachAdvice
         community={community}
         finds={finds}
+        coaching={coaching}
+        onApplyTip={onApplyTip}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
       />
@@ -3168,16 +3605,37 @@ function DashboardTab({
 function OutreachAdvice({
   community,
   finds,
+  coaching,
+  onApplyTip,
   goOutreach,
   goTemplates,
 }: {
   community: CommunityStats | null;
   finds: Find[];
+  coaching: string[];
+  onApplyTip: (tip: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
 }) {
   const p = community?.patterns;
   const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const isApplied = (s: string) =>
+    coaching.some((c) => c.trim().toLowerCase() === s.trim().toLowerCase());
+  // A small "turn this into a standing rule" control shown on each coachable tip.
+  const ApplyTip = ({ tip }: { tip: string }) =>
+    isApplied(tip) ? (
+      <span className="shrink-0 rounded-lg bg-sage/15 px-2.5 py-1 text-[11px] font-semibold text-sage">
+        Applied ✓
+      </span>
+    ) : (
+      <button
+        onClick={() => onApplyTip(tip)}
+        className="shrink-0 rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
+        title="Scout will follow this in every draft it writes for you"
+      >
+        Apply to my drafts
+      </button>
+    );
 
   // ---- Tailored coaching on the user's own drafts ----
   // Newest drafts from the pipeline, with whether they were actually sent.
@@ -3354,7 +3812,10 @@ function OutreachAdvice({
                       key={t.title}
                       className="rounded-2xl border border-coral/30 bg-white p-4 shadow-card"
                     >
-                      <div className="text-sm font-bold text-ink">{t.title}</div>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="text-sm font-bold text-ink">{t.title}</div>
+                        <ApplyTip tip={t.advice} />
+                      </div>
                       <p className="mt-1 text-xs leading-relaxed text-body">{t.advice}</p>
                     </div>
                   ))}
@@ -3381,7 +3842,10 @@ function OutreachAdvice({
                 key={tip.title}
                 className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
               >
-                <div className="text-sm font-bold text-ink">{tip.title}</div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="text-sm font-bold text-ink">{tip.title}</div>
+                  <ApplyTip tip={tip.body} />
+                </div>
                 <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
                 <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
                   Based on {tip.basis}
@@ -3410,14 +3874,17 @@ function OutreachAdvice({
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="text-sm font-bold text-ink">{tip.title}</div>
-                {tip.cta && (
-                  <button
-                    onClick={tip.cta.go}
-                    className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
-                  >
-                    {tip.cta.label}
-                  </button>
-                )}
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <ApplyTip tip={tip.body} />
+                  {tip.cta && (
+                    <button
+                      onClick={tip.cta.go}
+                      className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
+                    >
+                      {tip.cta.label}
+                    </button>
+                  )}
+                </div>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
             </div>

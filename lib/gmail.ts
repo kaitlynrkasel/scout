@@ -155,6 +155,7 @@ export async function gmailSendOrDraft(opts: {
   subject: string;
   body: string;
   mode: "send" | "draft";
+  threadId?: string; // when set, the message is placed in that existing thread
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   const raw = buildRaw(opts.from, opts.to, opts.subject, opts.body);
@@ -162,7 +163,13 @@ export async function gmailSendOrDraft(opts: {
     opts.mode === "send"
       ? "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
       : "https://gmail.googleapis.com/gmail/v1/users/me/drafts";
-  const payload = opts.mode === "send" ? { raw } : { message: { raw } };
+  // Threading a reply: Gmail associates the message with the thread when threadId
+  // is on the message object (and the subject stays "Re: ...").
+  const tid = opts.threadId || undefined;
+  const payload =
+    opts.mode === "send"
+      ? { raw, ...(tid ? { threadId: tid } : {}) }
+      : { message: { raw, ...(tid ? { threadId: tid } : {}) } };
   const r = await fetch(url, {
     method: "POST",
     headers: {

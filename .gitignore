@@ -9,3 +9,6 @@ next-env.d.ts
 .vercel
 public/pdf.worker.min.mjs
 tsconfig.tsbuildinfo
+
+# Local Claude Code dev config
+.claude/

@@ -7,9 +7,14 @@ export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
 
 export async function POST(req: NextRequest) {
   try {
-    const { opportunities, about, useCase, template, templates } = await req.json();
+    const { opportunities, about, useCase, template, templates, coaching, editPairs } =
+      await req.json();
     const opps: Opportunity[] = opportunities || [];
     const myTemplates: OutreachTemplate[] = templates || [];
+    const coach: string[] = Array.isArray(coaching) ? coaching : [];
+    const edits: { before: string; after: string }[] = Array.isArray(editPairs)
+      ? editPairs
+      : [];
     const uc = String(useCase || template || "networking");
     if (!opps.length) {
       return NextResponse.json({ error: "No opportunities selected." }, { status: 400 });
@@ -22,9 +27,14 @@ export async function POST(req: NextRequest) {
     }
     // Draft in parallel (small batch, fine for the spike's cap of a few rows).
     const drafts = await Promise.all(
-      opps
-        .slice(0, 8)
-        .map((o) => draftFor(o, String(about || ""), uc, myTemplates))
+      opps.slice(0, 8).map((o) =>
+        draftFor(o, String(about || ""), uc, {
+          templates: myTemplates,
+          coaching: coach,
+          editPairs: edits,
+          requirements: (o as any).requirements || "",
+        })
+      )
     );
     return NextResponse.json({ drafts });
   } catch (e: any) {
