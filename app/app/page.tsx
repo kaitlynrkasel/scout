@@ -1336,15 +1336,62 @@ function ScoutTool({
   // Prefill identity fields after Scout reads a resume. Keeps a name the user
   // already typed; sets the inferred use case (which reseeds its categories).
   // Bio is set separately (immediately) so nothing is lost if parsing fails.
-  function autofillIdentity(name?: string, useCase?: string) {
-    if (name && name.trim()) {
-      setProfile((prev) => {
-        if (prev.name && prev.name.trim()) return prev; // don't overwrite theirs
-        const next = { ...prev, name: name.trim() };
-        onSaveProfile(next);
-        return next;
-      });
+  function autofillIdentity(
+    name?: string,
+    useCase?: string,
+    extras?: {
+      age?: number | null;
+      education?: string;
+      location?: string;
+      companySize?: string;
+      competitiveness?: string;
     }
+  ) {
+    // Only fill fields the user hasn't set — a resume drop never overwrites
+    // something they typed. Every field is optional coming from the API.
+    setProfile((prev) => {
+      const next: Profile = { ...prev };
+      let changed = false;
+      if (name && name.trim() && !(prev.name && prev.name.trim())) {
+        next.name = name.trim();
+        changed = true;
+      }
+      if (
+        typeof extras?.age === "number" &&
+        Number.isFinite(extras.age) &&
+        !prev.age
+      ) {
+        next.age = extras.age;
+        changed = true;
+      }
+      if (extras?.education && extras.education.trim() && !(prev.college && prev.college.trim())) {
+        next.college = extras.education.trim();
+        changed = true;
+      }
+      if (extras?.location && extras.location.trim() && !(prev.location && prev.location.trim())) {
+        next.location = extras.location.trim();
+        changed = true;
+      }
+      const size = extras?.companySize;
+      if (
+        (size === "any" || size === "small" || size === "big") &&
+        (!prev.companySize || prev.companySize === "any")
+      ) {
+        next.companySize = size;
+        changed = true;
+      }
+      const comp = extras?.competitiveness;
+      if (
+        (comp === "any" || comp === "beginner" || comp === "intermediate" || comp === "competitive") &&
+        (!prev.competitiveness || prev.competitiveness === "any")
+      ) {
+        next.competitiveness = comp;
+        changed = true;
+      }
+      if (!changed) return prev;
+      onSaveProfile(next);
+      return next;
+    });
     if (useCase && useCase.trim()) changeUseCase(useCase.trim());
   }
 
@@ -6635,7 +6682,17 @@ function ProfileTab({
   onCompanySize: (v: CompanySize) => void;
   onCompetitiveness: (v: Competitiveness) => void;
   onUseCase: (v: string) => void;
-  onAutofill: (name?: string, useCase?: string) => void;
+  onAutofill: (
+    name?: string,
+    useCase?: string,
+    extras?: {
+      age?: number | null;
+      education?: string;
+      location?: string;
+      companySize?: string;
+      competitiveness?: string;
+    }
+  ) => void;
   canConfirm: boolean;
   onConfirm: () => void;
   mailboxAvailable: boolean;
@@ -6725,8 +6782,21 @@ function ProfileTab({
       // Build a signature from the resume, but only if the user hasn't set one
       // (never clobber an edited signature).
       if (res.ok && data.signature && !signature.trim()) onSignature(data.signature);
-      if (res.ok && (data.name || data.useCase)) {
-        onAutofill(data.name, data.useCase);
+      const hasExtras =
+        data &&
+        (data.age != null ||
+          !!String(data.education || "").trim() ||
+          !!String(data.location || "").trim() ||
+          !!String(data.companySize || "").trim() ||
+          !!String(data.competitiveness || "").trim());
+      if (res.ok && (data.name || data.useCase || hasExtras)) {
+        onAutofill(data.name, data.useCase, {
+          age: typeof data.age === "number" ? data.age : null,
+          education: data.education || "",
+          location: data.location || "",
+          companySize: data.companySize || "",
+          competitiveness: data.competitiveness || "",
+        });
         setAutofilled(true);
         setNote("Scout filled these in for you. Edit anything that's off.");
       } else if (res.ok) {
