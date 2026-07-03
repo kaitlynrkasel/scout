@@ -347,7 +347,7 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "templates" | "profile" | "account"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account"
   >("dashboard");
 
   // ---- Outreach state ----
@@ -1868,6 +1868,15 @@ function ScoutTool({
         />
       )}
 
+      {tab === "team" && (
+        <TeamTab
+          getToken={getToken}
+          accountEmail={accountEmail || ""}
+          projects={projects}
+          finds={finds}
+        />
+      )}
+
       {tab === "templates" && (
         <TemplatesTab
           kinds={OUTREACH_KINDS}
@@ -2060,6 +2069,22 @@ function SideNav({
       badge: newFindCount,
       icon: <path d="M20 7 9 18l-5-5" />,
     },
+    ...(hasAccount
+      ? [
+          {
+            key: "team",
+            label: "Team",
+            icon: (
+              <>
+                <circle cx="9" cy="8" r="3.2" />
+                <path d="M2.5 20a6.5 6.5 0 0 1 13 0" />
+                <circle cx="17.5" cy="9.5" r="2.6" />
+                <path d="M15 20a6 6 0 0 1 6.5-5.6" />
+              </>
+            ),
+          },
+        ]
+      : []),
     {
       key: "templates",
       label: "Templates",
@@ -4076,6 +4101,494 @@ function SendAction({ draft, onUse }: { draft: Draft; onUse: () => void }) {
     );
   }
   return null;
+}
+
+/* ---------------- Team tab (workspaces + shared projects + shared finds) ---------------- */
+function TeamTab({
+  getToken,
+  accountEmail,
+  projects,
+  finds,
+}: {
+  getToken?: () => Promise<string | null>;
+  accountEmail: string;
+  projects: Project[];
+  finds: Find[];
+}) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [ctx, setCtx] = useState<{ workspaces: any[]; invites: any[] }>({
+    workspaces: [],
+    invites: [],
+  });
+  const [wsName, setWsName] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [sharedProjects, setSharedProjects] = useState<any[]>([]);
+  const [shareChoice, setShareChoice] = useState("");
+  const [openId, setOpenId] = useState("");
+  const [sharedFinds, setSharedFinds] = useState<any[]>([]);
+  const [recs, setRecs] = useState<any[]>([]);
+
+  const workspace = ctx.workspaces[0] || null;
+
+  async function authFetch(url: string, opts: any = {}) {
+    const token = getToken ? await getToken() : null;
+    if (!token) throw new Error("Please sign in to use teams.");
+    const res = await fetch(url, {
+      ...opts,
+      headers: {
+        ...(opts.headers || {}),
+        authorization: `Bearer ${token}`,
+        ...(opts.body ? { "content-type": "application/json" } : {}),
+      },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "Request failed.");
+    return data;
+  }
+
+  async function loadCtx() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await authFetch("/api/team/workspace");
+      const wss = data.workspaces || [];
+      setCtx({ workspaces: wss, invites: data.invites || [] });
+      if (wss[0]) {
+        const p = await authFetch(`/api/team/project?workspaceId=${wss[0].id}`);
+        setSharedProjects(p.projects || []);
+      } else {
+        setSharedProjects([]);
+      }
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    loadCtx();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function run(label: string, fn: () => Promise<void>) {
+    setBusy(label);
+    setNote("");
+    setError("");
+    try {
+      await fn();
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  const createWorkspace = () =>
+    run("create", async () => {
+      await authFetch("/api/team/workspace", {
+        method: "POST",
+        body: JSON.stringify({ name: wsName }),
+      });
+      setWsName("");
+      await loadCtx();
+    });
+
+  const invite = () =>
+    run("invite", async () => {
+      await authFetch("/api/team/invite", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail }),
+      });
+      setNote(`Invited ${inviteEmail.trim()}. They'll see it when they sign in.`);
+      setInviteEmail("");
+      await loadCtx();
+    });
+
+  const accept = (workspaceId: string) =>
+    run("accept-" + workspaceId, async () => {
+      await authFetch("/api/team/accept", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId }),
+      });
+      await loadCtx();
+    });
+
+  // Share a local project (with its current finds) into the workspace.
+  const shareProject = () =>
+    run("share", async () => {
+      const p = projects.find((x) => x.id === shareChoice);
+      if (!p) throw new Error("Pick a project to share.");
+      const seed = finds
+        .filter((f) => f.projectId === p.id)
+        .map((f) => ({
+          dedupKey: f.id,
+          opp: f.opp,
+          status: f.status,
+          draft: f.draft || null,
+          requirements: f.requirements || null,
+          gmailThreadId: f.gmailThreadId || null,
+          denyReason: f.denyReason || null,
+        }));
+      await authFetch("/api/team/project", {
+        method: "POST",
+        body: JSON.stringify({
+          workspaceId: workspace.id,
+          name: p.name,
+          useCase: p.useCase,
+          context: p.context || "",
+          finds: seed,
+        }),
+      });
+      setNote(`Shared "${p.name}" with your team${seed.length ? ` (${seed.length} finds)` : ""}.`);
+      setShareChoice("");
+      await loadCtx();
+    });
+
+  const openProject = (id: string) =>
+    run("open-" + id, async () => {
+      setOpenId(id);
+      const [f, r] = await Promise.all([
+        authFetch(`/api/team/finds?projectId=${id}`),
+        authFetch(`/api/team/project?recommendationsFor=${id}`),
+      ]);
+      setSharedFinds(f.finds || []);
+      setRecs(r.recommendations || []);
+    });
+
+  const patchFind = (findId: string, patch: any) =>
+    run("find-" + findId, async () => {
+      const data = await authFetch("/api/team/finds/update", {
+        method: "POST",
+        body: JSON.stringify({ findId, ...patch }),
+      });
+      setSharedFinds((prev) => prev.map((x) => (x.id === findId ? data.find : x)));
+    });
+
+  const addTeammate = (userId: string) =>
+    run("add-" + userId, async () => {
+      await authFetch("/api/team/project/members", {
+        method: "POST",
+        body: JSON.stringify({ sharedProjectId: openId, addUserIds: [userId] }),
+      });
+      await openProject(openId);
+      await loadCtx();
+    });
+
+  const emailShort = (e: string) => (e || "").split("@")[0] || e;
+  const alreadyShared = new Set(sharedProjects.map((p) => p.name.toLowerCase()));
+  const shareable = projects.filter((p) => !alreadyShared.has(p.name.toLowerCase()));
+
+  return (
+    <main className="mx-auto max-w-4xl px-6 py-12">
+      <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+        Your <span className="brand-text">team</span>
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        Share a project with teammates so you all see the same finds and who is
+        working on what. No two people pitch the same contact twice.
+      </p>
+
+      {error && (
+        <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
+          {error}
+        </div>
+      )}
+      {note && (
+        <div className="mt-4 rounded-xl border border-sage/40 bg-sage/10 px-4 py-2.5 text-sm text-brown-deep">
+          {note}
+        </div>
+      )}
+
+      {/* Invites addressed to me */}
+      {ctx.invites.length > 0 && (
+        <section className="mt-6 space-y-2">
+          {ctx.invites.map((inv) => (
+            <div
+              key={inv.id}
+              className="flex flex-wrap items-center gap-3 rounded-2xl border border-sage/50 bg-sage/10 p-4"
+            >
+              <span className="flex-1 text-sm text-ink">
+                You&apos;ve been invited to{" "}
+                <span className="font-bold">{inv.workspaceName}</span>.
+              </span>
+              <button
+                onClick={() => accept(inv.workspaceId)}
+                disabled={!!busy}
+                className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                {busy === "accept-" + inv.workspaceId ? "Joining…" : "Join"}
+              </button>
+            </div>
+          ))}
+        </section>
+      )}
+
+      {loading ? (
+        <p className="mt-8 text-sm text-body/60">Loading your team…</p>
+      ) : !workspace ? (
+        /* -------- No workspace yet: create one -------- */
+        <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+          <h2 className="text-lg font-bold text-ink">Create your workspace</h2>
+          <p className="mt-1 text-sm text-body/80">
+            A workspace is your company or crew. Invite teammates into it, then share
+            projects with them.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <input
+              value={wsName}
+              onChange={(e) => setWsName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && wsName.trim()) createWorkspace();
+              }}
+              placeholder="e.g. Cue Creative"
+              className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+            <button
+              onClick={createWorkspace}
+              disabled={!wsName.trim() || !!busy}
+              className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+            >
+              {busy === "create" ? "Creating…" : "Create workspace"}
+            </button>
+          </div>
+        </section>
+      ) : (
+        <>
+          {/* -------- Workspace: members + invite -------- */}
+          <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-bold text-ink">{workspace.name}</h2>
+              <span className="text-xs font-semibold text-body/60">
+                {workspace.members?.length || 1}{" "}
+                {(workspace.members?.length || 1) === 1 ? "member" : "members"}
+              </span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(workspace.members || []).map((m: any) => (
+                <span
+                  key={m.user_id}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-warm-border bg-warm-bg px-3 py-1 text-xs font-medium text-ink"
+                  title={m.email}
+                >
+                  <span className="grid h-4 w-4 place-items-center rounded-full bg-brand-gradient text-[9px] font-bold text-white">
+                    {emailShort(m.email).charAt(0).toUpperCase()}
+                  </span>
+                  {m.email === accountEmail ? "You" : emailShort(m.email)}
+                  {m.role === "owner" && (
+                    <span className="text-[9px] font-bold uppercase text-body/50">owner</span>
+                  )}
+                </span>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
+              <input
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && inviteEmail.trim()) invite();
+                }}
+                placeholder="Invite a teammate by email (inside or outside your company)"
+                className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+              <button
+                onClick={invite}
+                disabled={!inviteEmail.trim() || !!busy}
+                className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+              >
+                {busy === "invite" ? "Inviting…" : "Invite"}
+              </button>
+            </div>
+          </section>
+
+          {/* -------- Shared projects -------- */}
+          <section className="mt-6">
+            <h2 className="text-lg font-bold text-ink">Shared projects</h2>
+            {sharedProjects.length === 0 ? (
+              <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+                Nothing shared yet. Share one of your projects below and its finds become
+                a shared pipeline your team works from together.
+              </p>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {sharedProjects.map((p) => (
+                  <div
+                    key={p.id}
+                    className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-bold text-ink">{p.name}</span>
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
+                        {(p.members || []).length} on the team
+                      </span>
+                      <button
+                        onClick={() => (openId === p.id ? setOpenId("") : openProject(p.id))}
+                        disabled={busy === "open-" + p.id}
+                        className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+                      >
+                        {busy === "open-" + p.id
+                          ? "Opening…"
+                          : openId === p.id
+                          ? "Hide"
+                          : "Open shared finds"}
+                      </button>
+                    </div>
+
+                    {openId === p.id && (
+                      <div className="mt-3 border-t border-warm-border pt-3">
+                        {/* Add teammates from the workspace */}
+                        {recs.length > 0 && (
+                          <div className="mb-3 flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-semibold text-body/60">
+                              Add from your workspace:
+                            </span>
+                            {recs.map((m: any) => (
+                              <button
+                                key={m.user_id}
+                                onClick={() => addTeammate(m.user_id)}
+                                disabled={!!busy}
+                                className="rounded-full border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10 disabled:opacity-50"
+                              >
+                                + {emailShort(m.email)}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        {sharedFinds.length === 0 ? (
+                          <p className="text-xs text-body/60">
+                            No shared finds yet in this project.
+                          </p>
+                        ) : (
+                          <div className="space-y-2">
+                            {sharedFinds.map((f) => (
+                              <SharedFindRow
+                                key={f.id}
+                                f={f}
+                                accountEmail={accountEmail}
+                                busy={busy === "find-" + f.id}
+                                onClaim={(claim) => patchFind(f.id, { claim })}
+                                onStatus={(status) => patchFind(f.id, { status })}
+                                emailShort={emailShort}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Share a project */}
+            {shareable.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4">
+                <span className="text-sm font-semibold text-ink">Share a project:</span>
+                <select
+                  value={shareChoice}
+                  onChange={(e) => setShareChoice(e.target.value)}
+                  className="scout-select min-w-[180px] rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+                >
+                  <option value="">Pick a project…</option>
+                  {shareable.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={shareProject}
+                  disabled={!shareChoice || !!busy}
+                  className="rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                >
+                  {busy === "share" ? "Sharing…" : "Share with team"}
+                </button>
+              </div>
+            )}
+          </section>
+        </>
+      )}
+    </main>
+  );
+}
+
+// One row in a shared pipeline: the prospect, who's on it, and its status.
+function SharedFindRow({
+  f,
+  accountEmail,
+  busy,
+  onClaim,
+  onStatus,
+  emailShort,
+}: {
+  f: any;
+  accountEmail: string;
+  busy: boolean;
+  onClaim: (claim: boolean) => void;
+  onStatus: (status: FindStatus) => void;
+  emailShort: (e: string) => string;
+}) {
+  const opp = f.opp || {};
+  const mine = f.claimed_email && f.claimed_email === accountEmail;
+  return (
+    <div className="rounded-xl border border-warm-border bg-white p-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-semibold text-ink">
+          {opp.url ? (
+            <a href={opp.url} target="_blank" rel="noreferrer" className="hover:text-accent">
+              {opp.name}
+            </a>
+          ) : (
+            opp.name
+          )}
+        </span>
+        {opp.outlet && <span className="text-xs text-body/70">{opp.outlet}</span>}
+        <select
+          value={f.status}
+          onChange={(e) => onStatus(e.target.value as FindStatus)}
+          disabled={busy}
+          title="Set status"
+          className="ml-auto cursor-pointer appearance-none rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-bold text-body outline-none"
+        >
+          {STATUS_OPTIONS.map((o) => (
+            <option key={o.key} value={o.key}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px]">
+        {f.claimed_email ? (
+          <span
+            className={`font-semibold ${mine ? "text-sage" : "text-accent"}`}
+            title={f.claimed_email}
+          >
+            {mine ? "You're on this" : `${emailShort(f.claimed_email)} is on this`}
+          </span>
+        ) : (
+          <span className="text-body/50">Unclaimed</span>
+        )}
+        {f.added_email && (
+          <span className="text-body/50">added by {emailShort(f.added_email)}</span>
+        )}
+        <button
+          onClick={() => onClaim(!mine)}
+          disabled={busy}
+          className={`ml-auto rounded-lg px-2.5 py-1 font-semibold transition disabled:opacity-50 ${
+            mine
+              ? "border border-warm-border text-body/60 hover:bg-warm-bg"
+              : "bg-brand-gradient text-white hover:opacity-95"
+          }`}
+        >
+          {busy ? "…" : mine ? "Release" : f.claimed_email ? "Take over" : "I'll take it"}
+        </button>
+      </div>
+    </div>
+  );
 }
 
 /* ---------------- Templates tab ---------------- */
