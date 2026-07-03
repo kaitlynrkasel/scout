@@ -6,7 +6,7 @@ export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
 
 export async function POST(req: NextRequest) {
   try {
-    const { goal, about, useCase, template, feedback, salt } = await req.json();
+    const { goal, about, useCase, template, feedback, salt, cohortHint } = await req.json();
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
     }
@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
       String(useCase || template || "networking"),
       10,
       feedback && typeof feedback === "object" ? feedback : undefined,
-      salt ? String(salt).slice(0, 64) : undefined
+      salt ? String(salt).slice(0, 64) : undefined,
+      cohortHint ? String(cohortHint).slice(0, 400) : undefined
     );
     return NextResponse.json(result);
   } catch (e: any) {

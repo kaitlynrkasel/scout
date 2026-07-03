@@ -66,7 +66,8 @@ async function planQueries(
   about: string,
   useCase: string,
   feedback?: DiscoverFeedback,
-  salt?: string
+  salt?: string,
+  cohortHint?: string
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -112,6 +113,8 @@ async function planQueries(
       ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
         "two people with a similar goal get different, equally-relevant results instead of the same list. "
       : "") +
+    // Aggregate "people like you" guidance from similar users (never individual data).
+    (cohortHint ? `PEOPLE-LIKE-YOU SIGNAL (aggregate, use as a soft steer not a rule): ${cohortHint} ` : "") +
     ` The current year is ${year}; for any dated query use ${year} or ${year + 1} (the current or upcoming cycle), never a past year. ` +
     "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
     "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
@@ -288,9 +291,10 @@ export async function discover(
   useCase: string,
   maxItems = 10,
   feedback?: DiscoverFeedback,
-  salt?: string
+  salt?: string,
+  cohortHint?: string
 ): Promise<DiscoverResult> {
-  const queries = await planQueries(goal, about, useCase, feedback, salt);
+  const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name — never resurface a rejected find.
   const deniedNames = new Set(

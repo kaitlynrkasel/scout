@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
+import { ucKey } from "@/lib/templates";
 
 export const runtime = "nodejs";
+
+// A cohort needs at least this many OTHER users before we show its patterns, so
+// a "people like you" pattern can never be traced back to one person.
+const MIN_COHORT = 5;
 
 // Real, aggregate-only community benchmarks computed from everyone else's saved
 // state. Returns averages only — never any individual's data. "Everyone else"
@@ -87,12 +92,26 @@ function communityPatterns(rows: any[]) {
   };
 }
 
+// "People like you": the same aggregate patterns, but computed only over users
+// who share the requester's use case (a loose cohort). Null unless the cohort is
+// big enough to stay anonymous.
+function cohortInfo(others: any[], useCaseRaw: string) {
+  const key = ucKey(useCaseRaw || "");
+  if (!key) return null;
+  const cohort = others.filter((r: any) =>
+    (r.data?.projects || []).some((p: any) => ucKey(p?.useCase || "") === key)
+  );
+  if (cohort.length < MIN_COHORT) return null;
+  return { users: cohort.length, useCase: useCaseRaw, patterns: communityPatterns(cohort) };
+}
+
 export async function GET(req: NextRequest) {
   const uid = await userIdFromReq(req);
   if (!uid || !supabaseAdmin) return NextResponse.json({ users: 0 });
 
   const { data } = await supabaseAdmin.from("user_state").select("user_id, data");
   const others = (data || []).filter((r: any) => r.user_id !== uid);
+  const useCaseParam = req.nextUrl.searchParams.get("useCase") || "";
   const metrics = others
     .map((r: any) => userMetrics(r.data || {}))
     .filter((m) => m.finds > 0 || m.drafts > 0);
@@ -109,5 +128,6 @@ export async function GET(req: NextRequest) {
     avgDrafts: avg((m) => m.drafts),
     avgFitKept: avg((m) => m.keptFit),
     patterns: communityPatterns(others),
+    cohort: useCaseParam ? cohortInfo(others, useCaseParam) : null,
   });
 }

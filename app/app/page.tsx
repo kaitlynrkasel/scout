@@ -78,6 +78,20 @@ function outreachSalt(accountEmail?: string): string {
   }
 }
 
+// A compact, aggregate "people like you" directive for the query planner, derived
+// from the cohort patterns. Empty when there's no real cohort yet.
+function cohortHintFrom(community: CommunityStats | null): string {
+  const c = community?.cohort;
+  if (!c) return "";
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const bits: string[] = [];
+  const top = c.patterns.channels?.[0];
+  if (top) bits.push(`reach people most through ${top.channel} (${pct(top.keptRate)} acted on)`);
+  if (c.patterns.fitKept != null) bits.push(`favor a strong, specific fit around ${pct(c.patterns.fitKept)}`);
+  if (!bits.length) return "";
+  return `Others doing "${c.useCase}" like this user tend to ${bits.join(" and ")}. Lean toward targets like that, while still keeping results niche and varied.`;
+}
+
 // Drop duplicate categories within the same project (same trimmed, case-folded
 // name), keeping the first. Cleans up any dupes seeded across earlier sessions.
 function dedupeCats<T extends { name: string; projectId: string }>(cats: T[]): T[] {
@@ -233,6 +247,18 @@ interface CommunityStats {
     fitDenied: number | null;
     contextEffect: { withContext: number | null; withoutContext: number | null } | null;
   };
+  // "People like you": patterns from users who share your use case (loose cohort).
+  cohort?: {
+    users: number;
+    useCase: string;
+    patterns: {
+      decidedFinds: number;
+      channels: { channel: string; total: number; keptRate: number }[];
+      fitKept: number | null;
+      fitDenied: number | null;
+      contextEffect: { withContext: number | null; withoutContext: number | null } | null;
+    };
+  } | null;
 }
 
 const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
@@ -741,9 +767,10 @@ function ScoutTool({
     const token = await getToken();
     if (!token) return;
     try {
-      const r = await fetch("/api/community-stats", {
-        headers: { authorization: `Bearer ${token}` },
-      });
+      const r = await fetch(
+        `/api/community-stats?useCase=${encodeURIComponent(activeUseCase || "")}`,
+        { headers: { authorization: `Bearer ${token}` } }
+      );
       if (r.ok) setCommunity(await r.json());
     } catch {}
   };
@@ -1761,6 +1788,7 @@ function ScoutTool({
           useCase: activeUseCase,
           feedback,
           salt: outreachSalt(accountEmail),
+          cohortHint: cohortHintFrom(community),
         }),
       });
       const data = await res.json();
@@ -4356,6 +4384,52 @@ function DashboardTab({
           </p>
         </section>
       )}
+
+      {/* -------- People like you (cohort patterns) -------- */}
+      {(() => {
+        const c = community?.cohort;
+        if (!c) return null;
+        const pct = (v: number) => `${Math.round(v * 100)}%`;
+        const top = c.patterns.channels?.[0];
+        const fitK = c.patterns.fitKept;
+        const fitD = c.patterns.fitDenied;
+        const tips: string[] = [];
+        if (top)
+          tips.push(
+            `They act on ${top.channel.toLowerCase()} contacts most (${pct(top.keptRate)} kept). Scout leans toward finding those for you.`
+          );
+        if (fitK != null && fitD != null && fitK > fitD)
+          tips.push(
+            `Their sweet spot is around ${pct(fitK)} fit; they pass on ones near ${pct(fitD)}.`
+          );
+        const ce = c.patterns.contextEffect;
+        if (ce && ce.withContext != null && ce.withoutContext != null && ce.withContext < ce.withoutContext)
+          tips.push(
+            `They miss less when they add project context (${pct(ce.withContext)} deny vs ${pct(ce.withoutContext)} without).`
+          );
+        if (!tips.length) return null;
+        return (
+          <section className="mt-8 rounded-3xl border border-sage/40 bg-sage/10 p-6">
+            <h2 className="text-lg font-bold text-ink">People like you</h2>
+            <p className="mt-1 text-sm text-body/80">
+              Patterns from {c.users} other{" "}
+              {c.users === 1 ? "person" : "people"} doing{" "}
+              <span className="font-semibold">{c.useCase}</span>. Scout uses these to steer
+              who it finds for you. Aggregate only, never anyone&apos;s individual data.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {tips.map((t) => (
+                <li key={t} className="flex items-start gap-2 text-sm text-ink">
+                  <span className="mt-0.5 text-sage" aria-hidden>
+                    ✦
+                  </span>
+                  <span>{t}</span>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
