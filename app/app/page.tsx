@@ -8,6 +8,7 @@ import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
 import { Reveal, CountUp, FadeIn } from "./motion";
 import Tutorial, { type TourStep } from "./Tutorial";
+import ImportOutreach from "./ImportOutreach";
 import { fileToText } from "@/lib/fileText";
 import {
   guessTimezone,
@@ -145,7 +146,7 @@ const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished o
 const TOUR_STEPS: TourStep[] = [
   {
     tab: "dashboard",
-    title: "Welcome to Scout 👋",
+    title: "Welcome to Scout",
     body: "Scout finds the right people and opportunities, then drafts warm, personalized outreach in your own voice. Here's a 60-second tour of how it works.",
   },
   {
@@ -192,7 +193,7 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     tab: "dashboard",
-    title: "You're all set 🎉",
+    title: "You're all set",
     body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from “Take a tour” at the bottom of the sidebar.",
   },
 ];
@@ -524,10 +525,54 @@ function AuthedShell() {
     setProfileLoaded(false);
     Promise.all([dbLoadProfile(uid), dbLoadState(uid)]).then(([p, s]) => {
       if (cancelled) return;
+      // Merge the extras from three places, prefer server state over
+      // localStorage (the fallback is only for the migration from the
+      // browser-only era; after this ships, the server state is the
+      // source of truth).
+      const remoteExtras = s?.profileExtras || {};
+      let localExtras: NonNullable<AppState["profileExtras"]> = {};
+      try {
+        const raw = localStorage.getItem(PROFILE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.age === "number") localExtras.age = parsed.age;
+          if (typeof parsed.college === "string") localExtras.college = parsed.college;
+          if (typeof parsed.location === "string") localExtras.location = parsed.location;
+          if (typeof parsed.companySize === "string") localExtras.companySize = parsed.companySize;
+          if (typeof parsed.competitiveness === "string")
+            localExtras.competitiveness = parsed.competitiveness;
+        }
+      } catch {
+        /* localStorage unavailable — nothing to migrate */
+      }
+      const raw = { ...localExtras, ...remoteExtras };
+      // AppState stores companySize/competitiveness as string; narrow to the
+      // Profile enums here so we don't leak an unexpected value into state.
+      const allowedSize = new Set<CompanySize>(["any", "small", "big"]);
+      const allowedComp = new Set<Competitiveness>([
+        "any",
+        "beginner",
+        "intermediate",
+        "competitive",
+      ]);
+      const mergedExtras: Partial<Profile> = {};
+      if (typeof raw.age === "number") mergedExtras.age = raw.age;
+      if (typeof raw.college === "string") mergedExtras.college = raw.college;
+      if (typeof raw.location === "string") mergedExtras.location = raw.location;
+      if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
+        mergedExtras.companySize = raw.companySize as CompanySize;
+      if (raw.competitiveness && allowedComp.has(raw.competitiveness as Competitiveness))
+        mergedExtras.competitiveness = raw.competitiveness as Competitiveness;
       setInitial(
         p
-          ? { name: p.name, bio: p.bio, useCase: p.useCase || "Networking", linkedin: p.linkedin || "" }
-          : { name: "", bio: "", useCase: "Networking", linkedin: "" }
+          ? {
+              name: p.name,
+              bio: p.bio,
+              useCase: p.useCase || "Networking",
+              linkedin: p.linkedin || "",
+              ...mergedExtras,
+            }
+          : { name: "", bio: "", useCase: "Networking", linkedin: "", ...mergedExtras }
       );
       setInitialState(s);
       setProfileLoaded(true);
@@ -599,6 +644,7 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  const [importOpen, setImportOpen] = useState(false); // CSV import modal open?
   // Is the signed-in user on the owner allowlist? Drives whether the Account
   // tab shows an "Admin" link into /admin. The Insights view itself lives on
   // its own route so customers never see any hint of it in the sidebar.
@@ -825,9 +871,20 @@ function ScoutTool({
       editPairs,
       resumeFile,
       signature,
+      // Ride the extras along in the JSON blob so they survive a redeploy.
+      // The profiles table only has name/bio/useCase/linkedin; everything else
+      // lived in localStorage before this — which meant it evaporated on any
+      // fresh hydrate.
+      profileExtras: {
+        age: profile.age,
+        college: profile.college,
+        location: profile.location,
+        companySize: profile.companySize,
+        competitiveness: profile.competitiveness,
+      },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.age, profile.college, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -1700,6 +1757,21 @@ function ScoutTool({
     return fresh.length;
   }
 
+  // Merge pre-built Find records (from the CSV importer) into the existing
+  // pipeline, skipping anything that would collide with an id already saved.
+  // Returns the count actually added so the importer can report it.
+  function importFinds(imported: Find[]): number {
+    const existing = new Set(finds.map((f) => f.id));
+    const fresh: Find[] = [];
+    for (const f of imported) {
+      if (existing.has(f.id)) continue;
+      existing.add(f.id);
+      fresh.push(f);
+    }
+    if (fresh.length) saveFinds([...fresh, ...finds]);
+    return fresh.length;
+  }
+
   function setFindStatus(id: string, status: FindStatus) {
     saveFinds(
       finds.map((f) =>
@@ -2317,6 +2389,13 @@ function ScoutTool({
         onClose={endTour}
         onFinish={endTour}
       />
+      <ImportOutreach
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImport={importFinds}
+        projects={projects}
+        activeProjectId={activeId}
+      />
       {discovering && tab !== "outreach" && (
         <GlobalScoutStatus
           startedAt={discoverStartedAt}
@@ -2836,6 +2915,7 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
+          openImport={() => setImportOpen(true)}
         />
       )}
 
@@ -4748,6 +4828,7 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
+  openImport,
 }: {
   activity: Activity;
   profile: Profile;
@@ -4764,7 +4845,10 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
+  openImport: () => void;
 }) {
+  // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
+  const [dashTab, setDashTab] = useState<"you" | "scout">("you");
   const learned = learnedFromFinds(finds);
   const insights = recentInsights(learned, coaching, editPairs);
   // Contacts you reached out to about a week ago that still haven't replied — a
@@ -4848,9 +4932,35 @@ function DashboardTab({
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
       <h1 className="font-serif text-[32px] font-normal tracking-tight text-ink">Dashboard</h1>
       <p className="mt-1 text-sm text-body">
-        Your outreach notebook — everything in one place.
+        {dashTab === "you"
+          ? "Your outreach notebook — everything in one place."
+          : "How Scout is doing across everyone using it."}
       </p>
 
+      {/* -------- Tab switcher -------- */}
+      <div className="mt-5 inline-flex rounded-xl border border-warm-border bg-white p-1 shadow-card">
+        {(
+          [
+            ["you", "You"],
+            ["scout", "Scout-wide"],
+          ] as const
+        ).map(([val, label]) => (
+          <button
+            key={val}
+            onClick={() => setDashTab(val)}
+            className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+              dashTab === val
+                ? "bg-brown text-white shadow-soft"
+                : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Follow-up reminder -------- */}
       {dueFollowUps > 0 && (
         <button
@@ -4873,8 +4983,30 @@ function DashboardTab({
         </button>
       )}
 
+      {/* -------- Import your existing outreach -------- */}
+      <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-extrabold text-ink">
+            Already reaching out somewhere else?
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+            Drop in a CSV of who you've already contacted. Scout won't resurface
+            them and starts learning what a fit looks like for you.
+          </p>
+        </div>
+        <button
+          onClick={openImport}
+          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+        >
+          Import a CSV
+        </button>
+      </section>
+
       {/* -------- Activity (real counts) -------- */}
-      <Reveal as="section" className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Reveal as="section" className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile
           n={activity.searches}
           label="Searches run"
@@ -5267,6 +5399,11 @@ function DashboardTab({
         )}
       </section>
 
+      </>
+      )}
+
+      {dashTab === "scout" && (
+      <>
       {/* -------- Getting sharper across Scout (public, everyone) -------- */}
       {community && (community.patterns?.decidedFinds || 0) > 0 && (
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
@@ -5354,6 +5491,11 @@ function DashboardTab({
         );
       })()}
 
+      </>
+      )}
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
         <section className="mt-10">
@@ -5439,6 +5581,11 @@ function DashboardTab({
         </div>
       </section>
 
+      </>
+      )}
+
+      {dashTab === "scout" && (
+      <>
       {/* -------- How Scout learns from EVERYONE -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout gets better for everyone</h2>
@@ -5465,6 +5612,11 @@ function DashboardTab({
         </div>
       </section>
 
+      </>
+      )}
+
+      {dashTab === "you" && (
+      <>
       {/* -------- Honesty note about reply tracking -------- */}
       <section className="mt-8 rounded-2xl border border-dashed border-warm-border bg-white/60 px-5 py-4">
         <div className="text-xs font-bold uppercase tracking-wider text-body/60">
@@ -5493,6 +5645,8 @@ function DashboardTab({
           Start scouting →
         </button>
       </section>
+      </>
+      )}
     </main>
   );
 }
@@ -6154,7 +6308,7 @@ function TeamTab({
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && wsName.trim()) createWorkspace();
                 }}
-                placeholder="e.g. Cue Creative, or Kaitlyn's team"
+                placeholder="e.g. Acme Studio, or the marketing team"
                 className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
               <button
@@ -7269,7 +7423,7 @@ function ProfileTab({
             <input
               value={name}
               onChange={(e) => onName(e.target.value)}
-              placeholder="e.g. Kaitlyn Kasel, or Belt Creative"
+              placeholder="e.g. Alex Rivera, or Acme Studio"
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
           </div>
@@ -7451,7 +7605,7 @@ function ProfileTab({
             value={signature}
             onChange={(e) => onSignature(e.target.value)}
             rows={4}
-            placeholder={"e.g.\nKaitlyn Kasel\nManager, Cue Creative\nkaitlyn@cuecreative.com · (615) 555-0142"}
+            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@acmestudio.com · (555) 010-0142"}
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-body/70">

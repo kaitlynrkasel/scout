@@ -106,8 +106,8 @@ async function planQueries(
     guidance =
       "Target findable, REAL INDIVIDUAL PEOPLE to network with in the user's exact field, people with names and titles " +
       "you could actually reach out to. Each query combines a specific ROLE TITLE + the user's industry/sub-field + an " +
-      "org type + a place + a findability signal (e.g. 'A&R coordinator indie label Nashville LinkedIn', " +
-      "'music marketing manager record label email', 'Belmont music business alumni A&R'). Prefer queries that surface " +
+      "org type + a place + a findability signal (e.g. 'brand partnerships manager consumer beauty LinkedIn', " +
+      "'growth marketing lead DTC startup email', 'product manager fintech alumni'). Prefer queries that surface " +
       "LinkedIn profiles, company team/staff/about pages, conference speaker lists, and roster or directory pages. " +
       "NEVER write queries that would return advice, how-to, tips, guides, or 'X ways to network' articles, do NOT use " +
       "the words 'how to', 'tips', 'guide', 'advice', 'template', or 'examples'.";
