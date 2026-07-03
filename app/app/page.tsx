@@ -6143,6 +6143,26 @@ function ProfileTab({
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
+  const [buildingSig, setBuildingSig] = useState(false);
+  // Build an email signature from the resume/bio text (explicit, overwrites the
+  // current one; the user can edit after).
+  async function buildSignatureFromResume() {
+    const t = bio.trim();
+    if (!t || buildingSig) return;
+    setBuildingSig(true);
+    try {
+      const res = await fetch("/api/parse-profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: t }),
+      });
+      const data = await res.json();
+      if (res.ok && data.signature) onSignature(data.signature);
+    } catch {}
+    finally {
+      setBuildingSig(false);
+    }
+  }
   // Individual vs company changes how you fill your profile (resume vs website).
   const [kind, setKind] = useState<"individual" | "company">("individual");
   const [website, setWebsite] = useState("");
@@ -6176,6 +6196,9 @@ function ProfileTab({
         body: JSON.stringify({ text: t }),
       });
       const data = await res.json();
+      // Build a signature from the resume, but only if the user hasn't set one
+      // (never clobber an edited signature).
+      if (res.ok && data.signature && !signature.trim()) onSignature(data.signature);
       if (res.ok && (data.name || data.useCase)) {
         onAutofill(data.name, data.useCase);
         setAutofilled(true);
@@ -6435,7 +6458,21 @@ function ProfileTab({
 
         {/* -------- Email signature -------- */}
         <div className="mt-5">
-          <Label>Email signature</Label>
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <Label className="mb-0">Email signature</Label>
+            <button
+              onClick={buildSignatureFromResume}
+              disabled={!bio.trim() || buildingSig}
+              title="Build a signature from your resume / bio (you can edit it after)"
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              {buildingSig
+                ? "Building…"
+                : signature.trim()
+                ? "Rebuild from resume"
+                : "Build from my resume"}
+            </button>
+          </div>
           <textarea
             value={signature}
             onChange={(e) => onSignature(e.target.value)}
@@ -6444,8 +6481,9 @@ function ProfileTab({
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-            Added to the end of every email Scout drafts for you. Leave blank to let
-            Scout sign off with just your name. Only used on emails, not DMs.
+            Added to the end of every email Scout drafts for you. Build it from your
+            resume above, then edit freely. Leave blank to let Scout sign off with just
+            your name. Only used on emails, not DMs.
           </p>
         </div>
 
