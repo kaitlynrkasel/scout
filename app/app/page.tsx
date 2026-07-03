@@ -128,6 +128,7 @@ const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
 const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
 const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
+const SIG_KEY = "scout_signature"; // email signature appended to drafts
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -465,6 +466,7 @@ function ScoutTool({
   const [coaching, setCoaching] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
   const [resumeFile, setResumeFile] = useState<{ name: string; dataUrl: string } | null>(null);
+  const [signature, setSignature] = useState(""); // email signature appended to drafts
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
   const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
   const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
@@ -511,6 +513,7 @@ function ScoutTool({
     let coach: string[] = [];
     let edits: { before: string; after: string }[] = [];
     let resume: { name: string; dataUrl: string } | null = null;
+    let sig = "";
 
     if (initialState && (initialState.projects?.length || initialState.templates?.length)) {
       cats = initialState.categories || [];
@@ -522,6 +525,7 @@ function ScoutTool({
       coach = initialState.coaching || [];
       edits = initialState.editPairs || [];
       resume = initialState.resumeFile || null;
+      sig = initialState.signature || "";
     } else {
       try {
         const c = localStorage.getItem(CAT_KEY);
@@ -558,6 +562,9 @@ function ScoutTool({
         const rf = localStorage.getItem(RESUME_KEY);
         if (rf) resume = JSON.parse(rf);
       } catch {}
+      try {
+        sig = localStorage.getItem(SIG_KEY) || "";
+      } catch {}
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
@@ -565,6 +572,7 @@ function ScoutTool({
     setCoaching(Array.isArray(coach) ? coach : []);
     setEditPairs(Array.isArray(edits) ? edits : []);
     setResumeFile(resume && resume.dataUrl ? resume : null);
+    setSignature(typeof sig === "string" ? sig : "");
 
     if (!projs.length) {
       // First run under the projects model. Create one default project and adopt
@@ -629,9 +637,10 @@ function ScoutTool({
       coaching,
       editPairs,
       resumeFile,
+      signature,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -701,6 +710,12 @@ function ScoutTool({
     try {
       if (n) localStorage.setItem(RESUME_KEY, JSON.stringify(n));
       else localStorage.removeItem(RESUME_KEY);
+    } catch {}
+  };
+  const saveSignature = (n: string) => {
+    setSignature(n);
+    try {
+      localStorage.setItem(SIG_KEY, n);
     } catch {}
   };
   // Keep an uploaded resume FILE (as a data URL) so it can be attached to emails.
@@ -1668,6 +1683,7 @@ function ScoutTool({
           templates: templatesFor(find.projectId, find.categoryId),
           coaching,
           editPairs,
+          signature,
         }),
       });
       const data = await res.json();
@@ -1862,6 +1878,7 @@ function ScoutTool({
           templates: templatesFor(activeId, catId),
           coaching,
           editPairs,
+          signature,
         }),
       });
       const data = await res.json();
@@ -2439,6 +2456,8 @@ function ScoutTool({
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
+          signature={signature}
+          onSignature={saveSignature}
         />
       )}
 
@@ -6079,6 +6098,8 @@ function ProfileTab({
   resumeFileName,
   onResumeFile,
   onClearResume,
+  signature,
+  onSignature,
 }: {
   name: string;
   bio: string;
@@ -6116,6 +6137,8 @@ function ProfileTab({
   resumeFileName: string;
   onResumeFile: (file: File) => void;
   onClearResume: () => void;
+  signature: string;
+  onSignature: (v: string) => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -6408,6 +6431,22 @@ function ProfileTab({
             placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
+        </div>
+
+        {/* -------- Email signature -------- */}
+        <div className="mt-5">
+          <Label>Email signature</Label>
+          <textarea
+            value={signature}
+            onChange={(e) => onSignature(e.target.value)}
+            rows={4}
+            placeholder={"e.g.\nKaitlyn Kasel\nManager, Cue Creative\nkaitlyn@cuecreative.com · (615) 555-0142"}
+            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+          <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+            Added to the end of every email Scout drafts for you. Leave blank to let
+            Scout sign off with just your name. Only used on emails, not DMs.
+          </p>
         </div>
 
         <hr className="my-7 border-warm-border" />

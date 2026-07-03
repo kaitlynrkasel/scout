@@ -86,10 +86,12 @@ export async function draftFor(
     coaching?: string[];
     editPairs?: { before: string; after: string }[];
     requirements?: string;
+    signature?: string;
   } = {}
 ): Promise<Draft> {
   const templates = opts.templates || [];
   const requirements = opts.requirements || (opp as any).requirements || "";
+  const signature = String(opts.signature || "").trim();
   const t = resolveTemplate(useCase);
   const draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
   const { channelType, to } = pickChannel(opp);
@@ -118,7 +120,9 @@ export async function draftFor(
     task =
       `Write an EMAIL. Return JSON {subject, body}. ` +
       `subject = honest, specific, low-key, no em-dashes. ` +
-      `body = greeting + 2 to 3 short paragraphs + a sign-off, the WHOLE message, ready to send. ` +
+      (signature
+        ? `body = greeting + 2 to 3 short paragraphs + a brief closing line only (like "Thanks," or "Best,"). Do NOT add the sender's name, title, or any signature block, one is appended automatically. `
+        : `body = greeting + 2 to 3 short paragraphs + a sign-off, the WHOLE message, ready to send. `) +
       `Open with the specific personalized line if a real note exists; otherwise a genuine specific reason for reaching out. Then the ask from PURPOSE.`;
   } else {
     task =
@@ -146,12 +150,19 @@ export async function draftFor(
     gen = null;
   }
 
+  // Append the user's signature verbatim (their own text, not run through noDash)
+  // to email drafts only. DMs/forms don't use email signatures.
+  let body = noDash(gen?.body || "(could not generate a draft for this one — try again)");
+  if (signature && channelType === "email") {
+    body = body.replace(/\s+$/, "") + "\n\n" + signature;
+  }
+
   return {
     opportunityId: opp.id,
     to,
     channelType,
     subject: noDash(gen?.subject || ""),
-    body: noDash(gen?.body || "(could not generate a draft for this one — try again)"),
+    body,
     whyItFits: opp.whyItFits,
     // Suggest attaching the resume by default when this is an email AND it reads
     // like a job/internship application, or the recipient asks for a resume/CV.

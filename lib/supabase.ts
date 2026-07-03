@@ -74,6 +74,7 @@ export interface AppState {
   coaching?: string[]; // approved dashboard tips, applied to every draft
   editPairs?: { before: string; after: string }[]; // learn-from-edits voice deltas
   resumeFile?: { name: string; dataUrl: string } | null; // resume to attach to emails
+  signature?: string; // email signature appended to drafted emails
 }
 
 export async function loadState(userId: string): Promise<AppState | null> {

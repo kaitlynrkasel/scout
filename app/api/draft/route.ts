@@ -7,7 +7,7 @@ export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
 
 export async function POST(req: NextRequest) {
   try {
-    const { opportunities, about, useCase, template, templates, coaching, editPairs } =
+    const { opportunities, about, useCase, template, templates, coaching, editPairs, signature } =
       await req.json();
     const opps: Opportunity[] = opportunities || [];
     const myTemplates: OutreachTemplate[] = templates || [];
@@ -15,6 +15,7 @@ export async function POST(req: NextRequest) {
     const edits: { before: string; after: string }[] = Array.isArray(editPairs)
       ? editPairs
       : [];
+    const sig = typeof signature === "string" ? signature : "";
     const uc = String(useCase || template || "networking");
     if (!opps.length) {
       return NextResponse.json({ error: "No opportunities selected." }, { status: 400 });
@@ -33,6 +34,7 @@ export async function POST(req: NextRequest) {
           coaching: coach,
           editPairs: edits,
           requirements: (o as any).requirements || "",
+          signature: sig,
         })
       )
     );
