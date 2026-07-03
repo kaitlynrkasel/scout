@@ -23,6 +23,14 @@ export interface Template {
   draftStyle: string;
 }
 
+// One article/page Scout used to learn about a person. Multiple can accumulate
+// on the same opp when the same person shows up in more than one place.
+export interface SourceRef {
+  title: string;
+  url: string;
+  snippet?: string;
+}
+
 export interface Opportunity {
   id: string;
   name: string; // person/company/outlet + role
@@ -39,6 +47,10 @@ export interface Opportunity {
   whyItFits: string; // recent/specific note used to personalize
   sourceTitle: string;
   sourceSnippet: string;
+  // All the articles/pages that mentioned this person, in the order they were
+  // found. Older opps saved before this field existed have `sources` undefined —
+  // reader code should treat that as [{ title: sourceTitle, url }].
+  sources?: SourceRef[];
 }
 
 export interface Draft {
