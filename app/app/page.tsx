@@ -8,6 +8,12 @@ import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
 import { fileToText } from "@/lib/fileText";
 import {
+  guessTimezone,
+  isBusinessHours,
+  localTimeLabel,
+  nextBusinessLabel,
+} from "@/lib/businessHours";
+import {
   authEnabled,
   supabase,
   loadProfile as dbLoadProfile,
@@ -3383,6 +3389,7 @@ function FindCard({
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
+  const [sendGuard, setSendGuard] = useState<null | { local: string; next: string }>(null);
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
@@ -3390,6 +3397,31 @@ function FindCard({
   const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
   const followUpReady =
     find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
+
+  // Send timing: a real delivery to a person outside their business hours gets a
+  // heads-up first. Applications (jobs/internships) always send immediately, and
+  // "create draft" mode isn't a delivery so it's never held.
+  const recipientTz = o.timezone || guessTimezone(o.location);
+  const isApplication = jobMode || !!find.application;
+  const afterHours =
+    gmail.sendMode === "send" &&
+    !isApplication &&
+    !!recipientTz &&
+    !isBusinessHours(recipientTz);
+  const doSend = () => {
+    setSendGuard(null);
+    onSendGmail();
+  };
+  const attemptSend = () => {
+    if (afterHours) {
+      setSendGuard({
+        local: localTimeLabel(recipientTz),
+        next: nextBusinessLabel(recipientTz),
+      });
+    } else {
+      onSendGmail();
+    }
+  };
 
   return (
     <div
@@ -3416,6 +3448,20 @@ function FindCard({
         <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
           {o.channel}
         </span>
+        {recipientTz && (
+          <span
+            title={`${o.name}'s local time${
+              isBusinessHours(recipientTz) ? "" : " — outside business hours"
+            }`}
+            className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+              isBusinessHours(recipientTz)
+                ? "border-warm-border bg-warm-bg text-body/70"
+                : "border-amber-300/60 bg-amber-50 text-amber-800"
+            }`}
+          >
+            🕐 {localTimeLabel(recipientTz)} their time
+          </span>
+        )}
         <button
           onClick={onTogglePin}
           title={find.pinned ? "Unpin" : "Pin to top"}
@@ -3618,7 +3664,7 @@ function FindCard({
           <>
             {gmail.connected && emailDraft && !done ? (
               <button
-                onClick={onSendGmail}
+                onClick={attemptSend}
                 disabled={gmailBusy}
                 className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
               >
@@ -3745,6 +3791,31 @@ function FindCard({
           </button>
         )}
       </div>
+
+      {/* Business-hours heads-up before an out-of-hours send */}
+      {sendGuard && (
+        <div className="mt-2.5 rounded-xl border border-amber-300/60 bg-amber-50 p-3 text-xs text-amber-900">
+          It&apos;s <span className="font-bold">{sendGuard.local}</span> for {o.name}
+          {o.location ? ` in ${o.location}` : ""}, outside business hours. Emails
+          landing at a good time get read more. Best to send around{" "}
+          <span className="font-bold">{sendGuard.next}</span> their time.
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <button
+              onClick={() => setSendGuard(null)}
+              className="rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-card transition hover:opacity-95"
+            >
+              Wait for business hours
+            </button>
+            <button
+              onClick={doSend}
+              disabled={gmailBusy}
+              className="rounded-lg border border-amber-400/60 bg-white px-3 py-1.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+            >
+              Send anyway
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Deny reason on passed finds — editable */}
       {denied && (

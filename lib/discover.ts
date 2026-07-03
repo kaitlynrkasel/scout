@@ -261,7 +261,9 @@ async function extract(
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
-    `url (best link), location, fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
+    `url (best link), location, ` +
+    `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
+    `fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
     `why_it_fits (one specific, true detail about them tied to the user's field, used to personalize outreach; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
@@ -372,6 +374,7 @@ export async function discover(
         contactRole: r.contact_role || "",
         contactHandle: r.contact_handle || "",
         location: r.location || "",
+        timezone: r.timezone || "",
         fitScore: fit,
         whyItFits: r.why_it_fits || "",
         sourceTitle: cand.title || "",

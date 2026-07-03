@@ -34,6 +34,7 @@ export interface Opportunity {
   contactRole: string;
   contactHandle: string;
   location: string;
+  timezone?: string; // IANA tz inferred from location (e.g. America/Chicago), for send timing
   fitScore: number | null; // 0..1
   whyItFits: string; // recent/specific note used to personalize
   sourceTitle: string;
