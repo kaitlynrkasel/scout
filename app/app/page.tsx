@@ -656,7 +656,7 @@ function ScoutTool({
   // Capped at ~5MB so we don't bloat account state; larger files are declined.
   async function storeResumeFile(file: File) {
     if (file.size > 5 * 1024 * 1024) {
-      setError("That resume file is over 5MB. Attach a smaller PDF.");
+      setError("That resume file is over 5MB. Attach a smaller file.");
       return;
     }
     const dataUrl: string = await new Promise((resolve, reject) => {
@@ -5984,8 +5984,10 @@ function ProfileTab({
             label={
               parsing
                 ? "Reading and filling in your profile…"
-                : "Drop your resume or LinkedIn PDF here, or click to upload"
+                : "Drop your resume or LinkedIn here, or click to upload"
             }
+            accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
+            hint="PDF, image (JPG/PNG), Word (.docx), HTML, or text"
             onText={(t) => readAndFill(t)}
             onFile={(f) => onResumeFile(f)}
           />
@@ -6358,22 +6360,34 @@ function FileDrop({
   onFile,
   label = "Drop a file here, or click to upload",
   accept = ".pdf,.docx,.html,.htm,.txt,.md",
+  hint = "PDF, Word (.docx), HTML, or text file",
 }: {
   onText: (text: string) => void;
   onFile?: (file: File) => void; // also hand back the raw file (e.g. to attach later)
   label?: string;
   accept?: string;
+  hint?: string;
 }) {
   const [reading, setReading] = useState(false);
   const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
 
   async function handle(file?: File | null) {
     if (!file) return;
     setErr("");
+    setNote("");
     setReading(true);
     try {
       if (onFile) onFile(file);
+      // Images (jpg/png/etc.) can be attached but not read for text (no OCR).
+      const isImage =
+        file.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|gif)$/i.test(file.name);
+      if (isImage) {
+        if (onFile) setNote(`Saved “${file.name}” to attach to your emails.`);
+        else setErr("That's an image, which can't be read as text. Upload a PDF or paste the text.");
+        return;
+      }
       const text = await fileToText(file);
       if (text) onText(text);
       else setErr("That file had no readable text, try pasting it instead.");
@@ -6404,7 +6418,8 @@ function FileDrop({
       <div className="text-sm font-semibold text-ink">
         {reading ? "Reading…" : label}
       </div>
-      <div className="mt-0.5 text-xs text-body/70">PDF, Word (.docx), HTML, or text file</div>
+      <div className="mt-0.5 text-xs text-body/70">{hint}</div>
+      {note && <div className="mt-1.5 text-xs font-semibold text-sage">{note}</div>}
       {err && <div className="mt-1.5 text-xs font-semibold text-accent">{err}</div>}
     </div>
   );
