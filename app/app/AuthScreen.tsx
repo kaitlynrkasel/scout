@@ -56,7 +56,7 @@ export default function AuthScreen() {
           <p className="mt-1 text-sm text-body">
             {mode === "in"
               ? "Sign in to reach your people."
-              : "Your profile and searches, private to you."}
+              : "Your Profile and searches, private to you."}
           </p>
 
           <form onSubmit={submit} className="mt-5 space-y-3">
@@ -124,7 +124,7 @@ export default function AuthScreen() {
         </div>
 
         <p className="mt-4 text-center text-xs text-body/60">
-          Your profile is private and only visible to you.
+          Your Profile is private and only visible to you.
         </p>
       </div>
     </div>

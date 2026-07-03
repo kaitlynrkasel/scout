@@ -189,7 +189,7 @@ Thanks so much, and congrats again on the signings!`}
               </div>
               <h3 className="text-[16px] font-bold text-ink">Private to your account</h3>
               <p className="mt-1.5 text-sm leading-relaxed text-body">
-                The more you use Scout, the more it fits you. Your profile, the searches
+                The more you use Scout, the more it fits you. Your Profile, the searches
                 you keep, the people you reach out to, and the edits you make to drafts
                 all teach it your taste and your voice, so your next results and messages
                 land closer to what you want. This stays private to your account.

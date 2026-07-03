@@ -2495,7 +2495,7 @@ function ScoutTool({
                       </div>
                       <p className="mt-1.5 text-xs text-body/70">
                         {searchComp === ""
-                          ? `Using your profile setting${
+                          ? `Using your Profile setting${
                               profile.competitiveness && profile.competitiveness !== "any"
                                 ? ` (${profile.competitiveness})`
                                 : ""
@@ -2636,7 +2636,7 @@ function ScoutTool({
                   <Step
                     n="3"
                     title="Say hello, your way"
-                    body="Warm, personal drafts for each channel, matched to your templates. Review, tweak, send."
+                    body="Warm, personal drafts for each channel, matched to your Templates. Review, tweak, send."
                     icon={
                       <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />
                     }
@@ -4393,7 +4393,7 @@ function FindCard({
           <button
             onClick={onDraftApplication}
             disabled={applying}
-            title="Read this posting's requirements and draft every written part from your profile"
+            title="Read this posting's requirements and draft every written part from your Profile"
             className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
           >
             {applying
@@ -6051,7 +6051,7 @@ function TeamTab({
           finds: seed,
         }),
       });
-      setNote(`Shared "${p.name}" with your team${seed.length ? ` (${seed.length} finds)` : ""}.`);
+      setNote(`Shared "${p.name}" with your Team${seed.length ? ` (${seed.length} finds)` : ""}.`);
       setShareChoice("");
       await loadCtx();
     });
@@ -6136,7 +6136,7 @@ function TeamTab({
       )}
 
       {loading ? (
-        <p className="mt-8 text-sm text-body/60">Loading your team…</p>
+        <p className="mt-8 text-sm text-body/60">Loading your Team…</p>
       ) : !workspace ? (
         /* -------- No workspace yet: create one -------- */
         <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
@@ -6221,7 +6221,7 @@ function TeamTab({
             {sharedProjects.length === 0 ? (
               <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
                 Nothing shared yet. Share one of your projects below and its finds become
-                a shared pipeline your team works from together.
+                a shared pipeline your Team works from together.
               </p>
             ) : (
               <div className="mt-3 space-y-2">
@@ -6544,7 +6544,7 @@ function TemplatesTab({
 
       <section className="mt-8">
         <h2 className="mb-4 text-lg font-bold text-ink">
-          Your templates ({list.length})
+          Your Templates ({list.length})
         </h2>
         {list.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-warm-border bg-white/60 p-10 text-center text-sm text-body/70">
@@ -7192,7 +7192,7 @@ function ProfileTab({
           <FileDrop
             label={
               parsing
-                ? "Reading and filling in your profile…"
+                ? "Reading and filling in your Profile…"
                 : "Drop your resume or LinkedIn here, or click to upload"
             }
             accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
@@ -7238,7 +7238,7 @@ function ProfileTab({
         {parsing && (
           <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-accent">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-warm-border border-t-coral" />
-            Reading your resume and filling in your profile…
+            Reading your resume and filling in your Profile…
           </div>
         )}
         {note && !parsing && (
@@ -7282,7 +7282,7 @@ function ProfileTab({
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
             <p className="mt-1.5 text-xs leading-relaxed text-body/60">
-              Saved to your profile and used to personalize outreach. To fill your
+              Saved to your Profile and used to personalize outreach. To fill your
               profile <span className="font-semibold">from</span> LinkedIn, upload your
               LinkedIn PDF above or paste your About section below.
             </p>
@@ -7801,7 +7801,7 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
         onClick={onSetup}
         className="mt-6 rounded-xl bg-brand-gradient px-7 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
       >
-        Set up your profile
+        Set up your Profile
       </button>
       <div className="mx-auto mt-7 flex max-w-md flex-wrap justify-center gap-2">
         {["Add your name", "Resume or website (optional)", "Start scouting"].map(
