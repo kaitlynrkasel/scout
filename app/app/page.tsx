@@ -196,6 +196,7 @@ interface Find {
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
+  pinned?: boolean; // pinned to the top of the finds list
   application?: {
     overview?: string;
     howToApply?: string;
@@ -1402,6 +1403,10 @@ function ScoutTool({
     const f = finds.find((x) => x.id === id);
     if (f) recordExposure(f.opp); // contacted -> feed the shared ledger
   }
+  // Pin/unpin a find so it sorts to the top of the list.
+  function togglePin(id: string) {
+    saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
+  }
   // Toggle whether this find's email draft attaches the resume.
   function setFindAttach(find: Find, on: boolean) {
     saveFinds(
@@ -2307,6 +2312,7 @@ function ScoutTool({
           applyingId={applyingId}
           hasResume={!!resumeFile}
           onToggleAttach={setFindAttach}
+          onTogglePin={togglePin}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -2961,6 +2967,7 @@ function FindsTab({
   applyingId,
   hasResume,
   onToggleAttach,
+  onTogglePin,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -2992,6 +2999,7 @@ function FindsTab({
   applyingId: string;
   hasResume: boolean;
   onToggleAttach: (f: Find, on: boolean) => void;
+  onTogglePin: (id: string) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -3009,7 +3017,12 @@ function FindsTab({
   );
   const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
     .slice()
-    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
+    // Pinned finds first, then best-fit.
+    .sort(
+      (a, b) =>
+        (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
+        (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
+    );
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -3116,6 +3129,7 @@ function FindsTab({
               applying={applyingId === f.id}
               hasResume={hasResume}
               onToggleAttach={(on) => onToggleAttach(f, on)}
+              onTogglePin={() => onTogglePin(f.id)}
             />
           ))}
         </div>
@@ -3289,6 +3303,7 @@ function FindCard({
   applying,
   hasResume,
   onToggleAttach,
+  onTogglePin,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -3313,6 +3328,7 @@ function FindCard({
   applying: boolean;
   hasResume: boolean;
   onToggleAttach: (on: boolean) => void;
+  onTogglePin: () => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -3332,7 +3348,11 @@ function FindCard({
   return (
     <div
       className={`rounded-2xl border p-4 shadow-card transition ${
-        denied ? "border-warm-border bg-white/60 opacity-70" : "border-warm-border bg-white"
+        denied
+          ? "border-warm-border bg-white/60 opacity-70"
+          : find.pinned
+          ? "border-coral/40 bg-warm-bg/40 ring-1 ring-coral/20"
+          : "border-warm-border bg-white"
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
@@ -3354,6 +3374,31 @@ function FindCard({
         <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
           {o.channel}
         </span>
+        <button
+          onClick={onTogglePin}
+          title={find.pinned ? "Unpin" : "Pin to top"}
+          aria-label={find.pinned ? "Unpin find" : "Pin find to top"}
+          aria-pressed={!!find.pinned}
+          className={`ml-auto shrink-0 rounded-lg border p-1 transition ${
+            find.pinned
+              ? "border-coral/40 bg-coral/10 text-accent"
+              : "border-transparent text-body/40 hover:border-warm-border hover:bg-warm-bg hover:text-accent"
+          }`}
+        >
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill={find.pinned ? "currentColor" : "none"}
+            stroke="currentColor"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <path d="M12 17v5" />
+            <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+          </svg>
+        </button>
       </div>
 
       {(o.outlet || o.location) && (
