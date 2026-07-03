@@ -1938,6 +1938,7 @@ function ScoutTool({
           finds={finds}
           community={community}
           coaching={coaching}
+          editPairs={editPairs}
           onApplyTip={addCoaching}
           onRemoveTip={removeCoaching}
           goOutreach={() => setTab("outreach")}
@@ -3285,6 +3286,81 @@ function learnedFromFinds(finds: Find[]) {
   };
 }
 
+// Concrete, honestly-derived things Scout has learned about THIS user recently,
+// each only shown when the real data supports it. Individual + private.
+function recentInsights(
+  learned: ReturnType<typeof learnedFromFinds>,
+  coaching: string[],
+  editPairs: { before: string; after: string }[]
+): { text: string; basis: string }[] {
+  const pct = (v: number) => `${Math.round(v * 100)}%`;
+  const out: { text: string; basis: string }[] = [];
+
+  // Channel preference: what you act on vs pass on.
+  const topKept = learned.keptChannels[0]?.[0];
+  const topDenied = learned.deniedChannels[0]?.[0];
+  if (topKept && learned.kept >= 3) {
+    out.push({
+      text:
+        topDenied && topDenied !== topKept
+          ? `You reach out to ${topKept} contacts and tend to pass on ${topDenied} ones.`
+          : `You reach out most through ${topKept}.`,
+      basis: `${learned.kept} you kept`,
+    });
+  }
+
+  // Fit sweet spot.
+  if (learned.keptFit != null && learned.deniedFit != null && learned.keptFit > learned.deniedFit) {
+    out.push({
+      text: `Your sweet spot is around ${pct(learned.keptFit)} fit; you pass on ones near ${pct(learned.deniedFit)}.`,
+      basis: `${learned.decided} decisions`,
+    });
+  }
+
+  // Improving trend (deny rate dropping over time).
+  if (learned.trend && learned.trend.delta < -0.05) {
+    out.push({
+      text: `Your matches are landing more often lately: deny rate ${pct(learned.trend.early)} then ${pct(learned.trend.recent)}.`,
+      basis: "earlier vs recent finds",
+    });
+  }
+
+  // Top reason you pass.
+  const topReason = learned.denyReasons[0];
+  if (topReason && topReason[1] >= 2) {
+    out.push({
+      text: `Most often you pass because: ${topReason[0].toLowerCase()}. Scout steers away from those.`,
+      basis: `${topReason[1]} times`,
+    });
+  }
+
+  // Reply tracking.
+  if (learned.replyRate != null && learned.sentCount >= 2) {
+    out.push({
+      text: `${learned.repliedCount} of ${learned.sentCount} tracked messages got a reply.`,
+      basis: "Gmail reply tracking",
+    });
+  }
+
+  // Voice learned from edits.
+  if (editPairs.length > 0) {
+    out.push({
+      text: `Scout has learned your writing voice from ${editPairs.length} edit${editPairs.length === 1 ? "" : "s"} you made to drafts.`,
+      basis: "your rewrites",
+    });
+  }
+
+  // Coaching turned into standing rules.
+  if (coaching.length > 0) {
+    out.push({
+      text: `${coaching.length} coaching rule${coaching.length === 1 ? "" : "s"} you approved now shape${coaching.length === 1 ? "s" : ""} every draft.`,
+      basis: "your dashboard",
+    });
+  }
+
+  return out;
+}
+
 /* ---------------- Dashboard tab ---------------- */
 function DashboardTab({
   activity,
@@ -3295,6 +3371,7 @@ function DashboardTab({
   finds,
   community,
   coaching,
+  editPairs,
   onApplyTip,
   onRemoveTip,
   goOutreach,
@@ -3310,6 +3387,7 @@ function DashboardTab({
   finds: Find[];
   community: CommunityStats | null;
   coaching: string[];
+  editPairs: { before: string; after: string }[];
   onApplyTip: (tip: string) => void;
   onRemoveTip: (tip: string) => void;
   goOutreach: () => void;
@@ -3318,6 +3396,7 @@ function DashboardTab({
   goFinds: () => void;
 }) {
   const learned = learnedFromFinds(finds);
+  const insights = recentInsights(learned, coaching, editPairs);
   // Contacts you reached out to about a week ago that still haven't replied — a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
@@ -3772,6 +3851,88 @@ function DashboardTab({
           </>
         )}
       </section>
+
+      {/* -------- What Scout has learned about YOU lately (individual) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-bold text-ink">What Scout has learned about you</h2>
+        <p className="mt-1 text-sm text-body/80">
+          Recent, private-to-you signals Scout picks up as you work. These steer who it
+          finds and how it drafts.
+        </p>
+        {insights.length ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {insights.map((ins) => (
+              <div
+                key={ins.text}
+                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+              >
+                <span
+                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-xs text-sage"
+                  aria-hidden
+                >
+                  ✦
+                </span>
+                <div>
+                  <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                    {ins.basis}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+            Nothing learned yet. As you keep, pass on, and edit finds, real insights about
+            your taste and voice show up here.{" "}
+            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
+              Work a few finds
+            </button>{" "}
+            to get started.
+          </p>
+        )}
+      </section>
+
+      {/* -------- Getting sharper across Scout (public, everyone) -------- */}
+      {community && (community.patterns?.decidedFinds || 0) > 0 && (
+        <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
+          <h2 className="text-lg font-bold text-ink">Getting sharper across Scout</h2>
+          <p className="mt-1 text-sm text-body/80">
+            Scout learns from everyone&apos;s decisions (anonymously, in aggregate). The
+            more the community decides, the better it matches for all of you.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-8">
+            <div>
+              <div className="text-2xl font-extrabold text-ink">
+                {(community.patterns?.decidedFinds || 0).toLocaleString()}
+              </div>
+              <div className="text-xs text-body/70">community decisions learned from</div>
+            </div>
+            <div>
+              <div className="text-2xl font-extrabold text-ink">
+                {(community.users + 1).toLocaleString()}
+              </div>
+              <div className="text-xs text-body/70">
+                {community.users + 1 === 1 ? "person" : "people"} using Scout
+              </div>
+            </div>
+            {community.patterns?.channels?.[0] && (
+              <div>
+                <div className="text-2xl font-extrabold text-ink">
+                  {Math.round(community.patterns.channels[0].keptRate * 100)}%
+                </div>
+                <div className="text-xs text-body/70">
+                  of {community.patterns.channels[0].channel.toLowerCase()} finds get acted on
+                </div>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-body/50">
+            Aggregate only, never anyone&apos;s individual data. Numbers grow and steady as
+            the community does.
+          </p>
+        </section>
+      )}
 
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
