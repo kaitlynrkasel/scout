@@ -11,6 +11,7 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-outfit)", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["var(--font-serif)", "ui-serif", "Georgia", "serif"],
       },
       colors: {
         ink: "#3b2c1d", // espresso, for headings
@@ -24,6 +25,7 @@ const config: Config = {
         clay: "#c8b899", // muted fills / avatars
         coffee: "#31241a", // deep coffee for dark CTA cards
         sage: "#8c9a76", // secondary accent (logo nod), used sparingly
+        "sage-deep": "#5f6a47", // deeper sage for text on sage tint
         danger: "#a6674a", // muted terracotta, reserved for "denied"
 
         // Surfaces
