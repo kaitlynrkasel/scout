@@ -1,35 +1,29 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 
 /**
- * Scout the dog — a small mascot pinned to the bottom-left of the main content
- * area. Hidden at the top of a page, it fades in once you scroll down, and
- * every ~40s it wags its tail for 5s (paused while the tab is hidden).
+ * Scout the dog — a small mascot that constantly sits in the bottom-left of the
+ * main content area on every tab. The moment it's on screen it wags its tail,
+ * then rests 30s and wags again for 5s, repeating.
  */
 export default function CornerDog() {
-  const [shown, setShown] = useState(false);
-  const [wagging, setWagging] = useState(false);
-  const wagTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [wagging, setWagging] = useState(true); // starts wagging the moment it's seen
 
-  // Reveal on scroll.
   useEffect(() => {
-    const onScroll = () => setShown(window.scrollY > 140);
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
-  // Tail-wag loop — skip a beat when the tab isn't visible.
-  useEffect(() => {
-    const loop = setInterval(() => {
-      if (document.hidden) return;
+    let stopTimer: ReturnType<typeof setTimeout>;
+    let restTimer: ReturnType<typeof setTimeout>;
+    const wag = () => {
       setWagging(true);
-      wagTimeout.current = setTimeout(() => setWagging(false), 5000);
-    }, 40000);
+      stopTimer = setTimeout(() => {
+        setWagging(false);
+        restTimer = setTimeout(wag, 30000); // rest 30s
+      }, 5000); // wag for 5s
+    };
+    wag();
     return () => {
-      clearInterval(loop);
-      if (wagTimeout.current) clearTimeout(wagTimeout.current);
+      clearTimeout(stopTimer);
+      clearTimeout(restTimer);
     };
   }, []);
 
@@ -38,9 +32,7 @@ export default function CornerDog() {
       src={wagging ? "/scout-dog-wag.gif" : "/scout-dog.png"}
       alt=""
       aria-hidden="true"
-      className={`pointer-events-none fixed bottom-4 left-[244px] z-40 hidden w-14 select-none transition-all duration-300 ease-out sm:block ${
-        shown ? "translate-y-0 opacity-90" : "translate-y-2 opacity-0"
-      }`}
+      className="pointer-events-none fixed bottom-28 left-[244px] z-40 hidden w-14 select-none sm:block"
     />
   );
 }
