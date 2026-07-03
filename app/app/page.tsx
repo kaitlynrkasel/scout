@@ -2488,7 +2488,7 @@ function FindsTab({
             onClick={goOutreach}
             className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
           >
-            Find more
+            Find opportunities
           </button>
         </div>
       </div>
@@ -3239,7 +3239,7 @@ function DashboardTab({
               onClick={goOutreach}
               className="ml-auto rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
             >
-              Scout more people
+              Find more opportunities
             </button>
           </div>
         </div>
