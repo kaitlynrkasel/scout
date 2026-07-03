@@ -5693,26 +5693,8 @@ function ProfileTab({
         <p className="mt-2 text-xs leading-relaxed text-body/70">
           Type anything, a job hunt, finding a band member, press for a product, investors.
           Pick a suggestion if one fits, or just describe it in your own words and Scout
-          will figure out who to look for.
+          will figure out who to look for. Manage your categories in the editor below.
         </p>
-        <div className="mt-3 rounded-xl bg-warm-bg/70 px-4 py-3">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-            Suggested categories
-          </div>
-          <div className="mt-2 flex flex-wrap gap-2">
-            {suggestionsFor(useCase).map((s) => (
-              <span
-                key={s.name}
-                className="rounded-full border border-warm-border bg-white px-3 py-1 text-xs font-medium text-ink"
-              >
-                {s.name}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2.5 text-xs text-body/70">
-            These appear on the Outreach tab. You can add or remove any of them there.
-          </p>
-        </div>
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
