@@ -145,7 +145,7 @@ const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished o
 const TOUR_STEPS: TourStep[] = [
   {
     tab: "dashboard",
-    title: "Welcome to Scout 👋",
+    title: "Welcome to Scout",
     body: "Scout finds the right people and opportunities, then drafts warm, personalized outreach in your own voice. Here's a 60-second tour of how it works.",
   },
   {
@@ -192,7 +192,7 @@ const TOUR_STEPS: TourStep[] = [
   },
   {
     tab: "dashboard",
-    title: "You're all set 🎉",
+    title: "You're all set",
     body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from “Take a tour” at the bottom of the sidebar.",
   },
 ];
