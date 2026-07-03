@@ -24,6 +24,9 @@ export function Nav() {
           <a href="/#features" className="transition hover:text-ink">
             Features
           </a>
+          <a href="/#team" className="transition hover:text-ink">
+            Team
+          </a>
           <a href="/analytics" className="transition hover:text-ink">
             Proof
           </a>
