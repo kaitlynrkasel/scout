@@ -170,10 +170,39 @@ function canonicalLink(u: string): string {
     : "";
 }
 
+// Normalize a person's name so "John Smith", "John J. Smith", "Dr. John Smith Jr",
+// and "John Jacob Smith" all collapse to the same key. Strips honorifics,
+// suffixes, and middle names/initials, then keeps first + last token.
 function normName(s: string): string {
-  return String(s || "")
+  const cleaned = String(s || "")
     .toLowerCase()
-    .replace(/[^a-z0-9]/g, "");
+    // Drop leading role/title prefixes ("VP of Marketing at John Smith" style
+    // never actually appears — extractor puts the name first — so this is
+    // safe.)
+    .replace(/\b(dr|mr|mrs|ms|prof|rev|hon|sir)\.?\s+/g, "")
+    // Drop suffixes that come after the last name.
+    .replace(/\b(jr|sr|ii|iii|iv|v|phd|md|esq|do|dds|rn|mba|cpa)\.?$/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = cleaned.split(" ").filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  return parts[0] + parts[parts.length - 1];
+}
+
+// A LinkedIn (or other social) URL/handle collapses to a stable identity key
+// even when spellings of the name differ across articles. Two opps with the
+// same LinkedIn slug are almost certainly the same person.
+function normHandle(h: string): string {
+  const s = String(h || "").toLowerCase().trim();
+  if (!s) return "";
+  const li = s.match(/linkedin\.com\/in\/([a-z0-9-]+)/);
+  if (li) return "li:" + li[1];
+  const tw = s.match(/(?:twitter\.com|x\.com)\/([a-z0-9_]+)/);
+  if (tw) return "tw:" + tw[1];
+  const ig = s.match(/instagram\.com\/([a-z0-9_.]+)/);
+  if (ig) return "ig:" + ig[1];
+  return s.replace(/^@+/, "").replace(/[^a-z0-9]/g, "");
 }
 
 // Is this a job/internship hunt? Those postings rarely list a real person, so we
@@ -450,15 +479,49 @@ export async function discover(
         }
       }
       const nm = normName(r.name);
+      const handleKey = normHandle(r.contact_handle || "");
       const host = urlHost(r.url || cand.url);
       if (nm && deniedNames.has(nm)) {
         skippedDupes++;
         logSkip(cand.title, cand.url, `you denied "${r.name}" before`);
         continue; // already rejected this exact one before
       }
-      if (nm && knownNames.has(nm)) {
-        skippedDupes++;
-        logSkip(cand.title, cand.url, `duplicate name: ${r.name}`);
+      // Same-person detection across articles: match either the normalized
+      // name or the same LinkedIn/Twitter/Instagram handle. When we hit one,
+      // don't drop the article — attach it as another source on the existing
+      // opp so the user can see every place we found this person.
+      const dupIdx = opps.findIndex((o) => {
+        if (nm && normName(o.name) === nm) return true;
+        const ok = normHandle(o.contactHandle);
+        if (handleKey && ok && ok === handleKey) return true;
+        return false;
+      });
+      if (dupIdx >= 0) {
+        const existing = opps[dupIdx];
+        const newRef = {
+          title: cand.title || "",
+          url: cand.url || "",
+          snippet: String(cand.content || "").slice(0, 220),
+        };
+        if (!existing.sources) {
+          existing.sources = [
+            { title: existing.sourceTitle, url: existing.url, snippet: existing.sourceSnippet },
+          ];
+        }
+        // Avoid re-adding an identical article URL, but merge in any missing
+        // contact detail the second article surfaces.
+        if (newRef.url && !existing.sources.find((s) => s.url === newRef.url)) {
+          existing.sources.push(newRef);
+        }
+        if (!existing.contactEmail && r.contact_email) existing.contactEmail = r.contact_email;
+        if (!existing.contactHandle && r.contact_handle) existing.contactHandle = r.contact_handle;
+        if (!existing.contactRole && r.contact_role) existing.contactRole = r.contact_role;
+        if (!existing.location && r.location) existing.location = r.location;
+        logSkip(
+          cand.title,
+          cand.url,
+          `merged into "${existing.name}" (now ${existing.sources.length} sources)`
+        );
         continue;
       }
       if (host && knownHosts.has(host)) {
@@ -488,6 +551,13 @@ export async function discover(
         whyItFits: r.why_it_fits || "",
         sourceTitle: cand.title || "",
         sourceSnippet: String(cand.content || "").slice(0, 220),
+        sources: [
+          {
+            title: cand.title || "",
+            url: cand.url || "",
+            snippet: String(cand.content || "").slice(0, 220),
+          },
+        ],
       });
     }
   }

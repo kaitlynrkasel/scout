@@ -20,9 +20,7 @@ export default function Landing() {
               One place for every conversation
             </span>
             <h1 className="mt-5 text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-6xl">
-              We Search,
-              <br />
-              <span className="brand-text">You Smile</span>
+              Find <span className="brand-text">your people</span>
             </h1>
             <p className="mt-5 max-w-xl text-[16px] leading-relaxed text-body">
               Scout searches the public web for the people and opportunities that fit

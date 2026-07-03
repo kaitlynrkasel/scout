@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
-import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
+import type { Draft, Opportunity, OutreachTemplate, SourceRef } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
@@ -344,13 +344,42 @@ const DENY_REASONS = [
   "Already reached out",
 ];
 
+// Same normalization the discover engine uses so IDs match across the boundary.
+// Strips honorifics/suffixes and keeps first + last token so "John Smith" and
+// "John J. Smith" collapse.
 function normNameKey(s: string): string {
-  return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const cleaned = String(s || "")
+    .toLowerCase()
+    .replace(/\b(dr|mr|mrs|ms|prof|rev|hon|sir)\.?\s+/g, "")
+    .replace(/\b(jr|sr|ii|iii|iv|v|phd|md|esq|do|dds|rn|mba|cpa)\.?$/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  const parts = cleaned.split(" ").filter(Boolean);
+  if (parts.length <= 1) return parts[0] || "";
+  return parts[0] + parts[parts.length - 1];
 }
 function urlHostKey(u: string): string {
   const m = String(u || "").match(/^https?:\/\/([^/?#]+)/i);
   return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
 }
+// LinkedIn / Twitter / Instagram handles collapse to the same identity across
+// different articles, so we can dedup even when spellings of the name differ.
+function normHandleKey(h: string): string {
+  const s = String(h || "").toLowerCase().trim();
+  if (!s) return "";
+  const li = s.match(/linkedin\.com\/in\/([a-z0-9-]+)/);
+  if (li) return "li:" + li[1];
+  const tw = s.match(/(?:twitter\.com|x\.com)\/([a-z0-9_]+)/);
+  if (tw) return "tw:" + tw[1];
+  const ig = s.match(/instagram\.com\/([a-z0-9_.]+)/);
+  if (ig) return "ig:" + ig[1];
+  return s.replace(/^@+/, "").replace(/[^a-z0-9]/g, "");
+}
+// The stable dedup key for a find. Kept as project + name + host for backward
+// compatibility with finds already saved under the old key format. Cross-article
+// merging (same person, different URL) is handled inside mergeFinds() so old
+// IDs don't break.
 function findKey(projectId: string, o: Opportunity): string {
   return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
 }
@@ -1738,12 +1767,77 @@ function ScoutTool({
   // Add newly discovered people to the active project's finds (deduped, keeping
   // any status/draft already set). Returns how many were genuinely new.
   function mergeFinds(newOpps: Opportunity[]): number {
-    const existing = new Set(finds.map((f) => f.id));
+    // Two dedup layers: exact id match (same person + same host, historic key)
+    // AND normalized-name/handle match against every find in this project. The
+    // second catches "same person, different article" cases — for those we
+    // MERGE the incoming article into the existing find's sources instead of
+    // adding a second row.
+    const existingIds = new Set(finds.map((f) => f.id));
+    const byName = new Map<string, Find>();
+    const byHandle = new Map<string, Find>();
+    for (const f of finds) {
+      if (f.projectId !== activeId) continue;
+      const nm = normNameKey(f.opp.name);
+      if (nm) byName.set(nm, f);
+      const hk = normHandleKey(f.opp.contactHandle || "");
+      if (hk) byHandle.set(hk, f);
+    }
     const fresh: Find[] = [];
+    const updates = new Map<string, Find>(); // id → updated Find (source-merged)
     for (const o of newOpps) {
       const id = findKey(activeId, o);
-      if (existing.has(id)) continue;
-      existing.add(id);
+      if (existingIds.has(id)) continue;
+      const nm = normNameKey(o.name);
+      const hk = normHandleKey(o.contactHandle || "");
+      const matched =
+        (nm && byName.get(nm)) || (hk && byHandle.get(hk)) || null;
+      if (matched) {
+        // Same person, different article — append this URL as another source
+        // on the matched find rather than surface a duplicate row.
+        const target = updates.get(matched.id) || matched;
+        const currentSources: SourceRef[] = target.opp.sources
+          ? [...target.opp.sources]
+          : [
+              {
+                title: target.opp.sourceTitle,
+                url: target.opp.url,
+                snippet: target.opp.sourceSnippet,
+              },
+            ];
+        const newRef: SourceRef = {
+          title: o.sourceTitle,
+          url: o.url,
+          snippet: o.sourceSnippet,
+        };
+        if (newRef.url && !currentSources.find((s) => s.url === newRef.url)) {
+          currentSources.push(newRef);
+        }
+        // Also add all sources from the incoming opp (in case discover already
+        // multi-source'd it) — same URL check keeps things clean.
+        if (o.sources) {
+          for (const s of o.sources) {
+            if (s.url && !currentSources.find((c) => c.url === s.url)) {
+              currentSources.push(s);
+            }
+          }
+        }
+        updates.set(matched.id, {
+          ...target,
+          opp: {
+            ...target.opp,
+            sources: currentSources,
+            // Backfill any contact detail we didn't have before.
+            contactEmail: target.opp.contactEmail || o.contactEmail,
+            contactHandle: target.opp.contactHandle || o.contactHandle,
+            contactRole: target.opp.contactRole || o.contactRole,
+            location: target.opp.location || o.location,
+          },
+        });
+        continue;
+      }
+      existingIds.add(id);
+      if (nm) byName.set(nm, {} as Find); // placeholder to dedup within this batch
+      if (hk) byHandle.set(hk, {} as Find);
       fresh.push({
         id,
         projectId: activeId,
@@ -1753,7 +1847,10 @@ function ScoutTool({
         addedAt: Date.now(),
       });
     }
-    if (fresh.length) saveFinds([...fresh, ...finds]);
+    if (fresh.length || updates.size) {
+      const merged = finds.map((f) => updates.get(f.id) || f);
+      saveFinds([...fresh, ...merged]);
+    }
     return fresh.length;
   }
 
@@ -3580,6 +3677,66 @@ function SideNav({
   );
 }
 
+/* ---------------- Sources list ----------------
+ * Expandable row on a find card that shows every article Scout used to learn
+ * about this person, when there's more than one. Collapsed to a "N articles"
+ * pill by default so cards stay scannable; click to reveal the URLs. */
+function SourcesList({ sources }: { sources: SourceRef[] }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-2">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-full border border-warm-border bg-warm-bg/60 px-2.5 py-1 text-[11px] font-bold text-brown-deep transition hover:bg-brown-tint"
+        aria-expanded={open}
+      >
+        <svg
+          width="11"
+          height="11"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5" />
+          <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5" />
+        </svg>
+        {sources.length} articles about this person
+        <span aria-hidden className="text-body/60">{open ? "▴" : "▾"}</span>
+      </button>
+      {open && (
+        <ul className="mt-2 space-y-1.5 text-xs">
+          {sources.map((s, i) => (
+            <li key={`${s.url}-${i}`} className="flex items-start gap-2 leading-relaxed">
+              <span className="mt-0.5 shrink-0 rounded bg-brown-tint px-1.5 py-0.5 text-[10px] font-bold text-brown-deep tabular-nums">
+                {i + 1}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-semibold text-ink">
+                  {s.title || "(untitled)"}
+                </div>
+                {s.url && (
+                  <a
+                    href={s.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="truncate block text-body/60 underline-offset-2 hover:underline"
+                  >
+                    {s.url}
+                  </a>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Finds list ---------------- */
 function FindsList({
   opps,
@@ -4350,6 +4507,12 @@ function FindCard({
       </div>
       {o.whyItFits && (
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
+      )}
+
+      {/* Multiple articles that mention this same person — collapsed by default
+          so the card stays compact. Renders only when 2+ sources exist. */}
+      {o.sources && o.sources.length > 1 && (
+        <SourcesList sources={o.sources} />
       )}
 
       {/* What this target asks for (pasted or found by deep-scan) */}
