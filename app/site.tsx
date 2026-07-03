@@ -3,7 +3,7 @@
 export function Logo({ size = 24 }: { size?: number }) {
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src="/scout-logo.svg" alt="Scout" width={size} height={size} />
+    <img src="/scout-logo.png" alt="Scout" width={size} height={size} />
   );
 }
 

@@ -1808,7 +1808,7 @@ function SideNav({
     <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col gap-1 border-r border-warm-border bg-surface p-4">
       <div className="flex items-center gap-2.5 px-2 pb-4 pt-1">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/scout-logo.svg" alt="Scout" width={36} height={36} className="h-9 w-9" />
+        <img src="/scout-logo.png" alt="Scout" width={36} height={36} className="h-9 w-9" />
         <span className="text-xl font-extrabold tracking-tight text-ink">Scout</span>
       </div>
 
@@ -4750,7 +4750,7 @@ function Logo({ small = false, white = false }: { small?: boolean; white?: boole
   return (
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src="/scout-logo.svg"
+      src="/scout-logo.png"
       alt="Scout"
       width={s}
       height={s}
