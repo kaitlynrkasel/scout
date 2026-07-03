@@ -49,7 +49,8 @@ const config: Config = {
       },
       boxShadow: {
         soft: "0 1px 2px rgba(60, 42, 24, 0.04), 0 16px 34px -18px rgba(60, 42, 24, 0.16)",
-        card: "0 2px 10px -3px rgba(60, 42, 24, 0.10)",
+        // Stacked-paper depth (notebook motif): a thin tan bottom edge + soft drop.
+        card: "0 2px 0 #ddcfb4, 0 16px 28px -20px rgba(60, 42, 24, 0.28)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(120deg, #7c5837 0%, #684a2d 100%)",
