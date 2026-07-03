@@ -405,19 +405,25 @@ export async function discover(
   // Hard cap: drop any target already contacted by too many other users recently,
   // so the same inboxes don't get blasted across profiles. Fail-open (if the
   // ledger is unreachable, nothing is dropped).
+  //
+  // IMPORTANT: only cap PERSONAL outreach (networking, PR, individual contacts).
+  // Job/internship postings are MEANT to receive many applicants, so there is no
+  // cap on those — everyone can and should apply to the same opening.
   let kept = opps;
   let skippedCapped = 0;
-  try {
-    const capped = await cappedKeys(opps.map((o) => targetKey(o)));
-    if (capped.size) {
-      kept = opps.filter((o) => {
-        const k = targetKey(o);
-        return !k || !capped.has(k);
-      });
-      skippedCapped = opps.length - kept.length;
+  if (!isJobUseCase(useCase)) {
+    try {
+      const capped = await cappedKeys(opps.map((o) => targetKey(o)));
+      if (capped.size) {
+        kept = opps.filter((o) => {
+          const k = targetKey(o);
+          return !k || !capped.has(k);
+        });
+        skippedCapped = opps.length - kept.length;
+      }
+    } catch {
+      kept = opps;
     }
-  } catch {
-    kept = opps;
   }
 
   return {

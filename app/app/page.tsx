@@ -1422,8 +1422,10 @@ function ScoutTool({
 
   // Tell the shared ledger this user is pursuing a contact, so it isn't
   // over-surfaced to everyone else. Fire-and-forget; no-op for signed-out users.
+  // Only personal outreach counts — job/internship openings are meant to get many
+  // applicants, so they're never capped and never recorded.
   const recordExposure = (opp: Opportunity) => {
-    if (!getToken) return;
+    if (!getToken || isJobUseCaseClient(activeUseCase)) return;
     getToken()
       .then((token) => {
         if (!token) return;
