@@ -2,23 +2,8 @@
 
 export function Logo({ size = 24 }: { size?: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <defs>
-        <linearGradient id="scout-grad" x1="0" y1="0" x2="24" y2="24">
-          <stop stopColor="#7a5b41" />
-          <stop offset="1" stopColor="#5e4530" />
-        </linearGradient>
-      </defs>
-      <rect width="24" height="24" rx="7" fill="url(#scout-grad)" />
-      <path
-        d="M6 7.5h12a1 1 0 0 1 1 1V14a1 1 0 0 1-1 1h-6.5L8 17.6A.45.45 0 0 1 7.3 17.2V15H6a1 1 0 0 1-1-1V8.5a1 1 0 0 1 1-1Z"
-        stroke="white"
-        strokeWidth="1.5"
-        fill="none"
-        strokeLinejoin="round"
-      />
-      <path d="M8 10.2h8 M8 12.4h5" stroke="white" strokeWidth="1.4" strokeLinecap="round" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/scout-logo.svg" alt="Scout" width={size} height={size} />
   );
 }
 
