@@ -524,10 +524,54 @@ function AuthedShell() {
     setProfileLoaded(false);
     Promise.all([dbLoadProfile(uid), dbLoadState(uid)]).then(([p, s]) => {
       if (cancelled) return;
+      // Merge the extras from three places, prefer server state over
+      // localStorage (the fallback is only for the migration from the
+      // browser-only era; after this ships, the server state is the
+      // source of truth).
+      const remoteExtras = s?.profileExtras || {};
+      let localExtras: NonNullable<AppState["profileExtras"]> = {};
+      try {
+        const raw = localStorage.getItem(PROFILE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.age === "number") localExtras.age = parsed.age;
+          if (typeof parsed.college === "string") localExtras.college = parsed.college;
+          if (typeof parsed.location === "string") localExtras.location = parsed.location;
+          if (typeof parsed.companySize === "string") localExtras.companySize = parsed.companySize;
+          if (typeof parsed.competitiveness === "string")
+            localExtras.competitiveness = parsed.competitiveness;
+        }
+      } catch {
+        /* localStorage unavailable — nothing to migrate */
+      }
+      const raw = { ...localExtras, ...remoteExtras };
+      // AppState stores companySize/competitiveness as string; narrow to the
+      // Profile enums here so we don't leak an unexpected value into state.
+      const allowedSize = new Set<CompanySize>(["any", "small", "big"]);
+      const allowedComp = new Set<Competitiveness>([
+        "any",
+        "beginner",
+        "intermediate",
+        "competitive",
+      ]);
+      const mergedExtras: Partial<Profile> = {};
+      if (typeof raw.age === "number") mergedExtras.age = raw.age;
+      if (typeof raw.college === "string") mergedExtras.college = raw.college;
+      if (typeof raw.location === "string") mergedExtras.location = raw.location;
+      if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
+        mergedExtras.companySize = raw.companySize as CompanySize;
+      if (raw.competitiveness && allowedComp.has(raw.competitiveness as Competitiveness))
+        mergedExtras.competitiveness = raw.competitiveness as Competitiveness;
       setInitial(
         p
-          ? { name: p.name, bio: p.bio, useCase: p.useCase || "Networking", linkedin: p.linkedin || "" }
-          : { name: "", bio: "", useCase: "Networking", linkedin: "" }
+          ? {
+              name: p.name,
+              bio: p.bio,
+              useCase: p.useCase || "Networking",
+              linkedin: p.linkedin || "",
+              ...mergedExtras,
+            }
+          : { name: "", bio: "", useCase: "Networking", linkedin: "", ...mergedExtras }
       );
       setInitialState(s);
       setProfileLoaded(true);
@@ -825,9 +869,20 @@ function ScoutTool({
       editPairs,
       resumeFile,
       signature,
+      // Ride the extras along in the JSON blob so they survive a redeploy.
+      // The profiles table only has name/bio/useCase/linkedin; everything else
+      // lived in localStorage before this — which meant it evaporated on any
+      // fresh hydrate.
+      profileExtras: {
+        age: profile.age,
+        college: profile.college,
+        location: profile.location,
+        companySize: profile.companySize,
+        competitiveness: profile.competitiveness,
+      },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.age, profile.college, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
