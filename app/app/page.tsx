@@ -562,6 +562,10 @@ function ScoutTool({
   const [error, setError] = useState("");
   const [apiReason, setApiReason] = useState<string | null>(null); // 'credits'|'auth'|'rate'
   const [opps, setOpps] = useState<Opportunity[]>([]);
+  // Per-candidate skip log surfaced from /api/discover, so the user (or you
+  // while iterating on the extract prompt) can see exactly what got filtered.
+  const [skipped, setSkipped] = useState<Array<{ title: string; url: string; reason: string }>>([]);
+  const [showSkipped, setShowSkipped] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
   // Which outreach kind each draft is currently written for. Keyed by
@@ -1259,6 +1263,8 @@ function ScoutTool({
     setStats("");
     setError("");
     setApiReason(null);
+    setSkipped([]);
+    setShowSkipped(false);
   }
 
   // Show the message from a failed API response, flagging credit/key/limit issues.
@@ -2071,6 +2077,7 @@ function ScoutTool({
       }
       setOpps(data.opportunities || []);
       setSelected({}); // nothing pre-approved — you approve who you want to reach
+      setSkipped(Array.isArray(data.skipped) ? data.skipped : []);
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
@@ -2450,7 +2457,43 @@ function ScoutTool({
                   {discovering ? "Scouting…" : "Scout"}
                 </button>
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
+                {skipped.length > 0 && (
+                  <button
+                    onClick={() => setShowSkipped((v) => !v)}
+                    className="ml-auto text-xs font-semibold text-body/70 underline-offset-2 transition hover:text-brown-deep hover:underline"
+                  >
+                    {showSkipped ? "Hide" : "See"} what was filtered ({skipped.length})
+                  </button>
+                )}
               </div>
+              {showSkipped && skipped.length > 0 && (
+                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-warm-border bg-warm-bg/40 p-4 text-xs">
+                  <ul className="space-y-2">
+                    {skipped.map((s, i) => (
+                      <li key={i} className="flex gap-2 leading-relaxed">
+                        <span className="mt-0.5 shrink-0 rounded bg-brown-tint px-1.5 py-0.5 text-[10px] font-bold uppercase text-brown-deep">
+                          {s.reason}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate font-semibold text-ink">
+                            {s.title || "(untitled)"}
+                          </div>
+                          {s.url && (
+                            <a
+                              href={s.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="truncate block text-body/60 underline-offset-2 hover:underline"
+                            >
+                              {s.url}
+                            </a>
+                          )}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </section>
             ) : (
               <ProfileGate onSetup={() => setTab("profile")} />
