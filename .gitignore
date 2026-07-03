@@ -10,8 +10,9 @@ next-env.d.ts
 public/pdf.worker.min.mjs
 tsconfig.tsbuildinfo
 
-# Local Claude Code dev config
-.claude/
+# Local Claude Code dev config (but keep shared skills tracked)
+.claude/*
+!.claude/skills/
 
 # Dev-only Tavily response cache (see lib/tavily.ts)
 .scout-cache/
