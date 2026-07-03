@@ -253,6 +253,14 @@ async function extract(
     `blog posts about how to reach out, news articles, login/paywall pages, pay-to-play services, off-industry results, and ` +
     `the user themselves. A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
     `an article teaching you how to network is NOT. ` +
+    `MENTIONED IS NOT ENOUGH: if the source is about a PROGRAM, EVENT, ORGANIZATION, or EMPLOYER and only mentions a person ` +
+    `by name in passing — no personal profile page, no interview with them, no direct contact channel — set is_relevant to false. ` +
+    `For target_type "person", the source must EITHER be about the person themselves (their profile page, an interview with ` +
+    `them, coverage of their own career) OR give a direct contact channel (email or LinkedIn URL / handle). Otherwise it's ` +
+    `not a real point of contact. ` +
+    `WHY_IT_FITS DISCIPLINE: must be a specific true detail about THE PERSON'S OWN work, career, projects, or interests — ` +
+    `not about their employer or program. If you can only describe the program they work at, that's a sign this isn't a real ` +
+    `prospect; set is_relevant false. ` +
     `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER); if clearly outside their industry ` +
     `or level, set is_relevant false. Reserve fit_score above 0.7 for results matching BOTH the goal and the user's ` +
     `specific industry/sub-field; give 0.3 or below to off-industry ones.`;
@@ -347,6 +355,21 @@ export async function discover(
         continue;
       }
       const r = rec as any;
+      // Backstop for the "name mentioned in an article about their program" case:
+      // if we've got a person with no email, no LinkedIn/handle, and no known
+      // channel, there's no real way to reach them — skip. Company Portal / staff
+      // pages / etc. still pass because their channel isn't "Unknown".
+      if (ttype === "person") {
+        const channel = String(r.channel || "").toLowerCase();
+        const reachable =
+          !!String(r.contact_email || "").trim() ||
+          !!String(r.contact_handle || "").trim() ||
+          (channel && channel !== "unknown");
+        if (!reachable) {
+          skippedNotFit++;
+          continue;
+        }
+      }
       const nm = normName(r.name);
       const host = urlHost(r.url || cand.url);
       if (nm && deniedNames.has(nm)) {
