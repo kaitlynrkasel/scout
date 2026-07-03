@@ -4748,8 +4748,21 @@ function ProfileTab({
           <textarea
             value={bio}
             onChange={(e) => onBio(e.target.value)}
+            onPaste={(e) => {
+              // Pasting a resume / bio / About section auto-fills your name and
+              // use case, no button needed. Only for a substantial paste, so a
+              // stray word or URL doesn't kick off a parse.
+              const pasted = (e.clipboardData?.getData("text") || "")
+                .replace(/\s+/g, " ")
+                .trim();
+              if (parsing || pasted.length < 120) return;
+              const el = e.currentTarget;
+              // Let the paste land in the box (onChange updates bio), then parse
+              // the full contents without re-setting the bio we just updated.
+              setTimeout(() => readAndFill(el.value, false), 0);
+            }}
             rows={11}
-            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Then tap 'Read this & fill in my profile'. The more you give, the more personal your outreach becomes."
+            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
