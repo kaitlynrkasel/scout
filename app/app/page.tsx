@@ -61,6 +61,23 @@ const GENERIC_SUGGESTIONS: { name: string; goal: string }[] = [
   { name: "Partners", goal: "people or organizations who could partner with me" },
 ];
 
+// A stable per-user seed so discovery varies results between people (less overlap,
+// less spam). Signed-in users key off their email; others get a persistent
+// per-browser id.
+function outreachSalt(accountEmail?: string): string {
+  if (accountEmail) return accountEmail;
+  try {
+    let s = localStorage.getItem("scout_salt");
+    if (!s) {
+      s = Math.random().toString(36).slice(2, 12);
+      localStorage.setItem("scout_salt", s);
+    }
+    return s;
+  } catch {
+    return "anon";
+  }
+}
+
 // Drop duplicate categories within the same project (same trimmed, case-folded
 // name), keeping the first. Cleans up any dupes seeded across earlier sessions.
 function dedupeCats<T extends { name: string; projectId: string }>(cats: T[]): T[] {
@@ -1355,6 +1372,8 @@ function ScoutTool({
   // Mark contacted from the button — same as setting status to sent.
   function markContacted(id: string) {
     setFindStatus(id, "sent");
+    const f = finds.find((x) => x.id === id);
+    if (f) recordExposure(f.opp); // contacted -> feed the shared ledger
   }
   // Toggle whether this find's email draft attaches the resume.
   function setFindAttach(find: Find, on: boolean) {
@@ -1400,6 +1419,29 @@ function ScoutTool({
   function removeFind(id: string) {
     saveFinds(finds.filter((f) => f.id !== id));
   }
+
+  // Tell the shared ledger this user is pursuing a contact, so it isn't
+  // over-surfaced to everyone else. Fire-and-forget; no-op for signed-out users.
+  const recordExposure = (opp: Opportunity) => {
+    if (!getToken) return;
+    getToken()
+      .then((token) => {
+        if (!token) return;
+        fetch("/api/exposure/record", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            opp: {
+              contactEmail: opp.contactEmail,
+              name: opp.name,
+              outlet: opp.outlet,
+              url: opp.url,
+            },
+          }),
+        }).catch(() => {});
+      })
+      .catch(() => {});
+  };
 
   // Deep-scan a find's site for a specific contact + submission requirements.
   async function deepScanFind(find: Find) {
@@ -1601,6 +1643,7 @@ function ScoutTool({
           )
         );
         bumpActivity({ drafts: 1 });
+        recordExposure(find.opp); // pursuing this contact -> feed the shared ledger
       }
     } catch (e: any) {
       setError(e.message);
@@ -1710,7 +1753,13 @@ function ScoutTool({
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ goal, about: aboutText, useCase: activeUseCase, feedback }),
+        body: JSON.stringify({
+          goal,
+          about: aboutText,
+          useCase: activeUseCase,
+          feedback,
+          salt: outreachSalt(accountEmail),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -1772,6 +1821,10 @@ function ScoutTool({
             return dr ? { ...f, draft: dr, status: "drafted" } : f;
           })
         );
+        // Feed the shared ledger for each contact we just drafted for.
+        chosen
+          .filter((o) => draftByOppId.has(o.id))
+          .forEach((o) => recordExposure(o));
       }
     } catch (e: any) {
       setError(e.message);

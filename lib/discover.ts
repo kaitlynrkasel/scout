@@ -7,6 +7,7 @@ import { claudeJson, parseJsonLoose } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC } from "./templates";
 import { ApiCreditError } from "./apiErrors";
+import { targetKey, cappedKeys } from "./exposure";
 import type { Opportunity } from "./types";
 
 // What the user has taught Scout by denying / keeping past finds. Fed into query
@@ -64,7 +65,8 @@ async function planQueries(
   goal: string,
   about: string,
   useCase: string,
-  feedback?: DiscoverFeedback
+  feedback?: DiscoverFeedback,
+  salt?: string
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -100,6 +102,16 @@ async function planQueries(
     "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
     "these from ABOUT THE USER — do not ask). " +
     guidance +
+    // Push the long tail: avoid the same few famous targets everyone contacts.
+    " CRITICAL for relevance and to avoid spamming the same inboxes: favor NICHE, specific, less-obvious targets that " +
+    "closely fit THIS user's exact sub-field, city, genre, stage and angle. Deliberately AVOID the handful of biggest, " +
+    "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
+    "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
+    "rather than broad. " +
+    (salt
+      ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
+        "two people with a similar goal get different, equally-relevant results instead of the same list. "
+      : "") +
     ` The current year is ${year}; for any dated query use ${year} or ${year + 1} (the current or upcoming cycle), never a past year. ` +
     "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
     "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
@@ -267,6 +279,7 @@ export interface DiscoverResult {
   candidates: number;
   skippedDupes: number;
   skippedNotFit: number;
+  skippedCapped: number; // dropped because too many other users already contacted them
 }
 
 export async function discover(
@@ -274,9 +287,10 @@ export async function discover(
   about: string,
   useCase: string,
   maxItems = 10,
-  feedback?: DiscoverFeedback
+  feedback?: DiscoverFeedback,
+  salt?: string
 ): Promise<DiscoverResult> {
-  const queries = await planQueries(goal, about, useCase, feedback);
+  const queries = await planQueries(goal, about, useCase, feedback, salt);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name — never resurface a rejected find.
   const deniedNames = new Set(
@@ -388,11 +402,30 @@ export async function discover(
     });
   }
 
+  // Hard cap: drop any target already contacted by too many other users recently,
+  // so the same inboxes don't get blasted across profiles. Fail-open (if the
+  // ledger is unreachable, nothing is dropped).
+  let kept = opps;
+  let skippedCapped = 0;
+  try {
+    const capped = await cappedKeys(opps.map((o) => targetKey(o)));
+    if (capped.size) {
+      kept = opps.filter((o) => {
+        const k = targetKey(o);
+        return !k || !capped.has(k);
+      });
+      skippedCapped = opps.length - kept.length;
+    }
+  } catch {
+    kept = opps;
+  }
+
   return {
-    opportunities: opps,
+    opportunities: kept,
     searched: queries.length + enrichSearches,
     candidates: candidates.length,
     skippedDupes,
     skippedNotFit,
+    skippedCapped,
   };
 }

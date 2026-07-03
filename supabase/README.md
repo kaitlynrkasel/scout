@@ -20,6 +20,16 @@ so people can only read data for teams they belong to.
 > current version adds the missing `GRANT`s to the service role (some projects, with
 > the new `sb_secret_` keys, don't grant it by default). Re-running is safe.
 
+## Anti-overexposure ledger (recommended)
+
+Run [`supabase/exposure.sql`](./exposure.sql) the same way (SQL Editor → paste → Run).
+It adds one internal table, `target_contacts`, that lets Scout stop surfacing the
+same contact once too many different users have already reached out to them — so
+the tool can't turn into a spam machine. It's aggregate-only (a normalized contact
+key + which user reached them, never message content) and RLS-locked so only the
+server can read it. Until you run it, discovery still works normally; it just
+doesn't apply the cross-user cap yet.
+
 No new environment variables are needed — Teams reuses the same Supabase keys already
 in `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`).
