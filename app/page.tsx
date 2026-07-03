@@ -314,7 +314,7 @@ const TEAM: { name: string; role: string; blurb: string; dogName: string }[] = [
     dogName: "Scout",
   },
   {
-    name: "Meraki Kasel",
+    name: "Mera Kasel",
     role: "Team",
     blurb: "TBD — add a short line about Meraki here.",
     dogName: "TBD",
