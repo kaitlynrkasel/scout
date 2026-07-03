@@ -962,17 +962,64 @@ function ScoutTool({
   }
 
   // Add a category to a SPECIFIC project (used by the Profile editor, where you
-  // may be editing a project that isn't the active one).
-  function addCategoryToProject(projectId: string, name: string) {
+  // may be editing a project that isn't the active one). An optional goal lets
+  // the caller pass a known search goal (from a suggestion or derived from the
+  // name) so discovery understands what the category is looking for.
+  function addCategoryToProject(projectId: string, name: string, goal = "") {
     const nm = name.trim();
     if (!nm) return;
     const c: Category = {
-      id: `cat-${Date.now()}`,
+      id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: nm,
-      goal: "",
+      goal: goal || "",
       projectId,
     };
     saveCats([...categories, c]);
+  }
+
+  // Reorder a project's categories to match the given id order (drag and drop).
+  function reorderCategoriesInProject(projectId: string, orderedIds: string[]) {
+    const mine = categories.filter((c) => c.projectId === projectId);
+    const byId = new Map(mine.map((c) => [c.id, c] as const));
+    const seq = orderedIds.map((id) => byId.get(id)).filter(Boolean) as Category[];
+    for (const c of mine) if (!orderedIds.includes(c.id)) seq.push(c); // safety
+    let i = 0;
+    // Rewrite this project's slots in place, leaving other projects untouched.
+    const next = categories.map((c) => (c.projectId === projectId ? seq[i++] : c));
+    saveCats(next);
+  }
+
+  // Delete several categories at once (multi-select). Keeps the active category
+  // valid if it was among those removed.
+  function removeCategoriesBulk(ids: string[]) {
+    const set = new Set(ids);
+    const next = categories.filter((c) => !set.has(c.id));
+    saveCats(next);
+    if (set.has(catId)) {
+      const mine = next.filter((c) => c.projectId === activeId);
+      if (mine.length) {
+        setCatId(mine[0].id);
+        setGoal(mine[0].goal);
+      } else {
+        setCatId("");
+      }
+    }
+  }
+
+  // Ask the API to turn a typed category name into a concrete search goal so
+  // discovery knows who to look for. Falls back to the raw name on any failure.
+  async function deriveCategoryGoal(name: string, useCase: string): Promise<string> {
+    try {
+      const res = await fetch("/api/category-goal", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, useCase, about: aboutText }),
+      });
+      const j = await res.json();
+      return (j && j.goal) || name;
+    } catch {
+      return name;
+    }
   }
 
   // Category manager (pencil): rename a category in the dropdown.
@@ -2006,6 +2053,9 @@ function ScoutTool({
           onAddCategory={addCategoryToProject}
           onRenameCategory={renameCategory}
           onRemoveCategory={removeCategory}
+          onRemoveCategories={removeCategoriesBulk}
+          onReorderCategories={reorderCategoriesInProject}
+          onDeriveGoal={deriveCategoryGoal}
         />
       )}
 
@@ -5399,6 +5449,9 @@ function ProfileTab({
   onAddCategory,
   onRenameCategory,
   onRemoveCategory,
+  onRemoveCategories,
+  onReorderCategories,
+  onDeriveGoal,
 }: {
   name: string;
   bio: string;
@@ -5422,9 +5475,12 @@ function ProfileTab({
   onAddProject: (name: string) => void;
   onRenameProject: (id: string, name: string) => void;
   onRemoveProject: (id: string) => void;
-  onAddCategory: (projectId: string, name: string) => void;
+  onAddCategory: (projectId: string, name: string, goal?: string) => void;
   onRenameCategory: (id: string, name: string) => void;
   onRemoveCategory: (id: string) => void;
+  onRemoveCategories: (ids: string[]) => void;
+  onReorderCategories: (projectId: string, orderedIds: string[]) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -5717,6 +5773,9 @@ function ProfileTab({
           onAddCategory={onAddCategory}
           onRenameCategory={onRenameCategory}
           onRemoveCategory={onRemoveCategory}
+          onRemoveCategories={onRemoveCategories}
+          onReorderCategories={onReorderCategories}
+          onDeriveGoal={onDeriveGoal}
         />
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
@@ -6082,6 +6141,219 @@ function WarnIcon() {
 }
 
 /* ---------------- List manager (pencil popover: add / rename / remove) ---------------- */
+// One project's categories: drag to reorder, click to multi-select and delete,
+// rename inline, and add your own (suggestions + free text, with the goal the
+// search will use derived so the API understands what to look for).
+function ProjectCategoryList({
+  project,
+  cats,
+  onRename,
+  onRemoveMany,
+  onReorder,
+  onAdd,
+  onDeriveGoal,
+}: {
+  project: Project;
+  cats: Category[];
+  onRename: (id: string, name: string) => void;
+  onRemoveMany: (ids: string[]) => void;
+  onReorder: (orderedIds: string[]) => void;
+  onAdd: (name: string, goal?: string) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+}) {
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [dragId, setDragId] = useState("");
+  const [overId, setOverId] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [addText, setAddText] = useState("");
+  const [deriving, setDeriving] = useState(false);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const n = new Set(prev);
+      n.has(id) ? n.delete(id) : n.add(id);
+      return n;
+    });
+  const deleteSelected = () => {
+    onRemoveMany([...selected]);
+    setSelected(new Set());
+  };
+  const drop = (targetId: string) => {
+    if (dragId && dragId !== targetId) {
+      const order = cats.map((c) => c.id).filter((id) => id !== dragId);
+      const at = order.indexOf(targetId);
+      order.splice(at < 0 ? order.length : at, 0, dragId);
+      onReorder(order);
+    }
+    setDragId("");
+    setOverId("");
+  };
+  const submitFree = async () => {
+    const name = addText.trim();
+    if (!name || deriving) return;
+    setDeriving(true);
+    try {
+      const goal = await onDeriveGoal(name, project.useCase);
+      onAdd(name, goal);
+      setAddText("");
+    } finally {
+      setDeriving(false);
+    }
+  };
+
+  const existing = new Set(cats.map((c) => c.name.trim().toLowerCase()));
+  const suggestions = suggestionsFor(project.useCase).filter(
+    (s) => !existing.has(s.name.trim().toLowerCase())
+  );
+
+  return (
+    <div>
+      {/* Multi-select toolbar */}
+      {selected.size > 0 && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-warm-bg px-2.5 py-1.5 text-xs">
+          <span className="font-semibold text-ink">{selected.size} selected</span>
+          <button
+            onClick={deleteSelected}
+            className="rounded-md bg-brand-gradient px-2.5 py-1 font-bold text-white transition hover:opacity-95"
+          >
+            Delete
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="font-semibold text-body/60 transition hover:text-ink"
+          >
+            Clear
+          </button>
+        </div>
+      )}
+
+      {cats.length === 0 && (
+        <p className="px-1 text-xs text-body/50">No categories yet. Add one below.</p>
+      )}
+
+      <ul className="space-y-1">
+        {cats.map((c) => {
+          const isSel = selected.has(c.id);
+          return (
+            <li
+              key={c.id}
+              onDragOver={(e) => {
+                e.preventDefault();
+                if (dragId) setOverId(c.id);
+              }}
+              onDrop={() => drop(c.id)}
+              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition ${
+                overId === c.id && dragId !== c.id ? "bg-coral/10 ring-1 ring-coral/30" : ""
+              } ${isSel ? "bg-sage/10" : ""}`}
+            >
+              <span
+                draggable
+                onDragStart={() => setDragId(c.id)}
+                onDragEnd={() => {
+                  setDragId("");
+                  setOverId("");
+                }}
+                title="Drag to reorder"
+                aria-label="Drag to reorder"
+                className="cursor-grab select-none px-0.5 text-body/40 active:cursor-grabbing"
+              >
+                ⠿
+              </span>
+              <input
+                type="checkbox"
+                checked={isSel}
+                onChange={() => toggle(c.id)}
+                aria-label={`Select ${c.name}`}
+                className="h-3.5 w-3.5 shrink-0 accent-brown"
+              />
+              <input
+                defaultValue={c.name}
+                key={c.name}
+                onBlur={(e) => {
+                  const v = e.target.value.trim();
+                  if (v && v !== c.name) onRename(c.id, v);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                aria-label={`Category name for ${c.name}`}
+                className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-sm text-ink outline-none transition hover:border-warm-border focus:border-coral"
+              />
+              <button
+                onClick={() => onRemoveMany([c.id])}
+                title={`Remove ${c.name}`}
+                aria-label={`Remove category ${c.name}`}
+                className="shrink-0 rounded-md border border-warm-border p-1 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+              >
+                <TrashIcon />
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+
+      {/* Add: a plus that opens suggestions + free text */}
+      {!addOpen ? (
+        <button
+          onClick={() => setAddOpen(true)}
+          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-warm-border px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
+        >
+          <span className="text-sm leading-none">+</span> Add a category
+        </button>
+      ) : (
+        <div className="mt-2 rounded-xl border border-warm-border bg-warm-bg/40 p-2.5">
+          {suggestions.length > 0 && (
+            <>
+              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-body/50">
+                Suggestions
+              </div>
+              <div className="mb-2.5 flex flex-wrap gap-1.5">
+                {suggestions.map((s) => (
+                  <button
+                    key={s.name}
+                    onClick={() => onAdd(s.name, s.goal)}
+                    title={s.goal}
+                    className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:border-coral/40 hover:bg-warm-bg"
+                  >
+                    + {s.name}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          <div className="flex items-center gap-1.5">
+            <input
+              value={addText}
+              onChange={(e) => setAddText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitFree();
+              }}
+              placeholder="Or type your own (Scout figures out who to find)"
+              className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
+            />
+            <button
+              onClick={submitFree}
+              disabled={!addText.trim() || deriving}
+              className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40"
+            >
+              {deriving ? "Reading…" : "Add"}
+            </button>
+            <button
+              onClick={() => {
+                setAddOpen(false);
+                setAddText("");
+              }}
+              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-body/60 transition hover:text-ink"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // Inline, always-visible editor for the user's projects and their categories.
 // Lives on the Profile tab (the popover CategoryManager stays on Outreach).
 function ProjectsCategoriesEditor({
@@ -6093,27 +6365,31 @@ function ProjectsCategoriesEditor({
   onAddCategory,
   onRenameCategory,
   onRemoveCategory,
+  onRemoveCategories,
+  onReorderCategories,
+  onDeriveGoal,
 }: {
   projects: Project[];
   categories: Category[];
   onAddProject: (name: string) => void;
   onRenameProject: (id: string, name: string) => void;
   onRemoveProject: (id: string) => void;
-  onAddCategory: (projectId: string, name: string) => void;
+  onAddCategory: (projectId: string, name: string, goal?: string) => void;
   onRenameCategory: (id: string, name: string) => void;
   onRemoveCategory: (id: string) => void;
+  onRemoveCategories: (ids: string[]) => void;
+  onReorderCategories: (projectId: string, orderedIds: string[]) => void;
+  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
 }) {
   const [newProject, setNewProject] = useState("");
-  // One "new category" input value per project, keyed by project id.
-  const [newCat, setNewCat] = useState<Record<string, string>>({});
 
   return (
     <div>
       <Label>Your projects and categories</Label>
       <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
         A project is usually one goal or one person you manage (say, an artist);
-        its categories are the kinds of people you search for. Edit them here or on
-        the Outreach tab, they stay in sync.
+        its categories are the kinds of people you search for. Drag to reorder,
+        click to select and delete, or add your own. Synced with the Outreach tab.
       </p>
 
       <div className="space-y-3">
@@ -6163,70 +6439,16 @@ function ProjectsCategoriesEditor({
                 )}
               </div>
 
-              <div className="mt-2.5 space-y-1.5 border-t border-warm-border pt-2.5">
-                {cats.length === 0 && (
-                  <p className="px-1 text-xs text-body/50">
-                    No categories yet. Add one below.
-                  </p>
-                )}
-                {cats.map((c) => (
-                  <div key={c.id} className="flex items-center gap-1.5">
-                    <span className="text-body/30" aria-hidden>
-                      ·
-                    </span>
-                    <input
-                      defaultValue={c.name}
-                      key={c.name}
-                      onBlur={(e) => {
-                        const v = e.target.value.trim();
-                        if (v && v !== c.name) onRenameCategory(c.id, v);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") e.currentTarget.blur();
-                      }}
-                      aria-label={`Category name for ${c.name}`}
-                      className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1 text-sm text-ink outline-none transition hover:border-warm-border focus:border-coral"
-                    />
-                    {cats.length > 1 && (
-                      <button
-                        onClick={() => onRemoveCategory(c.id)}
-                        title={`Remove ${c.name}`}
-                        aria-label={`Remove category ${c.name}`}
-                        className="shrink-0 rounded-lg border border-warm-border p-1 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-                      >
-                        <TrashIcon />
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <div className="flex items-center gap-1.5 pt-1">
-                  <input
-                    value={newCat[p.id] || ""}
-                    onChange={(e) =>
-                      setNewCat((s) => ({ ...s, [p.id]: e.target.value }))
-                    }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && (newCat[p.id] || "").trim()) {
-                        onAddCategory(p.id, newCat[p.id]);
-                        setNewCat((s) => ({ ...s, [p.id]: "" }));
-                      }
-                    }}
-                    placeholder="Add a category"
-                    className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
-                  />
-                  <button
-                    onClick={() => {
-                      if ((newCat[p.id] || "").trim()) {
-                        onAddCategory(p.id, newCat[p.id]);
-                        setNewCat((s) => ({ ...s, [p.id]: "" }));
-                      }
-                    }}
-                    disabled={!(newCat[p.id] || "").trim()}
-                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-bold text-accent transition hover:bg-warm-bg disabled:opacity-40"
-                  >
-                    Add
-                  </button>
-                </div>
+              <div className="mt-2.5 border-t border-warm-border pt-2.5">
+                <ProjectCategoryList
+                  project={p}
+                  cats={cats}
+                  onRename={onRenameCategory}
+                  onRemoveMany={onRemoveCategories}
+                  onReorder={(orderedIds) => onReorderCategories(p.id, orderedIds)}
+                  onAdd={(name, goal) => onAddCategory(p.id, name, goal)}
+                  onDeriveGoal={onDeriveGoal}
+                />
               </div>
             </div>
           );
