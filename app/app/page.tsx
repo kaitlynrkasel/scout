@@ -486,6 +486,10 @@ function ScoutTool({
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
+  // When discovery started (ms epoch), so the progress bar can resume at the
+  // right % after tab switches — SearchProgress is scoped to the Outreach tab
+  // and remounts when the user comes back.
+  const [discoverStartedAt, setDiscoverStartedAt] = useState<number | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [error, setError] = useState("");
   const [apiReason, setApiReason] = useState<string | null>(null); // 'credits'|'auth'|'rate'
@@ -1888,6 +1892,7 @@ function ScoutTool({
       return;
     }
     resetResults();
+    setDiscoverStartedAt(Date.now());
     setDiscovering(true);
     try {
       // Teach the search from this project's history: avoid denied finds (with
@@ -1932,6 +1937,7 @@ function ScoutTool({
       setError(e.message);
     } finally {
       setDiscovering(false);
+      setDiscoverStartedAt(null);
     }
   }
 
@@ -2025,6 +2031,12 @@ function ScoutTool({
         onClose={endTour}
         onFinish={endTour}
       />
+      {discovering && tab !== "outreach" && (
+        <GlobalScoutStatus
+          startedAt={discoverStartedAt}
+          onGo={() => setTab("outreach")}
+        />
+      )}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
       <div className="flex flex-1 flex-col">
@@ -2231,7 +2243,7 @@ function ScoutTool({
                 <Avatar />
                 <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3.5 shadow-card">
                   <Tail side="left" />
-                  <SearchProgress active={discovering} />
+                  <SearchProgress active={discovering} startedAt={discoverStartedAt} />
                 </div>
               </div>
             )}
@@ -2649,20 +2661,41 @@ function ScoutTool({
 
 /* ---------------- Search progress bar ----------------
  * Discovery takes ~30–60s and the API doesn't stream progress, so we show a
- * synthetic bar that eases toward ~92% over ~55s (fast at first, slow near the
- * end) and rotates through stage labels so the user sees Scout thinking. When
- * `active` flips false, we snap to 100% and hold briefly before unmounting. */
-function SearchProgress({ active }: { active: boolean }) {
-  const STAGES = [
-    "Reading the web",
-    "Finding real contacts",
-    "Checking who fits",
-    "Ranking your matches",
-    "Almost there",
-  ];
-  const [pct, setPct] = useState(0);
-  const [stage, setStage] = useState(0);
-  const startRef = useRef<number>(0);
+ * synthetic bar that eases toward ~92% (fast at first, slow near the end) and
+ * rotates through stage labels. `startedAt` is a timestamp lifted to the parent
+ * so the bar computes progress from the real search start — that way switching
+ * tabs and coming back resumes at the correct percentage instead of restarting.
+ * When `active` flips false we snap to 100% before unmounting. */
+const SEARCH_STAGES = [
+  "Reading the web",
+  "Finding real contacts",
+  "Checking who fits",
+  "Ranking your matches",
+  "Almost there",
+];
+const SEARCH_TAU = 22000; // easing time constant — controls approach speed
+const SEARCH_CAP = 92; // hold here until the request actually finishes
+
+function searchPctFor(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  const t = Date.now() - startedAt;
+  return SEARCH_CAP * (1 - Math.exp(-t / SEARCH_TAU));
+}
+function searchStageFor(startedAt: number | null): number {
+  if (!startedAt) return 0;
+  const t = Date.now() - startedAt;
+  return Math.min(SEARCH_STAGES.length - 1, Math.floor(t / 7000));
+}
+
+function SearchProgress({
+  active,
+  startedAt,
+}: {
+  active: boolean;
+  startedAt: number | null;
+}) {
+  const [pct, setPct] = useState(() => searchPctFor(startedAt));
+  const [stage, setStage] = useState(() => searchStageFor(startedAt));
 
   useEffect(() => {
     if (!active) {
@@ -2670,29 +2703,17 @@ function SearchProgress({ active }: { active: boolean }) {
       setPct(100);
       return;
     }
-    startRef.current = performance.now();
-    setPct(0);
-    setStage(0);
-    const TAU = 22000; // easing time constant — controls how fast we approach 92%
-    const CAP = 92; // hold here until the request actually finishes
+    setPct(searchPctFor(startedAt));
+    setStage(searchStageFor(startedAt));
     let raf = 0;
     const tick = () => {
-      const t = performance.now() - startRef.current;
-      // 1 - e^(-t/tau): fast climb early, slow near the cap
-      const eased = CAP * (1 - Math.exp(-t / TAU));
-      setPct(eased);
+      setPct(searchPctFor(startedAt));
+      setStage(searchStageFor(startedAt));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    const stageIv = setInterval(() => {
-      setStage((s) => Math.min(STAGES.length - 1, s + 1));
-    }, 7000);
-    return () => {
-      cancelAnimationFrame(raf);
-      clearInterval(stageIv);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [active]);
+    return () => cancelAnimationFrame(raf);
+  }, [active, startedAt]);
 
   return (
     <div>
@@ -2709,9 +2730,57 @@ function SearchProgress({ active }: { active: boolean }) {
         />
       </div>
       <p className="mt-2 text-xs text-body">
-        {STAGES[stage]}… Usually 30 to 60 seconds.
+        {SEARCH_STAGES[stage]}… Usually 30 to 60 seconds.
       </p>
     </div>
+  );
+}
+
+/* ---------------- Global search chip ----------------
+ * A compact status pill that stays pinned in the bottom-right whenever a
+ * discovery request is in flight, on every tab. Clicking it takes the user
+ * back to Outreach where the full progress card lives. */
+function GlobalScoutStatus({
+  startedAt,
+  onGo,
+}: {
+  startedAt: number | null;
+  onGo: () => void;
+}) {
+  const [pct, setPct] = useState(() => searchPctFor(startedAt));
+
+  useEffect(() => {
+    setPct(searchPctFor(startedAt));
+    let raf = 0;
+    const tick = () => {
+      setPct(searchPctFor(startedAt));
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [startedAt]);
+
+  return (
+    <button
+      onClick={onGo}
+      title="Back to Outreach"
+      className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-warm-border bg-white/95 px-3.5 py-2 shadow-soft backdrop-blur transition hover:border-brown/40 hover:shadow-card"
+    >
+      <span className="relative flex h-5 w-5 items-center justify-center">
+        <span className="absolute inset-0 animate-ping rounded-full bg-brown/30" />
+        <span className="relative h-2 w-2 rounded-full bg-brown" />
+      </span>
+      <span className="text-xs font-bold text-ink">Scouting</span>
+      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-brown-tint">
+        <span
+          className="block h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+          style={{ width: `${pct}%` }}
+        />
+      </span>
+      <span className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70">
+        {Math.round(pct)}%
+      </span>
+    </button>
   );
 }
 
