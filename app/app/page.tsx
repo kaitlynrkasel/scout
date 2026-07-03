@@ -6,6 +6,7 @@ import type { Draft, Opportunity, OutreachTemplate } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
+import Tutorial, { type TourStep } from "./Tutorial";
 import { fileToText } from "@/lib/fileText";
 import {
   guessTimezone,
@@ -129,6 +130,52 @@ const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every 
 const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
 const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
 const SIG_KEY = "scout_signature"; // email signature appended to drafts
+const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished or skipped
+
+// Guided intro tour. Each step spotlights a sidebar item (matched by its
+// data-tour id) and switches to that tab so the real screen shows behind.
+const TOUR_STEPS: TourStep[] = [
+  {
+    tab: "dashboard",
+    title: "Welcome to Scout 👋",
+    body: "Scout finds the right people and opportunities, then drafts warm, personalized outreach in your own voice. Here's a 60-second tour of how it works.",
+  },
+  {
+    tab: "dashboard",
+    target: "nav-dashboard",
+    title: "Your Dashboard",
+    body: "Your home base — a snapshot of activity, saved templates, and coaching tips that sharpen every draft over time.",
+  },
+  {
+    tab: "outreach",
+    target: "nav-outreach",
+    title: "Find people & draft outreach",
+    body: "Describe who you're trying to reach and Scout discovers matches, then drafts a message for each one in your voice. This is where most of your work happens.",
+  },
+  {
+    tab: "finds",
+    target: "nav-finds",
+    title: "Review your Finds",
+    body: "Everyone Scout surfaces lands here. Approve the good ones, deny the rest, and send drafts straight from your connected mailbox.",
+  },
+  {
+    tab: "templates",
+    target: "nav-templates",
+    title: "Save Templates",
+    body: "Keep reusable message templates per channel, project, or category. Scout blends them with your voice so drafts start from something you trust.",
+  },
+  {
+    tab: "profile",
+    target: "nav-profile",
+    title: "Set up your Profile",
+    body: "Add your name and a short bio so Scout knows who's reaching out and can write as you. Connect Gmail or Outlook here to send in one click.",
+  },
+  {
+    tab: "dashboard",
+    title: "You're all set 🎉",
+    body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from “Take a tour” at the bottom of the sidebar.",
+  },
+];
 
 // One-time rename of the old "cue_*" localStorage keys to "scout_*", so existing
 // per-browser users keep their profile, projects, and finds after the rebrand.
@@ -429,10 +476,11 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings"
   >("dashboard");
 
   // ---- Outreach state ----
+  const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
@@ -647,6 +695,31 @@ function ScoutTool({
   useEffect(() => {
     hydratedRef.current = true;
   }, []);
+
+  // Auto-launch the intro tour once, for first-time users. Runs after mount so
+  // the sidebar targets exist to spotlight.
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(TOUR_KEY)) {
+        const t = setTimeout(() => setTourOpen(true), 400);
+        return () => clearTimeout(t);
+      }
+    } catch {
+      /* localStorage unavailable — skip the tour rather than crash */
+    }
+  }, []);
+
+  function startTour() {
+    setTourOpen(true);
+  }
+  function endTour() {
+    setTourOpen(false);
+    try {
+      localStorage.setItem(TOUR_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+  }
 
   function seedForProject(projectId: string, uc: string): Category[] {
     return suggestionsFor(uc).map((s, i) => ({
@@ -1945,6 +2018,13 @@ function ScoutTool({
         showLogout={!!showLogout}
         onLogout={onLogout}
       />
+      <Tutorial
+        open={tourOpen}
+        steps={TOUR_STEPS}
+        setTab={setTab as (t: string) => void}
+        onClose={endTour}
+        onFinish={endTour}
+      />
       <CornerDog />
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
@@ -2480,6 +2560,38 @@ function ScoutTool({
         </main>
       )}
 
+      {tab === "settings" && (
+        <main className="mx-auto max-w-3xl px-6 py-12">
+          <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+            <span className="brand-text">Settings</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Small preferences that shape how Scout shows up for you.
+          </p>
+
+          <section className="mt-8 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div className="max-w-md">
+                <h2 className="text-base font-extrabold tracking-tight text-ink">
+                  Introduction tour
+                </h2>
+                <p className="mt-1.5 text-sm leading-relaxed text-body">
+                  A quick 60-second walkthrough that highlights each part of the app.
+                  It pops up automatically the first time you sign in — replay it here
+                  anytime.
+                </p>
+              </div>
+              <button
+                onClick={startTour}
+                className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+              >
+                Show the tour
+              </button>
+            </div>
+          </section>
+        </main>
+      )}
+
       </div>
 
       {/* ---------------- Footer ---------------- */}
@@ -2665,6 +2777,7 @@ function SideNav({
           return (
             <button
               key={it.key}
+              data-tour={`nav-${it.key}`}
               onClick={() => setTab(it.key)}
               className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
                 active
@@ -2750,6 +2863,30 @@ function SideNav({
             Account
           </button>
         )}
+        <button
+          onClick={() => setTab("settings")}
+          className={`mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            tab === "settings"
+              ? "bg-brown text-white shadow-soft"
+              : "text-body hover:bg-brown-tint hover:text-brown-deep"
+          }`}
+        >
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className={tab === "settings" ? "" : "opacity-80"}
+          >
+            <circle cx="12" cy="12" r="3" />
+            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
+          </svg>
+          Settings
+        </button>
         {showLogout && (
           <button
             onClick={onLogout}
