@@ -2797,43 +2797,57 @@ function SearchProgress({
   active: boolean;
   startedAt: number | null;
 }) {
-  const [pct, setPct] = useState(() => searchPctFor(startedAt));
-  const [stage, setStage] = useState(() => searchStageFor(startedAt));
+  // Transient display values — updated every animation frame directly on the
+  // DOM so we don't rerender the component 60×/sec. React state was churning
+  // the whole subtree; refs let CSS + textContent carry the update.
+  const barRef = useRef<HTMLDivElement | null>(null);
+  const pctRef = useRef<HTMLSpanElement | null>(null);
+  const stageRef = useRef<HTMLSpanElement | null>(null);
+
+  const apply = (pctVal: number, stageIdx: number) => {
+    if (barRef.current) barRef.current.style.width = `${pctVal}%`;
+    if (pctRef.current) pctRef.current.textContent = `${Math.round(pctVal)}%`;
+    if (stageRef.current) stageRef.current.textContent = SEARCH_STAGES[stageIdx];
+  };
 
   useEffect(() => {
     if (!active) {
       // Snap to full so the user sees the bar complete before it disappears.
-      setPct(100);
+      apply(100, SEARCH_STAGES.length - 1);
       return;
     }
-    setPct(searchPctFor(startedAt));
-    setStage(searchStageFor(startedAt));
+    apply(searchPctFor(startedAt), searchStageFor(startedAt));
     let raf = 0;
     const tick = () => {
-      setPct(searchPctFor(startedAt));
-      setStage(searchStageFor(startedAt));
+      apply(searchPctFor(startedAt), searchStageFor(startedAt));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, startedAt]);
 
   return (
     <div>
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold text-ink">Scout is searching</span>
-        <span className="ml-auto text-xs font-bold tabular-nums text-body/70">
-          {Math.round(pct)}%
+        <span
+          ref={pctRef}
+          className="ml-auto text-xs font-bold tabular-nums text-body/70"
+        >
+          {Math.round(searchPctFor(startedAt))}%
         </span>
       </div>
       <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brown-tint">
         <div
+          ref={barRef}
           className="h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
-          style={{ width: `${pct}%` }}
+          style={{ width: `${searchPctFor(startedAt)}%` }}
         />
       </div>
       <p className="mt-2 text-xs text-body">
-        {SEARCH_STAGES[stage]}… Usually 30 to 60 seconds.
+        <span ref={stageRef}>{SEARCH_STAGES[searchStageFor(startedAt)]}</span>… Usually 30
+        to 60 seconds.
       </p>
     </div>
   );
@@ -2850,17 +2864,26 @@ function GlobalScoutStatus({
   startedAt: number | null;
   onGo: () => void;
 }) {
-  const [pct, setPct] = useState(() => searchPctFor(startedAt));
+  // Same trick as SearchProgress — write to the DOM directly in the RAF tick
+  // so the chip doesn't rerender every frame.
+  const fillRef = useRef<HTMLSpanElement | null>(null);
+  const pctRef = useRef<HTMLSpanElement | null>(null);
+
+  const apply = (v: number) => {
+    if (fillRef.current) fillRef.current.style.width = `${v}%`;
+    if (pctRef.current) pctRef.current.textContent = `${Math.round(v)}%`;
+  };
 
   useEffect(() => {
-    setPct(searchPctFor(startedAt));
+    apply(searchPctFor(startedAt));
     let raf = 0;
     const tick = () => {
-      setPct(searchPctFor(startedAt));
+      apply(searchPctFor(startedAt));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [startedAt]);
 
   return (
@@ -2876,12 +2899,16 @@ function GlobalScoutStatus({
       <span className="text-xs font-bold text-ink">Scouting</span>
       <span className="h-1.5 w-20 overflow-hidden rounded-full bg-brown-tint">
         <span
+          ref={fillRef}
           className="block h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
-          style={{ width: `${pct}%` }}
+          style={{ width: `${searchPctFor(startedAt)}%` }}
         />
       </span>
-      <span className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70">
-        {Math.round(pct)}%
+      <span
+        ref={pctRef}
+        className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70"
+      >
+        {Math.round(searchPctFor(startedAt))}%
       </span>
     </button>
   );
