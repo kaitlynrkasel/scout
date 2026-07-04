@@ -165,13 +165,13 @@ const TOUR_STEPS: TourStep[] = [
     tab: "outreach",
     target: "project-switcher",
     title: "Projects: one workspace per goal",
-    body: "A project is a self-contained workspace — one per artist, client, or job hunt. Each keeps its own categories, finds, and context so pitches sound like they're really about that person.",
+    body: "A project is a self-contained workspace — one per client, brand, or goal. Each keeps its own categories, finds, and context so pitches sound like they're really about that project.",
   },
   {
     tab: "outreach",
     target: "category-switcher",
     title: "Categories: presets for each kind of search",
-    body: "Inside a project, categories are reusable search presets — e.g. \"press writers\" vs \"playlist curators\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
+    body: "Inside a project, categories are reusable search presets — e.g. \"brand partnerships\" vs \"press writers\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
   },
   {
     tab: "finds",
@@ -2575,13 +2575,13 @@ function ScoutTool({
                         onRemove={removeProject}
                         onClose={() => setEditingProjects(false)}
                         title="Your projects"
-                        addPlaceholder="New project (e.g. an artist)"
+                        addPlaceholder="New project (e.g. a client or brand)"
                         emptyText="No projects yet."
                       />
                     )}
                   </div>
                   <p className="mt-2.5 text-xs leading-relaxed text-body/70">
-                    One workspace per artist, client, or goal, each with its own
+                    One workspace per client, brand, or goal, each with its own
                     categories and searches. Tap the pencil to add or remove projects.
                   </p>
                 </div>
@@ -2599,7 +2599,7 @@ function ScoutTool({
                     value={activeProject?.context || ""}
                     onChange={(e) => setProjectContext(activeId, e.target.value)}
                     rows={2}
-                    placeholder="e.g. Anna Belt — Nashville folk-rock singer-songwriter, new single out now, for fans of Stevie Nicks and Maggie Rogers."
+                    placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
                 </div>
@@ -7509,7 +7509,7 @@ function ProfileTab({
         <Label>What are you using Scout for?</Label>
         <UseCaseCombo value={useCase} onChange={onUseCase} />
         <p className="mt-2 text-xs leading-relaxed text-body/70">
-          Type anything, a job hunt, finding a band member, press for a product, investors.
+          Type anything: a job hunt, press for a product, investors, mentors, partners.
           Pick a suggestion if one fits, or just describe it in your own words and Scout
           will figure out who to look for. Manage your categories in the editor below.
         </p>
@@ -8449,8 +8449,8 @@ function ProjectsCategoriesEditor({
     <div>
       <Label>Your projects and categories</Label>
       <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
-        A project is usually one goal or one person you manage (say, an artist);
-        its categories are the kinds of people you search for. Drag to reorder,
+        A project is usually one client, brand, or goal you're working on; its
+        categories are the kinds of people you search for. Drag to reorder,
         click to select and delete, or add your own. Synced with the Outreach tab.
       </p>
 
@@ -8528,7 +8528,7 @@ function ProjectsCategoriesEditor({
               setNewProject("");
             }
           }}
-          placeholder="New project (e.g. another artist you manage)"
+          placeholder="New project (e.g. another client or brand)"
           className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
         />
         <button

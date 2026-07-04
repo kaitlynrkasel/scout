@@ -21,8 +21,8 @@ export async function POST(req: NextRequest) {
       `You turn a short outreach CATEGORY name into a concrete, specific search goal describing exactly WHO or WHAT to ` +
       `find, so a discovery engine knows what it's looking for. Return ONLY JSON {goal}. goal is ONE clear phrase (not a ` +
       `sentence with fluff), naming the kind of people/organizations, their role, and the relevant field. No preamble. ` +
-      `NEVER use em-dashes. Example: name "A&R" + use case "Music PR" => goal "A&R representatives at record labels who ` +
-      `sign and develop new artists". If the name is already specific, tighten it; do not invent unrelated constraints.`;
+      `NEVER use em-dashes. Example: name "Recruiters" + use case "Job / Internship search" => goal "recruiters and hiring ` +
+      `managers in the user's industry with open roles for their level". If the name is already specific, tighten it; do not invent unrelated constraints.`;
     const user =
       `CATEGORY NAME: ${nm}\nUSE CASE: ${String(useCase || "")}\nABOUT THE USER (for field/context, optional): ${String(about || "").slice(0, 600)}`;
 

@@ -193,7 +193,7 @@ export default function Landing() {
 }
 
 const USE_CASES = [
-  { who: "Musician / manager", q: "Unsigned bassists in Nashville to join my artist's band" },
+  { who: "Consultant", q: "Operations leads at DTC brands doing $10M–$50M revenue" },
   { who: "Health brand", q: "Fitness influencers to promote my new supplement" },
   { who: "Student", q: "Summer internships at companies I admire" },
   { who: "Student", q: "Alumni in my field for a quick coffee chat" },

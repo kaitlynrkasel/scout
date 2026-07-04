@@ -93,17 +93,17 @@ export default function Analytics() {
               <div className="space-y-3">
                 <FindCard
                   name="Maria Chen"
-                  meta="Indie label · Nashville, TN"
-                  contact="maria@indielabel.com"
-                  why="Runs A&R and recently signed two folk acts."
+                  meta="Head of Partnerships · Brooklyn, NY"
+                  contact="maria@acmestudio.com"
+                  why="Just launched two collaborations with sustainability brands."
                   fit={92}
                   channel="Email"
                 />
                 <FindCard
                   name="Jordan Lee"
-                  meta="A&R coordinator · Remote"
-                  contact="@jordanlee_ar"
-                  why="Posts about discovering emerging artists."
+                  meta="Growth Marketing Lead · Remote"
+                  contact="@jordanlee_growth"
+                  why="Posts about DTC launches and creator partnerships."
                   fit={74}
                   channel="LinkedIn"
                 />
@@ -120,19 +120,19 @@ export default function Analytics() {
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-[11px] font-semibold text-white">
                     email
                   </span>
-                  <span className="text-xs text-body/70">→ maria@indielabel.com</span>
+                  <span className="text-xs text-body/70">→ maria@acmestudio.com</span>
                 </div>
                 <div className="border-b border-warm-border pb-2 text-sm font-semibold text-ink">
-                  Loved your recent signings, quick hello
+                  Loved your recent collabs, quick hello
                 </div>
                 <p className="mt-2.5 whitespace-pre-line text-sm leading-relaxed text-body">
                   {`Hi Maria,
 
-I came across your A&R work and the two folk acts you just signed, both have such a warm, honest sound. As someone building in artist development, I really admire how you pick artists.
+I came across your partnerships work and the two sustainability collaborations you just launched, both feel really considered and on-brand. As someone building in growth marketing, I really admire how you pick partners.
 
-I would love to grab a quick coffee or call sometime to hear how you approach finding new talent. No agenda, just genuinely inspired by what you do.
+I would love to grab a quick coffee or call sometime to hear how you approach finding new brands to work with. No agenda, just genuinely inspired by what you do.
 
-Thanks so much, and congrats again on the signings!`}
+Thanks so much, and congrats again on the launches!`}
                 </p>
               </div>
             </div>
