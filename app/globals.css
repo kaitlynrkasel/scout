@@ -7,37 +7,13 @@
 }
 
 body {
-  /* Calm warm-cream wash. The app shell (sidebar + cards) sits on top of this. */
-  background: #f3ecdd;
-  color: #71624f;
+  /* Light, near-neutral wash with only a faint warm tint. Crisp white cards sit
+     on top for clean separation. */
+  background: #f5f2ec;
+  color: #5f584e;
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-}
-
-/* Subtle paper grain — a fine noise wash over everything, kept light so the app
-   still reads clean and professional. */
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9999;
-  opacity: 0.8;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.11'/%3E%3C/svg%3E");
-}
-
-/* Very light, uneven paper tone for a touch of warmth/roughness. */
-body::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  z-index: 9998;
-  opacity: 0.5;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='700' height='700'%3E%3Cfilter id='m'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.008' numOctaves='3'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23m)' opacity='0.30'/%3E%3C/svg%3E");
 }
 
 /* Gradient text helper for the wordmark + accents (warm brown, near-flat). */
@@ -48,37 +24,16 @@ body::after {
   -webkit-text-fill-color: transparent;
 }
 
-/* ---- Notebook motif: paper depth, taped note, folder tabs, index cards ---- */
+/* ---- Card + tab helpers (clean/flat) ---- */
 
-/* Soft stacked-paper depth for cards. */
+/* Minimal, flat elevation for cards — leans on hairline borders, not depth. */
 .paper-card {
-  box-shadow: 0 2px 0 #ddcfb4, 0 18px 30px -22px rgba(60, 42, 24, 0.3);
+  box-shadow: 0 1px 2px rgba(40, 32, 24, 0.05);
 }
 
-/* Ruled-paper "note" with a strip of tape at the top. The rule spacing (28px)
-   matches the note's text line-height (leading-7) so lines sit under the text. */
+/* Plain surface (previously a ruled/taped note — now a clean card). */
 .note-paper {
-  background-color: #fffffb;
-  background-image: repeating-linear-gradient(
-    to bottom,
-    transparent 0,
-    transparent 23px,
-    #e7dcc4 23px,
-    #e7dcc4 24px,
-    transparent 24px,
-    transparent 28px
-  );
-}
-.note-paper::before {
-  content: "";
-  position: absolute;
-  top: -9px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 74px;
-  height: 18px;
-  background: rgba(200, 184, 153, 0.45);
-  border: 1px dashed rgba(124, 88, 55, 0.32);
+  background-color: #ffffff;
 }
 
 /* Folder tab that sits on top of a panel. */
@@ -87,16 +42,9 @@ body::after {
   border-radius: 12px 12px 0 0;
 }
 
-/* Small colored flap on an index card. */
+/* idx-flap kept as a no-op so existing markup stays valid without the flap. */
 .idx-flap::before {
-  content: "";
-  position: absolute;
-  top: -1px;
-  left: 18px;
-  width: 44px;
-  height: 6px;
-  background: #c8b899;
-  border-radius: 0 0 4px 4px;
+  content: none;
 }
 
 /* Refined native select with a warm-brown chevron. */
