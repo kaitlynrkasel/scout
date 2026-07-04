@@ -142,10 +142,10 @@ async function planQueries(
   } else if (jobs) {
     guidance =
       "Target REAL job/internship openings IN THE USER'S INDUSTRY. Every query should pair the role/field with " +
-      "the user's specific industry and sub-field (e.g. for a music-business student wanting marketing: " +
-      "'music industry marketing internship 2026 apply', 'record label marketing intern careers', " +
-      "'Nashville entertainment marketing internship'). Include apply/careers/internship/2026, vary company types " +
-      "(labels, agencies, startups, brands in that field) and add the user's city or a hub city for that industry.";
+      "the user's specific industry and sub-field (e.g. for a marketing junior wanting a brand internship: " +
+      "'brand marketing internship summer 2026 apply', 'growth marketing intern DTC careers', " +
+      "'New York consumer brand marketing internship'). Include apply/careers/internship/2026, vary company types " +
+      "(agencies, startups, established brands in that field) and add the user's city or a hub city for that industry.";
   } else if (networking) {
     guidance =
       "Target findable, REAL INDIVIDUAL PEOPLE to network with in the user's exact field, people with names and titles " +

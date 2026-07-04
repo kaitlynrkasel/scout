@@ -10,10 +10,10 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
     label: "Networking",
     blurb: "Find people in a field and write warm coffee-chat outreach.",
     targetNoun: "people",
-    goalPlaceholder: "e.g. people who work in A&R at indie labels in Nashville",
+    goalPlaceholder: "e.g. brand partnerships leads at consumer beauty startups",
     aboutPlaceholder:
       "A sentence or two about you — who you are and what you're hoping to learn.",
-    exampleGoal: "A&R and artist development people at indie labels in Nashville",
+    exampleGoal: "brand partnerships leads at consumer beauty and wellness startups",
     exampleAbout:
       "I run marketing for a small indie beauty brand and I'm hoping to learn from people doing partnerships and PR at bigger consumer brands.",
     queryTails: [
@@ -31,7 +31,7 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
     label: "Job / Internship Search",
     blurb: "Find openings and write tailored cover-letter outreach.",
     targetNoun: "openings",
-    goalPlaceholder: "e.g. remote marketing internships at music companies",
+    goalPlaceholder: "e.g. remote marketing internships at growth-stage startups",
     aboutPlaceholder:
       "Your background, skills, school/role, and what you're looking for.",
     exampleGoal: "find me a job or internship in my field",

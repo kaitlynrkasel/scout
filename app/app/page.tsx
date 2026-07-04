@@ -166,13 +166,13 @@ const TOUR_STEPS: TourStep[] = [
     tab: "outreach",
     target: "project-switcher",
     title: "Projects: one workspace per goal",
-    body: "A project is a self-contained workspace — one per artist, client, or job hunt. Each keeps its own categories, finds, and context so pitches sound like they're really about that person.",
+    body: "A project is a self-contained workspace — one per client, brand, or goal. Each keeps its own categories, finds, and context so pitches sound like they're really about that project.",
   },
   {
     tab: "outreach",
     target: "category-switcher",
     title: "Categories: presets for each kind of search",
-    body: "Inside a project, categories are reusable search presets — e.g. \"press writers\" vs \"playlist curators\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
+    body: "Inside a project, categories are reusable search presets — e.g. \"brand partnerships\" vs \"press writers\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
   },
   {
     tab: "finds",
@@ -2509,9 +2509,33 @@ function ScoutTool({
           <div className="mb-6">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
             <p className="mt-1 text-sm text-body">
-              Find the right people and draft messages in your voice.
+              Find your people and draft messages in your voice.
             </p>
           </div>
+
+            {/* -------- Import your existing outreach (dedup + learn) -------- */}
+            <section className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-ink">
+                  Already reaching out somewhere else?
+                </div>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                  Drop in a CSV of how you've been tracking your contacts. Scout
+                  won't resurface them and starts learning what a fit looks like
+                  for you.
+                </p>
+              </div>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+              >
+                Import a CSV
+              </button>
+            </section>
+
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -2552,13 +2576,13 @@ function ScoutTool({
                         onRemove={removeProject}
                         onClose={() => setEditingProjects(false)}
                         title="Your projects"
-                        addPlaceholder="New project (e.g. an artist)"
+                        addPlaceholder="New project (e.g. a client or brand)"
                         emptyText="No projects yet."
                       />
                     )}
                   </div>
                   <p className="mt-2.5 text-xs leading-relaxed text-body/70">
-                    One workspace per artist, client, or goal, each with its own
+                    One workspace per client, brand, or goal, each with its own
                     categories and searches. Tap the pencil to add or remove projects.
                   </p>
                 </div>
@@ -2576,13 +2600,9 @@ function ScoutTool({
                     value={activeProject?.context || ""}
                     onChange={(e) => setProjectContext(activeId, e.target.value)}
                     rows={2}
-                    placeholder="e.g. Anna Belt — Nashville folk-rock singer-songwriter, new single out now, for fans of Stevie Nicks and Maggie Rogers."
+                    placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
-                  <p className="mt-1.5 text-xs text-body/70">
-                    Scout weaves this into every message for this project, so pitches
-                    sound like they're really about {activeProject?.name || "them"}.
-                  </p>
                 </div>
               </div>
 
@@ -2964,6 +2984,9 @@ function ScoutTool({
         <FindsTab
           finds={myFinds}
           projectName={activeProject?.name || "this project"}
+          projects={projects}
+          activeProjectId={activeId}
+          onSelectProject={selectProject}
           filter={findFilter}
           setFilter={setFindFilter}
           gmail={activeMailbox}
@@ -3014,6 +3037,15 @@ function ScoutTool({
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
           openImport={() => setImportOpen(true)}
+          onEditProject={(id) => {
+            selectProject(id);
+            setEditingProjects(true);
+            setTab("outreach");
+          }}
+          onSeedTemplateForChannel={(channel) => {
+            setMtChannel(channel);
+            setTab("templates");
+          }}
         />
       )}
 
@@ -3970,6 +4002,9 @@ function DenyReasons({
 function FindsTab({
   finds,
   projectName,
+  projects,
+  activeProjectId,
+  onSelectProject,
   filter,
   setFilter,
   gmail,
@@ -4002,6 +4037,9 @@ function FindsTab({
 }: {
   finds: Find[];
   projectName: string;
+  projects: Project[];
+  activeProjectId: string;
+  onSelectProject: (id: string) => void;
   filter: FindStatus | "all";
   setFilter: (f: FindStatus | "all") => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -4058,12 +4096,20 @@ function FindsTab({
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="brand-text">finds</span>
           </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-body">
-            Everyone Scout has found for{" "}
-            <span className="font-semibold text-ink">{projectName}</span>. Draft a
-            message, mark who you&apos;ve contacted, or set aside the ones that
-            aren&apos;t a fit.
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Label className="mb-0">Project</Label>
+            <select
+              value={activeProjectId}
+              onChange={(e) => onSelectProject(e.target.value)}
+              className="scout-select rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {gmail.connected && trackable && (
@@ -4700,14 +4746,9 @@ function FindCard({
           </>
         )}
 
-        {!done && (
-          <button
-            onClick={onMarkSent}
-            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-          >
-            Mark contacted
-          </button>
-        )}
+        {/* Status pill dropdown at the top of the card handles every status
+            change (new / drafted / sent / replied / denied) — no separate
+            "Mark contacted" button needed. */}
 
         {/* Follow-up nudge on sent-but-no-reply finds */}
         {find.status === "sent" && (
@@ -4869,6 +4910,47 @@ function learnedFromFinds(finds: Find[]) {
     }
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   };
+  // Chip-worthy summaries about the OPPORTUNITY itself (not the outreach
+  // medium): what industries/companies + roles get accepted vs passed.
+  const tallyOf = (arr: Find[], get: (f: Find) => string) => {
+    const m: Record<string, number> = {};
+    for (const f of arr) {
+      const v = get(f).trim();
+      if (!v) continue;
+      m[v] = (m[v] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  };
+  // Bucket similar deny reasons into a shared concept so "wrong location",
+  // "not in my city", and "too far" collapse into a single Location tally.
+  // Anything the buckets don't catch falls through as its own literal reason.
+  const CONCEPT_BUCKETS: { label: string; test: RegExp }[] = [
+    { label: "Wrong location", test: /\b(location|city|region|country|state|area|place|based|distant|near|far|remote|abroad|foreign|domestic)\b/i },
+    { label: "Wrong industry", test: /\b(industry|field|sector|niche|category|market|space|vertical)\b/i },
+    { label: "Wrong role or level", test: /\b(role|level|junior|senior|entry|position|title|seniority|too small|too big|too senior|too junior|wrong seniority)\b/i },
+    { label: "Wrong timing", test: /\b(time|timing|deadline|closed|expired|past|future|old|stale|next year|next semester|fall|spring|summer|winter)\b/i },
+    { label: "No way to contact", test: /\b(contact|reach|email|way|closed|no email|no phone|dm only|form only)\b/i },
+    { label: "Genre / topic mismatch", test: /\b(country music|rock|pop|jazz|genre|topic|category|subject)\b/i },
+    { label: "Already reached out", test: /\balready\b|\bcontacted\b|\bknow them\b/i },
+  ];
+  const bucketReason = (r: string): string => {
+    for (const b of CONCEPT_BUCKETS) if (b.test.test(r)) return b.label;
+    return r;
+  };
+  const deniedReasons = (() => {
+    const m: Record<string, number> = {};
+    for (const f of denied) {
+      const raw = (f.denyReason || "").trim();
+      if (!raw) continue;
+      const key = bucketReason(raw);
+      m[key] = (m[key] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  })();
+  const deniedOutlets = tallyOf(denied, (f) => f.opp.outlet || "");
+  const deniedRoles = tallyOf(denied, (f) => f.opp.contactRole || "");
+  const keptOutlets = tallyOf(kept, (f) => f.opp.outlet || "");
+  const keptRoles = tallyOf(kept, (f) => f.opp.contactRole || "");
   const avgFit = (arr: Find[]) => {
     const fs = arr
       .map((f) => f.opp.fitScore)
@@ -4884,6 +4966,11 @@ function learnedFromFinds(finds: Find[]) {
     trend,
     keptChannels: tally(kept),
     deniedChannels: tally(denied),
+    keptOutlets,
+    keptRoles,
+    deniedOutlets,
+    deniedRoles,
+    deniedReasonsTally: deniedReasons,
     keptFit: avgFit(kept),
     deniedFit: avgFit(denied),
     replyRate,
@@ -4902,8 +4989,71 @@ function learnedFromFinds(finds: Find[]) {
 
 // Concrete, honestly-derived things Scout has learned about THIS user recently,
 // each only shown when the real data supports it. Individual + private.
+// Concrete signals about HOW the user writes their drafts — opener style,
+// sign-off, sentence length, formality — surfaced under "What Scout has
+// learned about you" so the section shows specific patterns rather than
+// generic claims.
+function learnedFromDrafts(finds: Find[]) {
+  const bodies = finds
+    .map((f) => (f.draft?.body || "").trim())
+    .filter((b) => b.length > 20);
+  if (!bodies.length) {
+    return {
+      count: 0,
+      opener: null as string | null,
+      signOff: null as string | null,
+      avgWords: null as number | null,
+      contractionRate: null as number | null,
+      exclaims: null as number | null,
+    };
+  }
+  const tally = (arr: string[]) => {
+    const m: Record<string, number> = {};
+    for (const s of arr) {
+      const k = s.trim().toLowerCase();
+      if (!k) continue;
+      m[k] = (m[k] || 0) + 1;
+    }
+    const top = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : null;
+  };
+  const openers: string[] = [];
+  const signOffs: string[] = [];
+  let words = 0;
+  let contractionHits = 0;
+  let exclaimHits = 0;
+  for (const body of bodies) {
+    const clean = body.replace(/\r/g, "");
+    // Opener: the first word after any name (Hi/Hey/Hello/Dear) or the
+    // first token if the message dives straight in.
+    const firstLine = clean.split(/\n+/)[0] || "";
+    const openerMatch = firstLine.match(/^(hi|hey|hello|dear|good\s+(morning|afternoon)|greetings|to whom)/i);
+    if (openerMatch) openers.push(openerMatch[0]);
+    // Sign-off: last non-empty line, taking just the word before the comma or newline.
+    const lines = clean.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1] || "";
+    const signMatch = last.match(/^(thanks|thank you|best|cheers|regards|kind regards|warmly|sincerely|talk soon|all the best)/i);
+    if (signMatch) signOffs.push(signMatch[0]);
+    // Word count for length signal.
+    words += clean.split(/\s+/).filter(Boolean).length;
+    // Contractions: rough heuristic (I'll, don't, won't, I'm, can't, etc.)
+    if (/\b(i'll|don't|won't|i'm|can't|it's|you're|we're|they're|didn't|isn't|aren't|haven't|wouldn't|couldn't|shouldn't)\b/i.test(clean))
+      contractionHits++;
+    if (/!/.test(clean)) exclaimHits++;
+  }
+  return {
+    count: bodies.length,
+    opener: tally(openers),
+    signOff: tally(signOffs),
+    avgWords: Math.round(words / bodies.length),
+    contractionRate: contractionHits / bodies.length,
+    exclaims: exclaimHits / bodies.length,
+  };
+}
+
 function recentInsights(
   learned: ReturnType<typeof learnedFromFinds>,
+  writing: ReturnType<typeof learnedFromDrafts>,
   coaching: string[],
   editPairs: { before: string; after: string }[]
 ): { text: string; basis: string }[] {
@@ -4964,6 +5114,45 @@ function recentInsights(
     });
   }
 
+  // Concrete writing patterns from the drafts themselves.
+  if (writing.count >= 3) {
+    if (writing.opener) {
+      out.push({
+        text: `You almost always open with "${writing.opener[0].toUpperCase() + writing.opener.slice(1)}". Scout keeps that as your default.`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.signOff) {
+      out.push({
+        text: `Your sign-off usually reads "${writing.signOff[0].toUpperCase() + writing.signOff.slice(1)}".`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.avgWords != null) {
+      const feel =
+        writing.avgWords < 60
+          ? "short and to the point"
+          : writing.avgWords < 120
+            ? "medium length, a few short paragraphs"
+            : "on the longer, more detailed side";
+      out.push({
+        text: `Your messages average ${writing.avgWords} words — ${feel}.`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.contractionRate != null && writing.contractionRate >= 0.6) {
+      out.push({
+        text: "You write informally — contractions like \"don't\" and \"I'll\" show up in most drafts. Scout matches that register.",
+        basis: `${writing.count} drafts`,
+      });
+    } else if (writing.contractionRate != null && writing.contractionRate <= 0.2 && writing.count >= 4) {
+      out.push({
+        text: "You lean formal — contractions rarely appear. Scout keeps drafts professional and full-form.",
+        basis: `${writing.count} drafts`,
+      });
+    }
+  }
+
   // Coaching turned into standing rules.
   if (coaching.length > 0) {
     out.push({
@@ -5005,6 +5194,8 @@ function DashboardTab({
   goProfile,
   goFinds,
   openImport,
+  onEditProject,
+  onSeedTemplateForChannel,
 }: {
   activity: Activity;
   profile: Profile;
@@ -5022,11 +5213,14 @@ function DashboardTab({
   goProfile: () => void;
   goFinds: () => void;
   openImport: () => void;
+  onEditProject: (id: string) => void;
+  onSeedTemplateForChannel: (channel: string) => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
   const learned = learnedFromFinds(finds);
-  const insights = recentInsights(learned, coaching, editPairs);
+  const writing = learnedFromDrafts(finds);
+  const insights = recentInsights(learned, writing, coaching, editPairs);
   // Contacts you reached out to about a week ago that still haven't replied — a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
@@ -5119,6 +5313,29 @@ function DashboardTab({
     minutesSaved >= 60
       ? `${(minutesSaved / 60).toFixed(1)} hrs`
       : `${minutesSaved} min`;
+
+  // Rhythm stats — how much you've done in the last 7 and 30 days. Uses the
+  // find's addedAt (when Scout surfaced it) for drafts, sentAt for sends.
+  const WEEK = 7 * 86400000;
+  const MONTH = 30 * 86400000;
+  const now = Date.now();
+  const draftsThisWeek = finds.filter(
+    (f) =>
+      (f.status === "drafted" || f.status === "sent" || f.status === "replied") &&
+      now - (f.addedAt || 0) < WEEK
+  ).length;
+  const sentThisWeek = finds.filter(
+    (f) => f.sentAt && now - f.sentAt < WEEK
+  ).length;
+  const activeDays = (() => {
+    const days = new Set<string>();
+    for (const f of finds) {
+      const t = f.sentAt || f.addedAt;
+      if (!t || now - t > MONTH) continue;
+      days.add(new Date(t).toISOString().slice(0, 10));
+    }
+    return days.size;
+  })();
 
   // What Scout uses to personalize FOR YOU — each item is a real signal or a
   // concrete way to make your outreach sharper.
@@ -5551,34 +5768,6 @@ function DashboardTab({
           </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {/* Fit sweet spot */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
-              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-                Your fit sweet spot
-              </div>
-              {learned.keptFit != null ? (
-                <>
-                  <div className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
-                    {Math.round(learned.keptFit * 100)}%
-                  </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                    Average fit of the people you reach out to
-                    {learned.deniedFit != null && (
-                      <>
-                        {" "}
-                        vs {Math.round(learned.deniedFit * 100)}% for the ones you pass.
-                        Scout leans toward your range.
-                      </>
-                    )}
-                  </p>
-                </>
-              ) : (
-                <p className="mt-2 text-xs text-body/70">
-                  Draft a few finds and this shows the fit level you gravitate toward.
-                </p>
-              )}
-            </div>
-
             {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
             {learned.replyRate != null && (
               <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
@@ -5610,15 +5799,20 @@ function DashboardTab({
                 <div>
                   <div className="text-xs font-semibold text-sage">You reach out to</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {learned.keptChannels.length ? (
-                      learned.keptChannels.slice(0, 4).map(([c, n]) => (
-                        <span
-                          key={c}
-                          className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
-                        >
-                          {c} · {n}
-                        </span>
-                      ))
+                    {(learned.keptOutlets.length
+                      ? learned.keptOutlets
+                      : learned.keptRoles
+                    ).length ? (
+                      (learned.keptOutlets.length ? learned.keptOutlets : learned.keptRoles)
+                        .slice(0, 4)
+                        .map(([c, n]) => (
+                          <span
+                            key={c}
+                            className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
+                          >
+                            {c} · {n}
+                          </span>
+                        ))
                     ) : (
                       <span className="text-xs text-body/50">nothing yet</span>
                     )}
@@ -5627,18 +5821,28 @@ function DashboardTab({
                 <div>
                   <div className="text-xs font-semibold text-body/60">You tend to pass on</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {learned.deniedChannels.length ? (
-                      learned.deniedChannels.slice(0, 4).map(([c, n]) => (
-                        <span
-                          key={c}
-                          className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
-                        >
-                          {c} · {n}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-body/50">nothing yet</span>
-                    )}
+                    {(() => {
+                      // Show the opportunity itself, not the outreach medium:
+                      // prefer explicit deny reasons; otherwise fall back to
+                      // companies (outlet), then roles.
+                      const source = learned.deniedReasonsTally.length
+                        ? learned.deniedReasonsTally
+                        : learned.deniedOutlets.length
+                          ? learned.deniedOutlets
+                          : learned.deniedRoles;
+                      return source.length ? (
+                        source.slice(0, 4).map(([c, n]) => (
+                          <span
+                            key={c}
+                            className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                          >
+                            {c} · {n}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-body/50">nothing yet</span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -5686,18 +5890,21 @@ function DashboardTab({
               const nw = mine.filter((f) => f.status === "new").length;
               const sent = mine.filter((f) => f.status === "sent").length;
               return (
-                <div
+                <button
                   key={p.id}
-                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card"
+                  onClick={() => onEditProject(p.id)}
+                  title="Open in Outreach and edit"
+                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
                 >
                   <span className="h-10 w-10 shrink-0 rounded-xl bg-brown" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold text-ink">{p.name}</div>
                     <div className="truncate text-xs text-muted">
                       {p.useCase} · {nw} new · {sent} sent
                     </div>
                   </div>
-                </div>
+                  <span aria-hidden className="text-xs text-body/50">✎</span>
+                </button>
               );
             })
           )}
@@ -5727,12 +5934,6 @@ function DashboardTab({
                 lowerBetter
               />
               <CompareRow
-                label="Fit sweet spot"
-                you={learned.keptFit}
-                them={community.avgFitKept}
-                fmt="pct"
-              />
-              <CompareRow
                 label="Finds saved"
                 you={finds.length}
                 them={community.avgFinds}
@@ -5747,8 +5948,10 @@ function DashboardTab({
             </div>
             <p className="mt-3 text-xs text-body/60">
               Based on {community.users} other{" "}
-              {community.users === 1 ? "person" : "people"} using Scout. Small samples
-              are noisy, this sharpens as the community grows.
+              {community.users === 1 ? "person" : "people"} using Scout with a
+              similar use case to yours. Teammates who picked a different use case
+              are compared against a different cohort, so their numbers will
+              differ from yours.
             </p>
           </>
         )}
@@ -5926,10 +6129,12 @@ function DashboardTab({
       <OutreachAdvice
         community={community}
         finds={finds}
+        templates={templates}
         coaching={coaching}
         onApplyTip={onApplyTip}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
+        onSeedTemplateForChannel={onSeedTemplateForChannel}
       />
 
       {/* -------- How Scout learns YOU -------- */}
@@ -6013,19 +6218,6 @@ function DashboardTab({
 
       {dashTab === "you" && (
       <>
-      {/* -------- Honesty note about reply tracking -------- */}
-      <section className="mt-8 rounded-2xl border border-dashed border-warm-border bg-white/60 px-5 py-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-          Coming soon
-        </div>
-        <p className="mt-1.5 text-sm leading-relaxed text-body">
-          Right now Scout drafts messages and you send them from your own email or DMs,
-          so opens and replies aren&apos;t tracked automatically yet. When you connect
-          sending, this dashboard will show real response and reply rates, not
-          estimates.
-        </p>
-      </section>
-
       {/* -------- CTA -------- */}
       <section className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl bg-brand-gradient px-6 py-5 text-white shadow-soft">
         <div>
@@ -6051,15 +6243,19 @@ function DashboardTab({
 function OutreachAdvice({
   community,
   finds,
+  templates,
   coaching,
   onApplyTip,
   goOutreach,
   goTemplates,
+  onSeedTemplateForChannel,
 }: {
   community: CommunityStats | null;
   finds: Find[];
+  templates: OutreachTemplate[];
   coaching: string[];
   onApplyTip: (tip: string) => void;
+  onSeedTemplateForChannel: (channel: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
 }) {
@@ -6067,20 +6263,87 @@ function OutreachAdvice({
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const isApplied = (s: string) =>
     coaching.some((c) => c.trim().toLowerCase() === s.trim().toLowerCase());
-  // A small "turn this into a standing rule" control shown on each coachable tip.
+  // Advice the user has dismissed — kept in localStorage so it stays hidden
+  // across sessions. Simple string match on the tip body.
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("scout_dismissed_tips");
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const dismissTip = (tip: string) => {
+    const key = tip.trim().toLowerCase();
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      try {
+        localStorage.setItem("scout_dismissed_tips", JSON.stringify([...next]));
+      } catch {
+        /* localStorage unavailable — dismissal is per-session only */
+      }
+      return next;
+    });
+  };
+  const isDismissed = (s: string) => dismissed.has(s.trim().toLowerCase());
+
+  // Detect the specific outreach channel a tip references. Returns the
+  // OUTREACH_KINDS label (matching the Templates dropdown) when found, so
+  // "LinkedIn is doing well" → "LinkedIn message". If the user already has a
+  // template for that channel we don't nudge — the goal is to seed the FIRST
+  // one, not spam.
+  const detectChannel = (text: string): string | null => {
+    const t = String(text || "").toLowerCase();
+    const has = (channel: string) =>
+      templates.some((tp) => (tp.channel || "").toLowerCase() === channel.toLowerCase());
+    if (/\blinkedin\b/.test(t) && !has("LinkedIn message")) return "LinkedIn message";
+    if (/\binstagram\b|\big\b/.test(t) && !has("Instagram DM")) return "Instagram DM";
+    if (/\btiktok\b/.test(t) && !has("TikTok DM")) return "TikTok DM";
+    if (/\b(x|twitter)\b/.test(t) && !has("X / Twitter DM")) return "X / Twitter DM";
+    if (/\btext message|\bsms\b/.test(t) && !has("Text message")) return "Text message";
+    if (/\bcover letter\b/.test(t) && !has("Cover letter")) return "Cover letter";
+    if (/\bemail\b/.test(t) && !has("Email")) return "Email";
+    return null;
+  };
+
+  const SeedTemplateBtn = ({ channel }: { channel: string }) => (
+    <button
+      onClick={() => onSeedTemplateForChannel(channel)}
+      className="shrink-0 rounded-lg bg-brown px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90"
+      title={`Jump to Templates with ${channel} pre-selected`}
+    >
+      Draft a {channel.replace(/ message| DM/, "")} template
+    </button>
+  );
+  // A small "turn this into a standing rule" control shown on each coachable
+  // tip, plus a "not helpful" button next to it. Dismissed tips get hidden
+  // right after via the isDismissed check on the parent renderer.
   const ApplyTip = ({ tip }: { tip: string }) =>
     isApplied(tip) ? (
       <span className="shrink-0 rounded-lg bg-sage/15 px-2.5 py-1 text-[11px] font-semibold text-sage">
         Applied ✓
       </span>
     ) : (
-      <button
-        onClick={() => onApplyTip(tip)}
-        className="shrink-0 rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
-        title="Scout will follow this in every draft it writes for you"
-      >
-        Apply to my drafts
-      </button>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <button
+          onClick={() => onApplyTip(tip)}
+          className="rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
+          title="Scout will follow this in every draft it writes for you"
+        >
+          Apply to my drafts
+        </button>
+        <button
+          onClick={() => dismissTip(tip)}
+          className="rounded-lg border border-warm-border px-2 py-1 text-[11px] font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+          title="Hide this advice"
+        >
+          Not helpful
+        </button>
+      </span>
     );
 
   // ---- Tailored coaching on the user's own drafts ----
@@ -6241,8 +6504,7 @@ function OutreachAdvice({
                   : `Review my ${myDrafts.length} recent ${myDrafts.length === 1 ? "draft" : "drafts"}`}
               </button>
               <span className="text-xs text-body/60">
-                Scout reads your recent messages and coaches you on them. Uses a small
-                amount of API credit.
+                Scout reads your recent messages and coaches you on them.
               </span>
             </div>
             {coachErr && (
@@ -6281,23 +6543,29 @@ function OutreachAdvice({
         <div className="text-xs font-bold uppercase tracking-wider text-accent">
           Working for the community right now
         </div>
-        {insights.length ? (
+        {insights.filter((t) => !isDismissed(t.body)).length ? (
           <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
-            {insights.map((tip) => (
-              <div
-                key={tip.title}
-                className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-bold text-ink">{tip.title}</div>
-                  <ApplyTip tip={tip.body} />
+            {insights.filter((t) => !isDismissed(t.body)).map((tip) => {
+              const channel = detectChannel(`${tip.title} ${tip.body}`);
+              return (
+                <div
+                  key={tip.title}
+                  className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-bold text-ink">{tip.title}</div>
+                    <ApplyTip tip={tip.body} />
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                      Based on {tip.basis}
+                    </div>
+                    {channel && <SeedTemplateBtn channel={channel} />}
+                  </div>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
-                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
-                  Based on {tip.basis}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
@@ -6310,10 +6578,10 @@ function OutreachAdvice({
       {/* Proven playbook */}
       <div className="mt-5">
         <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-          The proven playbook
+          Fundamentals
         </div>
         <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
-          {playbook.map((tip) => (
+          {playbook.filter((tip) => !isDismissed(tip.body)).map((tip) => (
             <div
               key={tip.title}
               className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
@@ -7001,10 +7269,9 @@ function TemplatesTab({
         Your <span className="brand-text">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Set up how each kind of message should sound, an email, a LinkedIn note, an
-        Instagram DM. When Scout drafts outreach, it uses the right format and
-        your voice for each channel. Keep a template global, or assign it to a
-        specific project or category so each artist gets their own voice.
+        Set up how each kind of message should sound. When Scout drafts outreach,
+        it uses your voice. Keep a template universal, or assign it to a specific
+        project or category.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -7075,11 +7342,6 @@ function TemplatesTab({
               ))}
             </select>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-body/80">
-            Scope this voice to one project (say, a specific artist) or a single
-            category within it. Leave it on <span className="font-semibold">All projects</span> to
-            use it everywhere.
-          </p>
         </div>
         <div className="mt-5">
           <button
@@ -7537,6 +7799,15 @@ function ProfileTab({
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
   const [buildingSig, setBuildingSig] = useState(false);
+  // Whether to show the job-applicant follow-ups (company size + competitive-
+  // ness). Defaults to true when the user's use case looks job-shaped OR when
+  // they've already set either field to a non-default value on a previous
+  // visit — so we don't hide answers they already picked.
+  const [jobApplicant, setJobApplicant] = useState<boolean>(
+    isJobUseCaseClient(useCase) ||
+      (!!companySize && companySize !== "any") ||
+      (!!competitiveness && competitiveness !== "any")
+  );
   // Build an email signature from the resume/bio text (explicit, overwrites the
   // current one; the user can edit after).
   async function buildSignatureFromResume() {
@@ -7808,7 +8079,7 @@ function ProfileTab({
         <Label>What are you using Scout for?</Label>
         <UseCaseCombo value={useCase} onChange={onUseCase} />
         <p className="mt-2 text-xs leading-relaxed text-body/70">
-          Type anything, a job hunt, finding a band member, press for a product, investors.
+          Type anything: a job hunt, press for a product, investors, mentors, partners.
           Pick a suggestion if one fits, or just describe it in your own words and Scout
           will figure out who to look for. Manage your categories in the editor below.
         </p>
@@ -7886,62 +8157,92 @@ function ProfileTab({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <div>
-              <Label>Company size you want</Label>
-              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
-                {(
-                  [
-                    ["any", "Any"],
-                    ["small", "Small / startup"],
-                    ["big", "Big / established"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => onCompanySize(val)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      companySize === val
-                        ? "bg-brown text-white shadow-soft"
-                        : "text-body/70 hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+          <div className="mt-5">
+            <Label>Are you applying to jobs or internships?</Label>
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+              {(
+                [
+                  ["yes", "Yes"],
+                  ["no", "No"],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setJobApplicant(val === "yes")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    jobApplicant === (val === "yes")
+                      ? "bg-brown text-white shadow-soft"
+                      : "text-body/70 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <div>
-              <Label>Competitiveness</Label>
-              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
-                {(
-                  [
-                    ["any", "Any"],
-                    ["beginner", "Beginner"],
-                    ["intermediate", "Intermediate"],
-                    ["competitive", "Competitive"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => onCompetitiveness(val)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      competitiveness === val
-                        ? "bg-brown text-white shadow-soft"
-                        : "text-body/70 hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                First-time applicant? Pick <span className="font-semibold">Beginner</span> —
-                Scout will skip the ultra-selective programs and surface ones you can
-                realistically land.
-              </p>
-            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+              Answering Yes shows two extra questions Scout uses to tune what
+              opportunities to surface for you.
+            </p>
           </div>
+
+          {jobApplicant && (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div>
+                <Label>Company size you want</Label>
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                  {(
+                    [
+                      ["any", "Any"],
+                      ["small", "Small / startup"],
+                      ["big", "Big / established"],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => onCompanySize(val)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        companySize === val
+                          ? "bg-brown text-white shadow-soft"
+                          : "text-body/70 hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Competitiveness</Label>
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                  {(
+                    [
+                      ["any", "Any"],
+                      ["beginner", "Beginner"],
+                      ["intermediate", "Intermediate"],
+                      ["competitive", "Competitive"],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => onCompetitiveness(val)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        competitiveness === val
+                          ? "bg-brown text-white shadow-soft"
+                          : "text-body/70 hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                  First-time applicant? Pick <span className="font-semibold">Beginner</span> —
+                  Scout will skip the ultra-selective programs and surface ones you can
+                  realistically land.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-5">
@@ -8748,8 +9049,8 @@ function ProjectsCategoriesEditor({
     <div>
       <Label>Your projects and categories</Label>
       <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
-        A project is usually one goal or one person you manage (say, an artist);
-        its categories are the kinds of people you search for. Drag to reorder,
+        A project is usually one client, brand, or goal you're working on; its
+        categories are the kinds of people you search for. Drag to reorder,
         click to select and delete, or add your own. Synced with the Outreach tab.
       </p>
 
@@ -8827,7 +9128,7 @@ function ProjectsCategoriesEditor({
               setNewProject("");
             }
           }}
-          placeholder="New project (e.g. another artist you manage)"
+          placeholder="New project (e.g. another client or brand)"
           className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
         />
         <button

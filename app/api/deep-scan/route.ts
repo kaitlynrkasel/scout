@@ -123,7 +123,7 @@ export async function POST(req: NextRequest) {
     const sys =
       `You read a company/opportunity's own web pages and extract two things for someone reaching out. ` +
       `Return ONLY JSON {contact:{name,role,email,handle}, requirements}. ` +
-      `contact = ONE specific, named person to reach (recruiter, hiring manager, editor, A&R, team member) with their ` +
+      `contact = ONE specific, named person to reach (recruiter, hiring manager, editor, partnerships lead, team member) with their ` +
       `real email or LinkedIn/@handle if shown. NEVER invent an email, name, or handle — use only what appears verbatim ` +
       `on the pages. Prefer a named person's real email over a generic inbox (info@, careers@, submit@). If only a generic ` +
       `inbox exists, put it in email and leave name empty. If nothing is present, use empty strings. ` +
