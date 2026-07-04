@@ -3,7 +3,7 @@
 // from the contact we actually have, and never fabricates.
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
-import { resolveTemplate, GENERIC } from "./templates";
+import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate } from "./types";
 
@@ -150,7 +150,20 @@ export async function draftFor(
     (opp.location ? `, based in ${opp.location}` : "") +
     `. Specific note (the ONLY basis for personalization, may be empty): "${opp.whyItFits || ""}".`;
 
-  const sender = `ABOUT THE SENDER (draw on what fits, do not list it all): ${about}`;
+  // Whether the sender's personal resume/career details belong in this message
+  // at all. Prospecting/biz-dev outreach (selling a product, pitching a
+  // company, partnering on behalf of a project) is about the COMPANY/PRODUCT,
+  // not the sender's individual accomplishments — those read as irrelevant
+  // noise in a cold pitch to, say, a nail salon. Networking/job-search/PR are
+  // the opposite: the sender's personal background IS the point.
+  const prospecting = isProspectingUseCase(useCase);
+  const sender = prospecting
+    ? `ABOUT THE SENDER: ${about}\n` +
+      `This outreach represents a COMPANY, PRODUCT, or PROJECT, not the sender's personal career. Do NOT mention the ` +
+      `sender's resume, education, age, or personal accomplishments unless the note above frames them as directly ` +
+      `relevant credibility for THIS pitch — most of the time they are not. Center the message on what's being offered ` +
+      `and why it fits this specific recipient, not on the sender's individual background.`
+    : `ABOUT THE SENDER (draw on what fits, do not list it all): ${about}`;
 
   const purpose = `PURPOSE / STYLE of this message: ${draftStyle}`;
 

@@ -101,6 +101,18 @@ export function resolveTemplate(useCase: string): Template | null {
   return null;
 }
 
+// Prospecting / lead-gen / biz-dev use cases: the user is reaching out on
+// behalf of a company, product, or project to EXTERNAL targets, not making a
+// personal ask. Shared by discover.ts (targets live in a different industry
+// than the user, so don't filter by the user's field) and draft.ts (the
+// sender's personal resume/bio/career history is usually irrelevant to a
+// business pitch, unlike networking/job-search/PR outreach where it's the point).
+export function isProspectingUseCase(useCase: string): boolean {
+  return /\b(sales|lead|prospect|pitch|sell|selling|client|customer|partner|partnership|sponsor|sponsorship|investor|fundrais|business development|biz ?dev|b2b|vendor|supplier|wholesale|distributor|retailer|buyer|advertis|outreach to (businesses|companies|brands)|cold (email|outreach|call))/i.test(
+    useCase || ""
+  );
+}
+
 export const GENERIC = {
   targetNoun: "people",
   blurb: "Scout reads your use case and finds who fits.",

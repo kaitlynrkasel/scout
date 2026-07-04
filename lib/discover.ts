@@ -5,7 +5,7 @@
 
 import { claudeJson, parseJsonLoose } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
-import { resolveTemplate, GENERIC } from "./templates";
+import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
 import type { Opportunity } from "./types";
@@ -49,18 +49,14 @@ function isNetworkingUseCase(useCase: string): boolean {
   return /\b(network|coffee|mentor|connect|advice|informational)/i.test(useCase);
 }
 
-// Prospecting / lead-gen: the user is finding EXTERNAL targets to pitch, sell
-// to, partner with, get sponsored by, or raise money from. The target lives in
-// a DIFFERENT world than the user — a marketing agency pitching restaurants, a
-// SaaS founder selling to any industry, a nonprofit chasing sponsors. For these,
-// the user's own industry must NOT filter results; the GOAL defines the target
-// profile. Contrast with networking/jobs, where the target IS in the user's
-// field and industry alignment against the user is exactly right.
-function isProspectingUseCase(useCase: string): boolean {
-  return /\b(sales|lead|prospect|pitch|sell|selling|client|customer|partner|partnership|sponsor|sponsorship|investor|fundrais|business development|biz ?dev|b2b|vendor|supplier|wholesale|distributor|retailer|buyer|advertis|outreach to (businesses|companies|brands)|cold (email|outreach|call))/i.test(
-    useCase || ""
-  );
-}
+// isProspectingUseCase (imported above) covers: the user is finding EXTERNAL
+// targets to pitch, sell to, partner with, get sponsored by, or raise money
+// from. The target lives in a DIFFERENT world than the user — a marketing
+// agency pitching restaurants, a SaaS founder selling to any industry, a
+// nonprofit chasing sponsors. For these, the user's own industry must NOT
+// filter results; the GOAL defines the target profile. Contrast with
+// networking/jobs, where the target IS in the user's field and industry
+// alignment against the user is exactly right.
 
 // The user has explicitly widened the target to any industry / anywhere. When
 // the goal says this, we drop industry + location filtering no matter the use
