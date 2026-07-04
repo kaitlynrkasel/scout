@@ -4936,13 +4936,16 @@ function FindDetailModal({
   }, [onClose]);
 
   // Neatly-formatted contact rows — only the ones we actually have.
+  // Any channel the search explicitly requested gets its own labeled box
+  // below ("Requested contact info") — found or not, so leave it out of this
+  // general list too, or it shows twice.
   const rows: { label: string; node: React.ReactNode }[] = [];
-  if (o.contactEmail)
+  if (o.contactEmail && !wantedChannels.includes("email"))
     rows.push({
       label: "Email",
       node: <ContactValue value={o.contactEmail} className="font-semibold text-accent" />,
     });
-  if (o.contactPhone)
+  if (o.contactPhone && !wantedChannels.includes("phone"))
     rows.push({
       label: "Phone",
       node: (
@@ -4964,7 +4967,7 @@ function FindDetailModal({
         </span>
       ),
     });
-  if (o.contactHandle)
+  if (o.contactHandle && !wantedChannels.includes("linkedin"))
     rows.push({
       label: "Profile",
       node: <ContactValue value={o.contactHandle} className="text-ink" />,
@@ -4982,7 +4985,7 @@ function FindDetailModal({
         </span>
       ),
     });
-  if (o.url)
+  if (o.url && !wantedChannels.includes("website"))
     rows.push({
       label: "Website",
       node: (
@@ -5879,35 +5882,45 @@ function FindCard({
           {[o.outlet, o.location].filter(Boolean).join(" · ")}
         </div>
       )}
-      <div className="mt-1 text-xs">
-        {o.contactEmail && (
-          <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
-        )}
-        {o.contactName && (
-          <span className="text-body">
-            {o.contactEmail ? "  ·  " : ""}
-            {o.contactName}
-            {o.contactRole ? ` (${o.contactRole})` : ""}
-          </span>
-        )}
-        {o.contactHandle && (
-          <span className="text-body/70">
-            {o.contactEmail || o.contactName ? "  ·  " : ""}
-            <ContactValue value={o.contactHandle} className="text-body/70" />
-          </span>
-        )}
-        {o.contactPhone && (
-          <span className="text-body/70">
-            {o.contactEmail || o.contactName || o.contactHandle ? "  ·  " : ""}
-            <a
-              href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
-              className="text-body/70 underline-offset-2 hover:text-accent hover:underline"
-            >
-              {o.contactPhone}
-            </a>
-          </span>
-        )}
-      </div>
+      {/* Any channel the search explicitly requested gets its own labeled box
+          below ("Requested contact info") — found or not, so leave it out of
+          this compact line too, or it shows twice. */}
+      {(() => {
+        const showEmail = !!o.contactEmail && !wantedChannels.includes("email");
+        const showHandle = !!o.contactHandle && !wantedChannels.includes("linkedin");
+        const showPhone = !!o.contactPhone && !wantedChannels.includes("phone");
+        return (
+          <div className="mt-1 text-xs">
+            {showEmail && (
+              <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
+            )}
+            {o.contactName && (
+              <span className="text-body">
+                {showEmail ? "  ·  " : ""}
+                {o.contactName}
+                {o.contactRole ? ` (${o.contactRole})` : ""}
+              </span>
+            )}
+            {showHandle && (
+              <span className="text-body/70">
+                {showEmail || o.contactName ? "  ·  " : ""}
+                <ContactValue value={o.contactHandle} className="text-body/70" />
+              </span>
+            )}
+            {showPhone && (
+              <span className="text-body/70">
+                {showEmail || o.contactName || showHandle ? "  ·  " : ""}
+                <a
+                  href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
+                  className="text-body/70 underline-offset-2 hover:text-accent hover:underline"
+                >
+                  {o.contactPhone}
+                </a>
+              </span>
+            )}
+          </div>
+        );
+      })()}
       {o.whyItFits && (
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
       )}
