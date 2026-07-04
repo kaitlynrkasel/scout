@@ -141,6 +141,17 @@ const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice del
 const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
 const SIG_KEY = "scout_signature"; // email signature appended to drafts
 const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished or skipped
+const AUTOSCHED_KEY = "scout_auto_schedule"; // "1" → after-hours sends auto-queue for the next business hour
+
+// Whether after-hours sends should silently queue for the recipient's next
+// business hour instead of prompting. Read at send time so it's always current.
+function autoScheduleOn(): boolean {
+  try {
+    return localStorage.getItem(AUTOSCHED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 // Guided intro tour. Each step spotlights a sidebar item (matched by its
 // data-tour id) and switches to that tab so the real screen shows behind.
@@ -1861,6 +1872,62 @@ function ScoutTool({
   // optional — they just make outreach more personal.
   const profileComplete = !!(profile.name.trim() || profile.bio.trim());
 
+  // ---- Personalized "who are you looking for?" placeholder ----
+  // The greyed-out example under the goal field is tailored to THIS user's
+  // industry (from aboutText) and the category they're about to search, and it
+  // varies per person via their salt — so the example looks different for
+  // everyone instead of being one static string. Falls back to the static
+  // template placeholder until a personalized one loads (or if there's no
+  // profile to personalize from). Cached per (useCase + category + profile) so
+  // we don't refetch on every render or when flipping back to a seen category.
+  const activeCatName = myCats.find((c) => c.id === catId)?.name || "";
+  const exampleCacheRef = useRef<Record<string, string>>({});
+  const [dynExample, setDynExample] = useState("");
+  useEffect(() => {
+    // Only personalize when we have something to personalize from.
+    if (!aboutText.trim()) {
+      setDynExample("");
+      return;
+    }
+    // Signature keeps the fetch stable: same inputs → cached example reused.
+    const aboutSig = aboutText.slice(0, 400);
+    const key = `${ucKey(activeUseCase)}::${activeCatName.toLowerCase()}::${aboutSig}`;
+    const cached = exampleCacheRef.current[key];
+    if (cached !== undefined) {
+      setDynExample(cached);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/example-goal", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            category: activeCatName,
+            useCase: activeUseCase,
+            about: aboutText,
+            salt: outreachSalt(accountEmail),
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        const ex = typeof data?.example === "string" ? data.example : "";
+        exampleCacheRef.current[key] = ex; // cache even "" so we don't retry a dud
+        if (!cancelled) setDynExample(ex);
+      } catch {
+        if (!cancelled) setDynExample("");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeUseCase, activeCatName, aboutText, accountEmail]);
+  // What the goal textarea actually shows as its placeholder.
+  const goalPlaceholder = dynExample
+    ? `e.g. ${dynExample}`
+    : uc.goalPlaceholder;
+
   // Finds belonging to the active project (newest first), and the count still to work.
   const myFinds = activeProject
     ? finds.filter((f) => f.projectId === activeProject.id)
@@ -2955,7 +3022,7 @@ function ScoutTool({
                   <textarea
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
-                    placeholder={uc.goalPlaceholder}
+                    placeholder={goalPlaceholder}
                     rows={3}
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
@@ -3088,7 +3155,7 @@ function ScoutTool({
             )}
 
             {/* ---------------- Results as a chat bubble ---------------- */}
-            {opps.length > 0 && (
+            {visibleOpps.length > 0 && (
               <section className="mt-10">
                 <div className="flex items-start gap-3">
                   <Avatar />
@@ -3101,8 +3168,17 @@ function ScoutTool({
                       <div>
                         <div className="text-sm font-bold text-ink">Scout</div>
                         <div className="text-xs text-body/80">
-                          I found {opps.length} {uc.targetNoun} who fit. Pick who to
+                          I found {visibleOpps.length} {uc.targetNoun} who fit. Pick who to
                           reach out to.
+                          {opps.length > visibleOpps.length && (
+                            <>
+                              {" "}
+                              <span className="text-body/50">
+                                ({opps.length - visibleOpps.length} you already passed on
+                                hidden)
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
                       <span className="ml-auto flex items-center gap-1.5 rounded-lg border border-warm-border px-2.5 py-1.5 text-xs font-semibold text-body">
@@ -3462,7 +3538,7 @@ function ScoutTool({
               <div>
                 <div className="text-sm font-bold text-ink">Scout</div>
                 <div className="text-xs text-body/80">
-                  {opps.length} {uc.targetNoun} who fit
+                  {visibleOpps.length} {uc.targetNoun} who fit
                 </div>
               </div>
               <button
@@ -4077,7 +4153,18 @@ function FindsList({
                     <ContactValue value={o.contactHandle} className="text-body/70" />
                   </span>
                 )}
-                {!o.contactEmail && !o.contactName && !o.contactHandle && (
+                {o.contactPhone && (
+                  <span className="text-body/70">
+                    {o.contactEmail || o.contactName || o.contactHandle ? "  ·  " : ""}
+                    <a
+                      href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
+                      className="text-body/70 underline-offset-2 hover:text-accent hover:underline"
+                    >
+                      {o.contactPhone}
+                    </a>
+                  </span>
+                )}
+                {!o.contactEmail && !o.contactName && !o.contactHandle && !o.contactPhone && (
                   <span className="text-body/40">no direct contact found yet</span>
                 )}
               </div>
@@ -4726,6 +4813,12 @@ function FindCard({
   };
   const attemptSend = () => {
     if (afterHours) {
+      // Auto-schedule setting on → silently queue for the recipient's next
+      // business hour instead of prompting.
+      if (autoScheduleOn()) {
+        onSchedule(suggestBusinessHour(recipientTz));
+        return;
+      }
       setSendGuard({
         local: localTimeLabel(recipientTz),
         next: nextBusinessLabel(recipientTz),
@@ -4821,6 +4914,17 @@ function FindCard({
           <span className="text-body/70">
             {o.contactEmail || o.contactName ? "  ·  " : ""}
             <ContactValue value={o.contactHandle} className="text-body/70" />
+          </span>
+        )}
+        {o.contactPhone && (
+          <span className="text-body/70">
+            {o.contactEmail || o.contactName || o.contactHandle ? "  ·  " : ""}
+            <a
+              href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
+              className="text-body/70 underline-offset-2 hover:text-accent hover:underline"
+            >
+              {o.contactPhone}
+            </a>
           </span>
         )}
       </div>
@@ -7741,12 +7845,31 @@ function SettingsTab({
   // Theme mirrors the .dark class on <html>; persisted to scout_theme and
   // applied pre-paint by the inline script in layout.tsx.
   const [dark, setDark] = useState(false);
+  // Auto-schedule after-hours sends for the recipient's next business hour.
+  const [autoSchedule, setAutoSchedule] = useState(false);
   useEffect(() => {
     setDark(document.documentElement.classList.contains("dark"));
+    try {
+      setAutoSchedule(localStorage.getItem(AUTOSCHED_KEY) === "1");
+    } catch {}
   }, []);
+  function setAutoSchedulePref(next: boolean) {
+    setAutoSchedule(next);
+    try {
+      localStorage.setItem(AUTOSCHED_KEY, next ? "1" : "0");
+    } catch {}
+  }
   function setTheme(next: boolean) {
     setDark(next);
-    document.documentElement.classList.toggle("dark", next);
+    const root = document.documentElement;
+    // Enable the global color cross-fade only for the duration of the switch,
+    // then strip it so it never slows down ordinary hovers/interactions.
+    root.classList.add("theme-transition");
+    root.classList.toggle("dark", next);
+    window.clearTimeout((setTheme as any)._t);
+    (setTheme as any)._t = window.setTimeout(() => {
+      root.classList.remove("theme-transition");
+    }, 550);
     try {
       localStorage.setItem("scout_theme", next ? "dark" : "light");
     } catch {}
@@ -7794,6 +7917,39 @@ function SettingsTab({
               </button>
             );
           })}
+        </div>
+      </section>
+
+      {/* Sending */}
+      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Sending</h2>
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <div className="text-sm font-bold text-ink">
+              Auto-schedule for the next business hour
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-body">
+              When you send outside a recipient&apos;s business hours, Scout
+              quietly queues the message for their next business hour instead of
+              asking, so it lands when it&apos;s most likely to be read. You can
+              still schedule any send by hand.
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={autoSchedule}
+            aria-label="Auto-schedule after-hours sends for the next business hour"
+            onClick={() => setAutoSchedulePref(!autoSchedule)}
+            className={`relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${
+              autoSchedule ? "bg-brown" : "bg-warm-border"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-soft transition ${
+                autoSchedule ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
         </div>
       </section>
 

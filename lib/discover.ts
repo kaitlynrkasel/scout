@@ -200,17 +200,38 @@ async function planQueries(
   }
 
   const year = new Date().getFullYear();
+  const anyIndustry = goalWantsAnyIndustry(goal);
+  // In prospecting / any-industry mode the TARGET lives in a different world than
+  // the user, so anchoring queries to the user's own field (e.g. a music-industry
+  // profile) is exactly wrong — it's why an "any industry" search kept returning
+  // only music. The GOAL defines the target; the user's field must not filter.
+  const anchor = prospecting
+    ? "You are a search strategist for an outreach tool. The user is PROSPECTING: write web-search queries that surface " +
+      "the TARGETS DESCRIBED BY THE GOAL. Do NOT anchor to the user's own industry, field, or genre (from ABOUT) — those " +
+      "targets live in DIFFERENT industries than the user, and biasing toward the user's field would return the wrong " +
+      "results. Use ABOUT only to understand what the user sells/offers, never as an industry filter on the targets. "
+    : "You are a search strategist for an outreach tool. From the user's goal and their profile, write web-search " +
+      "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
+      "these from ABOUT THE USER — do not ask). ";
+  // The long-tail push: for prospecting, "specific" means the GOAL's target
+  // profile (type/size/stage/place), not the user's sub-field/genre.
+  const longTail = prospecting
+    ? (anyIndustry
+        ? " CRITICAL: the user asked for ANY industry, so span MANY different industries across the query set (e.g. one " +
+          "for local retailers, one for professional-services firms, one for trades, one for hospitality, one for SaaS) " +
+          "instead of clustering in one. "
+        : " CRITICAL: keep queries specific to the GOAL's target profile (type, size, stage, location). ") +
+      "Favor NICHE, smaller, more-responsive targets over the handful of biggest names everyone already contacts. " +
+      "Make each query hyper-specific to the target profile (segment, company size, city) rather than broad. "
+    : " CRITICAL for relevance and to avoid spamming the same inboxes: favor NICHE, specific, less-obvious targets that " +
+      "closely fit THIS user's exact sub-field, city, genre, stage and angle. Deliberately AVOID the handful of biggest, " +
+      "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
+      "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
+      "rather than broad. ";
   const sys =
-    "You are a search strategist for an outreach tool. From the user's goal and their profile, write web-search " +
-    "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
-    "these from ABOUT THE USER — do not ask). " +
+    anchor +
     guidance +
-    // Push the long tail: avoid the same few famous targets everyone contacts.
-    " CRITICAL for relevance and to avoid spamming the same inboxes: favor NICHE, specific, less-obvious targets that " +
-    "closely fit THIS user's exact sub-field, city, genre, stage and angle. Deliberately AVOID the handful of biggest, " +
-    "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
-    "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
-    "rather than broad. " +
+    longTail +
     (salt
       ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
         "two people with a similar goal get different, equally-relevant results instead of the same list. "
@@ -403,8 +424,6 @@ async function extract(
   useCase: string,
   feedback?: DiscoverFeedback
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
-  const noun = (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
-
   // Fit is judged differently depending on what the user is doing:
   // - Prospecting (sales/leads/partners/investors) OR a goal that says "any
   //   industry": the target lives in a DIFFERENT world than the user, so we
@@ -412,6 +431,12 @@ async function extract(
   // - Everything else (networking/jobs/PR): the target IS in the user's field,
   //   so aligning to the user's industry/location is correct.
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
+  // The template's targetNoun (e.g. "outlet" for music PR) primes the extractor
+  // toward that world. In prospecting mode the target is whatever the GOAL says,
+  // so use a neutral noun instead of the user's-field noun.
+  const noun = prospecting
+    ? "target"
+    : (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
   // Within prospecting we never align to the USER'S field, but we still respect
   // a target profile the goal DOES name (e.g. "restaurants in Chicago"). Only
   // drop the industry / location filter entirely when the goal explicitly says
@@ -457,7 +482,10 @@ async function extract(
         : `LOCATION: only penalize fit_score if the GOAL specifies a location and this result is clearly elsewhere. `) +
       `REACHABILITY MATTERS MOST: since the user needs to actually contact these targets, favor results that expose a way in ` +
       `(a company contact page, an email, a phone number, a named person). A real company with a contact route is a strong ` +
-      `fit even in an unrelated industry. WHY_IT_FITS: a specific true detail about the TARGET that makes them a good prospect ` +
+      `fit even in an unrelated industry. REQUIRED CHANNELS: if the GOAL says it needs specific contact channels (e.g. "a phone ` +
+      `number", "an email", "a website"), treat those as hard preferences — capture each one that appears (contact_phone, ` +
+      `contact_email, url for the website) and give a clearly higher fit_score to results that expose ALL the requested ` +
+      `channels, a lower one to results missing some. WHY_IT_FITS: a specific true detail about the TARGET that makes them a good prospect ` +
       `for what the user offers (size, recent growth, what they do, why they'd want this), NOT a link to the user's own field. ` +
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
@@ -477,8 +505,9 @@ async function extract(
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
-    `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Unknown), ` +
+    `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
+    `contact_phone (a phone number ONLY if it appears verbatim in the result — for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
     `url (best link), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
@@ -813,6 +842,7 @@ export async function discover(
         if (!existing.contactEmail && r.contact_email) existing.contactEmail = r.contact_email;
         if (!existing.contactHandle && r.contact_handle) existing.contactHandle = r.contact_handle;
         if (!existing.contactRole && r.contact_role) existing.contactRole = r.contact_role;
+        if (!existing.contactPhone && r.contact_phone) existing.contactPhone = r.contact_phone;
         if (!existing.location && r.location) existing.location = r.location;
         logSkip(
           cand.title,
@@ -849,6 +879,7 @@ export async function discover(
         contactName: r.contact_name || "",
         contactRole: r.contact_role || "",
         contactHandle: r.contact_handle || "",
+        contactPhone: r.contact_phone || "",
         location: r.location || "",
         timezone: r.timezone || "",
         fitScore: fit,

@@ -41,6 +41,7 @@ export interface Opportunity {
   contactName: string;
   contactRole: string;
   contactHandle: string;
+  contactPhone: string; // phone number if the source lists one (lead-gen / local businesses)
   location: string;
   timezone?: string; // IANA tz inferred from location (e.g. America/Chicago), for send timing
   fitScore: number | null; // 0..1

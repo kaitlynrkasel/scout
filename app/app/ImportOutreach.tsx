@@ -220,6 +220,7 @@ export default function ImportOutreach({
         contactName: name,
         contactRole: role,
         contactHandle: handle,
+        contactPhone: "",
         location: "",
         timezone: "",
         fitScore: null as any,
