@@ -37,13 +37,23 @@ export function Reveal({
     () => {
       const el = ref.current;
       if (!el || prefersReducedMotion() || el.children.length === 0) return;
+      // If the group is already on screen (or above it) at mount — e.g. it was
+      // inserted after a search, or the tab just switched — play immediately
+      // instead of waiting for a scroll event. A ScrollTrigger on already-in-
+      // view content whose positions are stale never fires, which would leave
+      // the children stuck at opacity 0 (invisible). Only defer to scroll for
+      // content that genuinely starts below the fold.
+      const rect = el.getBoundingClientRect();
+      const alreadyInView = rect.top < window.innerHeight * 0.95;
       gsap.from(el.children, {
         opacity: 0,
         y,
         duration: 0.5,
         stagger,
         ease: "power2.out",
-        scrollTrigger: { trigger: el, start: "top 88%", once: true },
+        ...(alreadyInView
+          ? {}
+          : { scrollTrigger: { trigger: el, start: "top 88%", once: true } }),
       });
     },
     { scope: ref },
@@ -79,12 +89,18 @@ export function FadeIn({
     () => {
       const el = ref.current;
       if (!el || prefersReducedMotion()) return;
+      // Same safeguard as Reveal: play now if already on screen, so a stale
+      // ScrollTrigger can't leave this block invisible.
+      const rect = el.getBoundingClientRect();
+      const alreadyInView = rect.top < window.innerHeight * 0.95;
       gsap.from(el, {
         opacity: 0,
         y,
         duration: 0.5,
         ease: "power2.out",
-        scrollTrigger: { trigger: el, start: "top 90%", once: true },
+        ...(alreadyInView
+          ? {}
+          : { scrollTrigger: { trigger: el, start: "top 90%", once: true } }),
       });
     },
     { scope: ref },

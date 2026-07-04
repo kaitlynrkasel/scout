@@ -4009,7 +4009,12 @@ function FindsList({
 }) {
   const [denyingId, setDenyingId] = useState("");
   return (
-    <Reveal className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`} stagger={0.05}>
+    // Plain grid, NOT <Reveal>: these cards are inserted dynamically after a
+    // search, inside a scrollable container. A scroll-triggered reveal leaves
+    // them stuck at opacity 0 because ScrollTrigger's positions are stale, so
+    // the whole result list renders blank. (That was the "search did nothing"
+    // bug.)
+    <div className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`}>
       {opps.map((o) => {
         const on = !!selected[o.id];
         return (
@@ -4131,7 +4136,7 @@ function FindsList({
           </div>
         );
       })}
-    </Reveal>
+    </div>
   );
 }
 
