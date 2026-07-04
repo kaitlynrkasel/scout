@@ -195,7 +195,7 @@ export default function Landing() {
 const USE_CASES = [
   { who: "Consultant", q: "Operations leads at DTC brands doing $10M–$50M revenue" },
   { who: "Health brand", q: "Fitness influencers to promote my new supplement" },
-  { who: "Student", q: "Summer internships at companies I admire" },
+  { who: "Professional", q: "Find me a job or internship in my field" },
   { who: "Student", q: "Alumni in my field for a quick coffee chat" },
   { who: "Startup founder", q: "Heads of growth at Series A SaaS companies" },
   { who: "Author", q: "Book bloggers who review thriller novels" },
