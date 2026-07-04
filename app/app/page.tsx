@@ -1264,8 +1264,8 @@ function ScoutTool({
           attachment,
         }),
       });
-      const j = await r.json();
-      if (r.ok) {
+      const j = await parseApiResponse(r);
+      if (r.ok && !j?.error) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
         setFinds((prev) => {
@@ -1347,8 +1347,8 @@ function ScoutTool({
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
       });
-      const j = await r.json();
-      if (r.ok) {
+      const j = await parseApiResponse(r);
+      if (r.ok && !j?.error) {
         setGmailSent((s) => ({ ...s, [d.opportunityId]: j.mode }));
         bumpActivity({ copies: 1 });
         setFinds((prev) => {
@@ -1435,6 +1435,42 @@ function ScoutTool({
     setApiReason(null);
     setSkipped([]);
     setShowSkipped(false);
+  }
+
+  // Read a fetch Response safely: prefers JSON but falls back to a friendly
+  // error object when the body is HTML/text (Vercel serverless timeout,
+  // Anthropic error page, network middleware). Turns "Unexpected token 'A'…"
+  // into a real message the user can act on.
+  async function parseApiResponse(res: Response): Promise<any> {
+    const text = await res.text().catch(() => "");
+    // Empty body — trust the HTTP status.
+    if (!text.trim()) {
+      if (res.ok) return {};
+      return {
+        error:
+          res.status === 504 || res.status === 408
+            ? "The server took too long to respond. Try a narrower goal, or run it again."
+            : `Request failed (HTTP ${res.status}).`,
+      };
+    }
+    // Try JSON first — every well-behaved route returns it.
+    try {
+      return JSON.parse(text);
+    } catch {
+      // The body is HTML / plain text. Extract a short snippet so the user
+      // can tell what happened without being buried in a stack trace.
+      const snippet = text
+        .replace(/<[^>]+>/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 180);
+      const looksTimeout = /timed?\s?out|took too long|504|gateway/i.test(snippet);
+      return {
+        error: looksTimeout
+          ? "The server took too long to respond. Try a narrower goal, or run it again."
+          : `Server error: ${snippet || `HTTP ${res.status}`}`,
+      };
+    }
   }
 
   // Show the message from a failed API response, flagging credit/key/limit issues.
@@ -1673,7 +1709,7 @@ function ScoutTool({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name, useCase, about: aboutText }),
       });
-      const j = await res.json();
+      const j = await parseApiResponse(res);
       return (j && j.goal) || name;
     } catch {
       return name;
@@ -1984,9 +2020,9 @@ function ScoutTool({
           useCase: activeUseCase,
         }),
       });
-      const j = await res.json();
-      if (!res.ok) {
-        setRepliesNote(j.error || "Couldn't scan that site.");
+      const j = await parseApiResponse(res);
+      if (!res.ok || j?.error) {
+        setRepliesNote(j?.error || "Couldn't scan that site.");
         return;
       }
       const c = j.contact || {};
@@ -2048,9 +2084,9 @@ function ScoutTool({
           editPairs,
         }),
       });
-      const j = await res.json();
-      if (!res.ok) {
-        setRepliesNote(j.error || "Couldn't read that application.");
+      const j = await parseApiResponse(res);
+      if (!res.ok || j?.error) {
+        setRepliesNote(j?.error || "Couldn't read that application.");
         return;
       }
       const components = Array.isArray(j.components) ? j.components : [];
@@ -2101,9 +2137,9 @@ function ScoutTool({
           inThread: !!find.gmailThreadId,
         }),
       });
-      const j = await res.json();
-      if (!res.ok) {
-        setRepliesNote(j.error || "Couldn't draft a follow-up.");
+      const j = await parseApiResponse(res);
+      if (!res.ok || j?.error) {
+        setRepliesNote(j?.error || "Couldn't draft a follow-up.");
         return;
       }
       const followDraft: Draft = {
@@ -2152,8 +2188,8 @@ function ScoutTool({
           signature,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
         reportError(data);
         return;
       }
@@ -2323,8 +2359,8 @@ function ScoutTool({
           cohortHint: cohortHintFrom(community),
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
         reportError(data);
         return;
       }
@@ -2364,8 +2400,8 @@ function ScoutTool({
           signature,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
         reportError(data);
         return;
       }
@@ -2425,8 +2461,8 @@ function ScoutTool({
           kind,
         }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
         reportError(data);
         return;
       }
