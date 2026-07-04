@@ -10,6 +10,19 @@ import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
 import type { Opportunity } from "./types";
 
+// ---- Auto-tunable fit-scoring clauses ----
+// Isolated as single-string constants (not woven into the surrounding
+// template-literal concatenation) so /api/cron/auto-tune can safely locate,
+// replace, and re-commit just ONE of these based on real deny-reason data,
+// without touching the rest of extract()'s logic. Each must stay a single
+// backtick-delimited string ending in a semicolon on its own — that's what
+// makes the auto-editor's regex extraction reliable. See lib/autotune.ts.
+export const TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE =
+  `INDUSTRY ALIGNMENT: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. Never surface cross-industry hits unless the goal explicitly asks for that other industry.`;
+
+export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
+  `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly a different region / far city, penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty.`;
+
 // What the user has taught Scout by denying / keeping past finds. Fed into query
 // planning and extraction so the search learns their taste over time.
 export interface DiscoverFeedback {
@@ -489,13 +502,10 @@ async function extract(
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
       `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
-    : `INDUSTRY ALIGNMENT: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their ` +
-      `industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. ` +
-      `Never surface cross-industry hits unless the goal explicitly asks for that other industry. ` +
+    : `${TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE} ` +
       `WHY_IT_FITS DISCIPLINE: a specific true detail about THE PERSON'S OWN work, career, or interests tied to the user's ` +
       `field — not about their employer or program. If you can only describe the program they work at, set is_relevant false. ` +
-      `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly a different region / far city, ` +
-      `penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty. ` +
+      `${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
       `TIME WINDOW ALIGNMENT: if the GOAL specifies a semester or year and the posting is clearly for a different window, set ` +
       `is_relevant false — but only when the source explicitly says the wrong window. ` +
       `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off.`;
