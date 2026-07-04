@@ -1933,12 +1933,18 @@ function ScoutTool({
   // Which templates apply when drafting for a given project + category. Global
   // templates (no projectId) always apply; project-scoped ones apply to that
   // project; category-scoped ones only when that exact category is in play.
+  // If a project has none of its own (and no global ones exist either), fall
+  // back to ALL the user's templates as a voice reference — a template saved
+  // under a different project is still real evidence of how this person
+  // writes. Safe to borrow: draftFor's prompt already says to match voice, not
+  // copy content, and to adapt every detail to the actual recipient.
   function templatesFor(projectId: string, categoryId?: string): OutreachTemplate[] {
-    return myTemplates.filter((t) => {
+    const scoped = myTemplates.filter((t) => {
       if (t.projectId && t.projectId !== projectId) return false;
       if (t.categoryId && t.categoryId !== (categoryId || "")) return false;
       return true;
     });
+    return scoped.length ? scoped : myTemplates;
   }
 
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
