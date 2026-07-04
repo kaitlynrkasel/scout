@@ -294,3 +294,51 @@ function suggestsResume(
   );
   return jobLike || asksResume;
 }
+
+// Revise an already-drafted message per the sender's free-text instruction
+// ("make it shorter", "more casual", "mention I'm a student", etc). Unlike
+// draftFor, this doesn't regenerate from scratch — it edits the existing
+// subject/body so earlier personalization survives, and re-applies the same
+// channel constraints (LinkedIn's 200-character cap) since the instruction
+// could otherwise blow past them.
+export async function reviseDraft(
+  subject: string,
+  body: string,
+  channelType: Draft["channelType"],
+  instruction: string,
+  about: string
+): Promise<{ subject: string; body: string }> {
+  const isLinkedIn = channelType === "message";
+  const sys =
+    `You revise an outreach message the sender already drafted, per their instruction. Keep it in their voice and ` +
+    `keep it TRUE — never invent new facts, names, or details beyond what's already in the message or ABOUT THE SENDER. ` +
+    `Apply the instruction faithfully; if it conflicts with sounding warm and human, still honor it, that's the ` +
+    `sender's call. NEVER use em-dashes or en-dashes; use commas and periods. ` +
+    (isLinkedIn
+      ? `This is a LinkedIn/DM note — STRICTLY 200 characters or fewer in the revised body, including spaces. `
+      : "") +
+    `Return ONLY JSON {subject, body}.`;
+  const user =
+    `ABOUT THE SENDER: ${about}\n\n` +
+    `CURRENT SUBJECT: ${subject || "(none)"}\n` +
+    `CURRENT BODY:\n${body}\n\n` +
+    `INSTRUCTION: ${instruction}`;
+
+  let gen: any = null;
+  try {
+    gen = parseJsonLoose(await claudeJson(sys, user));
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    gen = null;
+  }
+  let newBody = noDash(gen?.body || body);
+  if (isLinkedIn && newBody.length > 200) {
+    const cut = newBody.slice(0, 200);
+    const lastSpace = cut.lastIndexOf(" ");
+    newBody = (lastSpace > 150 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:]+$/, "");
+  }
+  return {
+    subject: noDash(gen?.subject ?? subject),
+    body: newBody,
+  };
+}

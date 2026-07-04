@@ -767,6 +767,11 @@ function ScoutTool({
   const [draftKind, setDraftKind] = useState<Record<string, string>>({});
   // opportunityId currently being re-drafted after a kind change.
   const [redraftBusyId, setRedraftBusyId] = useState("");
+  // The "direct the AI" chat box above Messages: one free-text instruction
+  // applied to every draft currently shown ("make these shorter", "more
+  // casual", "mention I'm a recent grad").
+  const [redraftInstruction, setRedraftInstruction] = useState("");
+  const [revisingBatch, setRevisingBatch] = useState(false);
   const [stats, setStats] = useState("");
   const [expanded, setExpanded] = useState(false);
 
@@ -2913,6 +2918,45 @@ function ScoutTool({
     }
   }
 
+  // "Direct the AI" chat box above Messages: apply one free-text instruction
+  // across every draft currently shown, in a single pass. Revises subject/body
+  // only (see reviseDraft in lib/draft.ts) — everything else about the draft
+  // (recipient, channel, attach-resume) stays put. Persists onto the matching
+  // finds so the revision survives navigating away.
+  async function reviseAllDrafts() {
+    const instruction = redraftInstruction.trim();
+    if (!instruction || !drafts.length) return;
+    setError("");
+    setRevisingBatch(true);
+    try {
+      const res = await fetch("/api/redraft-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ drafts, instruction, about: aboutText }),
+      });
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
+        reportError(data);
+        return;
+      }
+      const revised: Draft[] = data.drafts || [];
+      setDrafts(revised);
+      const byOppId = new Map(revised.map((d) => [d.opportunityId, d]));
+      saveFinds(
+        finds.map((f) =>
+          f.draft && byOppId.has(f.draft.opportunityId)
+            ? { ...f, draft: byOppId.get(f.draft.opportunityId)! }
+            : f
+        )
+      );
+      setRedraftInstruction("");
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRevisingBatch(false);
+    }
+  }
+
   // Rewrite a single existing draft for a different outreach kind (Email,
   // LinkedIn message, Instagram DM, etc.). Called when the user changes the
   // format dropdown on a draft card; only that one draft updates.
@@ -3400,6 +3444,36 @@ function ScoutTool({
             {/* ---------------- Drafts ---------------- */}
             {drafts.length > 0 && (
               <section className="mt-12">
+                {/* Direct the AI: one instruction, applied to every draft below
+                    in a single pass — "make these shorter", "more casual",
+                    "mention I'm a recent grad", whatever you'd like. */}
+                <div className="mb-5 rounded-2xl border border-warm-border bg-surface p-4 shadow-soft">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <Label className="mb-0">Tell Scout how to write these better</Label>
+                    <MicButton
+                      onAppend={(t) => setRedraftInstruction((g) => joinSpoken(g, t))}
+                    />
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <input
+                      value={redraftInstruction}
+                      onChange={(e) => setRedraftInstruction(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && !revisingBatch) reviseAllDrafts();
+                      }}
+                      placeholder="e.g. make these shorter and more casual, mention I'm a recent grad"
+                      className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    />
+                    <button
+                      onClick={reviseAllDrafts}
+                      disabled={revisingBatch || !redraftInstruction.trim()}
+                      className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                    >
+                      {revisingBatch ? "Rewriting…" : `Rewrite all ${drafts.length}`}
+                    </button>
+                  </div>
+                </div>
+
                 <h2 className="mb-4 text-lg font-bold text-ink">
                   Messages ({drafts.length})
                 </h2>
