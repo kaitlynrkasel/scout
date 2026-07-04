@@ -35,7 +35,8 @@ export async function POST(req: NextRequest) {
           d.body || "",
           d.channelType,
           ins,
-          String(about || "")
+          String(about || ""),
+          d.to || ""
         );
         return { ...d, subject, body };
       })

@@ -7,6 +7,18 @@ import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate } from "./types";
 
+// A LinkedIn target is defined by the actual recipient — their channel or
+// handle URL — not just by which draft "kind" happens to be selected.
+// Otherwise picking a generic DM kind for someone whose real contact is
+// LinkedIn would skip LinkedIn's hard 200-character connection-note limit.
+function isLinkedInTarget(channel = "", contactHandle = "", kindLabel = ""): boolean {
+  return (
+    /linkedin/i.test(channel) ||
+    /linkedin\.com/i.test(contactHandle) ||
+    /linkedin/i.test(kindLabel)
+  );
+}
+
 function pickChannel(opp: Opportunity): {
   channelType: Draft["channelType"];
   to: string;
@@ -207,7 +219,7 @@ export async function draftFor(
     // LinkedIn-shaped must fit under 200 characters. SMS is loose and short.
     // Other DMs stay at a couple of sentences.
     const isLinkedIn =
-      /linkedin/i.test(dmLabel) ||
+      isLinkedInTarget(opp.channel, opp.contactHandle, dmLabel) ||
       (channelType === "message" && !dmLabel); // generic "LinkedIn / DM note" default
     const length =
       dmLabel === "text message"
@@ -255,7 +267,8 @@ export async function draftFor(
   // usually respects the prompt, but if it overshoots, trim on a word boundary
   // so we never hand back an un-sendable draft.
   const linkedInShaped =
-    /linkedin/i.test(dmLabel) || (channelType === "message" && !dmLabel);
+    isLinkedInTarget(opp.channel, opp.contactHandle, dmLabel) ||
+    (channelType === "message" && !dmLabel);
   if (linkedInShaped && body.length > 200) {
     const cut = body.slice(0, 200);
     const lastSpace = cut.lastIndexOf(" ");
@@ -306,9 +319,13 @@ export async function reviseDraft(
   body: string,
   channelType: Draft["channelType"],
   instruction: string,
-  about: string
+  about: string,
+  to = ""
 ): Promise<{ subject: string; body: string }> {
-  const isLinkedIn = channelType === "message";
+  // `to` holds the contact handle for message-type drafts — check it for an
+  // actual linkedin.com URL first; fall back to "any generic message" the
+  // same way draftFor does when we have no better signal.
+  const isLinkedIn = isLinkedInTarget("", to) || channelType === "message";
   const sys =
     `You revise an outreach message the sender already drafted, per their instruction. Keep it in their voice and ` +
     `keep it TRUE — never invent new facts, names, or details beyond what's already in the message or ABOUT THE SENDER. ` +
