@@ -165,6 +165,9 @@ export default function Landing() {
         </div>
       </section>
 
+      {/* Pricing */}
+      <Pricing />
+
       {/* Meet the team */}
       <MeetTheTeam />
 
@@ -208,6 +211,96 @@ const USE_CASES = [
   { who: "Event organizer", q: "Women-in-tech speakers for our conference" },
   { who: "Restaurant owner", q: "Food critics and foodie accounts in Chicago" },
 ];
+
+const PRICING_TIERS = [
+  {
+    name: "Free",
+    price: "$0",
+    cadence: "",
+    searches: "5 searches a month",
+    blurb: "Try Scout and reach a few of the right people.",
+    cta: "Start free",
+    href: "/app",
+    featured: false,
+  },
+  {
+    name: "Starter",
+    price: "$15",
+    cadence: "/mo",
+    searches: "30 searches a month",
+    blurb: "For steady, focused outreach week to week.",
+    cta: "Choose Starter",
+    href: "/app?tab=billing",
+    featured: false,
+  },
+  {
+    name: "Pro",
+    price: "$30",
+    cadence: "/mo",
+    searches: "60 searches a month",
+    blurb: "For heavier weeks and juggling multiple projects.",
+    cta: "Choose Pro",
+    href: "/app?tab=billing",
+    featured: true,
+  },
+];
+
+function Pricing() {
+  return (
+    <section id="pricing" className="mx-auto max-w-6xl px-6 py-20">
+      <div className="text-center">
+        <h2 className="text-3xl font-extrabold tracking-tight text-ink">
+          Simple, <span className="brand-text">search-based</span> pricing
+        </h2>
+        <p className="mx-auto mt-2 max-w-2xl text-[15px] text-body">
+          A search finds a fresh batch of people and drafts them a note. Start free, upgrade
+          when you need more. Cancel anytime.
+        </p>
+      </div>
+      <div className="mt-10 grid gap-5 md:grid-cols-3">
+        {PRICING_TIERS.map((t) => (
+          <div
+            key={t.name}
+            className={`relative flex flex-col rounded-3xl border p-7 shadow-card ${
+              t.featured
+                ? "border-brown bg-surface ring-1 ring-brown/20"
+                : "border-warm-border bg-surface"
+            }`}
+          >
+            {t.featured && (
+              <span className="absolute -top-3 left-7 rounded-full bg-brand-gradient px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-white shadow-card">
+                Most searches
+              </span>
+            )}
+            <div className="text-sm font-bold uppercase tracking-wider text-accent">
+              {t.name}
+            </div>
+            <div className="mt-3 flex items-baseline gap-1">
+              <span className="text-4xl font-extrabold tracking-tight text-ink">{t.price}</span>
+              {t.cadence && <span className="text-sm text-body/70">{t.cadence}</span>}
+            </div>
+            <div className="mt-2 text-sm font-semibold text-ink">{t.searches}</div>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">{t.blurb}</p>
+            <a
+              href={t.href}
+              className={`mt-6 rounded-xl px-6 py-3 text-center text-sm font-bold shadow-soft transition ${
+                t.featured
+                  ? "bg-brand-gradient text-white hover:opacity-95"
+                  : "border border-warm-border bg-surface text-ink hover:bg-warm-bg"
+              }`}
+            >
+              {t.cta}
+            </a>
+          </div>
+        ))}
+      </div>
+      <p className="mt-5 text-center text-xs text-body/60">
+        Secure checkout by Stripe. Every plan searches the real public web — never invented
+        contacts.
+      </p>
+    </section>
+  );
+}
 
 function UseCases() {
   return (

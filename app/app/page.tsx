@@ -716,6 +716,18 @@ function AuthedShell() {
   );
 }
 
+interface BillingStatus {
+  billingEnabled: boolean;
+  tier: "free" | "starter" | "pro";
+  status: string;
+  searchLimit: number;
+  searchesUsed: number;
+  freeLimit: number;
+  freeUsed: number;
+  periodEnd: string | null;
+  freeResetsAt: string | null;
+}
+
 function ScoutTool({
   initialProfile,
   onSaveProfile,
@@ -727,8 +739,14 @@ function ScoutTool({
   accountEmail,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing"
   >("dashboard");
+
+  // ---- Billing / plan state ----
+  // Shown when a search is blocked by the plan limit (code: 'quota' | 'free_exhausted').
+  const [upgradePrompt, setUpgradePrompt] = useState<{ code: string; tier: string } | null>(null);
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [billingBusy, setBillingBusy] = useState(false);
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
@@ -2830,9 +2848,13 @@ function ScoutTool({
       const goalForApi = extras.length
         ? `${goal}\n\n${extras.join(" ")}`
         : goal;
+      const token = getToken ? await getToken() : null;
       const res = await fetch("/api/discover", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           goal: goalForApi,
           about: aboutText,
@@ -2843,6 +2865,12 @@ function ScoutTool({
         }),
       });
       const data = await parseApiResponse(res);
+      // Out of searches on the plan — show the upgrade prompt (a billing 402
+      // carries a `code`; the API-credit 402 does not, so it still errors below).
+      if (res.status === 402 && data?.code) {
+        setUpgradePrompt({ code: data.code, tier: data.tier || "free" });
+        return;
+      }
       if (!res.ok || data?.error) {
         reportError(data);
         return;
@@ -2863,6 +2891,97 @@ function ScoutTool({
       setDiscoverStartedAt(null);
     }
   }
+
+  // ---- Billing helpers ----
+  // Load the signed-in user's plan + usage (source of truth is the server).
+  async function loadBilling() {
+    if (!getToken) return;
+    const token = await getToken();
+    if (!token) return;
+    try {
+      const res = await fetch("/api/billing/status", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (res.ok) setBilling(await res.json());
+    } catch {
+      /* non-fatal: the UI falls back to a neutral state */
+    }
+  }
+
+  // Redirect to Stripe Checkout for a plan (subscribe or upgrade).
+  async function startCheckout(tier: "starter" | "pro") {
+    if (!getToken) return;
+    setBillingBusy(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ tier }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j?.url) {
+        window.location.href = j.url;
+      } else if (j?.updated) {
+        // Plan switched in place (existing subscriber) — no redirect needed.
+        setUpgradePrompt(null);
+        setRepliesNote("Your plan was updated. Enjoy the extra searches!");
+        setTimeout(loadBilling, 1500);
+        setBillingBusy(false);
+      } else {
+        setError(j?.error || "Could not start checkout.");
+        setBillingBusy(false);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Could not start checkout.");
+      setBillingBusy(false);
+    }
+  }
+
+  // Open the Stripe Customer Portal (manage/cancel/switch/update card).
+  async function openBillingPortal() {
+    if (!getToken) return;
+    setBillingBusy(true);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/billing/portal", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const j = await res.json().catch(() => ({}));
+      if (j?.url) {
+        window.location.href = j.url;
+      } else {
+        setError(j?.error || "Could not open the billing portal.");
+        setBillingBusy(false);
+      }
+    } catch (e: any) {
+      setError(e?.message || "Could not open the billing portal.");
+      setBillingBusy(false);
+    }
+  }
+
+  // Load plan/usage on mount. If we're returning from Checkout (?billing=success),
+  // Stripe's webhook may land a beat later, so re-check shortly after and clean the URL.
+  useEffect(() => {
+    loadBilling();
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const billingParam = params.get("billing");
+    if (params.get("tab") === "billing") setTab("billing");
+    if (billingParam === "success") {
+      setTab("billing");
+      setRepliesNote("Thanks — your plan is active. It may take a moment to update.");
+      const t = setTimeout(loadBilling, 2500);
+      window.history.replaceState({}, "", "/app");
+      return () => clearTimeout(t);
+    }
+    if (billingParam === "cancel") {
+      window.history.replaceState({}, "", "/app");
+    }
+    // Run once on mount; getToken reads the live session each call.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function runDraft() {
     setError("");
@@ -3034,6 +3153,7 @@ function ScoutTool({
         templatesCount={myTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
+        billingTier={billing?.tier}
         projects={projects}
         activeId={activeId}
         onSelectProject={selectProject}
@@ -3782,6 +3902,16 @@ function ScoutTool({
         <SettingsTab onStartTour={startTour} onExport={exportMyData} />
       )}
 
+      {tab === "billing" && (
+        <BillingTab
+          billing={billing}
+          busy={billingBusy}
+          onSubscribe={startCheckout}
+          onManage={openBillingPortal}
+          onRefresh={loadBilling}
+        />
+      )}
+
       </div>
 
       {/* ---------------- Footer ---------------- */}
@@ -3797,6 +3927,84 @@ function ScoutTool({
           </span>
         </div>
       </footer>
+
+      {/* ---------------- Out-of-searches upgrade prompt ---------------- */}
+      {upgradePrompt && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
+          onClick={() => setUpgradePrompt(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-warm-border bg-surface p-6 shadow-soft"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-brown-tint text-brown-deep">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z" />
+              </svg>
+            </div>
+            <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">
+              {upgradePrompt.code === "free_exhausted"
+                ? "You've used your free searches"
+                : upgradePrompt.tier === "starter"
+                ? "You've hit your Starter limit"
+                : "You've used every search this month"}
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">
+              {upgradePrompt.code === "free_exhausted"
+                ? "You get 5 free searches a month. Pick a plan to keep scouting — it resets on the 1st either way."
+                : upgradePrompt.tier === "starter"
+                ? "Starter includes 30 searches a month. Upgrade to Pro for 60 — you keep going right away, and Stripe only charges the difference."
+                : "Pro includes 60 searches a month. Your allowance refreshes at the start of your next billing cycle."}
+            </p>
+
+            <div className="mt-5 space-y-2.5">
+              {upgradePrompt.code === "free_exhausted" && (
+                <>
+                  <button
+                    onClick={() => startCheckout("starter")}
+                    disabled={billingBusy}
+                    className="flex w-full items-center justify-between rounded-xl border border-warm-border px-4 py-3 text-left transition hover:border-brown hover:bg-brown-tint/40 disabled:opacity-50"
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-ink">Starter — 30 searches</span>
+                      <span className="block text-xs text-muted">$15 / month</span>
+                    </span>
+                    <span className="text-sm font-semibold text-brown">Choose →</span>
+                  </button>
+                  <button
+                    onClick={() => startCheckout("pro")}
+                    disabled={billingBusy}
+                    className="flex w-full items-center justify-between rounded-xl border border-brown bg-brown-tint/40 px-4 py-3 text-left transition hover:bg-brown-tint disabled:opacity-50"
+                  >
+                    <span>
+                      <span className="block text-sm font-semibold text-ink">Pro — 60 searches</span>
+                      <span className="block text-xs text-muted">$30 / month</span>
+                    </span>
+                    <span className="text-sm font-semibold text-brown">Choose →</span>
+                  </button>
+                </>
+              )}
+              {upgradePrompt.code === "quota" && upgradePrompt.tier === "starter" && (
+                <button
+                  onClick={() => startCheckout("pro")}
+                  disabled={billingBusy}
+                  className="w-full rounded-xl bg-brown px-4 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+                >
+                  {billingBusy ? "Opening checkout…" : "Upgrade to Pro — $30/mo for 60"}
+                </button>
+              )}
+            </div>
+
+            <button
+              onClick={() => setUpgradePrompt(null)}
+              className="mt-3 w-full rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+            >
+              {upgradePrompt.tier === "pro" && upgradePrompt.code === "quota" ? "Got it" : "Maybe later"}
+            </button>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* ---------------- Full-screen finds ---------------- */}
@@ -4052,6 +4260,7 @@ function SideNav({
   templatesCount,
   profileHasBio,
   hasAccount,
+  billingTier,
   projects,
   activeId,
   onSelectProject,
@@ -4064,6 +4273,7 @@ function SideNav({
   templatesCount: number;
   profileHasBio: boolean;
   hasAccount: boolean;
+  billingTier?: "free" | "starter" | "pro";
   projects: Project[];
   activeId: string;
   onSelectProject: (id: string) => void;
@@ -4246,6 +4456,41 @@ function SideNav({
               <path d="M5 20a7 7 0 0 1 14 0" />
             </svg>
             Account
+          </button>
+        )}
+        {hasAccount && (
+          <button
+            onClick={() => setTab("billing")}
+            className={`mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              tab === "billing"
+                ? "bg-brown text-white shadow-soft"
+                : "text-body hover:bg-brown-tint hover:text-brown-deep"
+            }`}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={tab === "billing" ? "" : "opacity-80"}
+            >
+              <rect x="2" y="5" width="20" height="14" rx="2.5" />
+              <path d="M2 10h20" />
+            </svg>
+            Plan &amp; billing
+            {billingTier && billingTier !== "free" && (
+              <span
+                className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                  tab === "billing" ? "bg-white/20 text-white" : "bg-brown-tint text-brown-deep"
+                }`}
+              >
+                {billingTier}
+              </span>
+            )}
           </button>
         )}
         <button
@@ -9004,6 +9249,160 @@ function SharedFindRow({
 }
 
 /* ---------------- Settings tab ---------------- */
+function BillingTab({
+  billing,
+  busy,
+  onSubscribe,
+  onManage,
+  onRefresh,
+}: {
+  billing: BillingStatus | null;
+  busy: boolean;
+  onSubscribe: (tier: "starter" | "pro") => void;
+  onManage: () => void;
+  onRefresh: () => void;
+}) {
+  // Refresh once when the tab opens (getToken reads the live session each call).
+  useEffect(() => {
+    onRefresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const fmt = (iso: string | null) =>
+    iso
+      ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" })
+      : "";
+
+  const tier = billing?.tier || "free";
+  const paid = tier === "starter" || tier === "pro";
+  const used = paid ? billing?.searchesUsed ?? 0 : billing?.freeUsed ?? 0;
+  const limit = paid ? billing?.searchLimit ?? 0 : billing?.freeLimit ?? 5;
+  const resets = paid ? billing?.periodEnd ?? null : billing?.freeResetsAt ?? null;
+  const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
+
+  const PLANS = [
+    { key: "starter" as const, label: "Starter", price: 15, searches: 30, blurb: "For steady, focused outreach." },
+    { key: "pro" as const, label: "Pro", price: 30, searches: 60, blurb: "For heavier weeks and multiple projects." },
+  ];
+
+  return (
+    <main className="mx-auto w-full max-w-5xl px-8 py-10">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">Plan &amp; billing</h1>
+      <p className="mt-1 text-sm text-body">
+        Each search finds a fresh batch of people and drafts them a note. Pick the monthly
+        volume that fits.
+      </p>
+
+      {billing && !billing.billingEnabled && (
+        <div className="mt-5 rounded-xl border border-attention/30 bg-attention/10 p-4 text-sm text-body">
+          Billing isn&rsquo;t connected yet. Once the Stripe keys are set, plans activate here.
+        </div>
+      )}
+
+      {/* Current plan + usage */}
+      <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted">
+              Current plan
+            </div>
+            <div className="mt-1 flex items-center gap-2">
+              <span className="text-xl font-semibold text-ink">
+                {paid ? (tier === "pro" ? "Pro" : "Starter") : "Free"}
+              </span>
+              {paid && billing?.status && (
+                <span className="rounded-full bg-brown-tint px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brown-deep">
+                  {billing.status}
+                </span>
+              )}
+            </div>
+          </div>
+          {paid && (
+            <button
+              onClick={onManage}
+              disabled={busy}
+              className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+            >
+              Manage subscription
+            </button>
+          )}
+        </div>
+
+        <div className="mt-5">
+          <div className="flex items-baseline justify-between text-sm">
+            <span className="font-medium tabular-nums text-ink">
+              {used} / {limit} searches
+            </span>
+            {resets && <span className="text-xs text-muted">Resets {fmt(resets)}</span>}
+          </div>
+          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-warm-bg">
+            <div className="h-full rounded-full bg-brown" style={{ width: `${pct}%` }} />
+          </div>
+          {!paid && (
+            <p className="mt-2 text-xs text-muted">
+              You&rsquo;re on the free plan — {limit} searches a month.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Plans */}
+      <section className="mt-4 grid gap-4 sm:grid-cols-2">
+        {PLANS.map((p) => {
+          const current = tier === p.key;
+          const isUpgrade = tier === "starter" && p.key === "pro";
+          return (
+            <div
+              key={p.key}
+              className={`rounded-2xl border p-6 shadow-card ${
+                current ? "border-brown bg-brown-tint/30" : "border-warm-border bg-surface"
+              }`}
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-lg font-semibold text-ink">{p.label}</span>
+                {current && (
+                  <span className="rounded-full bg-brown px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                    Current
+                  </span>
+                )}
+              </div>
+              <div className="mt-2 flex items-baseline gap-1">
+                <span className="text-3xl font-semibold tracking-tight text-ink">${p.price}</span>
+                <span className="text-sm text-muted">/month</span>
+              </div>
+              <p className="mt-1 text-sm text-body">
+                {p.searches} searches a month. {p.blurb}
+              </p>
+              <button
+                onClick={() => (current ? onManage() : onSubscribe(p.key))}
+                disabled={busy}
+                className={`mt-5 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
+                  current
+                    ? "border border-warm-border text-body hover:bg-warm-bg"
+                    : "bg-brown text-white shadow-soft hover:bg-brown-deep"
+                }`}
+              >
+                {current
+                  ? "Manage"
+                  : !paid
+                  ? `Choose ${p.label}`
+                  : isUpgrade
+                  ? "Upgrade to Pro"
+                  : `Switch to ${p.label}`}
+              </button>
+            </div>
+          );
+        })}
+      </section>
+
+      <p className="mt-4 text-center text-xs text-muted">
+        Secure checkout by Stripe. Cancel anytime &mdash; you keep your searches until the
+        period ends.
+      </p>
+    </main>
+  );
+}
+
 function SettingsTab({
   onStartTour,
   onExport,

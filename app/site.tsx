@@ -24,6 +24,9 @@ export function Nav() {
           <a href="/#features" className="transition hover:text-ink">
             Features
           </a>
+          <a href="/#pricing" className="transition hover:text-ink">
+            Pricing
+          </a>
           <a href="/#team" className="transition hover:text-ink">
             Team
           </a>
