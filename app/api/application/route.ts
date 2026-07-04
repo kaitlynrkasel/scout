@@ -3,7 +3,7 @@ import { draftApplication } from "@/lib/application";
 import { ApiCreditError } from "@/lib/apiErrors";
 
 export const runtime = "nodejs";
-export const maxDuration = 60; // reading pages + two Claude passes
+export const maxDuration = 240; // Pro plan headroom for reading pages + two Claude passes
 
 // Read a specific internship/job posting and draft every written application
 // component (cover letter, essays, short answers) from the applicant's profile.

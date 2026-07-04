@@ -3,7 +3,7 @@ import { claudeJson, parseJsonLoose } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60; // reads many drafts + one Claude pass; scales with draft count
 
 // Read the user's own recent drafts and coach them on their actual writing —
 // specific observations about THESE messages, not generic outreach tips.

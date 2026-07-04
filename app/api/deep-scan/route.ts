@@ -3,7 +3,7 @@ import { claudeJson, parseJsonLoose } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60; // fetch pages + one Claude pass; slow sites can hit the low ceiling
 
 // Strip a page down to readable text (same approach as /api/read-website).
 function stripHtml(html: string): string {

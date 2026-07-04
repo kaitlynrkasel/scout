@@ -3,7 +3,7 @@ import { draftFor } from "@/lib/draft";
 import { ApiCreditError } from "@/lib/apiErrors";
 import type { Opportunity, OutreachTemplate } from "@/lib/types";
 
-export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
+export const maxDuration = 300; // Pro plan max; batches up to 8 parallel Claude drafts
 
 export async function POST(req: NextRequest) {
   try {

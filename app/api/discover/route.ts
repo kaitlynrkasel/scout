@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
 
-export const maxDuration = 60; // Vercel Hobby caps at 60s; Pro lifts to 300s
+export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
 export async function POST(req: NextRequest) {
   try {

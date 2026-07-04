@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin, userFromReq } from "@/lib/supabaseAdmin";
 import { isOwnerEmail } from "@/lib/owner";
 
-export const maxDuration = 30;
+export const maxDuration = 60; // walks every user_state row; scales with user count
 export const dynamic = "force-dynamic";
 
 // GET /api/admin/insights — owner-only aggregate across every user's AppState.

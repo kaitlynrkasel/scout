@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { extractText, getDocumentProxy } from "unpdf";
 
 export const runtime = "nodejs";
-export const maxDuration = 30;
+export const maxDuration = 60; // large PDFs (multi-page resumes) can exceed the low ceiling
 
 // Extract text from a PDF on the SERVER so it works in every browser — even
 // older Safari/iOS that can't run pdf.js's worker. Uses unpdf, which ships a
