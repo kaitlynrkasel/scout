@@ -7,6 +7,7 @@ import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
 import { Reveal, CountUp, FadeIn } from "./motion";
+import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import ImportOutreach from "./ImportOutreach";
 import { fileToText } from "@/lib/fileText";
@@ -2506,7 +2507,7 @@ function ScoutTool({
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
           <div className="mb-6">
-            <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">Outreach</h1>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
             <p className="mt-1 text-sm text-body">
               Find your people and draft messages in your voice.
             </p>
@@ -3035,6 +3036,7 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
+          openImport={() => setImportOpen(true)}
           onEditProject={(id) => {
             selectProject(id);
             setEditingProjects(true);
@@ -3133,7 +3135,7 @@ function ScoutTool({
 
       {tab === "account" && accountEmail && (
         <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="brand-text">account</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -3175,7 +3177,7 @@ function ScoutTool({
 
       {tab === "settings" && (
         <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             <span className="brand-text">Settings</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -4091,7 +4093,7 @@ function FindsTab({
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="brand-text">finds</span>
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -5163,6 +5165,18 @@ function recentInsights(
 }
 
 /* ---------------- Dashboard tab ---------------- */
+// Status vocabulary for the recent-finds table: label, chip styling, next action.
+const FIND_STATUS: Record<
+  FindStatus,
+  { label: string; cls: string; action: string }
+> = {
+  new: { label: "New", cls: "bg-brown-tint text-brown-deep", action: "Draft" },
+  drafted: { label: "Drafted", cls: "bg-warm-bg text-body", action: "Send" },
+  sent: { label: "Sent", cls: "bg-warm-bg text-body", action: "Follow up" },
+  replied: { label: "Replied", cls: "bg-success/10 text-success-deep", action: "View" },
+  denied: { label: "Passed", cls: "bg-warm-bg text-muted", action: "View" },
+};
+
 function DashboardTab({
   activity,
   profile,
@@ -5179,6 +5193,7 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
+  openImport,
   onEditProject,
   onSeedTemplateForChannel,
 }: {
@@ -5197,6 +5212,7 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
+  openImport: () => void;
   onEditProject: (id: string) => void;
   onSeedTemplateForChannel: (channel: string) => void;
 }) {
@@ -5221,6 +5237,74 @@ function DashboardTab({
     replied: finds.filter((f) => f.status === "replied").length,
     denied: finds.filter((f) => f.status === "denied").length,
   };
+  // Real weekly series for the activity chart: people found vs messages sent,
+  // bucketed from each find's own timestamps. No fabricated data.
+  const WEEKS = 10;
+  const wkNow = Date.now();
+  const WK = 7 * 86400000;
+  const weekly = Array.from({ length: WEEKS }, (_, i) => {
+    const end = wkNow - (WEEKS - 1 - i) * WK;
+    const start = end - WK;
+    const inWeek = (t?: number) => typeof t === "number" && t > start && t <= end;
+    return {
+      label: "",
+      added: finds.filter((f) => inWeek(f.addedAt)).length,
+      sent: finds.filter((f) => inWeek(f.sentAt)).length,
+    };
+  });
+  const hasActivity = weekly.some((w) => w.added > 0 || w.sent > 0);
+  const onTarget = learned.decided ? Math.round((1 - learned.denyRate) * 100) : null;
+  const pipeTotal = pipe.new + pipe.drafted + pipe.sent + pipe.replied;
+  const recentFinds = finds
+    .slice()
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    .slice(0, 6);
+
+  // Personal greeting: time of day + the user's first name, then an honest,
+  // specific status line about this week's finds (only shown when there's news).
+  const hour = new Date().getHours();
+  const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const firstName = (profile.name || "").trim().split(/\s+/)[0] || "";
+  const newThisWeek = finds.filter((f) => f.addedAt && wkNow - f.addedAt <= WK).length;
+  const strongThisWeek = finds.filter(
+    (f) => f.addedAt && wkNow - f.addedAt <= WK && (f.opp.fitScore || 0) >= 0.8
+  ).length;
+
+  // Scout's pick: the strongest still-actionable find (not yet sent/passed), used
+  // for the dark spotlight card. whyItFits is Scout's real reason to reach out.
+  const pick = finds
+    .filter(
+      (f) =>
+        (f.status === "new" || f.status === "drafted") &&
+        typeof f.opp.fitScore === "number"
+    )
+    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0))[0];
+  const initials = (s: string) =>
+    (s || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || "")
+      .join("") || "?";
+
+  // Honest per-tile trend series: only People found and Taken to send have real
+  // per-week timestamps, so only those carry a sparkline. Searches and Drafts
+  // have no timeline, so they stay as plain figures rather than a fabricated one.
+  const foundSeries = weekly.map((w) => w.added);
+  const sentSeries = weekly.map((w) => w.sent);
+  const withMovement = (s: number[]) => (s.some((v) => v > 0) ? s : undefined);
+  const metrics: {
+    label: string;
+    value: number;
+    series?: number[];
+    delta?: number;
+  }[] = [
+    { label: "Searches", value: activity.searches },
+    { label: "People found", value: activity.found, series: withMovement(foundSeries), delta: weekly[WEEKS - 1].added },
+    { label: "Drafts written", value: activity.drafts },
+    { label: "Taken to send", value: activity.copies, series: withMovement(sentSeries), delta: weekly[WEEKS - 1].sent },
+  ];
+
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -5307,33 +5391,48 @@ function DashboardTab({
 
   return (
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
-      <h1 className="font-serif text-[32px] font-normal tracking-tight text-ink">Dashboard</h1>
-      {dashTab === "scout" && (
-        <p className="mt-1 text-sm text-body">
-          How Scout is doing across everyone using it.
-        </p>
-      )}
-
-      {/* -------- Tab switcher -------- */}
-      <div className="mt-5 inline-flex rounded-xl border border-warm-border bg-white p-1 shadow-card">
-        {(
-          [
-            ["you", "You"],
-            ["scout", "Scout-wide"],
-          ] as const
-        ).map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setDashTab(val)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
-              dashTab === val
-                ? "bg-brown text-white shadow-soft"
-                : "text-body/70 hover:text-ink"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* -------- Header: greeting + tab switcher -------- */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            {dashTab === "you"
+              ? firstName
+                ? `Good ${partOfDay}, ${firstName}`
+                : `Good ${partOfDay}`
+              : "Scout-wide"}
+          </h1>
+          <p className="mt-1 text-sm text-body">
+            {dashTab === "you"
+              ? newThisWeek > 0
+                ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week${
+                    strongThisWeek > 0
+                      ? ` — ${strongThisWeek} ${strongThisWeek === 1 ? "looks" : "look"} strong`
+                      : ""
+                  }. Here's where things stand.`
+                : "Here's where your outreach stands."
+              : "How Scout is doing across everyone using it."}
+          </p>
+        </div>
+        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-white p-1 shadow-card">
+          {(
+            [
+              ["you", "You"],
+              ["scout", "Scout-wide"],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setDashTab(val)}
+              className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+                dashTab === val
+                  ? "bg-brown text-white shadow-soft"
+                  : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {dashTab === "you" && (
@@ -5360,171 +5459,313 @@ function DashboardTab({
         </button>
       )}
 
-      {/* -------- Activity (real counts) -------- */}
-      <Reveal as="section" className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile
-          n={activity.searches}
-          label="Searches run"
-          icon={<><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></>}
-        />
-        <StatTile
-          n={activity.found}
-          label="People found"
-          icon={<><circle cx="9" cy="8" r="3.5" /><path d="M3 20a6 6 0 0 1 12 0M16 6a3.5 3.5 0 0 1 0 7M21 20a6 6 0 0 0-4-5.6" /></>}
-        />
-        <StatTile
-          n={activity.drafts}
-          label="Drafts written"
-          icon={<><path d="M4 4h16v12H8l-4 4z" /><path d="M8 9h8M8 12h5" /></>}
-        />
-        <StatTile
-          n={activity.copies}
-          label="Taken to send"
-          icon={<path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6z" />}
-        />
-      </Reveal>
-
-      {/* -------- Rhythm (recent frequency) -------- */}
-      <Reveal as="section" className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
-        <StatTile
-          n={draftsThisWeek}
-          label="Drafts this week"
-          icon={<><path d="M12 20V4M6 10l6-6 6 6" /></>}
-        />
-        <StatTile
-          n={sentThisWeek}
-          label="Sent this week"
-          icon={<><path d="M5 12h14M13 6l6 6-6 6" /></>}
-        />
-        <StatTile
-          n={activeDays}
-          label="Days active (last 30)"
-          icon={<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></>}
-        />
-      </Reveal>
-
-      {/* -------- Overview panel: taste note + pipeline checklist -------- */}
-      <section className="mt-6">
-        <div className="ml-1 flex">
-          <span className="folder-tab border border-b-0 border-warm-border bg-surface px-5 py-2.5 text-sm font-bold text-ink">
-            Overview
-          </span>
+      {/* -------- Import your existing outreach -------- */}
+      <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brown-tint text-brown-deep">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-extrabold text-ink">
+            Already reaching out somewhere else?
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+            Drop in a CSV of who you've already contacted. Scout won't resurface
+            them and starts learning what a fit looks like for you.
+          </p>
         </div>
-        <div className="rounded-2xl rounded-tl-none border border-warm-border bg-surface p-5 shadow-card paper-card sm:p-6">
-          <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
-            {/* Taste note — taped ruled paper */}
-            <div>
-              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
-                What Scout is learning about your taste
-              </div>
-              {learned.decided === 0 ? (
-                <p className="mt-3 max-w-md text-sm leading-relaxed text-body/70">
-                  Nothing learned yet. As you draft messages and set aside finds that
-                  aren&apos;t a fit, your deny rate and preferences show up here.
-                </p>
-              ) : (
-                <>
-                  <div className="mt-3 flex items-baseline gap-3">
-                    <span className="text-5xl font-extrabold tracking-tight text-ink">
-                      {Math.round(learned.denyRate * 100)}%
-                    </span>
-                    {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
-                      <span
-                        className={`rounded-full px-2.5 py-1 text-xs font-bold ${
-                          learned.trend.delta < 0
-                            ? "bg-sage/15 text-sage-deep"
-                            : "bg-warm-bg text-muted"
-                        }`}
-                      >
-                        {learned.trend.delta < 0 ? "↓" : "↑"} from{" "}
-                        {Math.round(learned.trend.early * 100)}%
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-1 text-[11px] font-bold uppercase tracking-wider text-muted">
-                    Deny rate
-                  </div>
-                  <p className="mt-3 max-w-md text-sm leading-relaxed text-body/80">
-                    {learned.trend
-                      ? learned.trend.delta < -0.01
-                        ? "More of Scout's finds are landing now than when you started. It's getting your taste."
-                        : learned.trend.delta > 0.01
-                        ? "Recent finds are landing less often. Adjusting your goal wording or project context can sharpen them."
-                        : "Holding steady as Scout learns what fits."
-                      : `You've set aside ${learned.denied} of ${learned.decided} you reviewed. A trend appears once you've reviewed a few more.`}
-                  </p>
-                </>
-              )}
-              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
-                <div
-                  className="text-xs text-body/70"
-                  title="Estimate based on ~6 minutes to research one person and write a personalized message by hand, multiplied by the number of drafts Scout has written for you."
-                >
-                  ~{timeSaved} <span className="text-muted">saved (est.)</span>
-                </div>
-                <button
-                  onClick={goOutreach}
-                  className="ml-auto rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
-                >
-                  Find more opportunities
-                </button>
-              </div>
-            </div>
+        <button
+          onClick={openImport}
+          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+        >
+          Import a CSV
+        </button>
+      </section>
 
-            {/* Pipeline checklist */}
+      {/* -------- Overview: activity chart + match quality + pipeline -------- */}
+      <section className="mt-6 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-xl border border-warm-border bg-white p-5 shadow-card">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="font-serif text-lg font-normal text-ink">Pipeline</h2>
-              <div className="mt-3">
-                {(
-                  [
-                    { label: "New finds", n: pipe.new },
-                    { label: "Drafted", n: pipe.drafted },
-                    { label: "Sent", n: pipe.sent },
-                    { label: "Replied", n: pipe.replied },
-                  ] as const
-                ).map((r, i, arr) => (
-                  <div
-                    key={r.label}
-                    className={`flex items-center gap-3 py-2.5 ${
-                      i < arr.length - 1 ? "border-b border-dashed border-warm-border" : ""
-                    }`}
-                  >
-                    <span
-                      className={`grid h-[18px] w-[18px] shrink-0 place-items-center rounded-[5px] border-2 ${
-                        r.n > 0 ? "border-brown bg-brown" : "border-clay"
-                      }`}
-                    >
-                      {r.n > 0 && (
-                        <svg viewBox="0 0 24 24" className="h-2.5 w-2.5" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
-                      )}
-                    </span>
-                    <span className="flex-1 text-sm font-medium text-ink">{r.label}</span>
-                    <span className="text-sm font-extrabold tabular-nums text-ink">{r.n}</span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-3 border-t border-warm-border pt-3 text-xs text-body/70">
-                <b className="text-ink">
-                  {pipe.new} {pipe.new === 1 ? "person" : "people"}
-                </b>{" "}
-                waiting for you in Finds.
-              </div>
+              <h2 className="text-sm font-semibold text-ink">Outreach activity</h2>
+              <p className="mt-0.5 text-xs text-muted">People found and messages sent, by week.</p>
+            </div>
+            <div className="text-right">
+              <div className="text-2xl font-semibold leading-none tabular-nums text-ink">{pipe.sent}</div>
+              <div className="mt-1 text-xs text-muted">sent total</div>
+            </div>
+          </div>
+          {hasActivity ? (
+            <div className="mt-4">
+              <ActivityChart data={weekly} />
+            </div>
+          ) : (
+            <div className="mt-4 flex h-[168px] flex-col items-center justify-center rounded-lg bg-warm-bg/60 px-4 text-center">
+              <p className="max-w-[16rem] text-sm text-muted">
+                Your activity shows up here once you start finding and messaging people.
+              </p>
+              <button
+                onClick={goOutreach}
+                className="mt-3 rounded-lg bg-brown px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brown-deep"
+              >
+                Run a search
+              </button>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-5 rounded-xl border border-warm-border bg-white p-5 shadow-card">
+          <div>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Match quality</h2>
+              {onTarget != null && learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    learned.trend.delta < 0
+                      ? "bg-success/10 text-success-deep"
+                      : "bg-attention/10 text-attention"
+                  }`}
+                >
+                  {learned.trend.delta < 0 ? "▲" : "▼"}{" "}
+                  {Math.abs(Math.round(learned.trend.delta * 100))} pts
+                </span>
+              )}
+            </div>
+            {onTarget == null ? (
+              <p className="mt-2 text-xs leading-relaxed text-muted">
+                Draft or pass on a few finds and Scout starts showing how well it
+                reads your taste.
+              </p>
+            ) : (
+              <>
+                <div className="mt-3 flex justify-center">
+                  <MatchGauge pct={onTarget} />
+                </div>
+                <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+                  {learned.trend && learned.trend.delta < -0.01
+                    ? "Sharper than when you started — fewer of Scout's finds are misses."
+                    : learned.trend && learned.trend.delta > 0.01
+                    ? "Landing less often lately. Tightening your goal or project context helps."
+                    : `${learned.kept} of ${learned.decided} finds kept so far.`}
+                </p>
+              </>
+            )}
+          </div>
+          <div className="border-t border-warm-border pt-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Pipeline</h2>
+              <span className="text-xs text-muted">{pipeTotal} in play</span>
+            </div>
+            <div className="mt-3.5">
+              <PipelineBar
+                segments={[
+                  { label: "New", value: pipe.new, color: "bg-clay", text: "text-body" },
+                  { label: "Drafted", value: pipe.drafted, color: "bg-brown", text: "text-body" },
+                  { label: "Sent", value: pipe.sent, color: "bg-brown-deep", text: "text-body" },
+                  { label: "Replied", value: pipe.replied, color: "bg-success", text: "text-body" },
+                ]}
+              />
             </div>
           </div>
         </div>
       </section>
 
-      {activity.searches === 0 && (
-        <p className="mt-3 text-xs text-muted">
-          Numbers fill in as you use Scout. Run a search on the Outreach tab to get
-          started.
-        </p>
+      {/* -------- Scout's pick (dark spotlight) -------- */}
+      {pick && (
+        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-coffee p-6 shadow-soft">
+          <span
+            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(200,184,153,.16), transparent 70%)" }}
+            aria-hidden
+          />
+          <span className="z-[1] grid h-14 w-14 shrink-0 place-items-center rounded-full border-2 border-white/15 bg-gradient-to-br from-[#e8dcc4] to-clay text-lg font-bold text-coffee">
+            {initials(pick.opp.name)}
+          </span>
+          <div className="z-[1] min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-clay">
+              <img
+                src="/scout-logo.png"
+                alt=""
+                width={15}
+                height={15}
+                className="h-[15px] w-[15px]"
+                style={{ filter: "brightness(0) invert(0.82) sepia(0.3)" }}
+              />
+              Scout&rsquo;s pick
+            </div>
+            <h3 className="mt-1.5 truncate text-[17px] font-semibold tracking-tight text-white">
+              {pick.opp.name}
+            </h3>
+            <p className="mt-1 max-w-[52ch] text-sm leading-relaxed text-[#c9c0b4]">
+              {(pick.opp.whyItFits || "").trim() ||
+                "Your strongest still-open match — worth a short, specific intro."}
+            </p>
+          </div>
+          <div className="z-[1] flex shrink-0 items-center gap-5">
+            {typeof pick.opp.fitScore === "number" && (
+              <div className="text-xs text-[#a89f92]">
+                Fit{" "}
+                <b className="text-[15px] font-bold text-white tabular-nums">
+                  {Math.round(pick.opp.fitScore * 100)}%
+                </b>
+              </div>
+            )}
+            <button
+              onClick={goFinds}
+              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-white"
+            >
+              Draft an intro &rarr;
+            </button>
+          </div>
+        </section>
       )}
+
+      {/* -------- Activity metrics (tiles; sparkline only where the data is real) -------- */}
+      <section className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        {metrics.map((m) => (
+          <div
+            key={m.label}
+            className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-xl font-semibold leading-none tabular-nums text-ink">
+                {m.value}
+              </div>
+              {m.series && <Sparkline data={m.series} />}
+            </div>
+            <div className="mt-1.5 text-xs text-muted">{m.label}</div>
+            {typeof m.delta === "number" && m.delta > 0 && (
+              <div className="mt-2 text-[11px] font-semibold text-success-deep">
+                +{m.delta} this week
+              </div>
+            )}
+          </div>
+        ))}
+      </section>
+
+      {/* -------- Recent finds -------- */}
+      <section className="mt-8">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold tracking-tight text-ink">Recent finds</h2>
+          <button
+            onClick={goFinds}
+            className="text-sm font-medium text-brown transition hover:text-brown-deep"
+          >
+            View all &rarr;
+          </button>
+        </div>
+        {recentFinds.length ? (
+          <div className="mt-3 overflow-x-auto rounded-xl border border-warm-border bg-white shadow-card">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted">
+                  <th className="px-4 py-2.5 font-medium">Name</th>
+                  <th className="hidden px-4 py-2.5 font-medium sm:table-cell">Source</th>
+                  <th className="px-4 py-2.5 font-medium">Fit</th>
+                  <th className="px-4 py-2.5 font-medium">Status</th>
+                  <th className="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {recentFinds.map((f) => {
+                  const st = FIND_STATUS[f.status];
+                  const fit =
+                    typeof f.opp.fitScore === "number"
+                      ? Math.round(f.opp.fitScore * 100)
+                      : null;
+                  const palette = ["#7c5837", "#8c9a76", "#a9761f", "#5d4026", "#3f7a52", "#b0553f"];
+                  const hash = (f.opp.name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+                  const avatar = palette[hash % palette.length];
+                  const dot =
+                    f.status === "replied"
+                      ? "bg-success"
+                      : f.status === "new"
+                      ? "bg-brown"
+                      : "bg-muted";
+                  return (
+                    <tr key={f.id} className="border-t border-warm-border transition hover:bg-warm-bg/50">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                            style={{ backgroundColor: avatar }}
+                            aria-hidden
+                          >
+                            {initials(f.opp.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block max-w-[18rem] truncate font-medium text-ink">
+                              {f.opp.name}
+                            </span>
+                            {f.opp.outlet && (
+                              <span className="block max-w-[18rem] truncate text-xs text-muted">
+                                {f.opp.outlet}
+                              </span>
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="hidden px-4 py-3 text-muted sm:table-cell">
+                        {f.opp.channel || "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        {fit != null ? (
+                          <div className="flex items-center gap-2.5">
+                            <span className="tabular-nums text-body">{fit}%</span>
+                            <span className="h-1.5 w-[52px] overflow-hidden rounded-full bg-warm-bg">
+                              <span
+                                className="block h-full rounded-full bg-brown"
+                                style={{ width: `${fit}%` }}
+                              />
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+                          {st.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={goFinds}
+                          className="text-sm font-medium text-brown transition hover:text-brown-deep"
+                        >
+                          {st.action}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-col items-center justify-center rounded-xl border border-dashed border-warm-border bg-white px-6 py-12 text-center">
+            <p className="max-w-sm text-sm text-muted">
+              No finds yet. Run a search and Scout starts filling your pipeline with
+              people worth reaching.
+            </p>
+            <button
+              onClick={goOutreach}
+              className="mt-4 rounded-lg bg-brown px-4 py-2 text-sm font-semibold text-white transition hover:bg-brown-deep"
+            >
+              Start scouting
+            </button>
+          </div>
+        )}
+      </section>
 
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
         <section className="mt-10">
-          <h2 className="font-serif text-xl font-normal text-ink">Your preferences</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">Your fit and preferences</h2>
+          <p className="mt-1 text-sm text-body/80">
+            The fit level and channels you gravitate toward, learned from the finds
+            you keep and pass on.
+          </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
@@ -5632,7 +5873,7 @@ function DashboardTab({
       {/* -------- Your projects -------- */}
       <section className="mt-10">
         <div className="flex items-center justify-between">
-          <h2 className="font-serif text-xl font-normal text-ink">Your projects</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">Your projects</h2>
           <button
             onClick={goOutreach}
             className="text-xs font-bold text-accent transition hover:underline"
@@ -5672,7 +5913,7 @@ function DashboardTab({
 
       {/* -------- You vs the community (real aggregate averages) -------- */}
       <section className="mt-10">
-        <h2 className="font-serif text-xl font-normal text-ink">You vs the community</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">You vs the community</h2>
         <p className="mt-1 text-sm text-body/80">
           How you compare to everyone else using Scout. Aggregate averages only,
           never anyone&apos;s private data.
@@ -5718,7 +5959,11 @@ function DashboardTab({
 
       {/* -------- What Scout has learned about YOU lately (individual) -------- */}
       <section className="mt-10">
-        <h2 className="font-serif text-xl font-normal text-ink">What Scout has learned about you</h2>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
+        <p className="mt-1 text-sm text-body/80">
+          Recent, private-to-you signals Scout picks up as you work. These steer who it
+          finds and how it drafts.
+        </p>
         {insights.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {insights.map((ins) => (
@@ -5761,7 +6006,7 @@ function DashboardTab({
       {/* -------- Getting sharper across Scout (public, everyone) -------- */}
       {community && (community.patterns?.decidedFinds || 0) > 0 && (
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
-          <h2 className="font-serif text-xl font-normal text-ink">Getting sharper across Scout</h2>
+          <h2 className="text-lg font-semibold tracking-tight text-ink">Getting sharper across Scout</h2>
           <p className="mt-1 text-sm text-body/80">
             Scout learns from everyone&apos;s decisions (anonymously, in aggregate). The
             more the community decides, the better it matches for all of you.
@@ -5824,7 +6069,7 @@ function DashboardTab({
         if (!tips.length) return null;
         return (
           <section className="mt-8 rounded-3xl border border-sage/40 bg-sage/10 p-6">
-            <h2 className="font-serif text-xl font-normal text-ink">People like you</h2>
+            <h2 className="text-lg font-semibold tracking-tight text-ink">People like you</h2>
             <p className="mt-1 text-sm text-body/80">
               Patterns from {c.users} other{" "}
               {c.users === 1 ? "person" : "people"} doing{" "}
@@ -6665,7 +6910,7 @@ function TeamTab({
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="brand-text">team</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -7020,7 +7265,7 @@ function TemplatesTab({
   };
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="brand-text">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -7675,7 +7920,7 @@ function ProfileTab({
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="brand-text">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
