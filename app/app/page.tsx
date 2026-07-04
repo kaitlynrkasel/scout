@@ -347,10 +347,19 @@ const DENY_REASONS = [
 ];
 
 // Same normalization the discover engine uses so IDs match across the boundary.
-// Strips honorifics/suffixes and keeps first + last token so "John Smith" and
-// "John J. Smith" collapse.
+// Strips role suffixes (", VP of…", " at Acme", " (Head of X)"), honorifics,
+// name suffixes, and middle names/initials — then keeps first + last token.
+// So "John Smith", "John J. Smith", "John Smith, Marketing Lead", and
+// "Dr. John Smith Jr" all collapse to "johnsmith".
 function normNameKey(s: string): string {
-  const cleaned = String(s || "")
+  // Drop everything after the first role separator, then normalize what's left.
+  // People/orgs almost never have commas or pipes in their actual name; when
+  // they do appear, they always mark a role/title/company suffix that would
+  // otherwise poison the "last token" heuristic below.
+  const dropRoleSuffix = String(s || "")
+    .split(/[,|·•—–]|\s+[-–—]\s+|\s+\bat\b\s+|\s+\bfor\b\s+/i)[0]
+    .replace(/\([^)]*\)/g, " ");
+  const cleaned = dropRoleSuffix
     .toLowerCase()
     .replace(/\b(dr|mr|mrs|ms|prof|rev|hon|sir)\.?\s+/g, "")
     .replace(/\b(jr|sr|ii|iii|iv|v|phd|md|esq|do|dds|rn|mba|cpa)\.?$/g, "")

@@ -218,7 +218,14 @@ function canonicalLink(u: string): string {
 // and "John Jacob Smith" all collapse to the same key. Strips honorifics,
 // suffixes, and middle names/initials, then keeps first + last token.
 function normName(s: string): string {
-  const cleaned = String(s || "")
+  // Drop everything after the first role separator so "Neal Eggers, VP of
+  // Customer Success" and "Neal Eggers" both normalize to "nealeggers".
+  // Without this, the "first + last token" heuristic below picks "success"
+  // as the last token for the first form and dedup fails.
+  const dropRoleSuffix = String(s || "")
+    .split(/[,|·•—–]|\s+[-–—]\s+|\s+\bat\b\s+|\s+\bfor\b\s+/i)[0]
+    .replace(/\([^)]*\)/g, " ");
+  const cleaned = dropRoleSuffix
     .toLowerCase()
     // Drop leading role/title prefixes ("VP of Marketing at John Smith" style
     // never actually appears — extractor puts the name first — so this is
