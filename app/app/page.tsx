@@ -2508,7 +2508,7 @@ function ScoutTool({
           <div className="mb-6">
             <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">Outreach</h1>
             <p className="mt-1 text-sm text-body">
-              Find the right people and draft messages in your voice.
+              Find your people and draft messages in your voice.
             </p>
           </div>
 
@@ -2522,8 +2522,9 @@ function ScoutTool({
                   Already reaching out somewhere else?
                 </div>
                 <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                  Drop in a CSV of who you've already contacted. Scout won't
-                  resurface them and starts learning what a fit looks like for you.
+                  Drop in a CSV of how you've been tracking your contacts. Scout
+                  won't resurface them and starts learning what a fit looks like
+                  for you.
                 </p>
               </div>
               <button
@@ -2601,10 +2602,6 @@ function ScoutTool({
                     placeholder="e.g. Anna Belt — Nashville folk-rock singer-songwriter, new single out now, for fans of Stevie Nicks and Maggie Rogers."
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
-                  <p className="mt-1.5 text-xs text-body/70">
-                    Scout weaves this into every message for this project, so pitches
-                    sound like they're really about {activeProject?.name || "them"}.
-                  </p>
                 </div>
               </div>
 
@@ -5114,11 +5111,11 @@ function DashboardTab({
   return (
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
       <h1 className="font-serif text-[32px] font-normal tracking-tight text-ink">Dashboard</h1>
-      <p className="mt-1 text-sm text-body">
-        {dashTab === "you"
-          ? "Your outreach notebook — everything in one place."
-          : "How Scout is doing across everyone using it."}
-      </p>
+      {dashTab === "scout" && (
+        <p className="mt-1 text-sm text-body">
+          How Scout is doing across everyone using it.
+        </p>
+      )}
 
       {/* -------- Tab switcher -------- */}
       <div className="mt-5 inline-flex rounded-xl border border-warm-border bg-white p-1 shadow-card">
@@ -5234,7 +5231,7 @@ function DashboardTab({
                   <p className="mt-3 max-w-md text-sm leading-relaxed text-body/80">
                     {learned.trend
                       ? learned.trend.delta < -0.01
-                        ? "Fewer of Scout's finds are misses now than when you started — it's getting your taste."
+                        ? "More of Scout's finds are landing now than when you started. It's getting your taste."
                         : learned.trend.delta > 0.01
                         ? "Recent finds are landing less often. Adjusting your goal wording or project context can sharpen them."
                         : "Holding steady as Scout learns what fits."
@@ -5243,9 +5240,11 @@ function DashboardTab({
                 </>
               )}
               <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
-                <div className="text-xs text-body/70">
-                  ~{timeSaved} <span className="text-muted">saved (est.)</span>, about 6 min
-                  per message.
+                <div
+                  className="text-xs text-body/70"
+                  title="Estimate based on ~6 minutes to research one person and write a personalized message by hand, multiplied by the number of drafts Scout has written for you."
+                >
+                  ~{timeSaved} <span className="text-muted">saved (est.)</span>
                 </div>
                 <button
                   onClick={goOutreach}
@@ -5309,41 +5308,9 @@ function DashboardTab({
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
         <section className="mt-10">
-          <h2 className="font-serif text-xl font-normal text-ink">Your fit and preferences</h2>
-          <p className="mt-1 text-sm text-body/80">
-            The fit level and channels you gravitate toward, learned from the finds
-            you keep and pass on.
-          </p>
+          <h2 className="font-serif text-xl font-normal text-ink">Your preferences</h2>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            {/* Fit sweet spot */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
-              <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-                Your fit sweet spot
-              </div>
-              {learned.keptFit != null ? (
-                <>
-                  <div className="mt-1 text-3xl font-extrabold tracking-tight text-ink">
-                    {Math.round(learned.keptFit * 100)}%
-                  </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                    Average fit of the people you reach out to
-                    {learned.deniedFit != null && (
-                      <>
-                        {" "}
-                        vs {Math.round(learned.deniedFit * 100)}% for the ones you pass.
-                        Scout leans toward your range.
-                      </>
-                    )}
-                  </p>
-                </>
-              ) : (
-                <p className="mt-2 text-xs text-body/70">
-                  Draft a few finds and this shows the fit level you gravitate toward.
-                </p>
-              )}
-            </div>
-
             {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
             {learned.replyRate != null && (
               <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
@@ -5492,12 +5459,6 @@ function DashboardTab({
                 lowerBetter
               />
               <CompareRow
-                label="Fit sweet spot"
-                you={learned.keptFit}
-                them={community.avgFitKept}
-                fmt="pct"
-              />
-              <CompareRow
                 label="Finds saved"
                 you={finds.length}
                 them={community.avgFinds}
@@ -5512,8 +5473,7 @@ function DashboardTab({
             </div>
             <p className="mt-3 text-xs text-body/60">
               Based on {community.users} other{" "}
-              {community.users === 1 ? "person" : "people"} using Scout. Small samples
-              are noisy, this sharpens as the community grows.
+              {community.users === 1 ? "person" : "people"} using Scout.
             </p>
           </>
         )}
@@ -5522,10 +5482,6 @@ function DashboardTab({
       {/* -------- What Scout has learned about YOU lately (individual) -------- */}
       <section className="mt-10">
         <h2 className="font-serif text-xl font-normal text-ink">What Scout has learned about you</h2>
-        <p className="mt-1 text-sm text-body/80">
-          Recent, private-to-you signals Scout picks up as you work. These steer who it
-          finds and how it drafts.
-        </p>
         {insights.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {insights.map((ins) => (
@@ -5778,19 +5734,6 @@ function DashboardTab({
 
       {dashTab === "you" && (
       <>
-      {/* -------- Honesty note about reply tracking -------- */}
-      <section className="mt-8 rounded-2xl border border-dashed border-warm-border bg-white/60 px-5 py-4">
-        <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-          Coming soon
-        </div>
-        <p className="mt-1.5 text-sm leading-relaxed text-body">
-          Right now Scout drafts messages and you send them from your own email or DMs,
-          so opens and replies aren&apos;t tracked automatically yet. When you connect
-          sending, this dashboard will show real response and reply rates, not
-          estimates.
-        </p>
-      </section>
-
       {/* -------- CTA -------- */}
       <section className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl bg-brand-gradient px-6 py-5 text-white shadow-soft">
         <div>
@@ -6006,8 +5949,7 @@ function OutreachAdvice({
                   : `Review my ${myDrafts.length} recent ${myDrafts.length === 1 ? "draft" : "drafts"}`}
               </button>
               <span className="text-xs text-body/60">
-                Scout reads your recent messages and coaches you on them. Uses a small
-                amount of API credit.
+                Scout reads your recent messages and coaches you on them.
               </span>
             </div>
             {coachErr && (
@@ -6075,7 +6017,7 @@ function OutreachAdvice({
       {/* Proven playbook */}
       <div className="mt-5">
         <div className="text-xs font-bold uppercase tracking-wider text-body/60">
-          The proven playbook
+          Fundamentals
         </div>
         <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
           {playbook.map((tip) => (
@@ -6766,10 +6708,9 @@ function TemplatesTab({
         Your <span className="brand-text">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Set up how each kind of message should sound, an email, a LinkedIn note, an
-        Instagram DM. When Scout drafts outreach, it uses the right format and
-        your voice for each channel. Keep a template global, or assign it to a
-        specific project or category so each artist gets their own voice.
+        Set up how each kind of message should sound. When Scout drafts outreach,
+        it uses your voice. Keep a template universal, or assign it to a specific
+        project or category.
       </p>
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -6840,11 +6781,6 @@ function TemplatesTab({
               ))}
             </select>
           </div>
-          <p className="mt-2 text-xs leading-relaxed text-body/80">
-            Scope this voice to one project (say, a specific artist) or a single
-            category within it. Leave it on <span className="font-semibold">All projects</span> to
-            use it everywhere.
-          </p>
         </div>
         <div className="mt-5">
           <button
