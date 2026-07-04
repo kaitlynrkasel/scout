@@ -5202,19 +5202,19 @@ function DashboardTab({
         <div className="rounded-2xl rounded-tl-none border border-warm-border bg-surface p-5 shadow-card paper-card sm:p-6">
           <div className="grid gap-5 lg:grid-cols-[1.3fr_1fr]">
             {/* Taste note — taped ruled paper */}
-            <div className="note-paper relative rounded-xl border border-warm-border px-6 pb-6 pt-7">
-              <div className="text-[11px] font-bold uppercase leading-7 tracking-[0.12em] text-muted">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted">
                 What Scout is learning about your taste
               </div>
               {learned.decided === 0 ? (
-                <p className="mt-7 max-w-md text-sm leading-7 text-body/70">
+                <p className="mt-3 max-w-md text-sm leading-relaxed text-body/70">
                   Nothing learned yet. As you draft messages and set aside finds that
                   aren&apos;t a fit, your deny rate and preferences show up here.
                 </p>
               ) : (
                 <>
-                  <div className="mt-7 flex h-14 items-center gap-3">
-                    <span className="text-5xl font-extrabold leading-none tracking-tight text-ink">
+                  <div className="mt-3 flex items-baseline gap-3">
+                    <span className="text-5xl font-extrabold tracking-tight text-ink">
                       {Math.round(learned.denyRate * 100)}%
                     </span>
                     {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
@@ -5230,10 +5230,10 @@ function DashboardTab({
                       </span>
                     )}
                   </div>
-                  <div className="text-[11px] font-bold uppercase leading-7 tracking-wider text-muted">
+                  <div className="mt-1 text-[11px] font-bold uppercase tracking-wider text-muted">
                     Deny rate
                   </div>
-                  <p className="mt-7 max-w-md text-sm leading-7 text-body/80">
+                  <p className="mt-3 max-w-md text-sm leading-relaxed text-body/80">
                     {learned.trend
                       ? learned.trend.delta < -0.01
                         ? "Fewer of Scout's finds are misses now than when you started — it's getting your taste."
@@ -5244,8 +5244,8 @@ function DashboardTab({
                   </p>
                 </>
               )}
-              <div className="mt-7 flex flex-wrap items-center gap-3">
-                <div className="text-xs leading-7 text-body/70">
+              <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-warm-border pt-4">
+                <div className="text-xs text-body/70">
                   ~{timeSaved} <span className="text-muted">saved (est.)</span>, about 6 min
                   per message.
                 </div>
