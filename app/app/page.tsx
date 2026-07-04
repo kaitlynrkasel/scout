@@ -1910,6 +1910,26 @@ function ScoutTool({
     setMtText("");
   }
 
+  // Edit an existing template in place (channel, text, and where it applies).
+  function updateTemplate(
+    id: string,
+    patch: { channel: string; text: string; projectId?: string; categoryId?: string }
+  ) {
+    saveTpls(
+      myTemplates.map((t) =>
+        t.id === id
+          ? {
+              ...t,
+              channel: patch.channel,
+              text: patch.text,
+              projectId: patch.projectId,
+              categoryId: patch.categoryId,
+            }
+          : t
+      )
+    );
+  }
+
   // Which templates apply when drafting for a given project + category. Global
   // templates (no projectId) always apply; project-scoped ones apply to that
   // project; category-scoped ones only when that exact category is in play.
@@ -3557,6 +3577,7 @@ function ScoutTool({
           add={addTemplate}
           list={myTemplates}
           remove={(id) => saveTpls(myTemplates.filter((s) => s.id !== id))}
+          onUpdate={updateTemplate}
           projects={projects}
           categories={categories}
           scopeProjectId={mtProjectId}
@@ -4779,7 +4800,11 @@ function FindDetailModal({
                   </div>
                 )}
                 <iframe
-                  src={o.url}
+                  // Routed through our own origin (see app/api/site-preview) so
+                  // X-Frame-Options / CSP frame-ancestors on the target site
+                  // can't refuse the embed — those headers apply to a direct
+                  // cross-origin request, not to our own proxied response.
+                  src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
                   title={`Preview of ${host || o.name}`}
                   onLoad={() => setFrameLoaded(true)}
                   referrerPolicy="no-referrer"
@@ -4794,8 +4819,8 @@ function FindDetailModal({
             )}
             {o.url && (
               <p className="mt-2 text-[11px] leading-relaxed text-body/50">
-                Some sites block embedding for security. If the preview stays blank,
-                use{" "}
+                A few sites still resist previewing here (login walls, aggressive
+                anti-bot checks). If the preview stays blank, use{" "}
                 <a
                   href={o.url}
                   target="_blank"
@@ -8673,6 +8698,7 @@ function TemplatesTab({
   add,
   list,
   remove,
+  onUpdate,
   projects,
   categories,
   scopeProjectId,
@@ -8688,6 +8714,10 @@ function TemplatesTab({
   add: () => void;
   list: OutreachTemplate[];
   remove: (id: string) => void;
+  onUpdate: (
+    id: string,
+    patch: { channel: string; text: string; projectId?: string; categoryId?: string }
+  ) => void;
   projects: Project[];
   categories: Category[];
   scopeProjectId: string;
@@ -8695,6 +8725,35 @@ function TemplatesTab({
   setScopeProjectId: (id: string) => void;
   setScopeCategoryId: (id: string) => void;
 }) {
+  // Which saved template (by id) is loaded into the form above for editing.
+  // "" means the form is in add-a-new-template mode.
+  const [editingId, setEditingId] = useState("");
+  function startEdit(t: OutreachTemplate) {
+    setEditingId(t.id);
+    setChannel(t.channel);
+    setText(t.text);
+    setScopeProjectId(t.projectId || "");
+    setScopeCategoryId(t.categoryId || "");
+  }
+  function cancelEdit() {
+    setEditingId("");
+    setText("");
+  }
+  function submit() {
+    if (!text.trim()) return;
+    if (editingId) {
+      onUpdate(editingId, {
+        channel,
+        text: text.trim(),
+        projectId: scopeProjectId || undefined,
+        categoryId: scopeProjectId && scopeCategoryId ? scopeCategoryId : undefined,
+      });
+      setEditingId("");
+      setText("");
+    } else {
+      add();
+    }
+  }
   const scopeCats = categories.filter((c) => c.projectId === scopeProjectId);
   // Human label for where a saved template applies.
   const scopeLabel = (t: OutreachTemplate): string => {
@@ -8785,14 +8844,22 @@ function TemplatesTab({
             </select>
           </div>
         </div>
-        <div className="mt-5">
+        <div className="mt-5 flex items-center gap-3">
           <button
-            onClick={add}
+            onClick={submit}
             disabled={!text.trim()}
             className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
           >
-            Save template
+            {editingId ? "Update template" : "Save template"}
           </button>
+          {editingId && (
+            <button
+              onClick={cancelEdit}
+              className="text-sm font-semibold text-body/60 transition hover:text-accent"
+            >
+              Cancel edit
+            </button>
+          )}
         </div>
       </section>
 
@@ -8810,7 +8877,11 @@ function TemplatesTab({
             {list.map((s) => (
               <div
                 key={s.id}
-                className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card"
+                className={`rounded-2xl border p-5 shadow-card transition ${
+                  editingId === s.id
+                    ? "border-coral/50 bg-warm-bg/40"
+                    : "border-warm-border bg-surface"
+                }`}
               >
                 <div className="mb-2.5 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
@@ -8825,12 +8896,20 @@ function TemplatesTab({
                   >
                     {scopeLabel(s)}
                   </span>
-                  <button
-                    onClick={() => remove(s.id)}
-                    className="ml-auto text-xs font-semibold text-body/60 transition hover:text-accent"
-                  >
-                    Remove
-                  </button>
+                  <span className="ml-auto flex items-center gap-3">
+                    <button
+                      onClick={() => startEdit(s)}
+                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
+                    >
+                      {editingId === s.id ? "Editing…" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => remove(s.id)}
+                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
+                    >
+                      Remove
+                    </button>
+                  </span>
                 </div>
                 <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
                   {s.text}
