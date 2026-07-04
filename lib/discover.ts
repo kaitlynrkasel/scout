@@ -49,12 +49,45 @@ function isNetworkingUseCase(useCase: string): boolean {
   return /\b(network|coffee|mentor|connect|advice|informational)/i.test(useCase);
 }
 
-// Obvious how-to / advice / listicle pages — never actual prospects. Filtered
-// before extraction so we don't waste calls turning guides into "opportunities".
-function looksLikeAdvice(title: string): boolean {
-  return /\b(how to|how i|tips?|a guide|guide to|ways to|steps to|best practices|advice|templates?|examples?|what to say|do'?s and don'?ts|ultimate guide|complete guide)\b/i.test(
-    String(title || "")
+// Influencer / creator discovery: brand looking for social creators, PR looking
+// for TikTokers to send product to, etc. These use cases live mostly outside
+// Scout's crawlable web — IG/TikTok/X are login-walled — so we lean on
+// roundup articles, blog listicles, and aggregator sites that name creators
+// and link out to their socials.
+function isInfluencerUseCase(useCase: string): boolean {
+  return /\b(influenc|creator|content creator|tiktok(er)?|instagram(m?er)?|youtub(er|e creator)|streamer|micro-?influenc|nano-?influenc|ugc)/i.test(
+    useCase
   );
+}
+
+// Pages structured as ranked / listed roundups — the primary source for
+// finding creators when we can't crawl the social platforms themselves.
+// "Top 10 beauty TikTokers", "Best Nashville influencers to follow", etc.
+export function looksLikeListicle(title: string): boolean {
+  const t = String(title || "");
+  if (!t.trim()) return false;
+  // A leading number ("10 Beauty Influencers…") is a strong signal.
+  if (/^\s*\d{1,3}\b/.test(t)) return true;
+  return /\b(top\s+\d+|best\s+\d+|our (favorite|favourite|top)\s+\w+|\d+\s+\w+(?:\s+\w+)?\s+to\s+(follow|watch|know)|\w+\s+you should (know|follow)|\d+\s+\w+ (accounts|creators|influencers|people|voices) to)\b/i.test(
+    t
+  );
+}
+
+// Obvious how-to / advice pages — never actual prospects. For influencer use
+// cases, listicle-style roundups DO count as source material (that's how you
+// find creators when their content lives inside login-walled apps), so those
+// bypass this filter. Standard how-to / tips content still gets dropped.
+function looksLikeAdvice(title: string, useCase = ""): boolean {
+  const t = String(title || "");
+  const generic = /\b(how to|how i|tips?|a guide|guide to|ways to|steps to|best practices|advice|templates?|what to say|do'?s and don'?ts|ultimate guide|complete guide)\b/i.test(
+    t
+  );
+  if (!generic) return false;
+  // For influencer discovery, "10 tips for growing on TikTok" is still noise,
+  // but "10 beauty creators to follow" isn't; the listicle check above catches
+  // the second. If BOTH signals match, prefer the listicle read (keep it).
+  if (isInfluencerUseCase(useCase) && looksLikeListicle(t)) return false;
+  return true;
 }
 
 // Podcast episodes, video clips, and interview transcripts almost never make
@@ -93,9 +126,20 @@ async function planQueries(
 
   const jobs = isJobUseCase(useCase);
   const networking = isNetworkingUseCase(useCase);
+  const influencer = isInfluencerUseCase(useCase);
 
   let guidance = "";
-  if (jobs) {
+  if (influencer) {
+    guidance =
+      "Target curated ROUNDUP articles and listicles that NAME real social creators — that's where we find them, " +
+      "since Instagram / TikTok / X block deep search. Combine the specific niche + platform + geography + a " +
+      "roundup signal. Good query patterns: 'top 10 {niche} {platform} {city}', 'best {niche} creators to follow', " +
+      "'{niche} {platform} accounts to know', '{niche} micro-influencer roundup', '{niche} {platform} directory', " +
+      "'linktree {niche} {city}'. Prefer queries that will surface: local magazine / press features (Voyager, " +
+      "Time Out, city guides), brand blog roundups, agency directories, aggregator sites (Later, Modash public " +
+      "pages, HypeAuditor blog, Klear). Include '{platform}.com' handles in queries so pages that mention creator " +
+      "@handles surface. NEVER use 'how to' or 'tips' — those are advice, not creator lists.";
+  } else if (jobs) {
     guidance =
       "Target REAL job/internship openings IN THE USER'S INDUSTRY. Every query should pair the role/field with " +
       "the user's specific industry and sub-field (e.g. for a music-business student wanting marketing: " +
@@ -344,6 +388,94 @@ async function extract(
   }
 }
 
+// Multi-person extraction for INFLUENCER discovery. Roundup articles like
+// "Top 10 beauty TikTokers to follow" name multiple creators; the single-
+// person `extract` above only gets one, wasting 90% of the source. This
+// variant reads the whole article and returns EVERY named creator with their
+// handle when present. Each becomes its own opp, all sharing the same source
+// URL/title so the multi-source dedup works cleanly if a creator appears
+// across two roundups.
+async function extractMultiplePeople(
+  cand: TavilyResult,
+  goal: string,
+  about: string,
+  useCase: string
+): Promise<
+  Array<{
+    name: string;
+    handle: string;
+    email: string;
+    role: string;
+    outlet: string;
+    location: string;
+    why_it_fits: string;
+    fit_score: number | null;
+    channel: string;
+  }>
+> {
+  const sys =
+    `You are a research assistant reading a curated ROUNDUP article that lists multiple real social creators / ` +
+    `influencers. Extract EVERY named creator from the article that fits the user's GOAL. Return ONLY a JSON ` +
+    `object with a "people" array, no prose. Each element: {name (their real name or handle if that's all shown), ` +
+    `handle (their @handle or full social URL — e.g. instagram.com/example, tiktok.com/@example, ` +
+    `youtube.com/@example — prefer the platform the user's GOAL implies), email (only if the article lists a ` +
+    `direct contact email; leave empty otherwise), role (what they do / niche: "beauty creator", "food TikToker", ` +
+    `etc.), outlet (the platform they're mostly on or their brand), location (city or country if the article ` +
+    `mentions it), why_it_fits (one specific true detail about THIS creator's own content or angle from the ` +
+    `article, not the article's premise; empty if unknown), fit_score (0..1 how well this specific creator ` +
+    `matches the goal), channel (one of "Instagram", "TikTok", "YouTube", "X", "Email", "Website Form", ` +
+    `"Unknown" — pick the platform their handle points at)}. Never invent handles or emails; if the article ` +
+    `only mentions a name in passing without any social handle or way to reach them, SKIP that person. Return ` +
+    `an empty array if there are no genuinely reachable creators on the page.`;
+  const user =
+    `USER GOAL: ${goal}\nUSE CASE: ${useCase}\nABOUT THE USER: ${about}\n\n` +
+    `SEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 6000)}`;
+  try {
+    const parsed: any = parseJsonLoose(await claudeJson(sys, user));
+    const arr: any[] = Array.isArray(parsed?.people) ? parsed.people : [];
+    const out: Array<{
+      name: string;
+      handle: string;
+      email: string;
+      role: string;
+      outlet: string;
+      location: string;
+      why_it_fits: string;
+      fit_score: number | null;
+      channel: string;
+    }> = [];
+    for (const p of arr) {
+      const name = String(p?.name || "").trim();
+      const handle = String(p?.handle || "").trim();
+      // A creator needs at least a name AND some way to reach them (handle or
+      // email). Skip pure name mentions.
+      if (!name || (!handle && !String(p?.email || "").trim())) continue;
+      const fitRaw = p?.fit_score;
+      const fit =
+        typeof fitRaw === "number"
+          ? fitRaw
+          : typeof fitRaw === "string"
+            ? parseFloat(fitRaw)
+            : null;
+      out.push({
+        name,
+        handle,
+        email: String(p?.email || "").trim(),
+        role: String(p?.role || "").trim(),
+        outlet: String(p?.outlet || "").trim(),
+        location: String(p?.location || "").trim(),
+        why_it_fits: String(p?.why_it_fits || "").trim(),
+        fit_score: fit != null && !Number.isNaN(fit) ? fit : null,
+        channel: String(p?.channel || "").trim() || "Unknown",
+      });
+    }
+    return out;
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    return [];
+  }
+}
+
 // One candidate that discover() considered but dropped, plus the human-readable
 // reason. Surfaced in the UI's "See what was filtered" panel so we can debug
 // prompt/filter tweaks without re-running full searches.
@@ -394,7 +526,7 @@ export async function discover(
     if (candidates.length >= maxItems * 4) break;
     const results = await tavilySearch(q, 8);
     for (const r of results) {
-      if (looksLikeAdvice(r.title)) {
+      if (looksLikeAdvice(r.title, useCase)) {
         logSkip(r.title, r.url, "title looks like advice / how-to");
         continue;
       }
@@ -423,17 +555,74 @@ export async function discover(
   let skippedDupes = 0;
   let skippedNotFit = 0;
 
+  // Influencer roundup articles list MULTIPLE creators; those get a different
+  // extractor that returns an array of people, all sharing the same source
+  // URL. Everything else runs single-extract as before.
+  const influencer = isInfluencerUseCase(useCase);
+  const isListicle = (c: TavilyResult) => influencer && looksLikeListicle(c.title);
+
   // Extract in small parallel batches so the spike is reasonably fast.
   const batchSize = 4;
   for (let i = 0; i < candidates.length && opps.length < maxItems; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
-    const recs = await Promise.all(
-      batch.map((c) => extract(c, goal, about, useCase, feedback))
+    const rawResults = await Promise.all(
+      batch.map(async (c) => {
+        if (isListicle(c)) {
+          const people = await extractMultiplePeople(c, goal, about, useCase);
+          return { multi: true as const, people, cand: c };
+        }
+        const rec = await extract(c, goal, about, useCase, feedback);
+        return { multi: false as const, rec, cand: c };
+      })
     );
-    for (let j = 0; j < recs.length; j++) {
+    // Flatten multi-person listicles into individual {rec, cand} pairs so the
+    // existing per-record processing logic below handles them the same way as
+    // single-person extracts. Every person from the same listicle keeps the
+    // listicle's URL/title as their source.
+    const flat: Array<{
+      rec: (Partial<Opportunity> & { isRelevant?: boolean }) | null;
+      cand: TavilyResult;
+    }> = [];
+    for (const r of rawResults) {
+      if (!r.multi) {
+        flat.push({ rec: r.rec, cand: r.cand });
+        continue;
+      }
+      if (!r.people.length) {
+        // The listicle extractor said "no reachable creators here" — log it as
+        // a skip so it's visible in the filter panel, don't retry with the
+        // single-person extractor.
+        logSkip(r.cand.title, r.cand.url, "listicle produced no reachable creators");
+        continue;
+      }
+      for (const p of r.people) {
+        // Downstream reads raw snake_case fields off the extracted record;
+        // mirror that shape so the multi-person path drops in cleanly.
+        flat.push({
+          rec: {
+            isRelevant: true,
+          } as any,
+          cand: r.cand,
+        });
+        Object.assign(flat[flat.length - 1].rec as any, {
+          name: p.name,
+          outlet: p.outlet,
+          channel: p.channel,
+          contact_email: p.email,
+          contact_name: p.name,
+          contact_role: p.role,
+          contact_handle: p.handle,
+          location: p.location,
+          fit_score: p.fit_score,
+          why_it_fits: p.why_it_fits,
+          target_type: "person",
+        });
+      }
+    }
+    for (let j = 0; j < flat.length; j++) {
       if (opps.length >= maxItems) break;
-      const rec = recs[j];
-      const cand = batch[j];
+      const rec = flat[j].rec as any;
+      const cand = flat[j].cand;
       if (!rec) {
         skippedNotFit++;
         logSkip(cand.title, cand.url, "extractor returned nothing");
