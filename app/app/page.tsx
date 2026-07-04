@@ -7,7 +7,7 @@ import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
 import CornerDog from "./CornerDog";
 import { Reveal, CountUp, FadeIn } from "./motion";
-import { ActivityChart, PipelineBar } from "./charts";
+import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import ImportOutreach from "./ImportOutreach";
 import { fileToText } from "@/lib/fileText";
@@ -5066,6 +5066,51 @@ function DashboardTab({
     .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
     .slice(0, 6);
 
+  // Personal greeting: time of day + the user's first name, then an honest,
+  // specific status line about this week's finds (only shown when there's news).
+  const hour = new Date().getHours();
+  const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+  const firstName = (profile.name || "").trim().split(/\s+/)[0] || "";
+  const newThisWeek = finds.filter((f) => f.addedAt && wkNow - f.addedAt <= WK).length;
+  const strongThisWeek = finds.filter(
+    (f) => f.addedAt && wkNow - f.addedAt <= WK && (f.opp.fitScore || 0) >= 0.8
+  ).length;
+
+  // Scout's pick: the strongest still-actionable find (not yet sent/passed), used
+  // for the dark spotlight card. whyItFits is Scout's real reason to reach out.
+  const pick = finds
+    .filter(
+      (f) =>
+        (f.status === "new" || f.status === "drafted") &&
+        typeof f.opp.fitScore === "number"
+    )
+    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0))[0];
+  const initials = (s: string) =>
+    (s || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || "")
+      .join("") || "?";
+
+  // Honest per-tile trend series: only People found and Taken to send have real
+  // per-week timestamps, so only those carry a sparkline. Searches and Drafts
+  // have no timeline, so they stay as plain figures rather than a fabricated one.
+  const foundSeries = weekly.map((w) => w.added);
+  const sentSeries = weekly.map((w) => w.sent);
+  const withMovement = (s: number[]) => (s.some((v) => v > 0) ? s : undefined);
+  const metrics: {
+    label: string;
+    value: number;
+    series?: number[];
+    delta?: number;
+  }[] = [
+    { label: "Searches", value: activity.searches },
+    { label: "People found", value: activity.found, series: withMovement(foundSeries), delta: weekly[WEEKS - 1].added },
+    { label: "Drafts written", value: activity.drafts },
+    { label: "Taken to send", value: activity.copies, series: withMovement(sentSeries), delta: weekly[WEEKS - 1].sent },
+  ];
+
   const channels = new Set(templates.map((t) => t.channel)).size;
   const projectsWithContext = projects.filter((p) => (p.context || "").trim()).length;
   // Honest, clearly-labeled estimate: ~6 min to find + write one personal message.
@@ -5129,33 +5174,48 @@ function DashboardTab({
 
   return (
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Dashboard</h1>
-      <p className="mt-1 text-sm text-body">
-        {dashTab === "you"
-          ? "Your outreach notebook — everything in one place."
-          : "How Scout is doing across everyone using it."}
-      </p>
-
-      {/* -------- Tab switcher -------- */}
-      <div className="mt-5 inline-flex rounded-xl border border-warm-border bg-white p-1 shadow-card">
-        {(
-          [
-            ["you", "You"],
-            ["scout", "Scout-wide"],
-          ] as const
-        ).map(([val, label]) => (
-          <button
-            key={val}
-            onClick={() => setDashTab(val)}
-            className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
-              dashTab === val
-                ? "bg-brown text-white shadow-soft"
-                : "text-body/70 hover:text-ink"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
+      {/* -------- Header: greeting + tab switcher -------- */}
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+            {dashTab === "you"
+              ? firstName
+                ? `Good ${partOfDay}, ${firstName}`
+                : `Good ${partOfDay}`
+              : "Scout-wide"}
+          </h1>
+          <p className="mt-1 text-sm text-body">
+            {dashTab === "you"
+              ? newThisWeek > 0
+                ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week${
+                    strongThisWeek > 0
+                      ? ` — ${strongThisWeek} ${strongThisWeek === 1 ? "looks" : "look"} strong`
+                      : ""
+                  }. Here's where things stand.`
+                : "Here's where your outreach stands."
+              : "How Scout is doing across everyone using it."}
+          </p>
+        </div>
+        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-white p-1 shadow-card">
+          {(
+            [
+              ["you", "You"],
+              ["scout", "Scout-wide"],
+            ] as const
+          ).map(([val, label]) => (
+            <button
+              key={val}
+              onClick={() => setDashTab(val)}
+              className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+                dashTab === val
+                  ? "bg-brown text-white shadow-soft"
+                  : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {dashTab === "you" && (
@@ -5238,7 +5298,21 @@ function DashboardTab({
 
         <div className="flex flex-col gap-5 rounded-xl border border-warm-border bg-white p-5 shadow-card">
           <div>
-            <h2 className="text-sm font-semibold text-ink">Match quality</h2>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-ink">Match quality</h2>
+              {onTarget != null && learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
+                <span
+                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
+                    learned.trend.delta < 0
+                      ? "bg-success/10 text-success-deep"
+                      : "bg-attention/10 text-attention"
+                  }`}
+                >
+                  {learned.trend.delta < 0 ? "▲" : "▼"}{" "}
+                  {Math.abs(Math.round(learned.trend.delta * 100))} pts
+                </span>
+              )}
+            </div>
             {onTarget == null ? (
               <p className="mt-2 text-xs leading-relaxed text-muted">
                 Draft or pass on a few finds and Scout starts showing how well it
@@ -5246,25 +5320,10 @@ function DashboardTab({
               </p>
             ) : (
               <>
-                <div className="mt-2 flex items-baseline gap-2">
-                  <span className="text-3xl font-semibold leading-none tabular-nums text-ink">
-                    {onTarget}%
-                  </span>
-                  <span className="text-xs text-muted">on target</span>
-                  {learned.trend && Math.abs(learned.trend.delta) >= 0.01 && (
-                    <span
-                      className={`ml-auto inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold ${
-                        learned.trend.delta < 0
-                          ? "bg-success/10 text-success-deep"
-                          : "bg-attention/10 text-attention"
-                      }`}
-                    >
-                      {learned.trend.delta < 0 ? "▲" : "▼"}{" "}
-                      {Math.abs(Math.round(learned.trend.delta * 100))} pts
-                    </span>
-                  )}
+                <div className="mt-3 flex justify-center">
+                  <MatchGauge pct={onTarget} />
                 </div>
-                <p className="mt-2 text-xs leading-relaxed text-muted">
+                <p className="mt-2 text-center text-xs leading-relaxed text-muted">
                   {learned.trend && learned.trend.delta < -0.01
                     ? "Sharper than when you started — fewer of Scout's finds are misses."
                     : learned.trend && learned.trend.delta > 0.01
@@ -5293,19 +5352,75 @@ function DashboardTab({
         </div>
       </section>
 
-      {/* -------- Activity metrics (hairline strip) -------- */}
-      <section className="mt-4 grid grid-cols-2 gap-px overflow-hidden rounded-xl border border-warm-border bg-warm-border sm:grid-cols-4">
-        {(
-          [
-            ["Searches", activity.searches],
-            ["People found", activity.found],
-            ["Drafts written", activity.drafts],
-            ["Taken to send", activity.copies],
-          ] as const
-        ).map(([label, n]) => (
-          <div key={label} className="bg-white px-4 py-3.5">
-            <div className="text-xl font-semibold leading-none tabular-nums text-ink">{n}</div>
-            <div className="mt-1.5 text-xs text-muted">{label}</div>
+      {/* -------- Scout's pick (dark spotlight) -------- */}
+      {pick && (
+        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-coffee p-6 shadow-soft">
+          <span
+            className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
+            style={{ background: "radial-gradient(circle, rgba(200,184,153,.16), transparent 70%)" }}
+            aria-hidden
+          />
+          <span className="z-[1] grid h-14 w-14 shrink-0 place-items-center rounded-full border-2 border-white/15 bg-gradient-to-br from-[#e8dcc4] to-clay text-lg font-bold text-coffee">
+            {initials(pick.opp.name)}
+          </span>
+          <div className="z-[1] min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-clay">
+              <img
+                src="/scout-logo.png"
+                alt=""
+                width={15}
+                height={15}
+                className="h-[15px] w-[15px]"
+                style={{ filter: "brightness(0) invert(0.82) sepia(0.3)" }}
+              />
+              Scout&rsquo;s pick
+            </div>
+            <h3 className="mt-1.5 truncate text-[17px] font-semibold tracking-tight text-white">
+              {pick.opp.name}
+            </h3>
+            <p className="mt-1 max-w-[52ch] text-sm leading-relaxed text-[#c9c0b4]">
+              {(pick.opp.whyItFits || "").trim() ||
+                "Your strongest still-open match — worth a short, specific intro."}
+            </p>
+          </div>
+          <div className="z-[1] flex shrink-0 items-center gap-5">
+            {typeof pick.opp.fitScore === "number" && (
+              <div className="text-xs text-[#a89f92]">
+                Fit{" "}
+                <b className="text-[15px] font-bold text-white tabular-nums">
+                  {Math.round(pick.opp.fitScore * 100)}%
+                </b>
+              </div>
+            )}
+            <button
+              onClick={goFinds}
+              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-white"
+            >
+              Draft an intro &rarr;
+            </button>
+          </div>
+        </section>
+      )}
+
+      {/* -------- Activity metrics (tiles; sparkline only where the data is real) -------- */}
+      <section className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
+        {metrics.map((m) => (
+          <div
+            key={m.label}
+            className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="text-xl font-semibold leading-none tabular-nums text-ink">
+                {m.value}
+              </div>
+              {m.series && <Sparkline data={m.series} />}
+            </div>
+            <div className="mt-1.5 text-xs text-muted">{m.label}</div>
+            {typeof m.delta === "number" && m.delta > 0 && (
+              <div className="mt-2 text-[11px] font-semibold text-success-deep">
+                +{m.delta} this week
+              </div>
+            )}
           </div>
         ))}
       </section>
@@ -5340,19 +5455,59 @@ function DashboardTab({
                     typeof f.opp.fitScore === "number"
                       ? Math.round(f.opp.fitScore * 100)
                       : null;
+                  const palette = ["#7c5837", "#8c9a76", "#a9761f", "#5d4026", "#3f7a52", "#b0553f"];
+                  const hash = (f.opp.name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+                  const avatar = palette[hash % palette.length];
+                  const dot =
+                    f.status === "replied"
+                      ? "bg-success"
+                      : f.status === "new"
+                      ? "bg-brown"
+                      : "bg-muted";
                   return (
                     <tr key={f.id} className="border-t border-warm-border transition hover:bg-warm-bg/50">
-                      <td className="max-w-[22rem] truncate px-4 py-3 font-medium text-ink">
-                        {f.opp.name}
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span
+                            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-xs font-semibold text-white"
+                            style={{ backgroundColor: avatar }}
+                            aria-hidden
+                          >
+                            {initials(f.opp.name)}
+                          </span>
+                          <span className="min-w-0">
+                            <span className="block max-w-[18rem] truncate font-medium text-ink">
+                              {f.opp.name}
+                            </span>
+                            {f.opp.outlet && (
+                              <span className="block max-w-[18rem] truncate text-xs text-muted">
+                                {f.opp.outlet}
+                              </span>
+                            )}
+                          </span>
+                        </div>
                       </td>
                       <td className="hidden px-4 py-3 text-muted sm:table-cell">
                         {f.opp.channel || "—"}
                       </td>
-                      <td className="px-4 py-3 tabular-nums text-body">
-                        {fit != null ? `${fit}%` : "—"}
+                      <td className="px-4 py-3">
+                        {fit != null ? (
+                          <div className="flex items-center gap-2.5">
+                            <span className="tabular-nums text-body">{fit}%</span>
+                            <span className="h-1.5 w-[52px] overflow-hidden rounded-full bg-warm-bg">
+                              <span
+                                className="block h-full rounded-full bg-brown"
+                                style={{ width: `${fit}%` }}
+                              />
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${st.cls}`}>
+                        <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${st.cls}`}>
+                          <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
                           {st.label}
                         </span>
                       </td>
