@@ -49,7 +49,7 @@ export default function AuthScreen() {
           </span>
         </div>
 
-        <div className="rounded-3xl border border-warm-border bg-white p-7 shadow-soft">
+        <div className="rounded-3xl border border-warm-border bg-surface p-7 shadow-soft">
           <h1 className="text-xl font-extrabold tracking-tight text-ink">
             {mode === "in" ? "Welcome back" : "Create your account"}
           </h1>

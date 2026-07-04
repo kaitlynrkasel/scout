@@ -13,37 +13,37 @@ const config: Config = {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
       },
       colors: {
-        ink: "#201d18", // near-black, faint warm — headings (AA+ on white)
-        body: "#57534c", // body text (~8:1 on white)
-        muted: "#7c776d", // secondary text (~5.3:1 on white, still AA)
+        // Every token references a CSS variable (space-separated RGB triplet)
+        // defined in globals.css, so the whole palette flips for dark mode by
+        // toggling a `.dark` class on <html>. Light values live on :root; dark
+        // overrides on .dark. See globals.css for the actual values.
+        ink: "rgb(var(--c-ink) / <alpha-value>)",
+        body: "rgb(var(--c-body) / <alpha-value>)",
+        muted: "rgb(var(--c-muted) / <alpha-value>)",
 
-        // Brown is the single restrained accent — primary action, selection, state.
-        brown: "#7c5837", // primary action / active nav / accent
-        "brown-deep": "#5d4026", // hover / pressed
-        "brown-tint": "#f2ece1", // soft selection / positive tint
-        clay: "#c8b899", // muted fills / avatars
-        coffee: "#26221c", // deep neutral for the rare dark surface
+        brown: "rgb(var(--c-brown) / <alpha-value>)",
+        "brown-deep": "rgb(var(--c-brown-deep) / <alpha-value>)",
+        "brown-tint": "rgb(var(--c-brown-tint) / <alpha-value>)",
+        clay: "rgb(var(--c-clay) / <alpha-value>)",
+        coffee: "rgb(var(--c-coffee) / <alpha-value>)",
 
-        // Standardized semantic states.
-        success: "#3f7a52", // replied / positive
-        "success-deep": "#2f5c3f",
-        attention: "#a9761f", // needs-attention / due
-        danger: "#b0553f", // denied / error
-        sage: "#8c9a76", // subtle live/connected dot (logo nod)
-        "sage-deep": "#5f6a47",
+        success: "rgb(var(--c-success) / <alpha-value>)",
+        "success-deep": "rgb(var(--c-success-deep) / <alpha-value>)",
+        attention: "rgb(var(--c-attention) / <alpha-value>)",
+        danger: "rgb(var(--c-danger) / <alpha-value>)",
+        sage: "rgb(var(--c-sage) / <alpha-value>)",
+        "sage-deep": "rgb(var(--c-sage-deep) / <alpha-value>)",
 
-        // Surfaces — white panels on a light near-neutral canvas; a distinct
-        // off-white for the sidebar/inset layer.
-        cream: "#f3f2ef", // page canvas (near-neutral, whisper of warmth)
-        surface: "#ffffff", // panels / cards
-        "surface-2": "#fbfbf9", // sidebar / inset layer
+        cream: "rgb(var(--c-cream) / <alpha-value>)",
+        surface: "rgb(var(--c-surface) / <alpha-value>)",
+        "surface-2": "rgb(var(--c-surface-2) / <alpha-value>)",
 
-        // Legacy names, remapped.
-        coral: "#7c5837",
-        blush: "#5d4026",
-        accent: "#5d4026",
-        "warm-bg": "#f4f2ee", // hover fill
-        "warm-border": "#e8e6e0", // hairline border
+        // Legacy names, remapped to the same variables.
+        coral: "rgb(var(--c-brown) / <alpha-value>)",
+        blush: "rgb(var(--c-brown-deep) / <alpha-value>)",
+        accent: "rgb(var(--c-brown-deep) / <alpha-value>)",
+        "warm-bg": "rgb(var(--c-warm-bg) / <alpha-value>)",
+        "warm-border": "rgb(var(--c-warm-border) / <alpha-value>)",
       },
       borderRadius: {
         // Tighter, more professional corners (crisper than Tailwind defaults).

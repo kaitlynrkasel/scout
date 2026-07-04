@@ -9,7 +9,7 @@ export function Logo({ size = 24 }: { size?: number }) {
 
 export function Nav() {
   return (
-    <header className="sticky top-0 z-20 border-b border-warm-border bg-white/85 backdrop-blur-md">
+    <header className="sticky top-0 z-20 border-b border-warm-border bg-surface/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-3">
         <a href="/" className="flex items-center gap-2">
           <Logo />
@@ -44,7 +44,7 @@ export function Nav() {
 
 export function Footer() {
   return (
-    <footer className="border-t border-warm-border bg-white/70">
+    <footer className="border-t border-warm-border bg-surface/70">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-6 py-8 text-xs text-body/70">
         <Logo size={18} />
         <span className="font-semibold">

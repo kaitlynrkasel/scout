@@ -17,9 +17,16 @@ export const metadata: Metadata = {
     "Find the right people, get their contacts, and draft personalized outreach in your voice.",
 };
 
+// Apply the saved theme before first paint so dark mode doesn't flash light.
+// Runs synchronously in <head>; reads the same key the Settings toggle writes.
+const themeScript = `(function(){try{if(localStorage.getItem('scout_theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();`;
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={sans.variable}>
+    <html lang="en" className={sans.variable} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+      </head>
       <body>{children}</body>
     </html>
   );

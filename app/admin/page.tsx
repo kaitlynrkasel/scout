@@ -84,7 +84,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen bg-warm-bg">
-      <header className="border-b border-warm-border bg-white/70">
+      <header className="border-b border-warm-border bg-surface/70">
         <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
@@ -111,7 +111,7 @@ function CenterMsg({
 }) {
   return (
     <div className="flex min-h-screen items-center justify-center bg-warm-bg">
-      <div className="rounded-2xl border border-warm-border bg-white p-8 text-center shadow-soft">
+      <div className="rounded-2xl border border-warm-border bg-surface p-8 text-center shadow-soft">
         <p className="text-sm font-semibold text-ink">{text}</p>
         {cta && (
           <Link

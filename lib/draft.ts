@@ -177,12 +177,25 @@ export async function draftFor(
       : channelType === "message"
         ? "a LinkedIn / DM note"
         : "a form / message note";
-    // SMS is looser and shorter than other DMs; other DMs are 2-4 sentences.
-    const length = dmLabel === "text message" ? "1 to 2 sentences, very informal" : "2 to 4 sentences";
+    // LinkedIn connection notes have a hard 200-character cap, so anything
+    // LinkedIn-shaped must fit under 200 characters. SMS is loose and short.
+    // Other DMs stay at a couple of sentences.
+    const isLinkedIn =
+      /linkedin/i.test(dmLabel) ||
+      (channelType === "message" && !dmLabel); // generic "LinkedIn / DM note" default
+    const length =
+      dmLabel === "text message"
+        ? "1 to 2 sentences, very informal"
+        : isLinkedIn
+          ? "STRICTLY 200 characters or fewer, including spaces — this is a hard LinkedIn limit, so be concise and cut anything non-essential"
+          : "2 to 4 sentences";
     task =
       `Write ${formatHint} (${length}). ` +
       `Return JSON {subject, body} with subject empty. ` +
-      `body = a warm, genuine note reflecting PURPOSE, with the personalized line if real.`;
+      `body = a warm, genuine note reflecting PURPOSE, with the personalized line if real.` +
+      (isLinkedIn
+        ? ` CRITICAL: the body must be 200 characters or fewer. Count characters, not words. If it runs over, tighten it until it fits.`
+        : "");
   }
 
   const tpl = templateBlock(templates, channelType);
@@ -206,9 +219,20 @@ export async function draftFor(
 
   // Append the user's signature verbatim (their own text, not run through noDash)
   // to email drafts only. DMs/forms don't use email signatures.
-  let body = noDash(gen?.body || "(could not generate a draft for this one — try again)");
+  let body = noDash(gen?.body || "(could not generate a draft for this one, try again)");
   if (signature && channelType === "email") {
     body = body.replace(/\s+$/, "") + "\n\n" + signature;
+  }
+
+  // Hard clamp for LinkedIn: connection notes cap at 200 characters. The model
+  // usually respects the prompt, but if it overshoots, trim on a word boundary
+  // so we never hand back an un-sendable draft.
+  const linkedInShaped =
+    /linkedin/i.test(dmLabel) || (channelType === "message" && !dmLabel);
+  if (linkedInShaped && body.length > 200) {
+    const cut = body.slice(0, 200);
+    const lastSpace = cut.lastIndexOf(" ");
+    body = (lastSpace > 150 ? cut.slice(0, lastSpace) : cut).replace(/[\s,.;:]+$/, "");
   }
 
   return {

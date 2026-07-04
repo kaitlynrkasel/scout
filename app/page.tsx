@@ -16,7 +16,7 @@ export default function Landing() {
         <div className="pointer-events-none absolute -right-32 -top-32 h-96 w-96 rounded-full bg-brand-gradient opacity-[0.12] blur-3xl" />
         <div className="mx-auto grid max-w-6xl items-center gap-10 px-6 pb-16 pt-16 lg:grid-cols-[1.25fr_1fr]">
           <div>
-            <span className="inline-block rounded-full border border-warm-border bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent shadow-card">
+            <span className="inline-block rounded-full border border-warm-border bg-surface px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent shadow-card">
               One place for every conversation
             </span>
             <h1 className="mt-5 text-5xl font-extrabold leading-[1.05] tracking-tight text-ink sm:text-6xl">
@@ -36,7 +36,7 @@ export default function Landing() {
               </a>
               <a
                 href="/analytics"
-                className="rounded-xl border border-warm-border bg-white px-6 py-3.5 text-sm font-bold text-ink transition hover:bg-warm-bg"
+                className="rounded-xl border border-warm-border bg-surface px-6 py-3.5 text-sm font-bold text-ink transition hover:bg-warm-bg"
               >
                 See the proof
               </a>
@@ -50,8 +50,8 @@ export default function Landing() {
           {/* Conversation mock */}
           <div className="hidden lg:block">
             <div className="relative mx-auto h-72 w-full max-w-sm">
-              <div className="absolute right-2 top-0 w-64 rounded-2xl rounded-tr-sm border border-warm-border bg-white p-4 shadow-soft">
-                <span className="absolute -right-[6px] top-6 h-3 w-3 rotate-45 border-r border-t border-warm-border bg-white" />
+              <div className="absolute right-2 top-0 w-64 rounded-2xl rounded-tr-sm border border-warm-border bg-surface p-4 shadow-soft">
+                <span className="absolute -right-[6px] top-6 h-3 w-3 rotate-45 border-r border-t border-warm-border bg-surface" />
                 <div className="mb-2 flex items-center gap-2">
                   <span className="h-6 w-6 rounded-full bg-brand-gradient" />
                   <span className="text-xs font-bold text-ink">You</span>
@@ -79,7 +79,7 @@ export default function Landing() {
                   <div className="h-2 w-3/4 rounded-full bg-white/35" />
                 </div>
               </div>
-              <div className="absolute bottom-2 right-12 flex items-center gap-1.5 rounded-full border border-warm-border bg-white px-3 py-2 shadow-card">
+              <div className="absolute bottom-2 right-12 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface px-3 py-2 shadow-card">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blush [animation-delay:150ms]" />
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral [animation-delay:300ms]" />
@@ -90,7 +90,7 @@ export default function Landing() {
       </section>
 
       {/* Proof strip */}
-      <section className="border-y border-warm-border bg-white">
+      <section className="border-y border-warm-border bg-surface">
         <div className="mx-auto grid max-w-6xl gap-px overflow-hidden rounded-none sm:grid-cols-3">
           <Stat big="Minutes, not hours" small="Find, research, and draft outreach in about a minute per person." />
           <Stat big="3–10× more replies" small="Personalized, targeted outreach vs. generic blasts (industry estimates)." />
@@ -156,7 +156,7 @@ export default function Landing() {
           <div className="mt-10">
             <a
               href="/analytics"
-              className="inline-flex items-center gap-2 rounded-xl border border-warm-border bg-white px-5 py-3 text-sm font-bold text-ink shadow-card transition hover:bg-warm-bg"
+              className="inline-flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-5 py-3 text-sm font-bold text-ink shadow-card transition hover:bg-warm-bg"
             >
               See the data behind it
               <span aria-hidden>→</span>
@@ -180,7 +180,7 @@ export default function Landing() {
           </p>
           <a
             href="/app"
-            className="mt-7 inline-block rounded-xl bg-white px-7 py-3.5 text-sm font-bold text-ink shadow-card transition hover:bg-white/90"
+            className="mt-7 inline-block rounded-xl bg-surface px-7 py-3.5 text-sm font-bold text-ink shadow-card transition hover:bg-surface/90"
           >
             Open Scout
           </a>
@@ -224,7 +224,7 @@ function UseCases() {
         {USE_CASES.map((u) => (
           <div
             key={u.q}
-            className="rounded-2xl border border-warm-border bg-white p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft"
+            className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft"
           >
             <div className="text-[11px] font-bold uppercase tracking-wider text-accent">
               {u.who}
@@ -270,7 +270,7 @@ function SearchIcon() {
 
 function Stat({ big, small }: { big: string; small: string }) {
   return (
-    <div className="bg-white px-6 py-7 text-center sm:border-l sm:border-warm-border sm:first:border-l-0">
+    <div className="bg-surface px-6 py-7 text-center sm:border-l sm:border-warm-border sm:first:border-l-0">
       <div className="text-xl font-extrabold tracking-tight text-ink">{big}</div>
       <div className="mx-auto mt-1.5 max-w-xs text-xs leading-relaxed text-body">
         {small}
@@ -281,7 +281,7 @@ function Stat({ big, small }: { big: string; small: string }) {
 
 function Feature({ title, body }: { title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
       <div className="mb-3 h-9 w-9 rounded-xl bg-brand-gradient" />
       <h3 className="text-[15px] font-bold text-ink">{title}</h3>
       <p className="mt-1.5 text-[13px] leading-relaxed text-body">{body}</p>
@@ -291,7 +291,7 @@ function Feature({ title, body }: { title: string; body: string }) {
 
 function HowStep({ n, title, body }: { n: string; title: string; body: string }) {
   return (
-    <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+    <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-gradient text-base font-extrabold text-white">
         {n}
       </div>
@@ -401,7 +401,7 @@ function TeamCard({
   photo?: string;
 }) {
   return (
-    <div className="flex flex-col rounded-3xl border border-warm-border bg-white p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft">
+    <div className="flex flex-col rounded-3xl border border-warm-border bg-surface p-6 shadow-card transition hover:-translate-y-0.5 hover:shadow-soft">
       {/* Circular headshot slot. Swap the initials fallback for
           <img src={photo} className="..." /> when a real photo lands. */}
       <div className="relative mx-auto mb-4 h-32 w-32 overflow-hidden rounded-full border-4 border-white bg-warm-bg shadow-card ring-1 ring-warm-border">
@@ -441,7 +441,7 @@ function ScoutCard({
   photo?: string;
 }) {
   return (
-    <div className="w-40 shrink-0 snap-start rounded-2xl border border-warm-border bg-white p-3 shadow-card">
+    <div className="w-40 shrink-0 snap-start rounded-2xl border border-warm-border bg-surface p-3 shadow-card">
       <div className="relative aspect-square w-full overflow-hidden rounded-xl bg-brand-gradient/15">
         {photo ? (
           // eslint-disable-next-line @next/next/no-img-element

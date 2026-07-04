@@ -748,6 +748,11 @@ function ScoutTool({
   // before/after voice deltas learned from drafts they hand-edited.
   const [coaching, setCoaching] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
+  // True after the user edits a draft while other un-sent drafts still exist —
+  // Scout can re-write those with the freshly-learned voice. Cleared once the
+  // user runs the refresh (or has no other drafts left to update).
+  const [voiceRefreshAvailable, setVoiceRefreshAvailable] = useState(false);
+  const [refreshingVoice, setRefreshingVoice] = useState(false);
   const [resumeFile, setResumeFile] = useState<{ name: string; dataUrl: string } | null>(null);
   const [signature, setSignature] = useState(""); // email signature appended to drafts
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
@@ -988,6 +993,37 @@ function ScoutTool({
   function startTour() {
     setTourOpen(true);
   }
+
+  // Download everything Scout has stored for this user as one JSON file.
+  // Runs entirely client-side — nothing leaves the browser except the download.
+  function exportMyData() {
+    try {
+      const payload = {
+        exportedAt: new Date().toISOString(),
+        profile,
+        projects,
+        categories,
+        finds,
+        templates: myTemplates,
+        coaching,
+        editPairs,
+        signature,
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `scout-export-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't export your data.");
+    }
+  }
   function endTour() {
     setTourOpen(false);
     try {
@@ -1084,13 +1120,20 @@ function ScoutTool({
   }
   // Record how the user rewrote a draft. Only keep it if the change is real
   // (not a trivial tweak) so we teach voice, not noise. Newest 6 retained.
-  const recordEdit = (before: string, after: string) => {
+  const recordEdit = (before: string, after: string, editedFindId?: string) => {
     const a = String(after || "").trim();
     const b = String(before || "").trim();
     if (!a || a === b) return;
     // Skip near-identical edits (a couple of chars) to avoid teaching noise.
     if (Math.abs(a.length - b.length) < 8 && a.slice(0, 40) === b.slice(0, 40)) return;
     saveEditPairs([{ before: b, after: a }, ...editPairs].slice(0, 6));
+    // If the user still has other un-sent drafts, offer to re-write them with
+    // this freshly-learned voice. Only "drafted" finds are eligible — sent or
+    // replied ones already went out and shouldn't change.
+    const otherDrafts = finds.filter(
+      (f) => f.id !== editedFindId && f.status === "drafted" && f.draft?.body
+    );
+    if (otherDrafts.length > 0) setVoiceRefreshAvailable(true);
   };
   // Bump real activity counters (searches run, people found, drafts written,
   // drafts copied to send). Honest usage, no invented metrics.
@@ -1966,7 +2009,7 @@ function ScoutTool({
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
   function editFindDraft(find: Find, subject: string, body: string) {
     const prevBody = find.draft?.body || "";
-    recordEdit(prevBody, body);
+    recordEdit(prevBody, body, find.id);
     saveFinds(
       finds.map((f) =>
         f.id === find.id && f.draft
@@ -1982,6 +2025,68 @@ function ScoutTool({
       )
     );
   }
+  // Re-draft every un-sent ("drafted") find with the current voice edits +
+  // coaching, so past drafts benefit from what Scout just learned. Sent and
+  // replied finds are left alone — they already went out. Batched through
+  // /api/draft (capped at 8 per call) to stay within the time budget.
+  async function refreshDraftsWithVoice() {
+    const eligible = finds.filter((f) => f.status === "drafted" && f.draft?.body);
+    if (!eligible.length) {
+      setVoiceRefreshAvailable(false);
+      return;
+    }
+    setError("");
+    setRefreshingVoice(true);
+    try {
+      const updated = new Map<string, Draft>(); // findId -> new draft
+      for (let i = 0; i < eligible.length; i += 8) {
+        const batch = eligible.slice(i, i + 8);
+        const res = await fetch("/api/draft", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            opportunities: batch.map((f) => ({
+              ...f.opp,
+              requirements: f.requirements || "",
+            })),
+            about: aboutText,
+            useCase: activeUseCase,
+            // Use each find's own template scope where possible; fall back to
+            // the active project's templates for the batch.
+            templates: templatesFor(activeId, catId),
+            coaching,
+            editPairs,
+            signature,
+          }),
+        });
+        const data = await parseApiResponse(res);
+        if (!res.ok || data?.error) {
+          reportError(data);
+          return;
+        }
+        const byOpp = new Map<string, Draft>(
+          (data.drafts || []).map((d: Draft) => [d.opportunityId, d])
+        );
+        for (const f of batch) {
+          const nd = byOpp.get(f.opp.id);
+          if (nd) updated.set(f.id, nd);
+        }
+      }
+      if (updated.size) {
+        saveFinds(
+          finds.map((f) =>
+            updated.has(f.id) ? { ...f, draft: updated.get(f.id)! } : f
+          )
+        );
+      }
+      setVoiceRefreshAvailable(false);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't refresh your drafts.");
+    } finally {
+      setRefreshingVoice(false);
+    }
+  }
+
   // Deny a find and record why (reason optional).
   function denyFindWithReason(id: string, reason: string) {
     saveFinds(
@@ -2675,32 +2780,10 @@ function ScoutTool({
             </p>
           </div>
 
-            {/* -------- Import your existing outreach (dedup + learn) -------- */}
-            <section className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold text-ink">
-                  Already reaching out somewhere else?
-                </div>
-                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                  Drop in a CSV of how you've been tracking your contacts. Scout
-                  won't resurface them and starts learning what a fit looks like
-                  for you.
-                </p>
-              </div>
-              <button
-                onClick={() => setImportOpen(true)}
-                className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-              >
-                Import a CSV
-              </button>
-            </section>
 
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
               <div
                 data-tour="project-switcher"
@@ -2713,7 +2796,7 @@ function ScoutTool({
                       <select
                         value={activeId}
                         onChange={(e) => selectProject(e.target.value)}
-                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                       >
                         {projects.map((p) => (
                           <option key={p.id} value={p.id}>
@@ -2779,7 +2862,7 @@ function ScoutTool({
                       <select
                         value={catId}
                         onChange={(e) => selectCategory(e.target.value)}
-                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                       >
                         {myCats.map((c) => (
                           <option key={c.id} value={c.id}>
@@ -2844,7 +2927,7 @@ function ScoutTool({
                             onClick={() => setSearchComp(val as any)}
                             className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                               searchComp === val
-                                ? "bg-white text-ink shadow-card"
+                                ? "bg-surface text-ink shadow-card"
                                 : "text-body/70 hover:text-ink"
                             }`}
                           >
@@ -2967,7 +3050,7 @@ function ScoutTool({
             {discovering && (
               <div className="mt-8 flex items-start gap-3">
                 <Avatar />
-                <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-white px-4 py-3.5 shadow-card">
+                <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-surface px-4 py-3.5 shadow-card">
                   <Tail side="left" />
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} />
                 </div>
@@ -3009,7 +3092,7 @@ function ScoutTool({
               <section className="mt-10">
                 <div className="flex items-start gap-3">
                   <Avatar />
-                  <div className="relative w-full rounded-3xl rounded-tl-md border border-warm-border bg-white shadow-soft">
+                  <div className="relative w-full rounded-3xl rounded-tl-md border border-warm-border bg-surface shadow-soft">
                     <Tail side="left" />
                     <button
                       onClick={() => setExpanded(true)}
@@ -3065,7 +3148,7 @@ function ScoutTool({
                     return (
                       <div
                         key={i}
-                        className="relative ml-auto max-w-3xl rounded-3xl rounded-tr-md border border-warm-border bg-white p-5 shadow-card"
+                        className="relative ml-auto max-w-3xl rounded-3xl rounded-tr-md border border-warm-border bg-surface p-5 shadow-card"
                       >
                         <Tail side="right" />
                         <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -3149,6 +3232,9 @@ function ScoutTool({
           projects={projects}
           activeProjectId={activeId}
           onSelectProject={selectProject}
+          voiceRefreshAvailable={voiceRefreshAvailable}
+          refreshingVoice={refreshingVoice}
+          onRefreshDrafts={refreshDraftsWithVoice}
           filter={findFilter}
           setFilter={setFindFilter}
           gmail={activeMailbox}
@@ -3201,7 +3287,6 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
-          openImport={() => setImportOpen(true)}
           onEditProject={(id) => {
             selectProject(id);
             setEditingProjects(true);
@@ -3295,6 +3380,7 @@ function ScoutTool({
           onClearResume={() => saveResumeFile(null)}
           signature={signature}
           onSignature={saveSignature}
+          onImport={() => setImportOpen(true)}
         />
       )}
 
@@ -3316,7 +3402,7 @@ function ScoutTool({
           />
 
           {isOwner && (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="max-w-md">
                   <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -3341,41 +3427,13 @@ function ScoutTool({
       )}
 
       {tab === "settings" && (
-        <main className="mx-auto max-w-3xl px-6 py-12">
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            <span className="brand-text">Settings</span>
-          </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-body">
-            Small preferences that shape how Scout shows up for you.
-          </p>
-
-          <section className="mt-8 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div className="max-w-md">
-                <h2 className="text-base font-extrabold tracking-tight text-ink">
-                  Introduction tour
-                </h2>
-                <p className="mt-1.5 text-sm leading-relaxed text-body">
-                  A quick 60-second walkthrough that highlights each part of the app.
-                  It pops up automatically the first time you sign in — replay it here
-                  anytime.
-                </p>
-              </div>
-              <button
-                onClick={startTour}
-                className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
-              >
-                Show the tour
-              </button>
-            </div>
-          </section>
-        </main>
+        <SettingsTab onStartTour={startTour} onExport={exportMyData} />
       )}
 
       </div>
 
       {/* ---------------- Footer ---------------- */}
-      <footer className="relative border-t border-warm-border bg-white/70">
+      <footer className="relative border-t border-warm-border bg-surface/70">
         <CornerDog />
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
@@ -3396,7 +3454,7 @@ function ScoutTool({
           onClick={() => setExpanded(false)}
         >
           <div
-            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-warm-border bg-white shadow-soft"
+            className="flex max-h-[92vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-warm-border bg-surface shadow-soft"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center gap-3 border-b border-warm-border px-6 py-4">
@@ -3610,7 +3668,7 @@ function GlobalScoutStatus({
     <button
       onClick={onGo}
       title="Back to Outreach"
-      className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-warm-border bg-white/95 px-3.5 py-2 shadow-soft backdrop-blur transition hover:border-brown/40 hover:shadow-card"
+      className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-warm-border bg-surface/95 px-3.5 py-2 shadow-soft backdrop-blur transition hover:border-brown/40 hover:shadow-card"
     >
       <span className="relative flex h-5 w-5 items-center justify-center">
         <span className="absolute inset-0 animate-ping rounded-full bg-brown/30" />
@@ -3786,7 +3844,7 @@ function SideNav({
               {it.dot && (
                 <span
                   className={`ml-auto h-1.5 w-1.5 rounded-full ${
-                    active ? "bg-white" : "bg-brown"
+                    active ? "bg-surface" : "bg-brown"
                   }`}
                 />
               )}
@@ -3803,7 +3861,7 @@ function SideNav({
           <select
             value={activeId}
             onChange={(e) => onSelectProject(e.target.value)}
-            className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2.5 text-xs font-bold text-ink outline-none transition focus:border-brown"
+            className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2.5 text-xs font-bold text-ink outline-none transition focus:border-brown"
           >
             {projects.map((p) => (
               <option key={p.id} value={p.id}>
@@ -3960,7 +4018,7 @@ function FindsList({
             className={`flex flex-col gap-3 rounded-2xl border p-3.5 transition ${
               on
                 ? "border-coral/40 bg-warm-bg/60"
-                : "border-warm-border bg-white"
+                : "border-warm-border bg-surface"
             }`}
           >
             <div className="min-w-0 flex-1">
@@ -4133,7 +4191,7 @@ function DenyReasons({
           className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
             current === r
               ? "border-coral/50 bg-brand-gradient text-white"
-              : "border-warm-border bg-white text-body hover:bg-warm-bg"
+              : "border-warm-border bg-surface text-body hover:bg-warm-bg"
           }`}
         >
           {r}
@@ -4154,7 +4212,7 @@ function DenyReasons({
       ) : (
         <button
           onClick={() => setShowOther(true)}
-          className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
+          className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
         >
           Other…
         </button>
@@ -4170,6 +4228,9 @@ function FindsTab({
   projects,
   activeProjectId,
   onSelectProject,
+  voiceRefreshAvailable,
+  refreshingVoice,
+  onRefreshDrafts,
   filter,
   setFilter,
   gmail,
@@ -4208,6 +4269,9 @@ function FindsTab({
   projects: Project[];
   activeProjectId: string;
   onSelectProject: (id: string) => void;
+  voiceRefreshAvailable: boolean;
+  refreshingVoice: boolean;
+  onRefreshDrafts: () => void;
   filter: FindStatus | "all";
   setFilter: (f: FindStatus | "all") => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -4272,7 +4336,7 @@ function FindsTab({
             <select
               value={activeProjectId}
               onChange={(e) => onSelectProject(e.target.value)}
-              className="scout-select rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
+              className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
             >
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
@@ -4288,7 +4352,7 @@ function FindsTab({
               onClick={onCheckReplies}
               disabled={repliesBusy}
               title="Scout checks your inbox for replies automatically; this checks right now."
-              className="rounded-xl border border-warm-border bg-white px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+              className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
             >
               {repliesBusy ? "Checking…" : "Check replies now"}
             </button>
@@ -4308,6 +4372,29 @@ function FindsTab({
         </p>
       )}
 
+      {/* Voice refresh: after an edit, offer to re-write un-sent drafts with
+          what Scout just learned about how you write. */}
+      {voiceRefreshAvailable && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-sage/40 bg-sage/10 p-4">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-extrabold text-ink">
+              Scout learned from your edit
+            </div>
+            <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+              Re-write your drafts you haven't sent yet in your updated voice,
+              so every message reflects the latest changes you made.
+            </p>
+          </div>
+          <button
+            onClick={onRefreshDrafts}
+            disabled={refreshingVoice}
+            className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+          >
+            {refreshingVoice ? "Re-writing…" : "Update my drafts"}
+          </button>
+        </div>
+      )}
+
       {/* Status filter */}
       <div className="mt-6 flex flex-wrap gap-2">
         {FIND_STATUSES.map((s) => {
@@ -4319,7 +4406,7 @@ function FindsTab({
               className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                 on
                   ? "border-coral/50 bg-brand-gradient text-white"
-                  : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                  : "border-warm-border bg-surface text-body hover:bg-warm-bg"
               }`}
             >
               {s.label}
@@ -4333,7 +4420,7 @@ function FindsTab({
       </div>
 
       {shown.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-white/60 p-12 text-center text-sm text-body/70">
+        <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
           {finds.length === 0 ? (
             <>
               No finds yet. Run a search on the{" "}
@@ -4399,7 +4486,7 @@ function FindStatusBadge({
     drafted: "border-coral/30 bg-warm-bg text-accent",
     sent: "border-sage/40 bg-sage/15 text-sage",
     replied: "border-sage/60 bg-sage/25 text-brown-deep",
-    denied: "border-warm-border bg-white text-body/50",
+    denied: "border-warm-border bg-surface text-body/50",
   };
   return (
     <select
@@ -4456,7 +4543,7 @@ function ApplicationPacket({
         {drafted.length > 1 && (
           <button
             onClick={copyAll}
-            className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-white"
+            className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-surface"
           >
             {copied === "__all" ? "Copied!" : "Copy all"}
           </button>
@@ -4479,7 +4566,7 @@ function ApplicationPacket({
       {/* Drafted written components */}
       <div className="mt-2.5 space-y-2.5">
         {drafted.map((c: any, i: number) => (
-          <div key={`d${i}`} className="rounded-lg border border-warm-border bg-white p-3">
+          <div key={`d${i}`} className="rounded-lg border border-warm-border bg-surface p-3">
             <div className="flex flex-wrap items-baseline gap-2">
               <span className="text-sm font-bold text-ink">{c.title}</span>
               {c.constraints && (
@@ -4532,17 +4619,17 @@ function ApplicationPacket({
 // follow-up is due. Replied is a calm green; denied fades out. (Class strings are
 // literal so Tailwind keeps them.)
 function findCardTone(find: Find): string {
-  if (find.status === "denied") return "border-warm-border bg-white/60 opacity-70";
+  if (find.status === "denied") return "border-warm-border bg-surface/60 opacity-70";
   if (find.status === "replied") return "border-sage/50 bg-sage/10";
   if (find.status === "sent") {
     const days = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
     if (days >= 7 && !find.lastFollowUpAt) return "border-coral/50 bg-coral/10"; // follow-up due
     if (days >= 7) return "border-amber-300/60 bg-amber-50/70"; // followed up, still waiting
     if (days >= 4) return "border-amber-300/50 bg-amber-50/60"; // aging
-    return "border-sage/30 bg-white"; // fresh send
+    return "border-sage/30 bg-surface"; // fresh send
   }
   if (find.status === "drafted") return "border-coral/30 bg-warm-bg/40"; // draft ready
-  return "border-warm-border bg-white"; // new
+  return "border-warm-border bg-surface"; // new
 }
 
 function FindCard({
@@ -4679,7 +4766,7 @@ function FindCard({
                 : "border-amber-300/60 bg-amber-50 text-amber-800"
             }`}
           >
-            🕐 {localTimeLabel(recipientTz)} their time
+            {localTimeLabel(recipientTz)} their time
           </span>
         )}
         <button
@@ -4783,9 +4870,7 @@ function FindCard({
                 <span>
                   Attach my resume
                   {d.attachResume && (
-                    <span className="ml-1 text-sage" aria-hidden>
-                      📎
-                    </span>
+                    <span className="ml-1 font-semibold text-sage">✓</span>
                   )}
                 </span>
                 <span className="text-body/50">
@@ -4812,7 +4897,7 @@ function FindCard({
         </div>
       )}
       {d && editing && (
-        <div className="mt-3 rounded-xl border border-coral/40 bg-white p-3">
+        <div className="mt-3 rounded-xl border border-coral/40 bg-surface p-3">
           {d.channelType === "email" && (
             <input
               value={editSubject}
@@ -5048,7 +5133,7 @@ function FindCard({
             <button
               onClick={doSend}
               disabled={gmailBusy}
-              className="rounded-lg border border-amber-400/60 bg-white px-3 py-1.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
+              className="rounded-lg border border-amber-400/60 bg-surface px-3 py-1.5 text-[11px] font-semibold text-amber-900 transition hover:bg-amber-100 disabled:opacity-50"
             >
               Send anyway
             </button>
@@ -5391,7 +5476,6 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
-  openImport,
   onEditProject,
   onSeedTemplateForChannel,
 }: {
@@ -5410,7 +5494,6 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
-  openImport: () => void;
   onEditProject: (id: string) => void;
   onSeedTemplateForChannel: (channel: string) => void;
 }) {
@@ -5602,16 +5685,16 @@ function DashboardTab({
           <p className="mt-1 text-sm text-body">
             {dashTab === "you"
               ? newThisWeek > 0
-                ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week${
+                ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week.${
                     strongThisWeek > 0
-                      ? ` — ${strongThisWeek} ${strongThisWeek === 1 ? "looks" : "look"} strong`
+                      ? ` ${strongThisWeek} ${strongThisWeek === 1 ? "looks" : "look"} strong.`
                       : ""
-                  }. Here's where things stand.`
-                : "Here's where your outreach stands."
+                  }`
+                : "Where your outreach stands."
               : "How Scout is doing across everyone using it."}
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-white p-1 shadow-card">
+        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-surface p-1 shadow-card">
           {(
             [
               ["you", "You"],
@@ -5657,31 +5740,9 @@ function DashboardTab({
         </button>
       )}
 
-      {/* -------- Import your existing outreach -------- */}
-      <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-brown-tint text-brown-deep">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-extrabold text-ink">
-            Already reaching out somewhere else?
-          </div>
-          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-            Drop in a CSV of who you've already contacted. Scout won't resurface
-            them and starts learning what a fit looks like for you.
-          </p>
-        </div>
-        <button
-          onClick={openImport}
-          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-        >
-          Import a CSV
-        </button>
-      </section>
-
       {/* -------- Overview: activity chart + match quality + pipeline -------- */}
       <section className="mt-6 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <div className="rounded-xl border border-warm-border bg-white p-5 shadow-card">
+        <div className="rounded-xl border border-warm-border bg-surface p-5 shadow-card">
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold text-ink">Outreach activity</h2>
@@ -5711,7 +5772,7 @@ function DashboardTab({
           )}
         </div>
 
-        <div className="flex flex-col gap-5 rounded-xl border border-warm-border bg-white p-5 shadow-card">
+        <div className="flex flex-col gap-5 rounded-xl border border-warm-border bg-surface p-5 shadow-card">
           <div>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-semibold text-ink">Match quality</h2>
@@ -5809,7 +5870,7 @@ function DashboardTab({
             )}
             <button
               onClick={goFinds}
-              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-white"
+              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-surface"
             >
               Draft an intro &rarr;
             </button>
@@ -5822,7 +5883,7 @@ function DashboardTab({
         {metrics.map((m) => (
           <div
             key={m.label}
-            className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+            className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="text-xl font-semibold leading-none tabular-nums text-ink">
@@ -5852,7 +5913,7 @@ function DashboardTab({
           </button>
         </div>
         {recentFinds.length ? (
-          <div className="mt-3 overflow-x-auto rounded-xl border border-warm-border bg-white shadow-card">
+          <div className="mt-3 overflow-x-auto rounded-xl border border-warm-border bg-surface shadow-card">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="text-left text-xs text-muted">
@@ -5941,7 +6002,7 @@ function DashboardTab({
             </table>
           </div>
         ) : (
-          <div className="mt-3 flex flex-col items-center justify-center rounded-xl border border-dashed border-warm-border bg-white px-6 py-12 text-center">
+          <div className="mt-3 flex flex-col items-center justify-center rounded-xl border border-dashed border-warm-border bg-surface px-6 py-12 text-center">
             <p className="max-w-sm text-sm text-muted">
               No finds yet. Run a search and Scout starts filling your pipeline with
               people worth reaching.
@@ -5968,7 +6029,7 @@ function DashboardTab({
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
             {learned.replyRate != null && (
-              <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
+              <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card sm:col-span-2">
                 <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                   Your reply rate
                 </div>
@@ -5989,7 +6050,7 @@ function DashboardTab({
             )}
 
             {/* Preferences */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card sm:col-span-2">
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card sm:col-span-2">
               <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                 Your preferences so far
               </div>
@@ -6032,7 +6093,7 @@ function DashboardTab({
                         source.slice(0, 4).map(([c, n]) => (
                           <span
                             key={c}
-                            className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                            className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-xs font-medium text-body/70"
                           >
                             {c} · {n}
                           </span>
@@ -6051,7 +6112,7 @@ function DashboardTab({
                     {learned.denyReasons.slice(0, 6).map(([r, n]) => (
                       <span
                         key={r}
-                        className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                        className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-xs font-medium text-body/70"
                       >
                         {r} · {n}
                       </span>
@@ -6108,7 +6169,9 @@ function DashboardTab({
                       {nw} new · {sent} sent
                     </div>
                   </div>
-                  <span aria-hidden className="mt-0.5 text-xs text-body/50">✎</span>
+                  <span aria-hidden className="mt-0.5 text-body/40">
+                    <PencilIcon />
+                  </span>
                 </button>
               );
             })
@@ -6124,7 +6187,7 @@ function DashboardTab({
           never anyone&apos;s private data.
         </p>
         {!community || community.users < 1 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-white/60 p-8 text-center text-sm text-body/70">
+          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-8 text-center text-sm text-body/70">
             Community benchmarks appear here as more people use Scout. Yours are
             ready, everyone else&apos;s are still coming.
           </div>
@@ -6174,7 +6237,7 @@ function DashboardTab({
             {insights.map((ins) => (
               <div
                 key={ins.text}
-                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
               >
                 <span
                   className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-sage"
@@ -6192,7 +6255,7 @@ function DashboardTab({
             ))}
           </div>
         ) : (
-          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-sm text-body/70">
             Nothing learned yet. As you keep, pass on, and edit finds, real insights about
             your taste and voice show up here.{" "}
             <button onClick={goFinds} className="font-semibold text-accent hover:underline">
@@ -6353,7 +6416,7 @@ function DashboardTab({
           {signals.map((s) => (
             <div
               key={s.label}
-              className="flex items-start gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+              className="flex items-start gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
             >
               <span
                 className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white ${
@@ -6395,7 +6458,7 @@ function DashboardTab({
       {/* -------- How Scout learns from EVERYONE -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout gets better for everyone</h2>
-        <div className="mt-4 rounded-3xl border border-warm-border bg-white p-6 shadow-card">
+        <div className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
           <p className="text-sm leading-relaxed text-body">
             Scout improves for all users as the shared engine learns which search
             angles surface real people, which channels actually get replies, and what a
@@ -6433,7 +6496,7 @@ function DashboardTab({
         </div>
         <button
           onClick={goOutreach}
-          className="ml-auto rounded-xl bg-white px-5 py-2.5 text-sm font-extrabold text-brown-deep transition hover:opacity-95"
+          className="ml-auto rounded-xl bg-surface px-5 py-2.5 text-sm font-extrabold text-brown-deep transition hover:opacity-95"
         >
           Start scouting →
         </button>
@@ -6686,7 +6749,7 @@ function OutreachAdvice({
           Tailored to you
         </div>
         {myDrafts.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-body/70">
             Once you&apos;ve drafted a few messages, Scout can read them and coach you
             on your own writing.{" "}
             <button onClick={goOutreach} className="font-semibold text-accent hover:underline">
@@ -6723,7 +6786,7 @@ function OutreachAdvice({
                   {coach.map((t) => (
                     <div
                       key={t.title}
-                      className="rounded-2xl border border-coral/30 bg-white p-4 shadow-card"
+                      className="rounded-2xl border border-coral/30 bg-surface p-4 shadow-card"
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="text-sm font-bold text-ink">{t.title}</div>
@@ -6773,7 +6836,7 @@ function OutreachAdvice({
             })}
           </div>
         ) : (
-          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
+          <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-body/70">
             Live patterns show up here once the community has made enough decisions —
             real numbers only, so nothing appears until the data can back it up.
           </p>
@@ -6789,7 +6852,7 @@ function OutreachAdvice({
           {playbook.filter((tip) => !isDismissed(tip.body)).map((tip) => (
             <div
               key={tip.title}
-              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+              className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
             >
               <div className="flex items-start justify-between gap-2">
                 <div className="text-sm font-bold text-ink">{tip.title}</div>
@@ -6840,7 +6903,7 @@ function CompareRow({
         : you > them
       : null;
   return (
-    <div className="rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+    <div className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
       <div className="flex items-center justify-between">
         <span className="text-xs font-bold uppercase tracking-wider text-body/60">
           {label}
@@ -6919,7 +6982,7 @@ function MeetingPrepBlock({
   // reason to show the button. Keeps early-stage cards uncluttered.
   if (!unlocked && !prep) return null;
   return (
-    <div className="mt-3 rounded-xl border border-warm-border bg-white p-3">
+    <div className="mt-3 rounded-xl border border-warm-border bg-surface p-3">
       <div className="flex items-center gap-2">
         <span className="text-xs font-extrabold uppercase tracking-wider text-brown-deep">
           Meeting prep
@@ -7019,13 +7082,13 @@ function SchedulePicker({
     <div ref={ref} className="relative inline-block">
       <button
         onClick={() => setOpen((v) => !v)}
-        className="rounded-lg border border-warm-border bg-white px-2.5 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        className="rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
         title="Send at a specific time"
       >
         Schedule ▾
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-warm-border bg-white p-3 shadow-soft">
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-warm-border bg-surface p-3 shadow-soft">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
             Send at
           </div>
@@ -7398,7 +7461,7 @@ function TeamTab({
         <p className="mt-8 text-sm text-body/60">Loading your Team…</p>
       ) : !workspace ? (
         /* -------- No workspace yet: create one -------- */
-        <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+        <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
           <h2 className="text-lg font-bold text-ink">Name your workspace</h2>
           <p className="mt-1 text-sm text-body/80">
             A workspace is your company or crew. Give it a name, then invite teammates
@@ -7429,7 +7492,7 @@ function TeamTab({
       ) : (
         <>
           {/* -------- Workspace: members + invite -------- */}
-          <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft">
+          <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-ink">{workspace.name}</h2>
               <span className="text-xs font-semibold text-body/60">
@@ -7478,7 +7541,7 @@ function TeamTab({
           <section className="mt-6">
             <h2 className="text-lg font-bold text-ink">Shared projects</h2>
             {sharedProjects.length === 0 ? (
-              <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-sm text-body/70">
+              <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-sm text-body/70">
                 Nothing shared yet. Share one of your projects below and its finds become
                 a shared pipeline your Team works from together.
               </p>
@@ -7487,7 +7550,7 @@ function TeamTab({
                 {sharedProjects.map((p) => (
                   <div
                     key={p.id}
-                    className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+                    className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-bold text-ink">{p.name}</span>
@@ -7561,7 +7624,7 @@ function TeamTab({
                 <select
                   value={shareChoice}
                   onChange={(e) => setShareChoice(e.target.value)}
-                  className="scout-select min-w-[180px] rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+                  className="scout-select min-w-[180px] rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
                 >
                   <option value="">Pick a project…</option>
                   {shareable.map((p) => (
@@ -7605,7 +7668,7 @@ function SharedFindRow({
   const opp = f.opp || {};
   const mine = f.claimed_email && f.claimed_email === accountEmail;
   return (
-    <div className="rounded-xl border border-warm-border bg-white p-3">
+    <div className="rounded-xl border border-warm-border bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-ink">
           {opp.url ? (
@@ -7662,6 +7725,119 @@ function SharedFindRow({
   );
 }
 
+/* ---------------- Settings tab ---------------- */
+function SettingsTab({
+  onStartTour,
+  onExport,
+}: {
+  onStartTour: () => void;
+  onExport: () => void;
+}) {
+  // Theme mirrors the .dark class on <html>; persisted to scout_theme and
+  // applied pre-paint by the inline script in layout.tsx.
+  const [dark, setDark] = useState(false);
+  useEffect(() => {
+    setDark(document.documentElement.classList.contains("dark"));
+  }, []);
+  function setTheme(next: boolean) {
+    setDark(next);
+    document.documentElement.classList.toggle("dark", next);
+    try {
+      localStorage.setItem("scout_theme", next ? "dark" : "light");
+    } catch {}
+  }
+
+  return (
+    <main className="mx-auto max-w-3xl px-6 py-12">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
+        <span className="brand-text">Settings</span>
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        Small preferences that shape how Scout shows up for you.
+      </p>
+
+      {/* Appearance */}
+      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Appearance</h2>
+        <p className="mt-1 text-sm leading-relaxed text-body">
+          Choose the theme Scout uses on this device.
+        </p>
+        <div className="mt-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(
+            [
+              ["light", "Light"],
+              ["dark", "Dark"],
+            ] as const
+          ).map(([val, label]) => {
+            const active = (val === "dark") === dark;
+            return (
+              <button
+                key={val}
+                onClick={() => setTheme(val === "dark")}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
+                  active
+                    ? "bg-brown text-white shadow-soft"
+                    : "text-body/70 hover:text-ink"
+                }`}
+              >
+                {val === "light" ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+                )}
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Introduction tour */}
+      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <h2 className="text-base font-extrabold tracking-tight text-ink">
+              Introduction tour
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">
+              A quick walkthrough that highlights each part of the app. It shows
+              automatically the first time you sign in. Replay it here anytime.
+            </p>
+          </div>
+          <button
+            onClick={onStartTour}
+            className="shrink-0 rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            Show the tour
+          </button>
+        </div>
+      </section>
+
+      {/* Your data */}
+      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <h2 className="text-base font-extrabold tracking-tight text-ink">
+              Export your data
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">
+              Download everything Scout has stored for you, your profile,
+              projects, finds, templates, and learned voice, as a single JSON
+              file. Nothing leaves your browser except the download.
+            </p>
+          </div>
+          <button
+            onClick={onExport}
+            className="shrink-0 rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-bold text-ink transition hover:bg-warm-bg"
+          >
+            Download JSON
+          </button>
+        </div>
+      </section>
+    </main>
+  );
+}
+
 /* ---------------- Templates tab ---------------- */
 function TemplatesTab({
   kinds,
@@ -7715,14 +7891,14 @@ function TemplatesTab({
         project or category.
       </p>
 
-      <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <div className="grid gap-5 sm:grid-cols-[210px_1fr]">
           <div>
             <Label>Kind of outreach</Label>
             <select
               value={channel}
               onChange={(e) => setChannel(e.target.value)}
-              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             >
               {kinds.map((c) => (
                 <option key={c} value={c}>
@@ -7758,7 +7934,7 @@ function TemplatesTab({
             <select
               value={scopeProjectId}
               onChange={(e) => setScopeProjectId(e.target.value)}
-              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             >
               <option value="">All projects</option>
               {projects.map((p) => (
@@ -7771,7 +7947,7 @@ function TemplatesTab({
               value={scopeCategoryId}
               onChange={(e) => setScopeCategoryId(e.target.value)}
               disabled={!scopeProjectId}
-              className="scout-select w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 disabled:opacity-50"
+              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 disabled:opacity-50"
             >
               <option value="">
                 {scopeProjectId ? "All categories in this project" : "Pick a project first"}
@@ -7800,7 +7976,7 @@ function TemplatesTab({
           Your Templates ({list.length})
         </h2>
         {list.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-warm-border bg-white/60 p-10 text-center text-sm text-body/70">
+          <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-10 text-center text-sm text-body/70">
             No templates yet. Add one for email, a LinkedIn message, or an Instagram
             DM, and every draft will match that style.
           </div>
@@ -7809,7 +7985,7 @@ function TemplatesTab({
             {list.map((s) => (
               <div
                 key={s.id}
-                className="rounded-2xl border border-warm-border bg-white p-5 shadow-card"
+                className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card"
               >
                 <div className="mb-2.5 flex flex-wrap items-center gap-2">
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
@@ -7915,10 +8091,10 @@ function UseCaseCombo({
           }
         }}
         placeholder="Type what you're using Scout for…"
-        className="w-full rounded-xl border border-warm-border bg-white px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        className="w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
       />
       {open && matches.length > 0 && (
-        <div className="absolute z-30 mt-1.5 max-h-64 w-full overflow-auto rounded-xl border border-warm-border bg-white py-1 shadow-soft">
+        <div className="absolute z-30 mt-1.5 max-h-64 w-full overflow-auto rounded-xl border border-warm-border bg-surface py-1 shadow-soft">
           {matches.map((s, i) => (
             <button
               key={s}
@@ -7955,7 +8131,7 @@ function ConnectEmailCard({
 }) {
   const [choosing, setChoosing] = useState(false);
   return (
-    <section className="mt-5 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -8030,7 +8206,7 @@ function MailboxCard({
   const label = provider === "gmail" ? "Gmail" : "Outlook";
   const mode = conn.sendMode || "draft";
   return (
-    <section className="mt-5 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -8096,7 +8272,7 @@ function MailboxCard({
                   className={`rounded-2xl border p-4 text-left transition ${
                     on
                       ? "border-coral/50 bg-warm-bg/60 ring-2 ring-coral/15"
-                      : "border-warm-border bg-white hover:bg-warm-bg/30"
+                      : "border-warm-border bg-surface hover:bg-warm-bg/30"
                   }`}
                 >
                   <div className="flex items-center gap-2">
@@ -8105,7 +8281,7 @@ function MailboxCard({
                         on ? "border-coral bg-coral" : "border-warm-border"
                       }`}
                     >
-                      {on && <span className="h-1.5 w-1.5 rounded-full bg-white" />}
+                      {on && <span className="h-1.5 w-1.5 rounded-full bg-surface" />}
                     </span>
                     <span className="text-sm font-bold text-ink">{opt.title}</span>
                   </div>
@@ -8176,6 +8352,7 @@ function ProfileTab({
   onClearResume,
   signature,
   onSignature,
+  onImport,
 }: {
   name: string;
   bio: string;
@@ -8235,6 +8412,7 @@ function ProfileTab({
   onClearResume: () => void;
   signature: string;
   onSignature: (v: string) => void;
+  onImport: () => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -8370,6 +8548,28 @@ function ProfileTab({
         messages sound.
       </p>
 
+      {/* -------- Import your existing outreach (dedup + learn) -------- */}
+      <section className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-extrabold text-ink">
+            Already reaching out somewhere else?
+          </div>
+          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+            Drop in a CSV of how you've been tracking your contacts. Scout won't
+            resurface them and starts learning what a fit looks like for you.
+          </p>
+        </div>
+        <button
+          onClick={onImport}
+          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+        >
+          Import a CSV
+        </button>
+      </section>
+
       {mailboxAvailable && (
         <>
           {/* Neither connected: one "Connect email" card that lets you choose. Once a
@@ -8404,7 +8604,7 @@ function ProfileTab({
         </>
       )}
 
-      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         {/* -------- Individual vs company: resume drop or website -------- */}
         <div className="mb-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(["individual", "company"] as const).map((k) => (
@@ -8413,7 +8613,7 @@ function ProfileTab({
               onClick={() => chooseKind(k)}
               className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
                 kind === k
-                  ? "bg-white text-ink shadow-card"
+                  ? "bg-surface text-ink shadow-card"
                   : "text-body/60 hover:text-ink"
               }`}
             >
@@ -8467,7 +8667,7 @@ function ProfileTab({
         {/* Resume kept for email attachments */}
         {resumeFileName && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
-            <span aria-hidden>📎</span>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49" /></svg>
             <span className="font-semibold">{resumeFileName}</span>
             <span className="text-body/70">saved to attach to emails when you choose</span>
             <button
@@ -8508,7 +8708,7 @@ function ProfileTab({
             className={`mt-3 rounded-xl px-4 py-2.5 text-xs font-medium ${
               autofilled
                 ? "border border-warm-border bg-warm-bg/70 text-ink"
-                : "border border-warm-border bg-white text-body"
+                : "border border-warm-border bg-surface text-body"
             }`}
           >
             {note}
@@ -8600,7 +8800,7 @@ function ProfileTab({
 
           <div className="mt-5">
             <Label>Are you applying to jobs or internships?</Label>
-            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
               {(
                 [
                   ["yes", "Yes"],
@@ -8630,7 +8830,7 @@ function ProfileTab({
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div>
                 <Label>Company size you want</Label>
-                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
                   {(
                     [
                       ["any", "Any"],
@@ -8654,7 +8854,7 @@ function ProfileTab({
               </div>
               <div>
                 <Label>Competitiveness</Label>
-                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
                   {(
                     [
                       ["any", "Any"],
@@ -8809,7 +9009,7 @@ function AccountCard({
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="mt-7 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
+    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
@@ -9065,7 +9265,7 @@ function FileDrop({
 /* ---------------- Profile gate (shown until a profile exists) ---------------- */
 function ProfileGate({ onSetup }: { onSetup: () => void }) {
   return (
-    <section className="mt-6 rounded-3xl border border-warm-border bg-white p-8 text-center shadow-soft sm:p-12">
+    <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-8 text-center shadow-soft sm:p-12">
       <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-gradient">
         <svg
           width="26"
@@ -9177,7 +9377,7 @@ function Step({
   icon: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
       <div className="flex items-center gap-3">
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient text-white">
           <svg
@@ -9207,7 +9407,7 @@ function Tail({ side }: { side: "left" | "right" }) {
   return (
     <span
       aria-hidden
-      className={`absolute top-4 h-3.5 w-3.5 rotate-45 bg-white ${
+      className={`absolute top-4 h-3.5 w-3.5 rotate-45 bg-surface ${
         side === "left"
           ? "-left-[7px] border-b border-l border-warm-border"
           : "-right-[7px] border-r border-t border-warm-border"
@@ -9416,7 +9616,7 @@ function ProjectCategoryList({
                     key={s.name}
                     onClick={() => onAdd(s.name, s.goal)}
                     title={s.goal}
-                    className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-ink transition hover:border-coral/40 hover:bg-warm-bg"
+                    className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:border-coral/40 hover:bg-warm-bg"
                   >
                     + {s.name}
                   </button>
@@ -9501,7 +9701,7 @@ function ProjectsCategoriesEditor({
           return (
             <div
               key={p.id}
-              className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
+              className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
             >
               <div className="flex items-center gap-2">
                 <span
@@ -9630,7 +9830,7 @@ function CategoryManager({
   return (
     <div
       ref={ref}
-      className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-2xl border border-warm-border bg-white p-3 shadow-soft"
+      className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-2xl border border-warm-border bg-surface p-3 shadow-soft"
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wider text-body/60">
@@ -9755,10 +9955,10 @@ function ExpandIcon() {
 function HeroArt() {
   return (
     <div className="relative mx-auto h-56 w-full max-w-sm">
-      <div className="absolute right-6 top-2 w-60 rounded-2xl rounded-tr-sm border border-warm-border bg-white p-3.5 shadow-soft">
+      <div className="absolute right-6 top-2 w-60 rounded-2xl rounded-tr-sm border border-warm-border bg-surface p-3.5 shadow-soft">
         <span
           aria-hidden
-          className="absolute -right-[6px] top-5 h-3 w-3 rotate-45 border-r border-t border-warm-border bg-white"
+          className="absolute -right-[6px] top-5 h-3 w-3 rotate-45 border-r border-t border-warm-border bg-surface"
         />
         <div className="mb-2 flex items-center gap-2">
           <span className="h-6 w-6 rounded-full bg-brand-gradient" />
@@ -9785,7 +9985,7 @@ function HeroArt() {
         <div className="h-2 w-full rounded-full bg-white/35" />
         <div className="mt-1.5 h-2 w-3/4 rounded-full bg-white/35" />
       </div>
-      <div className="absolute bottom-1 right-10 flex items-center gap-1.5 rounded-full border border-warm-border bg-white px-3 py-2 shadow-card">
+      <div className="absolute bottom-1 right-10 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface px-3 py-2 shadow-card">
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blush [animation-delay:150ms]" />
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral [animation-delay:300ms]" />

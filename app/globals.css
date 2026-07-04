@@ -4,12 +4,62 @@
 
 :root {
   color-scheme: light;
+  /* Palette as space-separated RGB triplets so Tailwind's rgb(var / a) works.
+     Light theme. */
+  --c-ink: 32 29 24;
+  --c-body: 87 83 76;
+  --c-muted: 124 119 109;
+  --c-brown: 124 88 55;
+  --c-brown-deep: 93 64 38;
+  --c-brown-tint: 242 236 225;
+  --c-clay: 200 184 153;
+  --c-coffee: 38 34 28;
+  --c-success: 63 122 82;
+  --c-success-deep: 47 92 63;
+  --c-attention: 169 118 31;
+  --c-danger: 176 85 63;
+  --c-sage: 140 154 118;
+  --c-sage-deep: 95 106 71;
+  --c-cream: 243 242 239;
+  --c-surface: 255 255 255;
+  --c-surface-2: 251 251 249;
+  --c-warm-bg: 244 242 238;
+  --c-warm-border: 232 230 224;
+  --brand-a: #7c5837;
+  --brand-b: #5d4026;
+}
+
+html.dark {
+  color-scheme: dark;
+  /* Warm dark theme — deep espresso grounds, cream text, the brown accent
+     lifted a touch so it reads on dark surfaces. */
+  --c-ink: 242 239 232;
+  --c-body: 199 193 182;
+  --c-muted: 146 139 127;
+  --c-brown: 185 138 87;
+  --c-brown-deep: 162 118 74;
+  --c-brown-tint: 51 41 28;
+  --c-clay: 107 95 73;
+  --c-coffee: 240 236 228;
+  --c-success: 106 168 127;
+  --c-success-deep: 143 192 160;
+  --c-attention: 208 162 78;
+  --c-danger: 212 122 99;
+  --c-sage: 154 168 134;
+  --c-sage-deep: 179 191 158;
+  --c-cream: 26 23 18;
+  --c-surface: 36 32 26;
+  --c-surface-2: 31 27 21;
+  --c-warm-bg: 44 39 31;
+  --c-warm-border: 58 53 44;
+  --brand-a: #b98a57;
+  --brand-b: #a2764a;
 }
 
 body {
-  /* Light near-neutral canvas; white panels sit on top for clean separation. */
-  background: #f3f2ef;
-  color: #57534c;
+  /* Canvas + body text follow the theme variables. */
+  background: rgb(var(--c-cream));
+  color: rgb(var(--c-body));
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
@@ -17,7 +67,7 @@ body {
 
 /* Gradient text helper for the wordmark + accents (warm brown, near-flat). */
 .brand-text {
-  background: linear-gradient(100deg, #7c5837 0%, #5d4026 100%);
+  background: linear-gradient(100deg, var(--brand-a) 0%, var(--brand-b) 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -32,7 +82,14 @@ body {
 
 /* Plain surface (previously a ruled/taped note — now a clean card). */
 .note-paper {
-  background-color: #ffffff;
+  background-color: rgb(var(--c-surface));
+}
+
+/* The warm-fade hero gradient is a fixed light gradient in the Tailwind config;
+   override it in dark so hero sections don't stay bright. Higher specificity
+   (element + two classes) beats the plain utility. */
+html.dark .bg-warm-fade {
+  background-image: linear-gradient(180deg, #1a1712 0%, #24201a 60%);
 }
 
 /* Folder tab that sits on top of a panel. */

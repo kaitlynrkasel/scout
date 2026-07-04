@@ -130,7 +130,7 @@ export default function InsightsView({
       )}
 
       {!data && !error && busy && (
-        <div className="rounded-2xl border border-warm-border bg-white p-6 text-sm text-body">
+        <div className="rounded-2xl border border-warm-border bg-surface p-6 text-sm text-body">
           Aggregating across all users…
         </div>
       )}
@@ -162,7 +162,7 @@ export default function InsightsView({
             ].map(([label, value]) => (
               <div
                 key={String(label)}
-                className="rounded-2xl border border-warm-border bg-white p-4"
+                className="rounded-2xl border border-warm-border bg-surface p-4"
               >
                 <div className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
                   {label}
@@ -178,7 +178,7 @@ export default function InsightsView({
               their client never synced to Supabase (incognito, signed out, or
               a different Supabase project). If their row is here but shows 0
               finds, the finds array isn't being saved. */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
+          <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
               Per-user (sorted by finds)
             </h2>
@@ -188,7 +188,7 @@ export default function InsightsView({
             </p>
             <div className="mt-3 max-h-64 overflow-y-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
+                <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
                     <th className="py-1">User</th>
                     <th className="py-1 text-right">Finds</th>
@@ -241,7 +241,7 @@ export default function InsightsView({
 
           {/* Deny reasons + top denied hosts side by side */}
           <div className="mt-6 grid gap-6 md:grid-cols-2">
-            <section className="rounded-2xl border border-warm-border bg-white p-5">
+            <section className="rounded-2xl border border-warm-border bg-surface p-5">
               <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                 Top deny reasons
               </h2>
@@ -267,7 +267,7 @@ export default function InsightsView({
               </ul>
             </section>
 
-            <section className="rounded-2xl border border-warm-border bg-white p-5">
+            <section className="rounded-2xl border border-warm-border bg-surface p-5">
               <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                 Top denied hosts
               </h2>
@@ -288,7 +288,7 @@ export default function InsightsView({
           </div>
 
           {/* Deny rate per use case */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
+          <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
               Deny rate by use case
             </h2>
@@ -328,7 +328,7 @@ export default function InsightsView({
           </section>
 
           {/* Raw denial log with search */}
-          <section className="mt-6 rounded-2xl border border-warm-border bg-white p-5">
+          <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                 Raw denials ({data.denials.length}, newest first)
@@ -342,7 +342,7 @@ export default function InsightsView({
             </div>
             <div className="mt-3 max-h-[520px] overflow-y-auto">
               <table className="w-full text-xs">
-                <thead className="sticky top-0 bg-white">
+                <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
                     <th className="py-1">Name</th>
                     <th className="py-1">Reason</th>

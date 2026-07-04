@@ -14,7 +14,7 @@ export default function Analytics() {
       {/* Hero */}
       <section className="bg-warm-fade">
         <div className="mx-auto max-w-6xl px-6 pb-10 pt-14">
-          <span className="inline-block rounded-full border border-warm-border bg-white px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent shadow-card">
+          <span className="inline-block rounded-full border border-warm-border bg-surface px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-accent shadow-card">
             The proof
           </span>
           <h1 className="mt-4 max-w-3xl text-4xl font-extrabold leading-[1.1] tracking-tight text-ink sm:text-5xl">
@@ -86,7 +86,7 @@ export default function Analytics() {
         >
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Finds */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
               <div className="mb-3 text-xs font-bold uppercase tracking-wider text-body/60">
                 What Scout found
               </div>
@@ -111,7 +111,7 @@ export default function Analytics() {
             </div>
 
             {/* Draft */}
-            <div className="rounded-2xl border border-warm-border bg-white p-5 shadow-card">
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
               <div className="mb-3 text-xs font-bold uppercase tracking-wider text-body/60">
                 A draft, in your voice
               </div>
@@ -146,7 +146,7 @@ Thanks so much, and congrats again on the launches!`}
           sub="What outreach takes by hand vs. with Scout."
         >
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+            <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
               <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                 By hand
               </div>
@@ -180,7 +180,7 @@ Thanks so much, and congrats again on the launches!`}
           sub="Two loops make every search sharper, one just for you, one for everyone."
         >
           <div className="grid gap-5 sm:grid-cols-2">
-            <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+            <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
               <div className="mb-3 flex items-center gap-2">
                 <span className="h-8 w-8 rounded-xl bg-brand-gradient" />
                 <span className="text-xs font-bold uppercase tracking-wider text-accent">
@@ -195,7 +195,7 @@ Thanks so much, and congrats again on the launches!`}
                 land closer to what you want. This stays private to your account.
               </p>
             </div>
-            <div className="rounded-2xl border border-warm-border bg-white p-6 shadow-card">
+            <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
               <div className="mb-3 flex items-center gap-2">
                 <span className="h-8 w-8 rounded-xl bg-brand-gradient" />
                 <span className="text-xs font-bold uppercase tracking-wider text-accent">
@@ -219,7 +219,7 @@ Thanks so much, and congrats again on the launches!`}
         </Section>
 
         {/* Honesty note + CTA */}
-        <div className="mt-14 rounded-2xl border border-warm-border bg-white p-6 text-center shadow-card">
+        <div className="mt-14 rounded-2xl border border-warm-border bg-surface p-6 text-center shadow-card">
           <p className="mx-auto max-w-2xl text-sm leading-relaxed text-body">
             Scout is new, so the figures above are the search funnel and well-established
             industry benchmarks, not inflated user counts. The best proof is trying it:
@@ -284,7 +284,7 @@ function FunnelStep({
       className={`rounded-2xl border p-4 ${
         highlight
           ? "border-coral/40 bg-warm-bg/50"
-          : "border-warm-border bg-white"
+          : "border-warm-border bg-surface"
       } shadow-card`}
     >
       <div className={`text-xl font-extrabold ${highlight ? "brand-text" : "text-ink"}`}>
@@ -348,7 +348,7 @@ function FindCard({
   channel: string;
 }) {
   return (
-    <div className="rounded-xl border border-warm-border bg-white p-3.5">
+    <div className="rounded-xl border border-warm-border bg-surface p-3.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-ink">{name}</span>
         <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
