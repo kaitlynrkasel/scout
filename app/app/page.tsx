@@ -3767,6 +3767,7 @@ function ScoutTool({
             setMtChannel(channel);
             setTab("templates");
           }}
+          getToken={getToken}
         />
       )}
 
@@ -6760,6 +6761,7 @@ function DashboardTab({
   goFinds,
   onEditProject,
   onSeedTemplateForChannel,
+  getToken,
 }: {
   activity: Activity;
   profile: Profile;
@@ -6780,6 +6782,7 @@ function DashboardTab({
   goFinds: () => void;
   onEditProject: (id: string) => void;
   onSeedTemplateForChannel: (channel: string) => void;
+  getToken?: () => Promise<string | null>;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -6828,6 +6831,51 @@ function DashboardTab({
       setTuningBusy(false);
     }
   }
+
+  // Algorithm change log: every edit the auto-tune cron has made (see
+  // /api/cron/auto-tune + supabase/auto_tune_log.sql). "Seen" is tracked
+  // locally so a badge can flag unread entries without touching the shared
+  // account state that the auto-tune system deliberately keeps separate from.
+  const AUTOTUNE_SEEN_KEY = "scout_autotune_log_seen_at";
+  const [autoTuneEntries, setAutoTuneEntries] = useState<any[] | null>(null);
+  const [autoTuneLogOpen, setAutoTuneLogOpen] = useState(false);
+  const [autoTuneLogErr, setAutoTuneLogErr] = useState("");
+  const [autoTuneSeenAt, setAutoTuneSeenAt] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem(AUTOTUNE_SEEN_KEY) || 0);
+    } catch {
+      return 0;
+    }
+  });
+  useEffect(() => {
+    if (!getToken) return;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const res = await fetch("/api/auto-tune-log", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) setAutoTuneEntries(data.entries || []);
+        else setAutoTuneLogErr(data?.error || "");
+      } catch {
+        /* silent — the badge/log just stays empty */
+      }
+    })();
+  }, [getToken]);
+  const unseenAutoTuneCount = (autoTuneEntries || []).filter(
+    (e) => new Date(e.created_at).getTime() > autoTuneSeenAt
+  ).length;
+  function openAutoTuneLog() {
+    setAutoTuneLogOpen((v) => !v);
+    const now = Date.now();
+    setAutoTuneSeenAt(now);
+    try {
+      localStorage.setItem(AUTOTUNE_SEEN_KEY, String(now));
+    } catch {}
+  }
+
   // Contacts you reached out to about a week ago that still haven't replied — a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
@@ -7906,6 +7954,99 @@ function DashboardTab({
               </button>
             </div>
           )}
+
+          {/* -------- Algorithm change log --------
+              Everything the auto-tune cron has actually done, in full —
+              exactly what changed, why, and a link to the commit. */}
+          <div className="mt-6 border-t border-warm-border pt-4">
+            <button
+              onClick={openAutoTuneLog}
+              className="flex w-full items-center gap-2 text-left text-sm font-bold text-ink"
+            >
+              Algorithm change log
+              {unseenAutoTuneCount > 0 && (
+                <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
+                  {unseenAutoTuneCount} new
+                </span>
+              )}
+              <span className="ml-auto text-xs font-semibold text-body/60">
+                {autoTuneLogOpen ? "Hide ▴" : "Show ▾"}
+              </span>
+            </button>
+            <p className="mt-1 text-xs leading-relaxed text-body/70">
+              Every edit the auto-tune cron has made to lib/discover.ts, unreviewed and
+              already live — this is the audit trail.
+            </p>
+            {autoTuneLogOpen && (
+              <div className="mt-3 space-y-3">
+                {autoTuneLogErr && (
+                  <p className="text-xs font-semibold text-red-700">{autoTuneLogErr}</p>
+                )}
+                {autoTuneEntries === null ? (
+                  <p className="text-xs text-body/50">Loading…</p>
+                ) : autoTuneEntries.length === 0 ? (
+                  <p className="text-xs text-body/50">
+                    No auto-tune edits yet — nothing has crossed the confidence gate.
+                  </p>
+                ) : (
+                  autoTuneEntries.map((e) => (
+                    <div
+                      key={e.id}
+                      className="rounded-xl border border-warm-border bg-warm-bg/40 p-3"
+                    >
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <span className="font-bold text-ink">{e.label}</span>
+                        <span className="text-body/50">
+                          {new Date(e.created_at).toLocaleString([], {
+                            month: "short",
+                            day: "numeric",
+                            hour: "numeric",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                        {e.commit_url && (
+                          <a
+                            href={e.commit_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="ml-auto font-semibold text-accent hover:underline"
+                          >
+                            View commit ↗
+                          </a>
+                        )}
+                      </div>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-body/50">
+                            Before
+                          </div>
+                          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                            {e.old_clause}
+                          </p>
+                        </div>
+                        <div>
+                          <div className="text-[10px] font-bold uppercase tracking-wide text-body/50">
+                            After
+                          </div>
+                          <p className="mt-0.5 text-xs leading-relaxed text-ink">
+                            {e.new_clause}
+                          </p>
+                        </div>
+                      </div>
+                      {e.signal?.topBucket && (
+                        <p className="mt-2 text-[11px] text-body/60">
+                          Triggered by: {e.signal.decided} decided finds, &quot;
+                          {e.signal.topBucket.label}&quot; was{" "}
+                          {Math.round(e.signal.topBucket.share * 100)}% of denials (
+                          {e.signal.topBucket.count} instances).
+                        </p>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+          </div>
         </section>
       ) : (
         <section className="mt-10 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-center text-sm text-body/60">

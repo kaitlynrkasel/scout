@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { claudeJson } from "@/lib/claude";
 import { githubConfigured, getFile, putFile } from "@/lib/github";
+import { gmailSendOrDraft } from "@/lib/gmail";
+import { outlookSendOrDraft } from "@/lib/outlook";
 import {
   computeTuningSignal,
   meetsThreshold,
@@ -25,6 +27,12 @@ const DISCOVER_PATH = "lib/discover.ts";
 // existing git integration deploys it from there. See the chat that requested
 // this ("fully autonomous, no review") for the reasoning and chosen
 // thresholds (MIN_DECIDED=20, MIN_BUCKET_SHARE=0.3, COOLDOWN_DAYS=7).
+//
+// Every applied edit is (a) logged to the auto_tune_log table — the
+// before/after clause text, the data that triggered it, and the GitHub commit
+// link — surfaced in-app as the algorithm change log, and (b) emailed to the
+// owner's connected mailbox as a best-effort notification. The log write is
+// the source of truth; email failing never blocks it.
 export async function GET(req: NextRequest) {
   const auth = req.headers.get("authorization") || "";
   const secret = process.env.CRON_SECRET || "";
@@ -53,44 +61,52 @@ export async function GET(req: NextRequest) {
   if (userErr) {
     return NextResponse.json({ error: `Couldn't list users: ${userErr.message}` }, { status: 500 });
   }
-  const ownerIds = (userList?.users || [])
-    .filter((u) => ownerEmails.includes((u.email || "").toLowerCase()))
-    .map((u) => u.id);
-  if (!ownerIds.length) {
+  const owners = (userList?.users || []).filter((u) =>
+    ownerEmails.includes((u.email || "").toLowerCase())
+  );
+  if (!owners.length) {
     return NextResponse.json({ skipped: true, reason: "No owner account found." });
   }
 
   const results: any[] = [];
-  for (const userId of ownerIds) {
+  for (const u of owners) {
     try {
-      results.push(await runForUser(userId));
+      results.push(await runForUser(u.id, u.email || ""));
     } catch (e: any) {
-      results.push({ userId, error: e?.message || "unknown error" });
+      results.push({ userId: u.id, error: e?.message || "unknown error" });
     }
   }
   return NextResponse.json({ results });
 }
 
-async function runForUser(userId: string) {
+async function runForUser(userId: string, ownerEmail: string) {
+  // Cooldown lives in the audit log itself (most recent row's timestamp) —
+  // single source of truth, no separate state field that could drift from it.
+  const { data: lastEntry } = await supabaseAdmin!
+    .from("auto_tune_log")
+    .select("created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const cooldownMs = COOLDOWN_DAYS * 86400000;
+  if (lastEntry?.created_at) {
+    const elapsed = Date.now() - new Date(lastEntry.created_at).getTime();
+    if (elapsed < cooldownMs) {
+      return {
+        userId,
+        applied: false,
+        reason: `cooldown active, ${Math.ceil((cooldownMs - elapsed) / 86400000)}d remaining`,
+      };
+    }
+  }
+
   const { data: row } = await supabaseAdmin!
     .from("user_state")
     .select("data")
     .eq("user_id", userId)
     .maybeSingle();
-  const state = (row?.data || {}) as any;
-  const finds = Array.isArray(state.finds) ? state.finds : [];
-
-  // Cooldown — refuse to fire again until enough time has passed, regardless
-  // of how strong the signal looks, so it can't thrash the same clause.
-  const lastRun = state.autoTuneLastRunAt ? new Date(state.autoTuneLastRunAt).getTime() : 0;
-  const cooldownMs = COOLDOWN_DAYS * 86400000;
-  if (lastRun && Date.now() - lastRun < cooldownMs) {
-    return {
-      userId,
-      applied: false,
-      reason: `cooldown active, ${Math.ceil((cooldownMs - (Date.now() - lastRun)) / 86400000)}d remaining`,
-    };
-  }
+  const finds = Array.isArray(row?.data?.finds) ? row!.data.finds : [];
 
   const signal = computeTuningSignal(finds);
   if (!meetsThreshold(signal)) {
@@ -150,28 +166,89 @@ async function runForUser(userId: string) {
     return { userId, applied: false, reason: `sanity check failed: ${check.reason}` };
   }
 
-  const message =
+  const commitMessage =
     `Auto-tune: ${slot.label}\n\n` +
     `${signal.decided} decided finds, ${signal.topBucket!.label} is ${Math.round(signal.topBucket!.share * 100)}% ` +
     `of denials (${signal.topBucket!.count} instances). Kept/denied avg fit: ` +
     `${signal.keptFit != null ? Math.round(signal.keptFit * 100) : "n/a"}% / ` +
     `${signal.deniedFit != null ? Math.round(signal.deniedFit * 100) : "n/a"}%.\n\n` +
     `Autonomous edit, no human review — see lib/autotune.ts.`;
-  await putFile(DISCOVER_PATH, revised, sha, message);
+  const { commitUrl } = await putFile(DISCOVER_PATH, revised, sha, commitMessage);
 
-  const nowIso = new Date().toISOString();
-  const log = Array.isArray(state.autoTuneLog) ? state.autoTuneLog : [];
-  await supabaseAdmin!.from("user_state").upsert({
+  await supabaseAdmin!.from("auto_tune_log").insert({
     user_id: userId,
-    data: {
-      ...state,
-      autoTuneLastRunAt: nowIso,
-      autoTuneLog: [
-        { at: nowIso, slot: slot.constName, label: slot.label, signal },
-        ...log,
-      ].slice(0, 20),
-    },
+    slot: slot.constName,
+    label: slot.label,
+    old_clause: currentClause,
+    new_clause: newClause,
+    commit_url: commitUrl,
+    signal,
   });
 
-  return { userId, applied: true, slot: slot.constName, signal, newClause };
+  await notifyOwner(userId, ownerEmail, slot.label, currentClause, newClause, signal, commitUrl);
+
+  return { userId, applied: true, slot: slot.constName, signal, newClause, commitUrl };
+}
+
+// Best-effort email through whichever mailbox the owner has connected. Never
+// throws — the log entry above is the actual record; this is just the alert.
+async function notifyOwner(
+  userId: string,
+  ownerEmail: string,
+  label: string,
+  oldClause: string,
+  newClause: string,
+  signal: ReturnType<typeof computeTuningSignal>,
+  commitUrl: string
+) {
+  if (!ownerEmail) return;
+  const subject = `Scout auto-tuned itself: ${label}`;
+  const body =
+    `Scout's search algorithm just tuned itself, no review, straight to production.\n\n` +
+    `WHAT CHANGED — ${label}\n\n` +
+    `BEFORE:\n${oldClause}\n\n` +
+    `AFTER:\n${newClause}\n\n` +
+    `WHY: of ${signal.decided} decided finds, "${signal.topBucket?.label}" was ${Math.round((signal.topBucket?.share || 0) * 100)}% of denials ` +
+    `(${signal.topBucket?.count} instances).${
+      signal.keptFit != null && signal.deniedFit != null
+        ? ` Kept/denied avg fit: ${Math.round(signal.keptFit * 100)}% / ${Math.round(signal.deniedFit * 100)}%.`
+        : ""
+    }\n\n` +
+    `Commit: ${commitUrl}\n\n` +
+    `Full history is in the app under Dashboard → Tune the search algorithm → Change log.`;
+
+  try {
+    const gmail = await supabaseAdmin!
+      .from("gmail_connections")
+      .select("email, refresh_token")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (gmail.data?.refresh_token) {
+      await gmailSendOrDraft({
+        refreshToken: gmail.data.refresh_token,
+        from: gmail.data.email || ownerEmail,
+        to: ownerEmail,
+        subject,
+        body,
+        mode: "send",
+      });
+      return;
+    }
+    const outlook = await supabaseAdmin!
+      .from("outlook_connections")
+      .select("email, refresh_token")
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (outlook.data?.refresh_token) {
+      await outlookSendOrDraft({
+        refreshToken: outlook.data.refresh_token,
+        to: ownerEmail,
+        subject,
+        body,
+        mode: "send",
+      });
+    }
+  } catch (e) {
+    console.warn("auto-tune notification email failed (log entry still saved):", e);
+  }
 }

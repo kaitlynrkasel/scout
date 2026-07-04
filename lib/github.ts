@@ -36,7 +36,7 @@ export async function putFile(
   content: string,
   sha: string,
   message: string
-): Promise<void> {
+): Promise<{ commitUrl: string; commitSha: string }> {
   const res = await fetch(`${API}/contents/${encodeURIComponent(path)}`, {
     method: "PUT",
     headers: { ...authHeaders(), "content-type": "application/json" },
@@ -51,4 +51,9 @@ export async function putFile(
     const body = await res.text().catch(() => "");
     throw new Error(`GitHub PUT ${path} failed: ${res.status} ${body.slice(0, 300)}`);
   }
+  const data = await res.json();
+  return {
+    commitUrl: data?.commit?.html_url || `https://github.com/${OWNER}/${REPO}/commits/main`,
+    commitSha: data?.commit?.sha || "",
+  };
 }
