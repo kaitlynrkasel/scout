@@ -4332,6 +4332,291 @@ function DenyReasons({
   );
 }
 
+// URLs that are almost certainly a job/application posting rather than a plain
+// company site — used to label the primary link as "Open application".
+function looksLikeApplication(url?: string): boolean {
+  const u = String(url || "").toLowerCase();
+  if (!u) return false;
+  return /(greenhouse\.io|lever\.co|myworkdayjobs|workday|ashbyhq|jobs\.|\/jobs|\/careers|\/apply|smartrecruiters|icims|taleo|bamboohr|breezy\.hr|workable|jobvite|recruitee)/.test(
+    u
+  );
+}
+
+/* ---------------- Find detail modal ----------------
+ * Click into a find to see everything about it in one place: all contact info
+ * neatly formatted, why it fits, what they ask for, its sources — plus a live,
+ * in-page preview of their website you can expand/contract (or drag to resize),
+ * and a prominent link to the application when the target is a job posting.
+ * Read-only: the draft/send actions stay on the card behind it. */
+function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void }) {
+  const o = find.opp;
+  const [tall, setTall] = useState(false); // preview height: compact vs expanded
+  const [frameLoaded, setFrameLoaded] = useState(false);
+  const recipientTz = o.timezone || guessTimezone(o.location);
+  const isApplication =
+    !!find.application || looksLikeApplication(o.url) || o.channel === "Company Portal";
+  const host = (() => {
+    try {
+      return o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
+    } catch {
+      return "";
+    }
+  })();
+
+  // Close on Escape.
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, [onClose]);
+
+  // Neatly-formatted contact rows — only the ones we actually have.
+  const rows: { label: string; node: React.ReactNode }[] = [];
+  if (o.contactEmail)
+    rows.push({
+      label: "Email",
+      node: <ContactValue value={o.contactEmail} className="font-semibold text-accent" />,
+    });
+  if (o.contactPhone)
+    rows.push({
+      label: "Phone",
+      node: (
+        <a
+          href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
+          className="font-semibold text-ink underline decoration-dotted underline-offset-2 hover:text-accent"
+        >
+          {o.contactPhone}
+        </a>
+      ),
+    });
+  if (o.contactName)
+    rows.push({
+      label: "Contact",
+      node: (
+        <span className="text-ink">
+          {o.contactName}
+          {o.contactRole ? <span className="text-body/70"> · {o.contactRole}</span> : null}
+        </span>
+      ),
+    });
+  if (o.contactHandle)
+    rows.push({
+      label: "Profile",
+      node: <ContactValue value={o.contactHandle} className="text-ink" />,
+    });
+  if (o.outlet) rows.push({ label: "Organization", node: <span className="text-ink">{o.outlet}</span> });
+  if (o.location)
+    rows.push({
+      label: "Location",
+      node: (
+        <span className="text-ink">
+          {o.location}
+          {recipientTz ? (
+            <span className="text-body/60"> · {localTimeLabel(recipientTz)} their time</span>
+          ) : null}
+        </span>
+      ),
+    });
+  if (o.url)
+    rows.push({
+      label: "Website",
+      node: (
+        <a
+          href={o.url}
+          target="_blank"
+          rel="noreferrer"
+          className="break-all text-accent underline decoration-dotted underline-offset-2 hover:text-brown-deep"
+        >
+          {host || o.url}
+        </a>
+      ),
+    });
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-3 backdrop-blur-sm sm:p-6"
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={`Details for ${o.name}`}
+    >
+      <div
+        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-warm-border bg-surface shadow-soft"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-start gap-3 border-b border-warm-border px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="truncate text-lg font-bold text-ink">{o.name}</span>
+              {o.fitScore != null && (
+                <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
+                  {Math.round(o.fitScore * 100)}% fit
+                </span>
+              )}
+              <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
+                {o.channel}
+              </span>
+              <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold capitalize text-body/80">
+                {find.status}
+              </span>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Close
+          </button>
+        </div>
+
+        {/* Body: info + website preview */}
+        <div className="grid flex-1 grid-cols-1 gap-0 overflow-auto lg:grid-cols-[minmax(280px,340px)_1fr]">
+          {/* Left: neatly formatted info */}
+          <div className="space-y-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
+            <div>
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                Contact
+              </div>
+              {rows.length ? (
+                <dl className="space-y-2">
+                  {rows.map((r) => (
+                    <div key={r.label} className="grid grid-cols-[84px_1fr] items-start gap-2 text-sm">
+                      <dt className="pt-0.5 text-[11px] font-semibold uppercase tracking-wide text-body/45">
+                        {r.label}
+                      </dt>
+                      <dd className="min-w-0 break-words leading-relaxed">{r.node}</dd>
+                    </div>
+                  ))}
+                </dl>
+              ) : (
+                <p className="text-sm text-body/50">No direct contact found yet.</p>
+              )}
+            </div>
+
+            {/* Quick actions */}
+            <div className="flex flex-wrap gap-2">
+              {o.url && (
+                <a
+                  href={o.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+                >
+                  {isApplication ? "Open application ↗" : "Open site ↗"}
+                </a>
+              )}
+              {o.contactEmail && mailHref(o.contactEmail) && (
+                <a
+                  href={`mailto:${o.contactEmail}`}
+                  className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                >
+                  Email
+                </a>
+              )}
+              {o.contactPhone && (
+                <a
+                  href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
+                  className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                >
+                  Call
+                </a>
+              )}
+            </div>
+
+            {o.whyItFits && (
+              <div>
+                <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  Why it fits
+                </div>
+                <p className="text-sm leading-relaxed text-body">{o.whyItFits}</p>
+              </div>
+            )}
+
+            {find.requirements && (
+              <div className="rounded-xl border border-sage/40 bg-sage/10 p-2.5 text-xs leading-relaxed text-brown-deep">
+                <span className="font-bold">What they ask for: </span>
+                {find.requirements}
+              </div>
+            )}
+
+            {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
+          </div>
+
+          {/* Right: live website preview */}
+          <div className="flex min-h-0 flex-col p-5">
+            <div className="mb-2 flex items-center gap-2">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                {isApplication ? "Application preview" : "Website preview"}
+              </div>
+              {host && <span className="truncate text-xs text-body/50">{host}</span>}
+              {o.url && (
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button
+                    onClick={() => setTall((v) => !v)}
+                    className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    {tall ? "Contract" : "Expand"}
+                  </button>
+                  <a
+                    href={o.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    Open ↗
+                  </a>
+                </div>
+              )}
+            </div>
+            {o.url ? (
+              <div
+                className="relative w-full overflow-hidden rounded-xl border border-warm-border bg-white"
+                style={{ height: tall ? "72vh" : 420, resize: "vertical", minHeight: 240 }}
+              >
+                {!frameLoaded && (
+                  <div className="absolute inset-0 flex items-center justify-center text-xs text-body/40">
+                    Loading preview…
+                  </div>
+                )}
+                <iframe
+                  src={o.url}
+                  title={`Preview of ${host || o.name}`}
+                  onLoad={() => setFrameLoaded(true)}
+                  referrerPolicy="no-referrer"
+                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  className="h-full w-full"
+                />
+              </div>
+            ) : (
+              <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-warm-border text-sm text-body/40">
+                No website on file for this find.
+              </div>
+            )}
+            {o.url && (
+              <p className="mt-2 text-[11px] leading-relaxed text-body/50">
+                Some sites block embedding for security. If the preview stays blank,
+                use{" "}
+                <a
+                  href={o.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-accent hover:underline"
+                >
+                  Open ↗
+                </a>{" "}
+                to view it in a new tab. Drag the bottom edge to resize.
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
 function FindsTab({
   finds,
@@ -4434,6 +4719,11 @@ function FindsTab({
         (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
         (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
     );
+
+  // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
+  // so it reflects live updates while open.
+  const [detailId, setDetailId] = useState("");
+  const detailFind = detailId ? finds.find((f) => f.id === detailId) || null : null;
 
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
@@ -4576,9 +4866,14 @@ function FindsTab({
               hasResume={hasResume}
               onToggleAttach={(on) => onToggleAttach(f, on)}
               onTogglePin={() => onTogglePin(f.id)}
+              onOpenDetail={() => setDetailId(f.id)}
             />
           ))}
         </div>
+      )}
+
+      {detailFind && (
+        <FindDetailModal find={detailFind} onClose={() => setDetailId("")} />
       )}
     </main>
   );
@@ -4771,6 +5066,7 @@ function FindCard({
   hasResume,
   onToggleAttach,
   onTogglePin,
+  onOpenDetail,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -4799,6 +5095,7 @@ function FindCard({
   hasResume: boolean;
   onToggleAttach: (on: boolean) => void;
   onTogglePin: () => void;
+  onOpenDetail: () => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -4854,15 +5151,13 @@ function FindCard({
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold text-ink">
-          {o.url ? (
-            <a href={o.url} target="_blank" rel="noreferrer" className="transition hover:text-accent">
-              {o.name}
-            </a>
-          ) : (
-            o.name
-          )}
-        </span>
+        <button
+          onClick={onOpenDetail}
+          title="Open details, contact info, and a website preview"
+          className="text-left font-semibold text-ink underline-offset-2 transition hover:text-accent hover:underline"
+        >
+          {o.name}
+        </button>
         <FindStatusBadge status={find.status} onStatus={onStatus} />
         {o.fitScore != null && (
           <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
@@ -4887,11 +5182,23 @@ function FindCard({
           </span>
         )}
         <button
+          onClick={onOpenDetail}
+          title="Open details, contact info, and a website preview"
+          className="ml-auto shrink-0 inline-flex items-center gap-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M15 3h6v6" />
+            <path d="M10 14 21 3" />
+            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" />
+          </svg>
+          Details
+        </button>
+        <button
           onClick={onTogglePin}
           title={find.pinned ? "Unpin" : "Pin to top"}
           aria-label={find.pinned ? "Unpin find" : "Pin find to top"}
           aria-pressed={!!find.pinned}
-          className={`ml-auto shrink-0 rounded-lg border p-1 transition ${
+          className={`shrink-0 rounded-lg border p-1 transition ${
             find.pinned
               ? "border-coral/40 bg-coral/10 text-accent"
               : "border-transparent text-body/40 hover:border-warm-border hover:bg-warm-bg hover:text-accent"
