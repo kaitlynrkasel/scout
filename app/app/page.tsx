@@ -4436,14 +4436,14 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center bg-ink/40 p-3 backdrop-blur-sm sm:p-6"
+      className="fixed inset-0 z-50 bg-surface"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={`Details for ${o.name}`}
     >
       <div
-        className="flex max-h-[94vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-warm-border bg-surface shadow-soft"
+        className="flex h-full w-full flex-col overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -4472,10 +4472,10 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
           </button>
         </div>
 
-        {/* Body: info + website preview */}
-        <div className="grid flex-1 grid-cols-1 gap-0 overflow-auto lg:grid-cols-[minmax(280px,340px)_1fr]">
+        {/* Body: info + website preview — fills the rest of the fullscreen modal */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(280px,340px)_1fr]">
           {/* Left: neatly formatted info */}
-          <div className="space-y-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
+          <div className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Contact
@@ -4545,8 +4545,8 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
             {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
           </div>
 
-          {/* Right: live website preview */}
-          <div className="flex min-h-0 flex-col p-5">
+          {/* Right: live website preview — fills all remaining height */}
+          <div className="flex h-full min-h-0 flex-col p-5">
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
                 {isApplication ? "Application preview" : "Website preview"}
@@ -4573,8 +4573,8 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
             </div>
             {o.url ? (
               <div
-                className="relative w-full overflow-hidden rounded-xl border border-warm-border bg-white"
-                style={{ height: tall ? "72vh" : 420, resize: "vertical", minHeight: 240 }}
+                className="relative w-full min-h-0 flex-1 overflow-hidden rounded-xl border border-warm-border bg-white"
+                style={{ height: tall ? "100%" : "65vh", resize: "vertical", minHeight: 240 }}
               >
                 {!frameLoaded && (
                   <div className="absolute inset-0 flex items-center justify-center text-xs text-body/40">
