@@ -3400,6 +3400,12 @@ function ScoutTool({
                 <div className="space-y-4">
                   {drafts.map((d, i) => {
                     const opp = opps.find((o) => o.id === d.opportunityId);
+                    // Every draft here already has a backing Find record (runDraft
+                    // stamps status "drafted" onto it) — look it up so status can
+                    // be changed right here instead of forcing a trip to Finds.
+                    const relatedFind = opp
+                      ? finds.find((f) => f.id === findKey(activeId, opp))
+                      : undefined;
                     return (
                       <div
                         key={i}
@@ -3410,6 +3416,12 @@ function ScoutTool({
                           <span className="font-semibold text-ink">
                             {opp?.name || "Draft"}
                           </span>
+                          {relatedFind && (
+                            <FindStatusBadge
+                              status={relatedFind.status}
+                              onStatus={(s) => setFindStatus(relatedFind.id, s)}
+                            />
+                          )}
                           <DraftKindPicker
                             value={
                               draftKind[d.opportunityId] ||
