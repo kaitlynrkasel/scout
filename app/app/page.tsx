@@ -838,12 +838,15 @@ function ScoutTool({
     setSignature(typeof sig === "string" ? sig : "");
 
     if (!projs.length) {
-      // First run under the projects model. Create one default project and adopt
-      // any existing categories (which used a `useCase` field) into it.
+      // First run under the projects model. Create one empty project that
+      // invites the user to name it and set their own use case — no seeded
+      // name from the profile, no inherited use case. Categories still seed
+      // from a blank use case (falls to GENERIC_SUGGESTIONS) so the user has
+      // something to work from immediately.
       const def: Project = {
         id: `proj-${Date.now()}`,
-        name: prof.name ? `${prof.name}` : "My outreach",
-        useCase: prof.useCase,
+        name: "Untitled project",
+        useCase: "",
         context: "",
       };
       const migrated = cats.map((c: any) => ({
@@ -5925,21 +5928,28 @@ function DashboardTab({
               const mine = finds.filter((f) => f.projectId === p.id);
               const nw = mine.filter((f) => f.status === "new").length;
               const sent = mine.filter((f) => f.status === "sent").length;
+              // Prefer the per-project context the user typed ("Anna Belt is a
+              // Nashville folk-rock artist…") over the shared profile use
+              // case, which is the same for every project and reads generic.
+              const description = (p.context || "").trim() || p.useCase;
               return (
                 <button
                   key={p.id}
                   onClick={() => onEditProject(p.id)}
                   title="Open in Outreach and edit"
-                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
+                  className="idx-flap relative flex items-start gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
                 >
-                  <span className="h-10 w-10 shrink-0 rounded-xl bg-brown" />
+                  <span className="mt-0.5 h-10 w-10 shrink-0 rounded-xl bg-brown" />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold text-ink">{p.name}</div>
-                    <div className="truncate text-xs text-muted">
-                      {p.useCase} · {nw} new · {sent} sent
+                    <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
+                      {description}
+                    </p>
+                    <div className="mt-1 text-[11px] font-semibold text-body/60 tabular-nums">
+                      {nw} new · {sent} sent
                     </div>
                   </div>
-                  <span aria-hidden className="text-xs text-body/50">✎</span>
+                  <span aria-hidden className="mt-0.5 text-xs text-body/50">✎</span>
                 </button>
               );
             })
