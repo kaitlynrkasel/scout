@@ -319,6 +319,7 @@ interface Find {
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
   pinned?: boolean; // pinned to the top of the finds list
+  scheduledSendAt?: string; // ISO timestamp: when the queued send will fire (via cron)
   application?: {
     overview?: string;
     howToApply?: string;
@@ -2222,6 +2223,57 @@ function ScoutTool({
     await sendViaMailbox(find.draft, find.gmailThreadId);
   }
 
+  // Queue this find's draft for future sending via the active mailbox. The
+  // /api/cron/send-scheduled endpoint (fired by Vercel Cron every 15 min)
+  // drains due rows and calls Gmail/Outlook send under the hood.
+  async function scheduleFindSend(find: Find, sendAt: Date) {
+    if (!find.draft || !activeMailbox.connected) return;
+    const token = getToken ? await getToken() : null;
+    if (!token) {
+      setError("Please sign in to schedule sends.");
+      return;
+    }
+    try {
+      const res = await fetch("/api/schedule-send", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          provider: activeMailbox.provider,
+          to: find.draft.to,
+          subject: find.draft.subject,
+          body: find.draft.body,
+          sendAt: sendAt.toISOString(),
+          findId: find.id,
+          opportunityId: find.opp.id,
+          attachment:
+            find.draft.channelType === "email" && find.draft.attachResume && resumeFile
+              ? { name: resumeFile.name, dataUrl: resumeFile.dataUrl }
+              : null,
+        }),
+      });
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
+        setError(data?.error || "Could not schedule that send.");
+        return;
+      }
+      // Mark the find locally as scheduled so the UI reflects the queue —
+      // the actual send happens later; setting status to "sent" now would
+      // lie. We reuse the "drafted" status and stash a note on the find.
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? { ...f, scheduledSendAt: sendAt.toISOString() }
+            : f
+        )
+      );
+    } catch (e: any) {
+      setError(e?.message || "Could not schedule that send.");
+    }
+  }
+
   // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
   const [repliesBusy, setRepliesBusy] = useState(false);
   const [repliesNote, setRepliesNote] = useState("");
@@ -3039,6 +3091,7 @@ function ScoutTool({
           onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
+          onSchedule={scheduleFindSend}
           onCopy={() => bumpActivity({ copies: 1 })}
           onEditDraft={editFindDraft}
           onDeepScan={deepScanFind}
@@ -4057,6 +4110,7 @@ function FindsTab({
   onStatus,
   onRemove,
   onSendGmail,
+  onSchedule,
   onCopy,
   onEditDraft,
   onDeepScan,
@@ -4092,6 +4146,7 @@ function FindsTab({
   onStatus: (f: Find, s: FindStatus) => void;
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
+  onSchedule: (f: Find, sendAt: Date) => void;
   onCopy: () => void;
   onEditDraft: (f: Find, subject: string, body: string) => void;
   onDeepScan: (f: Find) => void;
@@ -4231,6 +4286,7 @@ function FindsTab({
               onStatus={(s) => onStatus(f, s)}
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
+              onSchedule={(date) => onSchedule(f, date)}
               onCopy={onCopy}
               onEditDraft={(subject, body) => onEditDraft(f, subject, body)}
               onDeepScan={() => onDeepScan(f)}
@@ -4423,6 +4479,7 @@ function FindCard({
   onStatus,
   onRemove,
   onSendGmail,
+  onSchedule,
   onCopy,
   onEditDraft,
   onDeepScan,
@@ -4448,6 +4505,7 @@ function FindCard({
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
   onSendGmail: () => void;
+  onSchedule: (sendAt: Date) => void;
   onCopy: () => void;
   onEditDraft: (subject: string, body: string) => void;
   onDeepScan: () => void;
@@ -4748,17 +4806,26 @@ function FindCard({
         {d && (
           <>
             {gmail.connected && emailDraft && !done ? (
-              <button
-                onClick={attemptSend}
-                disabled={gmailBusy}
-                className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
-              >
-                {gmailBusy
-                  ? "Working…"
-                  : gmail.sendMode === "send"
-                  ? `Send from ${gmail.label || "Gmail"}`
-                  : `Create ${gmail.label || "Gmail"} draft`}
-              </button>
+              <>
+                <button
+                  onClick={attemptSend}
+                  disabled={gmailBusy}
+                  className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+                >
+                  {gmailBusy
+                    ? "Working…"
+                    : gmail.sendMode === "send"
+                      ? `Send from ${gmail.label || "Gmail"}`
+                      : `Create ${gmail.label || "Gmail"} draft`}
+                </button>
+                {gmail.sendMode === "send" && (
+                  <SchedulePicker
+                    timezone={find.opp.timezone}
+                    scheduledFor={find.scheduledSendAt}
+                    onSchedule={onSchedule}
+                  />
+                )}
+              </>
             ) : (
               !done && <SendAction draft={d} onUse={onCopy} />
             )}
@@ -6737,6 +6804,164 @@ function StatTile({
       <div className="mt-1 text-xs font-semibold text-body">{label}</div>
     </div>
   );
+}
+
+/* ---------------- Schedule picker ----------------
+ * Small popover on the draft's Send row. Suggests a smart default time (next
+ * 9am-6pm window in the recipient's timezone if we have one; else 9am tomorrow
+ * in the user's timezone) and lets them pick another. On confirm, the parent
+ * enqueues the message via /api/schedule-send and Vercel Cron drains the queue
+ * every 15 minutes. */
+function SchedulePicker({
+  timezone,
+  scheduledFor,
+  onSchedule,
+}: {
+  timezone?: string; // recipient's IANA tz, if we extracted one
+  scheduledFor?: string; // ISO string if this find already has a queued send
+  onSchedule: (sendAt: Date) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const suggested = suggestBusinessHour(timezone);
+  const [value, setValue] = useState<string>(toLocalDatetime(suggested));
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  if (scheduledFor) {
+    const when = new Date(scheduledFor);
+    return (
+      <span className="inline-flex items-center gap-1.5 rounded-lg border border-sage/50 bg-sage/10 px-2.5 py-1.5 text-[11px] font-bold text-brown-deep">
+        Scheduled · {when.toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+      </span>
+    );
+  }
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="rounded-lg border border-warm-border bg-white px-2.5 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        title="Send at a specific time"
+      >
+        Schedule ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full z-30 mt-1.5 w-64 rounded-xl border border-warm-border bg-white p-3 shadow-soft">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Send at
+          </div>
+          <input
+            type="datetime-local"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            className="mt-1.5 w-full rounded-lg border border-warm-border px-2 py-1.5 text-xs text-ink outline-none focus:border-brown"
+          />
+          <p className="mt-1.5 text-[10px] leading-relaxed text-body/70">
+            {timezone
+              ? `Suggested: next business hour in ${timezone}.`
+              : "Suggested: 9am tomorrow, your time."}
+          </p>
+          <div className="mt-2 flex gap-1.5">
+            <button
+              onClick={() => {
+                const d = fromLocalDatetime(value);
+                if (!d || d.getTime() < Date.now() + 60_000) {
+                  // datetime-local can round the past — bounce anything within
+                  // the next minute so the cron doesn't grab a "stale" queue
+                  // item on its first pass.
+                  return;
+                }
+                onSchedule(d);
+                setOpen(false);
+              }}
+              className="flex-1 rounded-lg bg-brown px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              Queue send
+            </button>
+            <button
+              onClick={() => setOpen(false)}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Return the next moment that falls inside recipient business hours. If we have
+// a recipient timezone, use it; else fall back to 9am tomorrow in the user's tz.
+function suggestBusinessHour(tz?: string): Date {
+  const now = new Date();
+  if (!tz) {
+    // 9am tomorrow, local user tz.
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  }
+  try {
+    // Read the current hour in the recipient's tz.
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      hour: "numeric",
+      hour12: false,
+      weekday: "short",
+    }).formatToParts(now);
+    const hour = Number(parts.find((p) => p.type === "hour")?.value || "0");
+    const day = parts.find((p) => p.type === "weekday")?.value || "";
+    const inBiz = hour >= 9 && hour < 18 && !/sat|sun/i.test(day);
+    if (inBiz) {
+      // Already business hours there — schedule 15 min out (still respects the
+      // window, gives the user a beat to change their mind).
+      return new Date(now.getTime() + 15 * 60 * 1000);
+    }
+    // Not in business hours → next 9am in that tz. Building the exact instant
+    // via Intl formatting is tricky; approximate by taking the local 9am
+    // tomorrow (the user picks in local time via the datetime-local input, so
+    // exactness here only affects the suggestion default).
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  } catch {
+    const d = new Date(now);
+    d.setDate(d.getDate() + 1);
+    d.setHours(9, 0, 0, 0);
+    return d;
+  }
+}
+
+// datetime-local wants "YYYY-MM-DDTHH:mm" in LOCAL time (no seconds, no tz).
+function toLocalDatetime(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return (
+    d.getFullYear() +
+    "-" +
+    pad(d.getMonth() + 1) +
+    "-" +
+    pad(d.getDate()) +
+    "T" +
+    pad(d.getHours()) +
+    ":" +
+    pad(d.getMinutes())
+  );
+}
+function fromLocalDatetime(v: string): Date | null {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 /* ---------------- One-click send action per draft (no account linking needed) ---------------- */
