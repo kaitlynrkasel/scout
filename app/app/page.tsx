@@ -2139,6 +2139,27 @@ function ScoutTool({
   function togglePin(id: string) {
     saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
   }
+  // Move a find to a different project. `id` bakes in the project (project::
+  // name::host), so a move needs a fresh id in the target project's scheme —
+  // otherwise a future search there wouldn't recognize this person as already
+  // found and would add a duplicate. Categories are project-scoped, so the old
+  // categoryId no longer means anything in the new project; drop it.
+  function moveFindToProject(id: string, targetProjectId: string) {
+    const f = finds.find((x) => x.id === id);
+    if (!f || f.projectId === targetProjectId) return;
+    const newId = findKey(targetProjectId, f.opp);
+    if (finds.some((x) => x.id === newId)) {
+      setError("That person is already in the target project.");
+      return;
+    }
+    saveFinds(
+      finds.map((x) =>
+        x.id === id
+          ? { ...x, id: newId, projectId: targetProjectId, categoryId: undefined }
+          : x
+      )
+    );
+  }
   // Toggle whether this find's email draft attaches the resume.
   function setFindAttach(find: Find, on: boolean) {
     saveFinds(
@@ -3434,6 +3455,7 @@ function ScoutTool({
           hasResume={!!resumeFile}
           onToggleAttach={setFindAttach}
           onTogglePin={togglePin}
+          onMoveProject={(f, pid) => moveFindToProject(f.id, pid)}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -4785,6 +4807,7 @@ function FindsTab({
   hasResume,
   onToggleAttach,
   onTogglePin,
+  onMoveProject,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -4827,6 +4850,7 @@ function FindsTab({
   hasResume: boolean;
   onToggleAttach: (f: Find, on: boolean) => void;
   onTogglePin: (id: string) => void;
+  onMoveProject: (f: Find, projectId: string) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -5001,6 +5025,8 @@ function FindsTab({
               wantedChannels={
                 categories.find((c) => c.id === f.categoryId)?.wantedChannels || []
               }
+              otherProjects={projects.filter((p) => p.id !== f.projectId)}
+              onMoveProject={(pid) => onMoveProject(f, pid)}
             />
           ))}
         </div>
@@ -5208,6 +5234,8 @@ function FindCard({
   onTogglePin,
   onOpenDetail,
   wantedChannels,
+  otherProjects,
+  onMoveProject,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -5238,6 +5266,8 @@ function FindCard({
   onTogglePin: () => void;
   onOpenDetail: () => void;
   wantedChannels: string[];
+  otherProjects: Project[];
+  onMoveProject: (projectId: string) => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -5562,6 +5592,26 @@ function FindCard({
           >
             {drafting ? "Drafting…" : "Draft a message"}
           </button>
+        )}
+
+        {/* Move to a different project — a find isn't stuck wherever it was
+            first surfaced. Resets after firing since the find leaves this list. */}
+        {otherProjects.length > 0 && (
+          <select
+            value=""
+            onChange={(e) => {
+              if (e.target.value) onMoveProject(e.target.value);
+            }}
+            title="Move this find to a different project"
+            className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-body outline-none transition hover:bg-warm-bg"
+          >
+            <option value="">Move to project…</option>
+            {otherProjects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
         )}
 
         {/* Job/internship: read the posting and draft the whole application */}
