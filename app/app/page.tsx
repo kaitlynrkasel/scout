@@ -6541,6 +6541,48 @@ function DashboardTab({
   const learned = learnedFromFinds(finds);
   const writing = learnedFromDrafts(finds);
   const insights = recentInsights(learned, writing, coaching, editPairs);
+
+  // Dev tool: turn real usage data into a ready-to-paste engineering prompt
+  // for recalibrating lib/discover.ts. Separate from the user-facing "learned
+  // about you" narrative above — this is raw numbers meant for tuning code.
+  const [tuningPrompt, setTuningPrompt] = useState("");
+  const [tuningBusy, setTuningBusy] = useState(false);
+  const [tuningErr, setTuningErr] = useState("");
+  const [tuningCopied, setTuningCopied] = useState(false);
+  async function generateTuningPrompt() {
+    setTuningBusy(true);
+    setTuningErr("");
+    setTuningPrompt("");
+    try {
+      const res = await fetch("/api/tuning-prompt", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          useCase: profile.useCase,
+          decided: learned.decided,
+          denyRate: learned.denyRate,
+          keptFit: learned.keptFit,
+          deniedFit: learned.deniedFit,
+          deniedReasons: learned.deniedReasonsTally,
+          keptChannels: learned.keptChannels,
+          deniedChannels: learned.deniedChannels,
+          replyRate: learned.replyRate,
+          repliedCount: learned.repliedCount,
+          sentCount: learned.sentCount,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.error) {
+        setTuningErr(data?.error || "Couldn't generate a tuning prompt.");
+        return;
+      }
+      setTuningPrompt(data.prompt || "");
+    } catch (e: any) {
+      setTuningErr(e?.message || "Couldn't generate a tuning prompt.");
+    } finally {
+      setTuningBusy(false);
+    }
+  }
   // Contacts you reached out to about a week ago that still haven't replied — a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
@@ -7490,6 +7532,142 @@ function DashboardTab({
           ))}
         </div>
       </section>
+
+      {/* -------- Tune the search algorithm (dev tool) --------
+          Raw, specific numbers from real decisions on this account — meant to
+          be fed back into lib/discover.ts's search/extraction prompts, not
+          just read. The button turns them into a ready-to-paste engineering
+          prompt for a future Claude Code session. */}
+      {learned.decided >= 5 ? (
+        <section className="mt-10 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
+          <h2 className="text-lg font-bold text-ink">Tune the search algorithm</h2>
+          <p className="mt-1 text-sm text-body/80">
+            Specific numbers from your {learned.decided} decided finds — the kind
+            of data that should shape lib/discover.ts&apos;s search and
+            fit-scoring prompts, not just sit in a dashboard.
+          </p>
+
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+              <div className="text-xl font-extrabold text-ink">
+                {Math.round(learned.denyRate * 100)}%
+              </div>
+              <div className="text-[11px] text-body/70">deny rate</div>
+            </div>
+            <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+              <div className="text-xl font-extrabold text-ink">
+                {learned.keptFit != null ? `${Math.round(learned.keptFit * 100)}%` : "—"}
+              </div>
+              <div className="text-[11px] text-body/70">avg fit, kept</div>
+            </div>
+            <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+              <div className="text-xl font-extrabold text-ink">
+                {learned.deniedFit != null ? `${Math.round(learned.deniedFit * 100)}%` : "—"}
+              </div>
+              <div className="text-[11px] text-body/70">avg fit, denied</div>
+            </div>
+            <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+              <div className="text-xl font-extrabold text-ink">
+                {learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "—"}
+              </div>
+              <div className="text-[11px] text-body/70">reply rate</div>
+            </div>
+          </div>
+
+          {learned.keptFit != null &&
+            learned.deniedFit != null &&
+            learned.keptFit - learned.deniedFit < 0.1 && (
+              <p className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-900">
+                Kept and denied fit scores are only{" "}
+                {Math.round((learned.keptFit - learned.deniedFit) * 100)} points apart —
+                fit_score isn&apos;t discriminating well and the extract() rubric in
+                lib/discover.ts likely needs sharpening.
+              </p>
+            )}
+
+          {learned.deniedReasonsTally.length > 0 && (
+            <div className="mt-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                Why you pass (bucketed)
+              </div>
+              <div className="mt-1.5 space-y-1">
+                {learned.deniedReasonsTally.slice(0, 6).map(([label, count]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between rounded-lg bg-warm-bg/40 px-2.5 py-1.5 text-xs"
+                  >
+                    <span className="text-ink">{label}</span>
+                    <span className="font-semibold text-body/70">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {(learned.keptChannels.length > 0 || learned.deniedChannels.length > 0) && (
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  Channels kept
+                </div>
+                <div className="mt-1 text-xs text-body/80">
+                  {learned.keptChannels.length
+                    ? learned.keptChannels.map(([c, n]) => `${c} (${n})`).join(", ")
+                    : "—"}
+                </div>
+              </div>
+              <div>
+                <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  Channels denied
+                </div>
+                <div className="mt-1 text-xs text-body/80">
+                  {learned.deniedChannels.length
+                    ? learned.deniedChannels.map(([c, n]) => `${c} (${n})`).join(", ")
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="mt-5 flex items-center gap-3">
+            <button
+              onClick={generateTuningPrompt}
+              disabled={tuningBusy}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+            >
+              {tuningBusy ? "Writing…" : "Generate tuning prompt"}
+            </button>
+            <span className="text-xs text-body/50">
+              Writes a prompt you can paste into Claude Code to recalibrate the search.
+            </span>
+          </div>
+          {tuningErr && (
+            <p className="mt-2.5 text-xs font-semibold text-red-700">{tuningErr}</p>
+          )}
+          {tuningPrompt && (
+            <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
+              <pre className="whitespace-pre-wrap font-sans text-xs leading-relaxed text-ink">
+                {tuningPrompt}
+              </pre>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(tuningPrompt);
+                  setTuningCopied(true);
+                  setTimeout(() => setTuningCopied(false), 1500);
+                }}
+                className="mt-2 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+              >
+                {tuningCopied ? "Copied ✓" : "Copy prompt"}
+              </button>
+            </div>
+          )}
+        </section>
+      ) : (
+        <section className="mt-10 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-center text-sm text-body/60">
+          Decide on a few more finds (kept {learned.decided}/5) and this section
+          fills in with real numbers you can feed back into the search algorithm.
+        </section>
+      )}
 
       </>
       )}
