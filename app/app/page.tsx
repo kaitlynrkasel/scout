@@ -1755,20 +1755,35 @@ function ScoutTool({
     resetResults();
   }
 
-  // "+ Save Search": save the current goal text as a new named category in the
-  // active project.
-  function addCategory() {
-    const name = window.prompt("Name this search:", "");
-    if (!name || !name.trim()) return;
+  // A short, readable default name from a goal string — first few words, capped
+  // length. Used to auto-save a custom search as a category (see
+  // autoSaveCustomSearch below); renameable anytime via the pencil.
+  function deriveCategoryName(g: string): string {
+    const s = g.trim().replace(/\s+/g, " ");
+    if (!s) return "New search";
+    const words = s.split(" ").slice(0, 6).join(" ");
+    const capped = words.length > 42 ? words.slice(0, 42).replace(/\s+\S*$/, "") : words;
+    return capped.charAt(0).toUpperCase() + capped.slice(1);
+  }
+
+  // Every search you run is automatically saved as a category — no manual
+  // "Save Search" step. If the "Custom search…" slot is still active, promote
+  // the current goal to a real category now and select it. Returns the
+  // category id to use for this run (existing catId, or the freshly created
+  // one) since `catId` state won't reflect a same-tick setCatId until the next
+  // render — callers that create finds in this same pass need the fresh id.
+  function autoSaveCustomSearch(): string {
+    if (catId || !goal.trim()) return catId;
     const c: Category = {
       id: `cat-${Date.now()}`,
-      name: name.trim(),
-      goal: goal,
+      name: deriveCategoryName(goal),
+      goal,
       projectId: activeId,
       wantedChannels: wantedChannels.length ? wantedChannels : undefined,
     };
     saveCats([...categories, c]);
     setCatId(c.id);
+    return c.id;
   }
 
   // Category manager (pencil): add a fresh empty category and select it.
@@ -2036,7 +2051,12 @@ function ScoutTool({
   // ---- Finds pipeline ----
   // Add newly discovered people to the active project's finds (deduped, keeping
   // any status/draft already set). Returns how many were genuinely new.
-  function mergeFinds(newOpps: Opportunity[]): number {
+  // categoryIdOverride: when a search auto-saves as a brand-new category mid-run
+  // (see runDiscover), `catId` state hasn't re-rendered yet — this closure would
+  // still see the old "" and tag fresh finds as uncategorized. Pass the fresh
+  // id explicitly so newly-found people land under the new category right away.
+  function mergeFinds(newOpps: Opportunity[], categoryIdOverride?: string): number {
+    const effectiveCatId = categoryIdOverride !== undefined ? categoryIdOverride : catId;
     // Two dedup layers: exact id match (same person + same host, historic key)
     // AND normalized-name/handle match against every find in this project. The
     // second catches "same person, different article" cases — for those we
@@ -2111,7 +2131,7 @@ function ScoutTool({
       fresh.push({
         id,
         projectId: activeId,
-        categoryId: catId || undefined,
+        categoryId: effectiveCatId || undefined,
         status: "new",
         opp: o,
         addedAt: Date.now(),
@@ -2737,6 +2757,7 @@ function ScoutTool({
       setTab("profile");
       return;
     }
+    const runCatId = autoSaveCustomSearch();
     resetResults();
     setDiscoverStartedAt(Date.now());
     setDiscovering(true);
@@ -2801,7 +2822,7 @@ function ScoutTool({
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
       );
-      const added = mergeFinds(data.opportunities || []);
+      const added = mergeFinds(data.opportunities || [], runCatId);
       bumpActivity({ searches: 1, found: (data.opportunities || []).length });
       if (added) setStats((s) => `${s} · ${added} new saved to Finds`);
     } catch (e: any) {
@@ -3092,21 +3113,15 @@ function ScoutTool({
                       />
                     )}
                   </div>
-                  <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-                    <button
-                      onClick={addCategory}
-                      className="font-semibold text-accent transition hover:underline"
-                    >
-                      + Save Search
-                    </button>
-                  </div>
                   <p className="mt-3 text-xs leading-relaxed text-body/70">
+                    {catId
+                      ? "Edits here save automatically to this category."
+                      : "Running this custom search saves it as a new category automatically."}{" "}
                     Categories belong to{" "}
                     <span className="font-semibold text-body">
                       {activeProject?.name || "this project"}
                     </span>
-                    . Tap the pencil to add, rename, or remove them from this
-                    project&apos;s dropdown.
+                    . Tap the pencil to rename or remove them.
                   </p>
                 </div>
 
