@@ -1928,6 +1928,25 @@ function ScoutTool({
     ? `e.g. ${dynExample}`
     : uc.goalPlaceholder;
 
+  // Persist edits to the goal back onto the selected saved category, so a
+  // category like "Companies" REMEMBERS what you mean by it instead of making
+  // you retype the search every time. Debounced; only writes when the text
+  // actually changed from what's stored, and never for the "Custom search" slot
+  // (catId === ""). saveCats bumps `categories`, which re-runs this effect, but
+  // then goal === cat.goal so it no-ops — no loop.
+  useEffect(() => {
+    if (!catId) return; // "Custom search…" — one-off, nothing to persist onto
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat || goal === cat.goal) return;
+    const t = setTimeout(() => {
+      saveCats(
+        categories.map((c) => (c.id === catId ? { ...c, goal } : c))
+      );
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goal, catId, categories]);
+
   // Finds belonging to the active project (newest first), and the count still to work.
   const myFinds = activeProject
     ? finds.filter((f) => f.projectId === activeProject.id)
