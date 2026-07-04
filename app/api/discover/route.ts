@@ -1,11 +1,48 @@
 import { NextRequest, NextResponse } from "next/server";
 import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
+import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
+import { getEntitlement, consumeSearch } from "@/lib/billing";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
 export async function POST(req: NextRequest) {
   try {
+    // Metering is only enforced when auth is configured (service-role present).
+    // Locally, without Supabase, discovery stays open and unmetered.
+    const metered = !!supabaseAdmin;
+    let uid: string | null = null;
+    if (metered) {
+      uid = await userIdFromReq(req);
+      if (!uid) {
+        return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+      }
+      // Pre-check the allowance so we don't run a search the user can't afford.
+      // (A failed search shouldn't cost a credit, so we consume only on success.)
+      const ent = await getEntitlement(uid);
+      const paid = ent.tier === "starter" || ent.tier === "pro";
+      if (paid && ent.searchesUsed >= ent.searchLimit) {
+        return NextResponse.json(
+          {
+            error: `You've used all ${ent.searchLimit} searches on your ${ent.tier} plan this month.`,
+            code: "quota",
+            tier: ent.tier,
+          },
+          { status: 402 }
+        );
+      }
+      if (!paid && ent.freeUsed >= ent.freeLimit) {
+        return NextResponse.json(
+          {
+            error: `You've used your ${ent.freeLimit} free searches this month.`,
+            code: "free_exhausted",
+            tier: "free",
+          },
+          { status: 402 }
+        );
+      }
+    }
+
     const { goal, about, useCase, template, feedback, salt, cohortHint } = await req.json();
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
@@ -28,6 +65,16 @@ export async function POST(req: NextRequest) {
       salt ? String(salt).slice(0, 64) : undefined,
       cohortHint ? String(cohortHint).slice(0, 400) : undefined
     );
+
+    // Count this successful search against the user's monthly allowance.
+    if (metered && uid) {
+      try {
+        await consumeSearch(uid);
+      } catch (e: any) {
+        console.warn("consumeSearch failed (search already returned):", e?.message);
+      }
+    }
+
     return NextResponse.json(result);
   } catch (e: any) {
     if (e instanceof ApiCreditError) {
