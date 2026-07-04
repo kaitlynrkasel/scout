@@ -66,7 +66,10 @@ function isProspectingUseCase(useCase: string): boolean {
 // the goal says this, we drop industry + location filtering no matter the use
 // case, because the user is telling us the net is intentionally wide.
 function goalWantsAnyIndustry(goal: string): boolean {
-  return /\b(any (industry|field|sector|vertical|niche|business)|all (industries|sectors|fields)|every (industry|sector)|industry.?agnostic|no (specific )?industry|regardless of industry|across industries)\b/i.test(
+  // Loose enough to catch "any other industry", "any type of industry", "any
+  // kind of business", etc, not just the exact phrase "any industry" — a
+  // fixed two-word match was silently missing common real-world phrasings.
+  return /\b(any (other |type of |kind of |given )*(industry|field|sector|vertical|niche|business)|all (industries|sectors|fields|businesses)|every (industry|sector|business)|industry.?agnostic|no (specific )?industry|regardless of (the )?industry|(not|isn'?t) industry.?specific|across industries|open to (any|all) industr(y|ies)|doesn'?t matter (the |what )?industry)\b/i.test(
     goal || ""
   );
 }
