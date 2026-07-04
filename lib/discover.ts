@@ -214,6 +214,29 @@ function canonicalLink(u: string): string {
     : "";
 }
 
+// Decide which URL to attach to an extracted opp. Prefers the LLM's URL when
+// it's demonstrably real — its host either matches the Tavily source URL's
+// host (a canonical link off the same domain) or appears somewhere in the
+// source page's content (the LLM cleaned up a jobs-board link to the direct
+// company page). Otherwise falls back to the actual Tavily source URL so a
+// hallucinated same-name domain can't slip through. Empty LLM URL is a no-op.
+function pickTrustedUrl(llmUrl: string, candUrl: string, candContent: string): string {
+  const llm = String(llmUrl || "").trim();
+  const cand = String(candUrl || "").trim();
+  if (!llm) return cand || "";
+  const llmHost = urlHost(llm);
+  if (!llmHost) return cand || "";
+  const candHost = urlHost(cand);
+  // Same-domain: LLM stripped tracking params or picked a canonical URL — trust.
+  if (candHost && llmHost === candHost) return llm;
+  // Cross-domain: only trust when the LLM's host actually appears in the
+  // source page's content (case-insensitive substring). Hallucinated hosts
+  // don't survive this because the source page never mentions them.
+  const contentLower = String(candContent || "").toLowerCase();
+  if (contentLower && contentLower.includes(llmHost)) return llm;
+  return cand || "";
+}
+
 // Normalize a person's name so "John Smith", "John J. Smith", "Dr. John Smith Jr",
 // and "John Jacob Smith" all collapse to the same key. Strips honorifics,
 // suffixes, and middle names/initials, then keeps first + last token.
@@ -346,6 +369,10 @@ async function extract(
     `You are a research assistant. From a web search result, extract a structured record of ONE REAL, SPECIFIC ${noun || "target"} ` +
     `the user could actually reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
     `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
+    `URL DISCIPLINE: the url field MUST appear verbatim in the search result's content or URL. Never construct ` +
+    `a URL by guessing what the company's domain probably is (e.g. do NOT write "concordgroupinsurance.com" ` +
+    `just because the company is "Concord"; that risks pointing at a completely different company that happens ` +
+    `to share a name). If no URL for this specific target appears in the source, leave url empty. ` +
     `THE RESULT MUST BE AN ACTUAL PROSPECT, not content about outreach. Set is_relevant to false (and target_type "other") ` +
     `for anything that is ADVICE or GENERAL CONTENT rather than a specific reachable person or organization: how-to guides, ` +
     `"tips"/"advice"/"best practices" articles, "X ways to network" or "top 10" listicles, template/example collections, ` +
@@ -731,11 +758,18 @@ export async function discover(
       let fit = typeof r.fit_score === "number" ? r.fit_score : parseFloat(r.fit_score);
       if (isNaN(fit)) fit = null as any;
 
+      // Trust the LLM's URL only when we can verify it isn't hallucinated:
+      // its host must appear in the source page's content, OR it must sit on
+      // the same domain as the Tavily source URL. Otherwise fall back to the
+      // real cand.url. Fixes the "Concord Music Publishing → concordgroup
+      // insurance.com" style cross-company confusion where the extractor
+      // invents a plausible domain from the company name.
+      const chosenUrl = pickTrustedUrl(String(r.url || ""), cand.url || "", cand.content || "");
       opps.push({
         id: `${Date.now()}-${opps.length}`,
         name: String(r.name).trim(),
         outlet: r.outlet || "",
-        url: r.url || cand.url || "",
+        url: chosenUrl,
         channel: r.channel || "Unknown",
         contactEmail: r.contact_email || "",
         contactName: r.contact_name || "",
