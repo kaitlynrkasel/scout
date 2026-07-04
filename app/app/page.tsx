@@ -320,6 +320,17 @@ interface Find {
   scanned?: boolean; // deep-scan has already run on this find's site
   pinned?: boolean; // pinned to the top of the finds list
   scheduledSendAt?: string; // ISO timestamp: when the queued send will fire (via cron)
+  // Meeting / interview prep — factual highlights about the contact + outlet,
+  // fetched via a fresh Tavily + Claude pass after the user updates status to
+  // "sent" or "replied". Persists so re-opening the find shows the same facts.
+  meetingPrep?: {
+    generatedAt: string; // ISO timestamp
+    facts: Array<{
+      category: string;
+      fact: string;
+      source?: { title: string; url: string };
+    }>;
+  };
   application?: {
     overview?: string;
     howToApply?: string;
@@ -2014,6 +2025,57 @@ function ScoutTool({
   };
 
   // Deep-scan a find's site for a specific contact + submission requirements.
+  // Ask Scout to prep the user for a meeting / interview with this contact.
+  // Runs fresh Tavily searches on the person + their outlet and returns
+  // categorized facts — not questions to ask. Gated at the UI layer to
+  // status "sent" or later, so this doubles as an incentive to keep statuses
+  // current (see the button visibility rules in FindCard).
+  const [meetingPrepId, setMeetingPrepId] = useState("");
+  async function generateMeetingPrep(find: Find) {
+    setError("");
+    setMeetingPrepId(find.id);
+    try {
+      const res = await fetch("/api/meeting-prep", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opp: find.opp,
+          about: aboutText,
+          useCase: activeUseCase,
+        }),
+      });
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
+        reportError(data);
+        return;
+      }
+      const facts = Array.isArray(data.facts) ? data.facts : [];
+      if (!facts.length) {
+        setError(
+          "Scout couldn't find enough fresh info to prep. Try again in a few days once there's more on the web."
+        );
+        return;
+      }
+      saveFinds(
+        finds.map((f) =>
+          f.id === find.id
+            ? {
+                ...f,
+                meetingPrep: {
+                  generatedAt: data.generatedAt || new Date().toISOString(),
+                  facts,
+                },
+              }
+            : f
+        )
+      );
+    } catch (e: any) {
+      setError(e?.message || "Meeting prep failed.");
+    } finally {
+      setMeetingPrepId("");
+    }
+  }
+
   async function deepScanFind(find: Find) {
     if (!find.opp.url) {
       setRepliesNote("This find has no page to scan.");
@@ -3101,6 +3163,8 @@ function ScoutTool({
           onRemove={(f) => removeFind(f.id)}
           onSendGmail={sendFindViaGmail}
           onSchedule={scheduleFindSend}
+          onMeetingPrep={generateMeetingPrep}
+          meetingPrepId={meetingPrepId}
           onCopy={() => bumpActivity({ copies: 1 })}
           onEditDraft={editFindDraft}
           onDeepScan={deepScanFind}
@@ -4120,6 +4184,8 @@ function FindsTab({
   onRemove,
   onSendGmail,
   onSchedule,
+  onMeetingPrep,
+  meetingPrepId,
   onCopy,
   onEditDraft,
   onDeepScan,
@@ -4156,6 +4222,8 @@ function FindsTab({
   onRemove: (f: Find) => void;
   onSendGmail: (f: Find) => void;
   onSchedule: (f: Find, sendAt: Date) => void;
+  onMeetingPrep: (f: Find) => void;
+  meetingPrepId: string;
   onCopy: () => void;
   onEditDraft: (f: Find, subject: string, body: string) => void;
   onDeepScan: (f: Find) => void;
@@ -4296,6 +4364,8 @@ function FindsTab({
               onRemove={() => onRemove(f)}
               onSendGmail={() => onSendGmail(f)}
               onSchedule={(date) => onSchedule(f, date)}
+              onMeetingPrep={() => onMeetingPrep(f)}
+              meetingPrepBusy={meetingPrepId === f.id}
               onCopy={onCopy}
               onEditDraft={(subject, body) => onEditDraft(f, subject, body)}
               onDeepScan={() => onDeepScan(f)}
@@ -4489,6 +4559,8 @@ function FindCard({
   onRemove,
   onSendGmail,
   onSchedule,
+  onMeetingPrep,
+  meetingPrepBusy,
   onCopy,
   onEditDraft,
   onDeepScan,
@@ -4515,6 +4587,8 @@ function FindCard({
   onRemove: () => void;
   onSendGmail: () => void;
   onSchedule: (sendAt: Date) => void;
+  onMeetingPrep: () => void;
+  meetingPrepBusy: boolean;
   onCopy: () => void;
   onEditDraft: (subject: string, body: string) => void;
   onDeepScan: () => void;
@@ -4675,6 +4749,15 @@ function FindCard({
           {find.requirements}
         </div>
       )}
+
+      {/* Meeting / interview prep — factual highlights about the contact.
+          Unlocked once status ≥ sent, so keeping statuses current pays out
+          with real prep. Prep persists on the find once generated. */}
+      <MeetingPrepBlock
+        find={find}
+        busy={meetingPrepBusy}
+        onGenerate={onMeetingPrep}
+      />
 
       {/* Stored draft — read view or inline editor */}
       {d && !editing && (
@@ -6811,6 +6894,84 @@ function StatTile({
         <CountUp value={n} />
       </div>
       <div className="mt-1 text-xs font-semibold text-body">{label}</div>
+    </div>
+  );
+}
+
+/* ---------------- Meeting prep ----------------
+ * Once a find's status is "sent" or later — meaning the user has actually
+ * reached out — Scout offers to prep them for a meeting/interview by
+ * pulling fresh facts about the contact + outlet. Statuses "new" and
+ * "drafted" don't show the button; that's the deliberate incentive to
+ * keep statuses current. Denied hides it too. */
+function MeetingPrepBlock({
+  find,
+  busy,
+  onGenerate,
+}: {
+  find: Find;
+  busy: boolean;
+  onGenerate: () => void;
+}) {
+  const unlocked = find.status === "sent" || find.status === "replied";
+  const prep = find.meetingPrep;
+  // Don't render the block at all until it's unlocked AND has content or a
+  // reason to show the button. Keeps early-stage cards uncluttered.
+  if (!unlocked && !prep) return null;
+  return (
+    <div className="mt-3 rounded-xl border border-warm-border bg-white p-3">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-extrabold uppercase tracking-wider text-brown-deep">
+          Meeting prep
+        </span>
+        {prep && (
+          <span className="text-[10px] font-semibold text-body/50">
+            generated {new Date(prep.generatedAt).toLocaleDateString()}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          <button
+            onClick={onGenerate}
+            disabled={busy}
+            className="rounded-lg bg-brown px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Pulling facts…" : prep ? "Refresh" : "Prep for a meeting"}
+          </button>
+        </div>
+      </div>
+      {prep && prep.facts.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {prep.facts.map((f, i) => (
+            <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+              <span className="mt-0.5 shrink-0 rounded bg-warm-bg px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-brown-deep">
+                {f.category}
+              </span>
+              <div className="min-w-0 flex-1 text-body">
+                {f.fact}
+                {f.source?.url && (
+                  <>
+                    {" "}
+                    <a
+                      href={f.source.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brown underline-offset-2 hover:underline"
+                    >
+                      source
+                    </a>
+                  </>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+      {!prep && unlocked && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-body/70">
+          Now that you've reached out, Scout can pull real facts about their
+          career, outlet, and recent work so you can walk in informed.
+        </p>
+      )}
     </div>
   );
 }
