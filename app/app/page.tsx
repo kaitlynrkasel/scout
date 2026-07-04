@@ -7239,7 +7239,7 @@ function DashboardTab({
 
       {/* -------- Scout's pick (dark spotlight) -------- */}
       {pick && (
-        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-coffee p-6 shadow-soft">
+        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-brown-deep p-6 shadow-soft">
           <span
             className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
             style={{ background: "radial-gradient(circle, rgba(200,184,153,.16), transparent 70%)" }}
