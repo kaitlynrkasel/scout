@@ -1,15 +1,13 @@
 import type { Metadata } from "next";
 import localFont from "next/font/local";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
-// Instrument Sans — a crisp, neutral grotesque for body/UI. Loaded locally (no
-// runtime font CDN) so the whole app renders the same typeface everywhere. Reads
-// sharper and more professional than a geometric sans at small/caption sizes.
-const sans = localFont({
-  src: [
-    { path: "./fonts/InstrumentSans-Regular.ttf", weight: "400", style: "normal" },
-    { path: "./fonts/InstrumentSans-Bold.ttf", weight: "700", style: "normal" },
-  ],
+// Inter — a clean, neutral, highly legible UI sans in the spirit of Claude's
+// interface (whose actual face, Styrene, is proprietary). Full weight range,
+// self-hosted by next/font at build time.
+const sans = Inter({
+  subsets: ["latin"],
   variable: "--font-sans",
   display: "swap",
 });

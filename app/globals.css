@@ -55,12 +55,18 @@ body::after {
   box-shadow: 0 2px 0 #ddcfb4, 0 18px 30px -22px rgba(60, 42, 24, 0.3);
 }
 
-/* Ruled-paper "note" with a strip of tape at the top. */
+/* Ruled-paper "note" with a strip of tape at the top. The rule spacing (28px)
+   matches the note's text line-height (leading-7) so lines sit under the text. */
 .note-paper {
+  background-color: #fffffb;
   background-image: repeating-linear-gradient(
-    #fffffb,
-    #fffffb 33px,
-    #ece0c6 34px
+    to bottom,
+    transparent 0,
+    transparent 23px,
+    #e7dcc4 23px,
+    #e7dcc4 24px,
+    transparent 24px,
+    transparent 28px
   );
 }
 .note-paper::before {
@@ -68,7 +74,7 @@ body::after {
   position: absolute;
   top: -9px;
   left: 50%;
-  transform: translateX(-50%) rotate(-2deg);
+  transform: translateX(-50%);
   width: 74px;
   height: 18px;
   background: rgba(200, 184, 153, 0.45);
