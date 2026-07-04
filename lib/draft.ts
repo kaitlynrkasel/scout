@@ -54,6 +54,18 @@ function coachingBlock(coaching?: string[]): string {
   );
 }
 
+// Advice the user marked "Not helpful" — the negative mirror of coachingBlock.
+// These are suggestions Scout's dashboard surfaced that the user rejected, so
+// treat them as things to actively AVOID, not just skip applying.
+function dismissedAdviceBlock(dismissedAdvice?: string[]): string {
+  const d = (dismissedAdvice || []).map((s) => String(s || "").trim()).filter(Boolean).slice(0, 12);
+  if (!d.length) return "";
+  return (
+    "\n\nADVICE THE USER REJECTED as not helpful for them (do NOT follow these, avoid this style/approach in this message):\n" +
+    d.map((s) => `- ${s}`).join("\n")
+  );
+}
+
 // The strongest voice signal: how the user rewrote earlier drafts. Learn the delta.
 function editBlock(editPairs?: { before: string; after: string }[]): string {
   const p = (editPairs || []).filter((x) => x && x.after).slice(0, 4);
@@ -109,6 +121,7 @@ export async function draftFor(
   opts: {
     templates?: OutreachTemplate[];
     coaching?: string[];
+    dismissedAdvice?: string[];
     editPairs?: { before: string; after: string }[];
     requirements?: string;
     signature?: string;
@@ -202,6 +215,7 @@ export async function draftFor(
   const extras =
     requirementsBlock(requirements) +
     coachingBlock(opts.coaching) +
+    dismissedAdviceBlock(opts.dismissedAdvice) +
     editBlock(opts.editPairs);
 
   let gen: any = null;

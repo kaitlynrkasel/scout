@@ -7,11 +7,22 @@ export const maxDuration = 300; // Pro plan max; batches up to 8 parallel Claude
 
 export async function POST(req: NextRequest) {
   try {
-    const { opportunities, about, useCase, template, templates, coaching, editPairs, signature, kind } =
-      await req.json();
+    const {
+      opportunities,
+      about,
+      useCase,
+      template,
+      templates,
+      coaching,
+      dismissedAdvice,
+      editPairs,
+      signature,
+      kind,
+    } = await req.json();
     const opps: Opportunity[] = opportunities || [];
     const myTemplates: OutreachTemplate[] = templates || [];
     const coach: string[] = Array.isArray(coaching) ? coaching : [];
+    const dismissed: string[] = Array.isArray(dismissedAdvice) ? dismissedAdvice : [];
     const edits: { before: string; after: string }[] = Array.isArray(editPairs)
       ? editPairs
       : [];
@@ -33,6 +44,7 @@ export async function POST(req: NextRequest) {
         draftFor(o, String(about || ""), uc, {
           templates: myTemplates,
           coaching: coach,
+          dismissedAdvice: dismissed,
           editPairs: edits,
           requirements: (o as any).requirements || "",
           signature: sig,

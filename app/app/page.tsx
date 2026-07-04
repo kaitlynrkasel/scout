@@ -137,6 +137,10 @@ const ACT_KEY = "scout_activity";
 const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
+// Advice the user marked "Not helpful" — the negative mirror of COACH_KEY.
+// Same key OutreachAdvice used to hide dismissed tips locally; lifted to
+// top-level state so drafting can also avoid what the user rejected.
+const DISMISSED_ADVICE_KEY = "scout_dismissed_tips";
 const EDITS_KEY = "scout_edit_pairs"; // learn-from-edits before/after voice deltas
 const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for attaching
 const SIG_KEY = "scout_signature"; // email signature appended to drafts
@@ -783,6 +787,9 @@ function ScoutTool({
   // Coaching directives the user approved (applied to every draft) + the
   // before/after voice deltas learned from drafts they hand-edited.
   const [coaching, setCoaching] = useState<string[]>([]);
+  // Advice the user marked "Not helpful" — fed into drafting as things to
+  // avoid, the negative mirror of `coaching`.
+  const [dismissedAdvice, setDismissedAdvice] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
   // True after the user edits a draft while other un-sent drafts still exist —
   // Scout can re-write those with the freshly-learned voice. Cleared once the
@@ -898,6 +905,12 @@ function ScoutTool({
     setEditPairs(Array.isArray(edits) ? edits : []);
     setResumeFile(resume && resume.dataUrl ? resume : null);
     setSignature(typeof sig === "string" ? sig : "");
+    // Local-only (not part of cross-device sync): advice dismissed as "not helpful".
+    try {
+      const raw = localStorage.getItem(DISMISSED_ADVICE_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      setDismissedAdvice(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
+    } catch {}
 
     if (!projs.length) {
       // First run under the projects model. Create one empty project that
@@ -1121,6 +1134,17 @@ function ScoutTool({
   };
   const removeCoaching = (tip: string) => {
     saveCoaching(coaching.filter((c) => c !== tip));
+  };
+  // Mark advice "Not helpful": hides it AND feeds it to drafting as something
+  // to avoid (see dismissedAdviceBlock in lib/draft.ts). Dedupe, cap at 12.
+  const dismissAdvice = (tip: string) => {
+    const t = String(tip || "").trim().toLowerCase();
+    if (!t) return;
+    const next = [t, ...dismissedAdvice.filter((d) => d !== t)].slice(0, 12);
+    setDismissedAdvice(next);
+    try {
+      localStorage.setItem(DISMISSED_ADVICE_KEY, JSON.stringify(next));
+    } catch {}
   };
   const saveEditPairs = (n: { before: string; after: string }[]) => {
     setEditPairs(n);
@@ -2218,6 +2242,7 @@ function ScoutTool({
             // the active project's templates for the batch.
             templates: templatesFor(activeId, catId),
             coaching,
+            dismissedAdvice,
             editPairs,
             signature,
           }),
@@ -2424,6 +2449,7 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           coaching,
+          dismissedAdvice,
           editPairs,
         }),
       });
@@ -2527,6 +2553,7 @@ function ScoutTool({
           useCase: activeUseCase,
           templates: templatesFor(find.projectId, find.categoryId),
           coaching,
+          dismissedAdvice,
           editPairs,
           signature,
         }),
@@ -2800,6 +2827,7 @@ function ScoutTool({
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
           coaching,
+          dismissedAdvice,
           editPairs,
           signature,
         }),
@@ -2860,6 +2888,7 @@ function ScoutTool({
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
           coaching,
+          dismissedAdvice,
           editPairs,
           signature,
           kind,
@@ -3473,9 +3502,11 @@ function ScoutTool({
           finds={finds}
           community={community}
           coaching={coaching}
+          dismissedAdvice={dismissedAdvice}
           editPairs={editPairs}
           onApplyTip={addCoaching}
           onRemoveTip={removeCoaching}
+          onDismissAdvice={dismissAdvice}
           goOutreach={() => setTab("outreach")}
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
@@ -6131,9 +6162,11 @@ function DashboardTab({
   finds,
   community,
   coaching,
+  dismissedAdvice,
   editPairs,
   onApplyTip,
   onRemoveTip,
+  onDismissAdvice,
   goOutreach,
   goTemplates,
   goProfile,
@@ -6149,9 +6182,11 @@ function DashboardTab({
   finds: Find[];
   community: CommunityStats | null;
   coaching: string[];
+  dismissedAdvice: string[];
   editPairs: { before: string; after: string }[];
   onApplyTip: (tip: string) => void;
   onRemoveTip: (tip: string) => void;
+  onDismissAdvice: (tip: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
   goProfile: () => void;
@@ -7061,7 +7096,9 @@ function DashboardTab({
         finds={finds}
         templates={templates}
         coaching={coaching}
+        dismissedAdvice={dismissedAdvice}
         onApplyTip={onApplyTip}
+        onDismissAdvice={onDismissAdvice}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
         onSeedTemplateForChannel={onSeedTemplateForChannel}
@@ -7175,7 +7212,9 @@ function OutreachAdvice({
   finds,
   templates,
   coaching,
+  dismissedAdvice,
   onApplyTip,
+  onDismissAdvice,
   goOutreach,
   goTemplates,
   onSeedTemplateForChannel,
@@ -7184,7 +7223,9 @@ function OutreachAdvice({
   finds: Find[];
   templates: OutreachTemplate[];
   coaching: string[];
+  dismissedAdvice: string[];
   onApplyTip: (tip: string) => void;
+  onDismissAdvice: (tip: string) => void;
   onSeedTemplateForChannel: (channel: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
@@ -7193,33 +7234,11 @@ function OutreachAdvice({
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const isApplied = (s: string) =>
     coaching.some((c) => c.trim().toLowerCase() === s.trim().toLowerCase());
-  // Advice the user has dismissed — kept in localStorage so it stays hidden
-  // across sessions. Simple string match on the tip body.
-  const [dismissed, setDismissed] = useState<Set<string>>(() => {
-    if (typeof window === "undefined") return new Set();
-    try {
-      const raw = localStorage.getItem("scout_dismissed_tips");
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw);
-      return new Set(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
-    } catch {
-      return new Set();
-    }
-  });
-  const dismissTip = (tip: string) => {
-    const key = tip.trim().toLowerCase();
-    setDismissed((prev) => {
-      const next = new Set(prev);
-      next.add(key);
-      try {
-        localStorage.setItem("scout_dismissed_tips", JSON.stringify([...next]));
-      } catch {
-        /* localStorage unavailable — dismissal is per-session only */
-      }
-      return next;
-    });
-  };
-  const isDismissed = (s: string) => dismissed.has(s.trim().toLowerCase());
+  // "Not helpful" advice is lifted to top-level state (dismissedAdvice) so
+  // drafting can also avoid it, not just hide it here. dismissTip below just
+  // forwards to the parent's handler, which persists + dedupes.
+  const dismissTip = (tip: string) => onDismissAdvice(tip);
+  const isDismissed = (s: string) => dismissedAdvice.includes(s.trim().toLowerCase());
 
   // Detect the specific outreach channel a tip references. Returns the
   // OUTREACH_KINDS label (matching the Templates dropdown) when found, so

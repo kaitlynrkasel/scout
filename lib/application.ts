@@ -49,6 +49,7 @@ export async function draftApplication(opts: {
   about: string;
   useCase?: string;
   coaching?: string[];
+  dismissedAdvice?: string[];
   editPairs?: { before: string; after: string }[];
 }): Promise<ApplicationResult> {
   const u = safeUrl(opts.url);
@@ -95,6 +96,7 @@ export async function draftApplication(opts: {
   const writable = components.filter((c) => WRITABLE.has(c.kind));
   if (writable.length) {
     const coach = (opts.coaching || []).filter(Boolean).slice(0, 8);
+    const rejected = (opts.dismissedAdvice || []).filter(Boolean).slice(0, 12);
     const edits = (opts.editPairs || []).filter((x) => x && x.after).slice(0, 3);
     const drSys =
       `You draft internship/job application materials in the applicant's own voice, using ONLY the true facts in ` +
@@ -105,6 +107,10 @@ export async function draftApplication(opts: {
       `Return ONLY JSON {drafts:[{title, text}]} with one entry per item, in the same order.` +
       (coach.length
         ? `\n\nApply this coaching the applicant approved:\n` + coach.map((c) => `- ${c}`).join("\n")
+        : "") +
+      (rejected.length
+        ? `\n\nAdvice the applicant rejected as not helpful (do NOT follow these, avoid this style/approach):\n` +
+          rejected.map((r) => `- ${r}`).join("\n")
         : "") +
       (edits.length
         ? `\n\nMatch how they rewrite drafts (study BEFORE to AFTER, copy the style not the content):\n` +

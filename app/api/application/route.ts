@@ -9,7 +9,8 @@ export const maxDuration = 240; // Pro plan headroom for reading pages + two Cla
 // component (cover letter, essays, short answers) from the applicant's profile.
 export async function POST(req: NextRequest) {
   try {
-    const { url, name, outlet, about, useCase, coaching, editPairs } = await req.json();
+    const { url, name, outlet, about, useCase, coaching, dismissedAdvice, editPairs } =
+      await req.json();
     if (!url || !String(url).trim()) {
       return NextResponse.json({ error: "This opening has no link to read." }, { status: 400 });
     }
@@ -26,6 +27,7 @@ export async function POST(req: NextRequest) {
       about: String(about || ""),
       useCase: String(useCase || ""),
       coaching: Array.isArray(coaching) ? coaching : [],
+      dismissedAdvice: Array.isArray(dismissedAdvice) ? dismissedAdvice : [],
       editPairs: Array.isArray(editPairs) ? editPairs : [],
     });
     return NextResponse.json(result);
