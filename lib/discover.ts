@@ -167,6 +167,13 @@ async function planQueries(
   const networking = isNetworkingUseCase(useCase);
   const influencer = isInfluencerUseCase(useCase);
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
+  // The industry anchor below stops queries from clustering in the user's own
+  // field. Location needs the exact same guard: ABOUT is the only place a
+  // city ever appears for this user, so with no explicit instruction the
+  // model quietly grounds queries in the sender's own city even when the
+  // goal says "any location" — this was the actual cause of prospecting
+  // searches still coming back Nashville/music-flavored.
+  const anywhere = goalWantsAnywhere(goal);
 
   let guidance = "";
   if (prospecting) {
@@ -221,7 +228,16 @@ async function planQueries(
     ? "You are a search strategist for an outreach tool. The user is PROSPECTING: write web-search queries that surface " +
       "the TARGETS DESCRIBED BY THE GOAL. Do NOT anchor to the user's own industry, field, or genre (from ABOUT) — those " +
       "targets live in DIFFERENT industries than the user, and biasing toward the user's field would return the wrong " +
-      "results. Use ABOUT only to understand what the user sells/offers, never as an industry filter on the targets. "
+      "results. Use ABOUT only to understand what the user sells/offers, never as an industry filter on the targets. " +
+      "USE CASE is just a category label for this search, not the product being pitched — if ABOUT describes a specific " +
+      "product, tool, or service (even one sentence naming it), THAT is what's being offered; never substitute the USE " +
+      "CASE label as the offering (e.g. a 'Music PR' use case prospecting for a software tool's customers is NOT selling " +
+      "music services — it's selling that tool, so don't bias queries toward buyers of music-related things). " +
+      (anywhere
+        ? "The user has said the target can be ANYWHERE — do NOT use the sender's own city, state, or region from ABOUT " +
+          "as a query parameter, even implicitly; it is not a location constraint on the targets. "
+        : "Only use a location in queries if the GOAL ITSELF explicitly names one. The sender's own city/region in ABOUT " +
+          "describes the sender, not where the targets should be — never default to it as a stand-in location. ")
     : "You are a search strategist for an outreach tool. From the user's goal and their profile, write web-search " +
       "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
       "these from ABOUT THE USER — do not ask). ";
@@ -484,7 +500,10 @@ async function extract(
     ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting — finding external ${noun || "target"}s to ` +
       `pitch, sell to, partner with, or raise from. Do NOT reject a result for being in a different industry than the user. ` +
       `The GOAL states the target profile (size, type, stage, location if any); judge fit against THAT, and ignore the user's ` +
-      `own field entirely for filtering. ` +
+      `own field entirely for filtering. WHAT'S BEING OFFERED comes from ABOUT's actual description of the product/service/ ` +
+      `project (even one sentence naming it) — the USE CASE label is only a category for this search, never assume it IS ` +
+      `the offering (e.g. a "Music PR" use case prospecting for a software tool's customers is selling that tool, not music ` +
+      `services — do not bias fit or why_it_fits toward buyers of music-related things just because of the USE CASE label). ` +
       (anyIndustry
         ? `The user has said ANY INDUSTRY is fine, so industry is NOT a filter at all — a bakery, a law firm, and a game studio ` +
           `are all equally valid if they otherwise match the goal. `
@@ -497,8 +516,11 @@ async function extract(
       `fit even in an unrelated industry. REQUIRED CHANNELS: if the GOAL says it needs specific contact channels (e.g. "a phone ` +
       `number", "an email", "a website"), treat those as hard preferences — capture each one that appears (contact_phone, ` +
       `contact_email, url for the website) and give a clearly higher fit_score to results that expose ALL the requested ` +
-      `channels, a lower one to results missing some. WHY_IT_FITS: a specific true detail about the TARGET that makes them a good prospect ` +
-      `for what the user offers (size, recent growth, what they do, why they'd want this), NOT a link to the user's own field. ` +
+      `channels, a lower one to results missing some. WHY_IT_FITS: a specific true detail about the TARGET's OWN business ` +
+      `(size, recent growth, what they do, why they'd want this) that makes them a good prospect for what the user offers. ` +
+      `FORBIDDEN: never phrase why_it_fits in terms of the SENDER's background, employer, career, or industry — do not ` +
+      `write things like "a good fit given the sender's X experience" or reference the sender's field/employer at all; if ` +
+      `the target's own details don't stand on their own, describe the target's business instead, or leave why_it_fits empty. ` +
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
       `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
@@ -519,8 +541,8 @@ async function extract(
     `contact_phone (a phone number ONLY if it appears verbatim in the result — for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
     `url (best link), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
-    `fit_score (0 to 1, how well this matches the goal AND the user's industry), ` +
-    `why_it_fits (one specific, true detail about them tied to the user's field, used to personalize outreach; empty if unknown).`;
+    `fit_score (0 to 1 — follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
+    `why_it_fits (one specific, true detail used to personalize outreach — follow the WHY_IT_FITS rule above exactly for what it should describe; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
   const learned = feedbackBlock(feedback);
