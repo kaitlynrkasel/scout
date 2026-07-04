@@ -3040,6 +3040,10 @@ function ScoutTool({
             setEditingProjects(true);
             setTab("outreach");
           }}
+          onSeedTemplateForChannel={(channel) => {
+            setMtChannel(channel);
+            setTab("templates");
+          }}
         />
       )}
 
@@ -4983,8 +4987,71 @@ function learnedFromFinds(finds: Find[]) {
 
 // Concrete, honestly-derived things Scout has learned about THIS user recently,
 // each only shown when the real data supports it. Individual + private.
+// Concrete signals about HOW the user writes their drafts — opener style,
+// sign-off, sentence length, formality — surfaced under "What Scout has
+// learned about you" so the section shows specific patterns rather than
+// generic claims.
+function learnedFromDrafts(finds: Find[]) {
+  const bodies = finds
+    .map((f) => (f.draft?.body || "").trim())
+    .filter((b) => b.length > 20);
+  if (!bodies.length) {
+    return {
+      count: 0,
+      opener: null as string | null,
+      signOff: null as string | null,
+      avgWords: null as number | null,
+      contractionRate: null as number | null,
+      exclaims: null as number | null,
+    };
+  }
+  const tally = (arr: string[]) => {
+    const m: Record<string, number> = {};
+    for (const s of arr) {
+      const k = s.trim().toLowerCase();
+      if (!k) continue;
+      m[k] = (m[k] || 0) + 1;
+    }
+    const top = Object.entries(m).sort((a, b) => b[1] - a[1])[0];
+    return top ? top[0] : null;
+  };
+  const openers: string[] = [];
+  const signOffs: string[] = [];
+  let words = 0;
+  let contractionHits = 0;
+  let exclaimHits = 0;
+  for (const body of bodies) {
+    const clean = body.replace(/\r/g, "");
+    // Opener: the first word after any name (Hi/Hey/Hello/Dear) or the
+    // first token if the message dives straight in.
+    const firstLine = clean.split(/\n+/)[0] || "";
+    const openerMatch = firstLine.match(/^(hi|hey|hello|dear|good\s+(morning|afternoon)|greetings|to whom)/i);
+    if (openerMatch) openers.push(openerMatch[0]);
+    // Sign-off: last non-empty line, taking just the word before the comma or newline.
+    const lines = clean.split(/\n+/).map((l) => l.trim()).filter(Boolean);
+    const last = lines[lines.length - 1] || "";
+    const signMatch = last.match(/^(thanks|thank you|best|cheers|regards|kind regards|warmly|sincerely|talk soon|all the best)/i);
+    if (signMatch) signOffs.push(signMatch[0]);
+    // Word count for length signal.
+    words += clean.split(/\s+/).filter(Boolean).length;
+    // Contractions: rough heuristic (I'll, don't, won't, I'm, can't, etc.)
+    if (/\b(i'll|don't|won't|i'm|can't|it's|you're|we're|they're|didn't|isn't|aren't|haven't|wouldn't|couldn't|shouldn't)\b/i.test(clean))
+      contractionHits++;
+    if (/!/.test(clean)) exclaimHits++;
+  }
+  return {
+    count: bodies.length,
+    opener: tally(openers),
+    signOff: tally(signOffs),
+    avgWords: Math.round(words / bodies.length),
+    contractionRate: contractionHits / bodies.length,
+    exclaims: exclaimHits / bodies.length,
+  };
+}
+
 function recentInsights(
   learned: ReturnType<typeof learnedFromFinds>,
+  writing: ReturnType<typeof learnedFromDrafts>,
   coaching: string[],
   editPairs: { before: string; after: string }[]
 ): { text: string; basis: string }[] {
@@ -5045,6 +5112,45 @@ function recentInsights(
     });
   }
 
+  // Concrete writing patterns from the drafts themselves.
+  if (writing.count >= 3) {
+    if (writing.opener) {
+      out.push({
+        text: `You almost always open with "${writing.opener[0].toUpperCase() + writing.opener.slice(1)}". Scout keeps that as your default.`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.signOff) {
+      out.push({
+        text: `Your sign-off usually reads "${writing.signOff[0].toUpperCase() + writing.signOff.slice(1)}".`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.avgWords != null) {
+      const feel =
+        writing.avgWords < 60
+          ? "short and to the point"
+          : writing.avgWords < 120
+            ? "medium length, a few short paragraphs"
+            : "on the longer, more detailed side";
+      out.push({
+        text: `Your messages average ${writing.avgWords} words — ${feel}.`,
+        basis: `${writing.count} drafts`,
+      });
+    }
+    if (writing.contractionRate != null && writing.contractionRate >= 0.6) {
+      out.push({
+        text: "You write informally — contractions like \"don't\" and \"I'll\" show up in most drafts. Scout matches that register.",
+        basis: `${writing.count} drafts`,
+      });
+    } else if (writing.contractionRate != null && writing.contractionRate <= 0.2 && writing.count >= 4) {
+      out.push({
+        text: "You lean formal — contractions rarely appear. Scout keeps drafts professional and full-form.",
+        basis: `${writing.count} drafts`,
+      });
+    }
+  }
+
   // Coaching turned into standing rules.
   if (coaching.length > 0) {
     out.push({
@@ -5074,6 +5180,7 @@ function DashboardTab({
   goProfile,
   goFinds,
   onEditProject,
+  onSeedTemplateForChannel,
 }: {
   activity: Activity;
   profile: Profile;
@@ -5091,11 +5198,13 @@ function DashboardTab({
   goProfile: () => void;
   goFinds: () => void;
   onEditProject: (id: string) => void;
+  onSeedTemplateForChannel: (channel: string) => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
   const learned = learnedFromFinds(finds);
-  const insights = recentInsights(learned, coaching, editPairs);
+  const writing = learnedFromDrafts(finds);
+  const insights = recentInsights(learned, writing, coaching, editPairs);
   // Contacts you reached out to about a week ago that still haven't replied — a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
@@ -5775,10 +5884,12 @@ function DashboardTab({
       <OutreachAdvice
         community={community}
         finds={finds}
+        templates={templates}
         coaching={coaching}
         onApplyTip={onApplyTip}
         goOutreach={goOutreach}
         goTemplates={goTemplates}
+        onSeedTemplateForChannel={onSeedTemplateForChannel}
       />
 
       {/* -------- How Scout learns YOU -------- */}
@@ -5887,15 +5998,19 @@ function DashboardTab({
 function OutreachAdvice({
   community,
   finds,
+  templates,
   coaching,
   onApplyTip,
   goOutreach,
   goTemplates,
+  onSeedTemplateForChannel,
 }: {
   community: CommunityStats | null;
   finds: Find[];
+  templates: OutreachTemplate[];
   coaching: string[];
   onApplyTip: (tip: string) => void;
+  onSeedTemplateForChannel: (channel: string) => void;
   goOutreach: () => void;
   goTemplates: () => void;
 }) {
@@ -5930,6 +6045,35 @@ function OutreachAdvice({
     });
   };
   const isDismissed = (s: string) => dismissed.has(s.trim().toLowerCase());
+
+  // Detect the specific outreach channel a tip references. Returns the
+  // OUTREACH_KINDS label (matching the Templates dropdown) when found, so
+  // "LinkedIn is doing well" → "LinkedIn message". If the user already has a
+  // template for that channel we don't nudge — the goal is to seed the FIRST
+  // one, not spam.
+  const detectChannel = (text: string): string | null => {
+    const t = String(text || "").toLowerCase();
+    const has = (channel: string) =>
+      templates.some((tp) => (tp.channel || "").toLowerCase() === channel.toLowerCase());
+    if (/\blinkedin\b/.test(t) && !has("LinkedIn message")) return "LinkedIn message";
+    if (/\binstagram\b|\big\b/.test(t) && !has("Instagram DM")) return "Instagram DM";
+    if (/\btiktok\b/.test(t) && !has("TikTok DM")) return "TikTok DM";
+    if (/\b(x|twitter)\b/.test(t) && !has("X / Twitter DM")) return "X / Twitter DM";
+    if (/\btext message|\bsms\b/.test(t) && !has("Text message")) return "Text message";
+    if (/\bcover letter\b/.test(t) && !has("Cover letter")) return "Cover letter";
+    if (/\bemail\b/.test(t) && !has("Email")) return "Email";
+    return null;
+  };
+
+  const SeedTemplateBtn = ({ channel }: { channel: string }) => (
+    <button
+      onClick={() => onSeedTemplateForChannel(channel)}
+      className="shrink-0 rounded-lg bg-brown px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90"
+      title={`Jump to Templates with ${channel} pre-selected`}
+    >
+      Draft a {channel.replace(/ message| DM/, "")} template
+    </button>
+  );
   // A small "turn this into a standing rule" control shown on each coachable
   // tip, plus a "not helpful" button next to it. Dismissed tips get hidden
   // right after via the isDismissed check on the parent renderer.
@@ -6156,21 +6300,27 @@ function OutreachAdvice({
         </div>
         {insights.filter((t) => !isDismissed(t.body)).length ? (
           <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
-            {insights.filter((t) => !isDismissed(t.body)).map((tip) => (
-              <div
-                key={tip.title}
-                className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="text-sm font-bold text-ink">{tip.title}</div>
-                  <ApplyTip tip={tip.body} />
+            {insights.filter((t) => !isDismissed(t.body)).map((tip) => {
+              const channel = detectChannel(`${tip.title} ${tip.body}`);
+              return (
+                <div
+                  key={tip.title}
+                  className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="text-sm font-bold text-ink">{tip.title}</div>
+                    <ApplyTip tip={tip.body} />
+                  </div>
+                  <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
+                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                      Based on {tip.basis}
+                    </div>
+                    {channel && <SeedTemplateBtn channel={channel} />}
+                  </div>
                 </div>
-                <p className="mt-1 text-xs leading-relaxed text-body">{tip.body}</p>
-                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wide text-body/50">
-                  Based on {tip.basis}
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-white/60 px-4 py-3 text-xs leading-relaxed text-body/70">
