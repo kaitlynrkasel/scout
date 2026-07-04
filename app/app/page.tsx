@@ -4529,10 +4529,60 @@ function FindDetailModal({
   find,
   onClose,
   wantedChannels,
+  gmail,
+  drafting,
+  gmailBusy,
+  onDraft,
+  onDeny,
+  onSetReason,
+  onReopen,
+  onRemove,
+  onSendGmail,
+  onSchedule,
+  onMeetingPrep,
+  meetingPrepBusy,
+  onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanning,
+  onFollowUp,
+  followUpBusy,
+  jobMode,
+  onDraftApplication,
+  applying,
+  hasResume,
+  onToggleAttach,
+  otherProjects,
+  onMoveProject,
 }: {
   find: Find;
   onClose: () => void;
   wantedChannels: string[];
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
+  drafting: boolean;
+  gmailBusy: boolean;
+  onDraft: () => void;
+  onDeny: (reason?: string) => void;
+  onSetReason: (reason: string) => void;
+  onReopen: () => void;
+  onRemove: () => void;
+  onSendGmail: () => void;
+  onSchedule: (sendAt: Date) => void;
+  onMeetingPrep: () => void;
+  meetingPrepBusy: boolean;
+  onCopy: () => void;
+  onEditDraft: (subject: string, body: string) => void;
+  onDeepScan: () => void;
+  scanning: boolean;
+  onFollowUp: () => void;
+  followUpBusy: boolean;
+  jobMode: boolean;
+  onDraftApplication: () => void;
+  applying: boolean;
+  hasResume: boolean;
+  onToggleAttach: (on: boolean) => void;
+  otherProjects: Project[];
+  onMoveProject: (projectId: string) => void;
 }) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
@@ -4773,6 +4823,42 @@ function FindDetailModal({
             )}
 
             {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
+
+            {/* The whole drafting-and-sending workflow, right here — draft, edit,
+                send/schedule, deny, follow up — without leaving this popup. */}
+            <div className="border-t border-warm-border pt-4">
+              <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                Outreach
+              </div>
+              <FindWorkflow
+                find={find}
+                gmail={gmail}
+                drafting={drafting}
+                gmailBusy={gmailBusy}
+                onDraft={onDraft}
+                onDeny={onDeny}
+                onSetReason={onSetReason}
+                onReopen={onReopen}
+                onRemove={onRemove}
+                onSendGmail={onSendGmail}
+                onSchedule={onSchedule}
+                onMeetingPrep={onMeetingPrep}
+                meetingPrepBusy={meetingPrepBusy}
+                onCopy={onCopy}
+                onEditDraft={onEditDraft}
+                onDeepScan={onDeepScan}
+                scanning={scanning}
+                onFollowUp={onFollowUp}
+                followUpBusy={followUpBusy}
+                jobMode={jobMode}
+                onDraftApplication={onDraftApplication}
+                applying={applying}
+                hasResume={hasResume}
+                onToggleAttach={onToggleAttach}
+                otherProjects={otherProjects}
+                onMoveProject={onMoveProject}
+              />
+            </div>
           </div>
 
           {/* Right: live website preview — fills all remaining height */}
@@ -5122,6 +5208,31 @@ function FindsTab({
           wantedChannels={
             categories.find((c) => c.id === detailFind.categoryId)?.wantedChannels || []
           }
+          gmail={gmail}
+          drafting={draftingId === detailFind.id}
+          gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
+          onDraft={() => onDraft(detailFind)}
+          onDeny={(reason) => onDeny(detailFind, reason)}
+          onSetReason={(reason) => onSetReason(detailFind, reason)}
+          onReopen={() => onReopen(detailFind)}
+          onRemove={() => onRemove(detailFind)}
+          onSendGmail={() => onSendGmail(detailFind)}
+          onSchedule={(date) => onSchedule(detailFind, date)}
+          onMeetingPrep={() => onMeetingPrep(detailFind)}
+          meetingPrepBusy={meetingPrepId === detailFind.id}
+          onCopy={onCopy}
+          onEditDraft={(subject, body) => onEditDraft(detailFind, subject, body)}
+          onDeepScan={() => onDeepScan(detailFind)}
+          scanning={scanningId === detailFind.id}
+          onFollowUp={() => onFollowUp(detailFind)}
+          followUpBusy={followUpId === detailFind.id}
+          jobMode={jobMode}
+          onDraftApplication={() => onDraftApplication(detailFind)}
+          applying={applyingId === detailFind.id}
+          hasResume={hasResume}
+          onToggleAttach={(on) => onToggleAttach(detailFind, on)}
+          otherProjects={projects.filter((p) => p.id !== detailFind.projectId)}
+          onMoveProject={(pid) => onMoveProject(detailFind, pid)}
         />
       )}
     </main>
@@ -5353,51 +5464,9 @@ function FindCard({
   onMoveProject: (projectId: string) => void;
 }) {
   const o = find.opp;
-  const d = find.draft;
-  const denied = find.status === "denied";
-  // Contacted (or beyond): hide the send/mark actions.
-  const done = find.status === "sent" || find.status === "replied";
-  const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
-  const [denying, setDenying] = useState(false); // reason picker shown pre-deny
-  const [sendGuard, setSendGuard] = useState<null | { local: string; next: string }>(null);
-  const [editing, setEditing] = useState(false); // draft edit mode
-  const [editSubject, setEditSubject] = useState("");
-  const [editBody, setEditBody] = useState("");
-  // How long since the outreach went out, for the follow-up nudge.
-  const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
-  const followUpReady =
-    find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
-
-  // Send timing: a real delivery to a person outside their business hours gets a
-  // heads-up first. Applications (jobs/internships) always send immediately, and
-  // "create draft" mode isn't a delivery so it's never held.
+  // Recipient timezone is also needed by FindWorkflow below, which recomputes
+  // it independently since it's a standalone component.
   const recipientTz = o.timezone || guessTimezone(o.location);
-  const isApplication = jobMode || !!find.application;
-  const afterHours =
-    gmail.sendMode === "send" &&
-    !isApplication &&
-    !!recipientTz &&
-    !isBusinessHours(recipientTz);
-  const doSend = () => {
-    setSendGuard(null);
-    onSendGmail();
-  };
-  const attemptSend = () => {
-    if (afterHours) {
-      // Auto-schedule setting on → silently queue for the recipient's next
-      // business hour instead of prompting.
-      if (autoScheduleOn()) {
-        onSchedule(suggestBusinessHour(recipientTz));
-        return;
-      }
-      setSendGuard({
-        local: localTimeLabel(recipientTz),
-        next: nextBusinessLabel(recipientTz),
-      });
-    } else {
-      onSendGmail();
-    }
-  };
 
   return (
     <div
@@ -5562,6 +5631,147 @@ function FindCard({
         </div>
       )}
 
+      <FindWorkflow
+        find={find}
+        gmail={gmail}
+        drafting={drafting}
+        gmailBusy={gmailBusy}
+        onDraft={onDraft}
+        onDeny={onDeny}
+        onSetReason={onSetReason}
+        onReopen={onReopen}
+        onRemove={onRemove}
+        onSendGmail={onSendGmail}
+        onSchedule={onSchedule}
+        onMeetingPrep={onMeetingPrep}
+        meetingPrepBusy={meetingPrepBusy}
+        onCopy={onCopy}
+        onEditDraft={onEditDraft}
+        onDeepScan={onDeepScan}
+        scanning={scanning}
+        onFollowUp={onFollowUp}
+        followUpBusy={followUpBusy}
+        jobMode={jobMode}
+        onDraftApplication={onDraftApplication}
+        applying={applying}
+        hasResume={hasResume}
+        onToggleAttach={onToggleAttach}
+        otherProjects={otherProjects}
+        onMoveProject={onMoveProject}
+      />
+    </div>
+  );
+}
+
+/* ---------------- Find workflow: draft, edit, send/schedule, deny, follow up ----------------
+ * The whole drafting-and-sending process for one find, factored out of
+ * FindCard so it can also run inside FindDetailModal — the fullscreen "Details"
+ * popup goes through the entire workflow (draft, edit, send, schedule, deny,
+ * follow up) without leaving the popup. */
+function FindWorkflow({
+  find,
+  gmail,
+  drafting,
+  gmailBusy,
+  onDraft,
+  onDeny,
+  onSetReason,
+  onReopen,
+  onRemove,
+  onSendGmail,
+  onSchedule,
+  onMeetingPrep,
+  meetingPrepBusy,
+  onCopy,
+  onEditDraft,
+  onDeepScan,
+  scanning,
+  onFollowUp,
+  followUpBusy,
+  jobMode,
+  onDraftApplication,
+  applying,
+  hasResume,
+  onToggleAttach,
+  otherProjects,
+  onMoveProject,
+}: {
+  find: Find;
+  gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
+  drafting: boolean;
+  gmailBusy: boolean;
+  onDraft: () => void;
+  onDeny: (reason?: string) => void;
+  onSetReason: (reason: string) => void;
+  onReopen: () => void;
+  onRemove: () => void;
+  onSendGmail: () => void;
+  onSchedule: (sendAt: Date) => void;
+  onMeetingPrep: () => void;
+  meetingPrepBusy: boolean;
+  onCopy: () => void;
+  onEditDraft: (subject: string, body: string) => void;
+  onDeepScan: () => void;
+  scanning: boolean;
+  onFollowUp: () => void;
+  followUpBusy: boolean;
+  jobMode: boolean;
+  onDraftApplication: () => void;
+  applying: boolean;
+  hasResume: boolean;
+  onToggleAttach: (on: boolean) => void;
+  otherProjects: Project[];
+  onMoveProject: (projectId: string) => void;
+}) {
+  const o = find.opp;
+  const d = find.draft;
+  const denied = find.status === "denied";
+  // Contacted (or beyond): hide the send/mark actions.
+  const done = find.status === "sent" || find.status === "replied";
+  const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
+  const [denying, setDenying] = useState(false); // reason picker shown pre-deny
+  const [sendGuard, setSendGuard] = useState<null | { local: string; next: string }>(null);
+  const [editing, setEditing] = useState(false); // draft edit mode
+  const [editSubject, setEditSubject] = useState("");
+  const [editBody, setEditBody] = useState("");
+  // How long since the outreach went out, for the follow-up nudge.
+  const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
+  const followUpReady =
+    find.status === "sent" && sentAgoDays >= 7 && !find.lastFollowUpAt;
+
+  // Send timing: a real delivery to a person outside their business hours gets a
+  // heads-up first. Applications (jobs/internships) always send immediately, and
+  // "create draft" mode isn't a delivery so it's never held.
+  const recipientTz = o.timezone || guessTimezone(o.location);
+  const isApplication = jobMode || !!find.application;
+  const afterHours =
+    gmail.sendMode === "send" &&
+    !isApplication &&
+    !!recipientTz &&
+    !isBusinessHours(recipientTz);
+  const doSend = () => {
+    setSendGuard(null);
+    onSendGmail();
+  };
+  const attemptSend = () => {
+    if (afterHours) {
+      // Auto-schedule setting on → silently queue for the recipient's next
+      // business hour instead of prompting.
+      if (autoScheduleOn()) {
+        onSchedule(suggestBusinessHour(recipientTz));
+        return;
+      }
+      setSendGuard({
+        local: localTimeLabel(recipientTz),
+        next: nextBusinessLabel(recipientTz),
+      });
+    } else {
+      onSendGmail();
+    }
+  };
+
+  return (
+    <>
       {/* Meeting / interview prep — factual highlights about the contact.
           Unlocked once status ≥ sent, so keeping statuses current pays out
           with real prep. Prep persists on the find once generated. */}
@@ -5897,7 +6107,7 @@ function FindCard({
           <DenyReasons current={find.denyReason} onPick={(r) => onSetReason(r)} />
         </div>
       )}
-    </div>
+    </>
   );
 }
 
