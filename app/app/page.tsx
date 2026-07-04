@@ -2983,6 +2983,9 @@ function ScoutTool({
         <FindsTab
           finds={myFinds}
           projectName={activeProject?.name || "this project"}
+          projects={projects}
+          activeProjectId={activeId}
+          onSelectProject={selectProject}
           filter={findFilter}
           setFilter={setFindFilter}
           gmail={activeMailbox}
@@ -3032,6 +3035,11 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
+          onEditProject={(id) => {
+            selectProject(id);
+            setEditingProjects(true);
+            setTab("outreach");
+          }}
         />
       )}
 
@@ -3988,6 +3996,9 @@ function DenyReasons({
 function FindsTab({
   finds,
   projectName,
+  projects,
+  activeProjectId,
+  onSelectProject,
   filter,
   setFilter,
   gmail,
@@ -4020,6 +4031,9 @@ function FindsTab({
 }: {
   finds: Find[];
   projectName: string;
+  projects: Project[];
+  activeProjectId: string;
+  onSelectProject: (id: string) => void;
   filter: FindStatus | "all";
   setFilter: (f: FindStatus | "all") => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -4076,12 +4090,20 @@ function FindsTab({
           <h1 className="font-serif text-3xl font-normal tracking-tight text-ink">
             Your <span className="brand-text">finds</span>
           </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-body">
-            Everyone Scout has found for{" "}
-            <span className="font-semibold text-ink">{projectName}</span>. Draft a
-            message, mark who you&apos;ve contacted, or set aside the ones that
-            aren&apos;t a fit.
-          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Label className="mb-0">Project</Label>
+            <select
+              value={activeProjectId}
+              onChange={(e) => onSelectProject(e.target.value)}
+              className="scout-select rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {gmail.connected && trackable && (
@@ -4718,14 +4740,9 @@ function FindCard({
           </>
         )}
 
-        {!done && (
-          <button
-            onClick={onMarkSent}
-            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-          >
-            Mark contacted
-          </button>
-        )}
+        {/* Status pill dropdown at the top of the card handles every status
+            change (new / drafted / sent / replied / denied) — no separate
+            "Mark contacted" button needed. */}
 
         {/* Follow-up nudge on sent-but-no-reply finds */}
         {find.status === "sent" && (
@@ -4887,6 +4904,47 @@ function learnedFromFinds(finds: Find[]) {
     }
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   };
+  // Chip-worthy summaries about the OPPORTUNITY itself (not the outreach
+  // medium): what industries/companies + roles get accepted vs passed.
+  const tallyOf = (arr: Find[], get: (f: Find) => string) => {
+    const m: Record<string, number> = {};
+    for (const f of arr) {
+      const v = get(f).trim();
+      if (!v) continue;
+      m[v] = (m[v] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  };
+  // Bucket similar deny reasons into a shared concept so "wrong location",
+  // "not in my city", and "too far" collapse into a single Location tally.
+  // Anything the buckets don't catch falls through as its own literal reason.
+  const CONCEPT_BUCKETS: { label: string; test: RegExp }[] = [
+    { label: "Wrong location", test: /\b(location|city|region|country|state|area|place|based|distant|near|far|remote|abroad|foreign|domestic)\b/i },
+    { label: "Wrong industry", test: /\b(industry|field|sector|niche|category|market|space|vertical)\b/i },
+    { label: "Wrong role or level", test: /\b(role|level|junior|senior|entry|position|title|seniority|too small|too big|too senior|too junior|wrong seniority)\b/i },
+    { label: "Wrong timing", test: /\b(time|timing|deadline|closed|expired|past|future|old|stale|next year|next semester|fall|spring|summer|winter)\b/i },
+    { label: "No way to contact", test: /\b(contact|reach|email|way|closed|no email|no phone|dm only|form only)\b/i },
+    { label: "Genre / topic mismatch", test: /\b(country music|rock|pop|jazz|genre|topic|category|subject)\b/i },
+    { label: "Already reached out", test: /\balready\b|\bcontacted\b|\bknow them\b/i },
+  ];
+  const bucketReason = (r: string): string => {
+    for (const b of CONCEPT_BUCKETS) if (b.test.test(r)) return b.label;
+    return r;
+  };
+  const deniedReasons = (() => {
+    const m: Record<string, number> = {};
+    for (const f of denied) {
+      const raw = (f.denyReason || "").trim();
+      if (!raw) continue;
+      const key = bucketReason(raw);
+      m[key] = (m[key] || 0) + 1;
+    }
+    return Object.entries(m).sort((a, b) => b[1] - a[1]);
+  })();
+  const deniedOutlets = tallyOf(denied, (f) => f.opp.outlet || "");
+  const deniedRoles = tallyOf(denied, (f) => f.opp.contactRole || "");
+  const keptOutlets = tallyOf(kept, (f) => f.opp.outlet || "");
+  const keptRoles = tallyOf(kept, (f) => f.opp.contactRole || "");
   const avgFit = (arr: Find[]) => {
     const fs = arr
       .map((f) => f.opp.fitScore)
@@ -4902,6 +4960,11 @@ function learnedFromFinds(finds: Find[]) {
     trend,
     keptChannels: tally(kept),
     deniedChannels: tally(denied),
+    keptOutlets,
+    keptRoles,
+    deniedOutlets,
+    deniedRoles,
+    deniedReasonsTally: deniedReasons,
     keptFit: avgFit(kept),
     deniedFit: avgFit(denied),
     replyRate,
@@ -5010,6 +5073,7 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
+  onEditProject,
 }: {
   activity: Activity;
   profile: Profile;
@@ -5026,6 +5090,7 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
+  onEditProject: (id: string) => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -5055,6 +5120,29 @@ function DashboardTab({
     minutesSaved >= 60
       ? `${(minutesSaved / 60).toFixed(1)} hrs`
       : `${minutesSaved} min`;
+
+  // Rhythm stats — how much you've done in the last 7 and 30 days. Uses the
+  // find's addedAt (when Scout surfaced it) for drafts, sentAt for sends.
+  const WEEK = 7 * 86400000;
+  const MONTH = 30 * 86400000;
+  const now = Date.now();
+  const draftsThisWeek = finds.filter(
+    (f) =>
+      (f.status === "drafted" || f.status === "sent" || f.status === "replied") &&
+      now - (f.addedAt || 0) < WEEK
+  ).length;
+  const sentThisWeek = finds.filter(
+    (f) => f.sentAt && now - f.sentAt < WEEK
+  ).length;
+  const activeDays = (() => {
+    const days = new Set<string>();
+    for (const f of finds) {
+      const t = f.sentAt || f.addedAt;
+      if (!t || now - t > MONTH) continue;
+      days.add(new Date(t).toISOString().slice(0, 10));
+    }
+    return days.size;
+  })();
 
   // What Scout uses to personalize FOR YOU — each item is a real signal or a
   // concrete way to make your outreach sharper.
@@ -5184,6 +5272,25 @@ function DashboardTab({
           n={activity.copies}
           label="Taken to send"
           icon={<path d="M22 3 11 14M22 3l-7 18-4-8-8-4 19-6z" />}
+        />
+      </Reveal>
+
+      {/* -------- Rhythm (recent frequency) -------- */}
+      <Reveal as="section" className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <StatTile
+          n={draftsThisWeek}
+          label="Drafts this week"
+          icon={<><path d="M12 20V4M6 10l6-6 6 6" /></>}
+        />
+        <StatTile
+          n={sentThisWeek}
+          label="Sent this week"
+          icon={<><path d="M5 12h14M13 6l6 6-6 6" /></>}
+        />
+        <StatTile
+          n={activeDays}
+          label="Days active (last 30)"
+          icon={<><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M8 2v4M16 2v4M3 10h18" /></>}
         />
       </Reveal>
 
@@ -5342,15 +5449,20 @@ function DashboardTab({
                 <div>
                   <div className="text-xs font-semibold text-sage">You reach out to</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {learned.keptChannels.length ? (
-                      learned.keptChannels.slice(0, 4).map(([c, n]) => (
-                        <span
-                          key={c}
-                          className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
-                        >
-                          {c} · {n}
-                        </span>
-                      ))
+                    {(learned.keptOutlets.length
+                      ? learned.keptOutlets
+                      : learned.keptRoles
+                    ).length ? (
+                      (learned.keptOutlets.length ? learned.keptOutlets : learned.keptRoles)
+                        .slice(0, 4)
+                        .map(([c, n]) => (
+                          <span
+                            key={c}
+                            className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
+                          >
+                            {c} · {n}
+                          </span>
+                        ))
                     ) : (
                       <span className="text-xs text-body/50">nothing yet</span>
                     )}
@@ -5359,18 +5471,28 @@ function DashboardTab({
                 <div>
                   <div className="text-xs font-semibold text-body/60">You tend to pass on</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {learned.deniedChannels.length ? (
-                      learned.deniedChannels.slice(0, 4).map(([c, n]) => (
-                        <span
-                          key={c}
-                          className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
-                        >
-                          {c} · {n}
-                        </span>
-                      ))
-                    ) : (
-                      <span className="text-xs text-body/50">nothing yet</span>
-                    )}
+                    {(() => {
+                      // Show the opportunity itself, not the outreach medium:
+                      // prefer explicit deny reasons; otherwise fall back to
+                      // companies (outlet), then roles.
+                      const source = learned.deniedReasonsTally.length
+                        ? learned.deniedReasonsTally
+                        : learned.deniedOutlets.length
+                          ? learned.deniedOutlets
+                          : learned.deniedRoles;
+                      return source.length ? (
+                        source.slice(0, 4).map(([c, n]) => (
+                          <span
+                            key={c}
+                            className="rounded-full border border-warm-border bg-white px-2.5 py-1 text-xs font-medium text-body/70"
+                          >
+                            {c} · {n}
+                          </span>
+                        ))
+                      ) : (
+                        <span className="text-xs text-body/50">nothing yet</span>
+                      );
+                    })()}
                   </div>
                 </div>
               </div>
@@ -5418,18 +5540,21 @@ function DashboardTab({
               const nw = mine.filter((f) => f.status === "new").length;
               const sent = mine.filter((f) => f.status === "sent").length;
               return (
-                <div
+                <button
                   key={p.id}
-                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card"
+                  onClick={() => onEditProject(p.id)}
+                  title="Open in Outreach and edit"
+                  className="idx-flap relative flex items-center gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
                 >
                   <span className="h-10 w-10 shrink-0 rounded-xl bg-brown" />
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold text-ink">{p.name}</div>
                     <div className="truncate text-xs text-muted">
                       {p.useCase} · {nw} new · {sent} sent
                     </div>
                   </div>
-                </div>
+                  <span aria-hidden className="text-xs text-body/50">✎</span>
+                </button>
               );
             })
           )}
@@ -5473,7 +5598,10 @@ function DashboardTab({
             </div>
             <p className="mt-3 text-xs text-body/60">
               Based on {community.users} other{" "}
-              {community.users === 1 ? "person" : "people"} using Scout.
+              {community.users === 1 ? "person" : "people"} using Scout with a
+              similar use case to yours. Teammates who picked a different use case
+              are compared against a different cohort, so their numbers will
+              differ from yours.
             </p>
           </>
         )}
@@ -5775,20 +5903,58 @@ function OutreachAdvice({
   const pct = (v: number) => `${Math.round(v * 100)}%`;
   const isApplied = (s: string) =>
     coaching.some((c) => c.trim().toLowerCase() === s.trim().toLowerCase());
-  // A small "turn this into a standing rule" control shown on each coachable tip.
+  // Advice the user has dismissed — kept in localStorage so it stays hidden
+  // across sessions. Simple string match on the tip body.
+  const [dismissed, setDismissed] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const raw = localStorage.getItem("scout_dismissed_tips");
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const dismissTip = (tip: string) => {
+    const key = tip.trim().toLowerCase();
+    setDismissed((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      try {
+        localStorage.setItem("scout_dismissed_tips", JSON.stringify([...next]));
+      } catch {
+        /* localStorage unavailable — dismissal is per-session only */
+      }
+      return next;
+    });
+  };
+  const isDismissed = (s: string) => dismissed.has(s.trim().toLowerCase());
+  // A small "turn this into a standing rule" control shown on each coachable
+  // tip, plus a "not helpful" button next to it. Dismissed tips get hidden
+  // right after via the isDismissed check on the parent renderer.
   const ApplyTip = ({ tip }: { tip: string }) =>
     isApplied(tip) ? (
       <span className="shrink-0 rounded-lg bg-sage/15 px-2.5 py-1 text-[11px] font-semibold text-sage">
         Applied ✓
       </span>
     ) : (
-      <button
-        onClick={() => onApplyTip(tip)}
-        className="shrink-0 rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
-        title="Scout will follow this in every draft it writes for you"
-      >
-        Apply to my drafts
-      </button>
+      <span className="flex shrink-0 items-center gap-1.5">
+        <button
+          onClick={() => onApplyTip(tip)}
+          className="rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
+          title="Scout will follow this in every draft it writes for you"
+        >
+          Apply to my drafts
+        </button>
+        <button
+          onClick={() => dismissTip(tip)}
+          className="rounded-lg border border-warm-border px-2 py-1 text-[11px] font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+          title="Hide this advice"
+        >
+          Not helpful
+        </button>
+      </span>
     );
 
   // ---- Tailored coaching on the user's own drafts ----
@@ -5988,9 +6154,9 @@ function OutreachAdvice({
         <div className="text-xs font-bold uppercase tracking-wider text-accent">
           Working for the community right now
         </div>
-        {insights.length ? (
+        {insights.filter((t) => !isDismissed(t.body)).length ? (
           <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
-            {insights.map((tip) => (
+            {insights.filter((t) => !isDismissed(t.body)).map((tip) => (
               <div
                 key={tip.title}
                 className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
@@ -6020,7 +6186,7 @@ function OutreachAdvice({
           Fundamentals
         </div>
         <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
-          {playbook.map((tip) => (
+          {playbook.filter((tip) => !isDismissed(tip.body)).map((tip) => (
             <div
               key={tip.title}
               className="rounded-2xl border border-warm-border bg-white p-4 shadow-card"
@@ -7238,6 +7404,15 @@ function ProfileTab({
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
   const [buildingSig, setBuildingSig] = useState(false);
+  // Whether to show the job-applicant follow-ups (company size + competitive-
+  // ness). Defaults to true when the user's use case looks job-shaped OR when
+  // they've already set either field to a non-default value on a previous
+  // visit — so we don't hide answers they already picked.
+  const [jobApplicant, setJobApplicant] = useState<boolean>(
+    isJobUseCaseClient(useCase) ||
+      (!!companySize && companySize !== "any") ||
+      (!!competitiveness && competitiveness !== "any")
+  );
   // Build an email signature from the resume/bio text (explicit, overwrites the
   // current one; the user can edit after).
   async function buildSignatureFromResume() {
@@ -7587,62 +7762,92 @@ function ProfileTab({
             </div>
           </div>
 
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <div>
-              <Label>Company size you want</Label>
-              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
-                {(
-                  [
-                    ["any", "Any"],
-                    ["small", "Small / startup"],
-                    ["big", "Big / established"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => onCompanySize(val)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      companySize === val
-                        ? "bg-brown text-white shadow-soft"
-                        : "text-body/70 hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+          <div className="mt-5">
+            <Label>Are you applying to jobs or internships?</Label>
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+              {(
+                [
+                  ["yes", "Yes"],
+                  ["no", "No"],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val}
+                  onClick={() => setJobApplicant(val === "yes")}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    jobApplicant === (val === "yes")
+                      ? "bg-brown text-white shadow-soft"
+                      : "text-body/70 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-            <div>
-              <Label>Competitiveness</Label>
-              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
-                {(
-                  [
-                    ["any", "Any"],
-                    ["beginner", "Beginner"],
-                    ["intermediate", "Intermediate"],
-                    ["competitive", "Competitive"],
-                  ] as const
-                ).map(([val, label]) => (
-                  <button
-                    key={val}
-                    onClick={() => onCompetitiveness(val)}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                      competitiveness === val
-                        ? "bg-brown text-white shadow-soft"
-                        : "text-body/70 hover:text-ink"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                First-time applicant? Pick <span className="font-semibold">Beginner</span> —
-                Scout will skip the ultra-selective programs and surface ones you can
-                realistically land.
-              </p>
-            </div>
+            <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+              Answering Yes shows two extra questions Scout uses to tune what
+              opportunities to surface for you.
+            </p>
           </div>
+
+          {jobApplicant && (
+            <div className="mt-5 grid gap-5 sm:grid-cols-2">
+              <div>
+                <Label>Company size you want</Label>
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                  {(
+                    [
+                      ["any", "Any"],
+                      ["small", "Small / startup"],
+                      ["big", "Big / established"],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => onCompanySize(val)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        companySize === val
+                          ? "bg-brown text-white shadow-soft"
+                          : "text-body/70 hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <Label>Competitiveness</Label>
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-white p-1">
+                  {(
+                    [
+                      ["any", "Any"],
+                      ["beginner", "Beginner"],
+                      ["intermediate", "Intermediate"],
+                      ["competitive", "Competitive"],
+                    ] as const
+                  ).map(([val, label]) => (
+                    <button
+                      key={val}
+                      onClick={() => onCompetitiveness(val)}
+                      className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                        competitiveness === val
+                          ? "bg-brown text-white shadow-soft"
+                          : "text-body/70 hover:text-ink"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                  First-time applicant? Pick <span className="font-semibold">Beginner</span> —
+                  Scout will skip the ultra-selective programs and surface ones you can
+                  realistically land.
+                </p>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="mt-5">
