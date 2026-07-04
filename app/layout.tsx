@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import localFont from "next/font/local";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
@@ -12,13 +11,6 @@ const sans = Inter({
   display: "swap",
 });
 
-// Young Serif — warm, field-guide display face used for headings only.
-const youngSerif = localFont({
-  src: [{ path: "./fonts/YoungSerif-Regular.ttf", weight: "400", style: "normal" }],
-  variable: "--font-serif",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: "Scout — AI Outreach Engine",
   description:
@@ -27,7 +19,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${youngSerif.variable}`}>
+    <html lang="en" className={sans.variable}>
       <body>{children}</body>
     </html>
   );

@@ -7,10 +7,9 @@
 }
 
 body {
-  /* Light, near-neutral wash with only a faint warm tint. Crisp white cards sit
-     on top for clean separation. */
-  background: #f5f2ec;
-  color: #5f584e;
+  /* Light near-neutral canvas; white panels sit on top for clean separation. */
+  background: #f3f2ef;
+  color: #57534c;
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;

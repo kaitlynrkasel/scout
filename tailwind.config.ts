@@ -11,34 +11,39 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
-        serif: ["var(--font-serif)", "ui-serif", "Georgia", "serif"],
       },
       colors: {
-        ink: "#2c2722", // near-black, faintly warm — for headings
-        body: "#5f584e", // neutral warm-gray body text
-        muted: "#9c968b", // captions / placeholders
+        ink: "#201d18", // near-black, faint warm — headings (AA+ on white)
+        body: "#57534c", // body text (~8:1 on white)
+        muted: "#7c776d", // secondary text (~5.3:1 on white, still AA)
 
-        // Brown is now a single restrained accent, not the whole mood.
+        // Brown is the single restrained accent — primary action, selection, state.
         brown: "#7c5837", // primary action / active nav / accent
-        "brown-deep": "#5d4026", // deeper brown for links / gradients
-        "brown-tint": "#efeae0", // soft neutral tint for hovers / chips
+        "brown-deep": "#5d4026", // hover / pressed
+        "brown-tint": "#f2ece1", // soft selection / positive tint
         clay: "#c8b899", // muted fills / avatars
-        coffee: "#2b2620", // deep neutral for dark CTA cards
-        sage: "#8c9a76", // secondary accent (logo nod), used sparingly
-        "sage-deep": "#5f6a47", // deeper sage for text on sage tint
-        danger: "#a6674a", // muted terracotta, reserved for "denied"
+        coffee: "#26221c", // deep neutral for the rare dark surface
 
-        // Surfaces — crisp white cards on a light, near-neutral page.
-        cream: "#f5f2ec", // page background (faint warm tint)
-        surface: "#ffffff", // cards / sidebar (crisp white)
-        "surface-2": "#fbfaf7", // raised / inner surfaces
+        // Standardized semantic states.
+        success: "#3f7a52", // replied / positive
+        "success-deep": "#2f5c3f",
+        attention: "#a9761f", // needs-attention / due
+        danger: "#b0553f", // denied / error
+        sage: "#8c9a76", // subtle live/connected dot (logo nod)
+        "sage-deep": "#5f6a47",
 
-        // Legacy names, remapped to the new palette
-        coral: "#7c5837", // was orange-coral -> primary brown
-        blush: "#5d4026", // was pink -> brown-deep
-        accent: "#5d4026", // links / accents -> deep brown (contrast on white)
-        "warm-bg": "#f2efe8", // soft neutral background / hover
-        "warm-border": "#e8e3d9", // hairline border (light neutral)
+        // Surfaces — white panels on a light near-neutral canvas; a distinct
+        // off-white for the sidebar/inset layer.
+        cream: "#f3f2ef", // page canvas (near-neutral, whisper of warmth)
+        surface: "#ffffff", // panels / cards
+        "surface-2": "#fbfbf9", // sidebar / inset layer
+
+        // Legacy names, remapped.
+        coral: "#7c5837",
+        blush: "#5d4026",
+        accent: "#5d4026",
+        "warm-bg": "#f4f2ee", // hover fill
+        "warm-border": "#e8e6e0", // hairline border
       },
       borderRadius: {
         // Tighter, more professional corners (crisper than Tailwind defaults).
