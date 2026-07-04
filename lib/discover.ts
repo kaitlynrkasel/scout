@@ -49,6 +49,33 @@ function isNetworkingUseCase(useCase: string): boolean {
   return /\b(network|coffee|mentor|connect|advice|informational)/i.test(useCase);
 }
 
+// Prospecting / lead-gen: the user is finding EXTERNAL targets to pitch, sell
+// to, partner with, get sponsored by, or raise money from. The target lives in
+// a DIFFERENT world than the user — a marketing agency pitching restaurants, a
+// SaaS founder selling to any industry, a nonprofit chasing sponsors. For these,
+// the user's own industry must NOT filter results; the GOAL defines the target
+// profile. Contrast with networking/jobs, where the target IS in the user's
+// field and industry alignment against the user is exactly right.
+function isProspectingUseCase(useCase: string): boolean {
+  return /\b(sales|lead|prospect|pitch|sell|selling|client|customer|partner|partnership|sponsor|sponsorship|investor|fundrais|business development|biz ?dev|b2b|vendor|supplier|wholesale|distributor|retailer|buyer|advertis|outreach to (businesses|companies|brands)|cold (email|outreach|call))/i.test(
+    useCase || ""
+  );
+}
+
+// The user has explicitly widened the target to any industry / anywhere. When
+// the goal says this, we drop industry + location filtering no matter the use
+// case, because the user is telling us the net is intentionally wide.
+function goalWantsAnyIndustry(goal: string): boolean {
+  return /\b(any (industry|field|sector|vertical|niche|business)|all (industries|sectors|fields)|every (industry|sector)|industry.?agnostic|no (specific )?industry|regardless of industry|across industries)\b/i.test(
+    goal || ""
+  );
+}
+function goalWantsAnywhere(goal: string): boolean {
+  return /\b(anywhere|any (location|city|region|country|state|area)|nationwide|worldwide|global(ly)?|remote|no (specific )?location|regardless of location|located anywhere)\b/i.test(
+    goal || ""
+  );
+}
+
 // Influencer / creator discovery: brand looking for social creators, PR looking
 // for TikTokers to send product to, etc. These use cases live mostly outside
 // Scout's crawlable web — IG/TikTok/X are login-walled — so we lean on
@@ -127,9 +154,21 @@ async function planQueries(
   const jobs = isJobUseCase(useCase);
   const networking = isNetworkingUseCase(useCase);
   const influencer = isInfluencerUseCase(useCase);
+  const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
 
   let guidance = "";
-  if (influencer) {
+  if (prospecting) {
+    guidance =
+      "The user is PROSPECTING — finding external companies / people to pitch, sell to, partner with, or raise from. The " +
+      "targets live in DIFFERENT industries than the user, so do NOT bias queries toward the user's own field. Build queries " +
+      "from the GOAL's target profile (size, type, stage, location) plus a findability signal that surfaces a contact route. " +
+      "Good query patterns: '{target type} companies contact email', '{target type} directory', 'list of {target type} " +
+      "businesses', '{target type} companies {city}' (only if the goal names a place), '{industry} startups contact us', " +
+      "'{target type} companies with phone number email'. Prefer queries that surface company contact / about pages, business " +
+      "directories, chamber-of-commerce and association member lists, and curated roundups of companies. If the goal says ANY " +
+      "industry, vary the industries across queries (e.g. one for local retailers, one for professional-services firms, one " +
+      "for SaaS startups) to cast a wide net. NEVER use 'how to', 'tips', 'guide', or 'advice'.";
+  } else if (influencer) {
     guidance =
       "Target curated ROUNDUP articles and listicles that NAME real social creators — that's where we find them, " +
       "since Instagram / TikTok / X block deep search. Combine the specific niche + platform + geography + a " +
@@ -365,7 +404,24 @@ async function extract(
   feedback?: DiscoverFeedback
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
   const noun = (resolveTemplate(useCase)?.targetNoun || GENERIC.targetNoun).replace(/s$/, "");
-  const sys =
+
+  // Fit is judged differently depending on what the user is doing:
+  // - Prospecting (sales/leads/partners/investors) OR a goal that says "any
+  //   industry": the target lives in a DIFFERENT world than the user, so we
+  //   must NOT filter by the user's own field. The GOAL defines the target.
+  // - Everything else (networking/jobs/PR): the target IS in the user's field,
+  //   so aligning to the user's industry/location is correct.
+  const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
+  // Within prospecting we never align to the USER'S field, but we still respect
+  // a target profile the goal DOES name (e.g. "restaurants in Chicago"). Only
+  // drop the industry / location filter entirely when the goal explicitly says
+  // any-industry / anywhere.
+  const anyIndustry = goalWantsAnyIndustry(goal);
+  const anywhere = goalWantsAnywhere(goal);
+
+  // Core quality gates — apply to every mode. These are about whether the
+  // result is a REAL, REACHABLE target, not about fit.
+  const core =
     `You are a research assistant. From a web search result, extract a structured record of ONE REAL, SPECIFIC ${noun || "target"} ` +
     `the user could actually reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
     `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
@@ -375,31 +431,49 @@ async function extract(
     `to share a name). If no URL for this specific target appears in the source, leave url empty. ` +
     `THE RESULT MUST BE AN ACTUAL PROSPECT, not content about outreach. Set is_relevant to false (and target_type "other") ` +
     `for anything that is ADVICE or GENERAL CONTENT rather than a specific reachable person or organization: how-to guides, ` +
-    `"tips"/"advice"/"best practices" articles, "X ways to network" or "top 10" listicles, template/example collections, ` +
-    `blog posts about how to reach out, news articles, login/paywall pages, pay-to-play services, off-industry results, and ` +
-    `the user themselves. A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
-    `an article teaching you how to network is NOT. ` +
-    `MENTIONED IS NOT ENOUGH: if the source is about a PROGRAM, EVENT, ORGANIZATION, or EMPLOYER and only mentions a person ` +
-    `by name in passing — no personal profile page, no interview with them, no direct contact channel — set is_relevant to false. ` +
-    `For target_type "person", the source must EITHER be about the person themselves (their profile page, an interview with ` +
-    `them, coverage of their own career) OR give a direct contact channel (email or LinkedIn URL / handle). Otherwise it's ` +
-    `not a real point of contact. ` +
-    `WHY_IT_FITS DISCIPLINE: must be a specific true detail about THE PERSON'S OWN work, career, projects, or interests — ` +
-    `not about their employer or program. If you can only describe the program they work at, that's a sign this isn't a real ` +
-    `prospect; set is_relevant false. ` +
-    `PODCASTS / INTERVIEWS / VIDEO CLIPS: episodes, YouTube videos, and interview transcripts almost never make the person ` +
-    `reachable. If the source is a podcast episode or a video and the person is just the guest — no direct email, no LinkedIn ` +
-    `linked from the page, no contact channel — set is_relevant false. Being interviewed on a podcast is not a way to be reached. ` +
-    `INDUSTRY ALIGNMENT IS CRITICAL: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their ` +
-    `industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. ` +
-    `Never surface cross-industry hits unless the goal explicitly asks for that other industry. ` +
-    `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly in a different region / country / ` +
-    `far-away city, penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty. ` +
-    `TIME WINDOW ALIGNMENT: if the user's GOAL specifies a semester or year (e.g. "Fall 2026 internships", "summer 2027 roles"), ` +
-    `and the posting is clearly for a different window (already-closed 2024 posting, or the wrong semester), set is_relevant ` +
-    `false. Don't invent a mismatch when the posting's timing is unclear — only reject when the source explicitly says the wrong ` +
-    `window. Reserve fit_score above 0.7 for results matching goal + industry + location + time window; give 0.3 or below when ` +
-    `two or more of those are off.`;
+    `"tips"/"advice"/"best practices" articles, "top 10" listicles, template/example collections, ` +
+    `blog posts about how to reach out, login/paywall pages, pay-to-play services, and the user themselves. ` +
+    `A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
+    `an article teaching you how to do outreach is NOT. ` +
+    `MENTIONED IS NOT ENOUGH: for target_type "person", if the source is about a PROGRAM, EVENT, ORGANIZATION, or EMPLOYER and ` +
+    `only mentions a person by name in passing — no personal profile page, no interview, no direct contact channel — set ` +
+    `is_relevant to false. For a "person" the source must EITHER be about them OR give a direct contact channel ` +
+    `(email or LinkedIn URL / handle). ` +
+    `PODCASTS / VIDEO CLIPS: an episode or video where the person is just a guest, with no contact channel, is not reachable; ` +
+    `set is_relevant false. `;
+
+  // Fit / alignment section — this is the part that differs by mode.
+  const fitRules = prospecting
+    ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting — finding external ${noun || "target"}s to ` +
+      `pitch, sell to, partner with, or raise from. Do NOT reject a result for being in a different industry than the user. ` +
+      `The GOAL states the target profile (size, type, stage, location if any); judge fit against THAT, and ignore the user's ` +
+      `own field entirely for filtering. ` +
+      (anyIndustry
+        ? `The user has said ANY INDUSTRY is fine, so industry is NOT a filter at all — a bakery, a law firm, and a game studio ` +
+          `are all equally valid if they otherwise match the goal. `
+        : `Match the target types the goal describes. `) +
+      (anywhere
+        ? `The user has said the target can be ANYWHERE, so do NOT penalize location. `
+        : `LOCATION: only penalize fit_score if the GOAL specifies a location and this result is clearly elsewhere. `) +
+      `REACHABILITY MATTERS MOST: since the user needs to actually contact these targets, favor results that expose a way in ` +
+      `(a company contact page, an email, a phone number, a named person). A real company with a contact route is a strong ` +
+      `fit even in an unrelated industry. WHY_IT_FITS: a specific true detail about the TARGET that makes them a good prospect ` +
+      `for what the user offers (size, recent growth, what they do, why they'd want this), NOT a link to the user's own field. ` +
+      `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
+      `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
+      `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
+    : `INDUSTRY ALIGNMENT: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their ` +
+      `industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. ` +
+      `Never surface cross-industry hits unless the goal explicitly asks for that other industry. ` +
+      `WHY_IT_FITS DISCIPLINE: a specific true detail about THE PERSON'S OWN work, career, or interests tied to the user's ` +
+      `field — not about their employer or program. If you can only describe the program they work at, set is_relevant false. ` +
+      `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly a different region / far city, ` +
+      `penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty. ` +
+      `TIME WINDOW ALIGNMENT: if the GOAL specifies a semester or year and the posting is clearly for a different window, set ` +
+      `is_relevant false — but only when the source explicitly says the wrong window. ` +
+      `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off.`;
+
+  const sys = core + fitRules;
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
