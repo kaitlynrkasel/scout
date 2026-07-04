@@ -307,6 +307,10 @@ interface Project {
   name: string;
   useCase: string;
   context: string; // who this outreach is for — fed into discovery + drafting
+  // Optional per-project email signature. Falls back to the account-wide
+  // default (SIG_KEY/profile signature) when unset — different projects can
+  // sign off as different people/brands without touching the global default.
+  signature?: string;
 }
 interface Category {
   id: string;
@@ -1704,6 +1708,17 @@ function ScoutTool({
     saveProjects(projects.map((p) => (p.id === id ? { ...p, context } : p)));
   }
 
+  // Per-project email signature, falling back to the account-wide default
+  // when a project hasn't set its own. Every draft-generating call site
+  // should use this instead of the flat `signature` value.
+  function signatureFor(projectId: string): string {
+    const proj = projects.find((p) => p.id === projectId);
+    return (proj?.signature ?? signature) || "";
+  }
+  function setProjectSignature(id: string, sig: string) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, signature: sig } : p)));
+  }
+
   // Prefill identity fields after Scout reads a resume. Keeps a name the user
   // already typed; sets the inferred use case (which reseeds its categories).
   // Bio is set separately (immediately) so nothing is lost if parsing fails.
@@ -2313,7 +2328,7 @@ function ScoutTool({
             coaching,
             dismissedAdvice,
             editPairs,
-            signature,
+            signature: signatureFor(activeId),
           }),
         });
         const data = await parseApiResponse(res);
@@ -2624,7 +2639,7 @@ function ScoutTool({
           coaching,
           dismissedAdvice,
           editPairs,
-          signature,
+          signature: signatureFor(find.projectId),
         }),
       });
       const data = await parseApiResponse(res);
@@ -3000,7 +3015,7 @@ function ScoutTool({
           coaching,
           dismissedAdvice,
           editPairs,
-          signature,
+          signature: signatureFor(activeId),
         }),
       });
       const data = await parseApiResponse(res);
@@ -3100,7 +3115,7 @@ function ScoutTool({
           coaching,
           dismissedAdvice,
           editPairs,
-          signature,
+          signature: signatureFor(activeId),
           kind,
         }),
       });
@@ -3732,6 +3747,8 @@ function ScoutTool({
           onToggleAttach={setFindAttach}
           onTogglePin={togglePin}
           onMoveProject={(f, pid) => moveFindToProject(f.id, pid)}
+          getSignatureFor={signatureFor}
+          onEditSignature={setProjectSignature}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
@@ -4881,6 +4898,8 @@ function FindDetailModal({
   onToggleAttach,
   otherProjects,
   onMoveProject,
+  currentSignature,
+  onEditSignature,
 }: {
   find: Find;
   onClose: () => void;
@@ -4911,6 +4930,8 @@ function FindDetailModal({
   onToggleAttach: (on: boolean) => void;
   otherProjects: Project[];
   onMoveProject: (projectId: string) => void;
+  currentSignature: string;
+  onEditSignature: (sig: string) => void;
 }) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
@@ -5189,6 +5210,8 @@ function FindDetailModal({
                 onToggleAttach={onToggleAttach}
                 otherProjects={otherProjects}
                 onMoveProject={onMoveProject}
+                currentSignature={currentSignature}
+                onEditSignature={onEditSignature}
               />
             </div>
           </div>
@@ -5309,6 +5332,8 @@ function FindsTab({
   onToggleAttach,
   onTogglePin,
   onMoveProject,
+  getSignatureFor,
+  onEditSignature,
   onCheckReplies,
   repliesBusy,
   repliesNote,
@@ -5352,6 +5377,8 @@ function FindsTab({
   onToggleAttach: (f: Find, on: boolean) => void;
   onTogglePin: (id: string) => void;
   onMoveProject: (f: Find, projectId: string) => void;
+  getSignatureFor: (projectId: string) => string;
+  onEditSignature: (projectId: string, sig: string) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
   repliesNote: string;
@@ -5528,6 +5555,8 @@ function FindsTab({
               }
               otherProjects={projects.filter((p) => p.id !== f.projectId)}
               onMoveProject={(pid) => onMoveProject(f, pid)}
+              currentSignature={getSignatureFor(f.projectId)}
+              onEditSignature={(sig) => onEditSignature(f.projectId, sig)}
             />
           ))}
         </div>
@@ -5566,6 +5595,8 @@ function FindsTab({
           onToggleAttach={(on) => onToggleAttach(detailFind, on)}
           otherProjects={projects.filter((p) => p.id !== detailFind.projectId)}
           onMoveProject={(pid) => onMoveProject(detailFind, pid)}
+          currentSignature={getSignatureFor(detailFind.projectId)}
+          onEditSignature={(sig) => onEditSignature(detailFind.projectId, sig)}
         />
       )}
     </main>
@@ -5763,6 +5794,8 @@ function FindCard({
   wantedChannels,
   otherProjects,
   onMoveProject,
+  currentSignature,
+  onEditSignature,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -5795,6 +5828,8 @@ function FindCard({
   wantedChannels: string[];
   otherProjects: Project[];
   onMoveProject: (projectId: string) => void;
+  currentSignature: string;
+  onEditSignature: (sig: string) => void;
 }) {
   const o = find.opp;
   // Recipient timezone is also needed by FindWorkflow below, which recomputes
@@ -6002,6 +6037,8 @@ function FindCard({
         onToggleAttach={onToggleAttach}
         otherProjects={otherProjects}
         onMoveProject={onMoveProject}
+        currentSignature={currentSignature}
+        onEditSignature={onEditSignature}
       />
     </div>
   );
@@ -6040,6 +6077,8 @@ function FindWorkflow({
   onToggleAttach,
   otherProjects,
   onMoveProject,
+  currentSignature,
+  onEditSignature,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -6068,6 +6107,8 @@ function FindWorkflow({
   onToggleAttach: (on: boolean) => void;
   otherProjects: Project[];
   onMoveProject: (projectId: string) => void;
+  currentSignature: string;
+  onEditSignature: (sig: string) => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -6080,6 +6121,13 @@ function FindWorkflow({
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  // When the draft's body cleanly ends with this project's current signature,
+  // the editor splits it into its own field — editing just the sign-off and
+  // saving updates THAT PROJECT's signature going forward, not just this one
+  // draft. Null means no clean split was found (body edited as one blob, as
+  // before — never silently mangles a draft we can't confidently split).
+  const [editSignature, setEditSignature] = useState<string | null>(null);
+  const hasSignatureSplit = editSignature !== null;
   // How long since the outreach went out, for the follow-up nudge.
   const sentAgoDays = find.sentAt ? (Date.now() - find.sentAt) / 86400000 : 0;
   const followUpReady =
@@ -6168,7 +6216,20 @@ function FindWorkflow({
           <button
             onClick={() => {
               setEditSubject(d.subject || "");
-              setEditBody(d.body || "");
+              const body = d.body || "";
+              // Only split when this draft's body cleanly ends with the
+              // project's CURRENT signature — anything less exact (already
+              // customized, signature changed since drafting, no signature at
+              // all) falls back to editing the whole body as one blob.
+              const sig = currentSignature.trim();
+              const suffix = sig ? `\n\n${sig}` : "";
+              if (d.channelType === "email" && sig && body.endsWith(suffix)) {
+                setEditBody(body.slice(0, body.length - suffix.length));
+                setEditSignature(sig);
+              } else {
+                setEditBody(body);
+                setEditSignature(null);
+              }
               setEditing(true);
             }}
             className="mt-2 text-[11px] font-semibold text-accent transition hover:underline"
@@ -6193,10 +6254,28 @@ function FindWorkflow({
             rows={Math.min(16, Math.max(6, editBody.split("\n").length + 1))}
             className="w-full rounded-lg border border-warm-border px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-coral/20"
           />
+          {hasSignatureSplit && (
+            <div className="mt-2">
+              <div className="mb-1 text-[11px] font-semibold text-body/60">
+                Signature — editing this updates the default for every draft in this project
+              </div>
+              <textarea
+                value={editSignature || ""}
+                onChange={(e) => setEditSignature(e.target.value)}
+                rows={Math.min(6, Math.max(2, (editSignature || "").split("\n").length + 1))}
+                className="w-full rounded-lg border border-sage/40 bg-sage/5 px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-sage/20"
+              />
+            </div>
+          )}
           <div className="mt-2 flex items-center gap-2">
             <button
               onClick={() => {
-                onEditDraft(editSubject, editBody);
+                const sig = (editSignature || "").trim();
+                const body = hasSignatureSplit && sig ? `${editBody.trimEnd()}\n\n${sig}` : editBody;
+                onEditDraft(editSubject, body);
+                if (hasSignatureSplit && sig !== currentSignature.trim()) {
+                  onEditSignature(sig);
+                }
                 setEditing(false);
               }}
               className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
