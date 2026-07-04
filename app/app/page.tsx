@@ -4862,6 +4862,7 @@ function FindDetailModal({
   onDeny,
   onSetReason,
   onReopen,
+  onStatus,
   onRemove,
   onSendGmail,
   onSchedule,
@@ -4891,6 +4892,7 @@ function FindDetailModal({
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
+  onStatus: (s: FindStatus) => void;
   onRemove: () => void;
   onSendGmail: () => void;
   onSchedule: (sendAt: Date) => void;
@@ -5165,6 +5167,7 @@ function FindDetailModal({
                 onDeny={onDeny}
                 onSetReason={onSetReason}
                 onReopen={onReopen}
+                onStatus={onStatus}
                 onRemove={onRemove}
                 onSendGmail={onSendGmail}
                 onSchedule={onSchedule}
@@ -5541,6 +5544,7 @@ function FindsTab({
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
           onReopen={() => onReopen(detailFind)}
+          onStatus={(s) => onStatus(detailFind, s)}
           onRemove={() => onRemove(detailFind)}
           onSendGmail={() => onSendGmail(detailFind)}
           onSchedule={(date) => onSchedule(detailFind, date)}
@@ -5966,6 +5970,7 @@ function FindCard({
         onDeny={onDeny}
         onSetReason={onSetReason}
         onReopen={onReopen}
+        onStatus={onStatus}
         onRemove={onRemove}
         onSendGmail={onSendGmail}
         onSchedule={onSchedule}
@@ -6003,6 +6008,7 @@ function FindWorkflow({
   onDeny,
   onSetReason,
   onReopen,
+  onStatus,
   onRemove,
   onSendGmail,
   onSchedule,
@@ -6030,6 +6036,7 @@ function FindWorkflow({
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
+  onStatus: (s: FindStatus) => void;
   onRemove: () => void;
   onSendGmail: () => void;
   onSchedule: (sendAt: Date) => void;
@@ -6310,32 +6317,47 @@ function FindWorkflow({
           </>
         )}
 
-        {/* Status pill dropdown at the top of the card handles every status
-            change (new / drafted / sent / replied / denied) — no separate
-            "Mark contacted" button needed. */}
-
-        {/* Follow-up nudge on sent-but-no-reply finds */}
+        {/* The status pill dropdown at the top of the card can set any status;
+            these two sit right next to the follow-up action since "did they
+            reply" / "not going anywhere" are the two real outcomes of a sent
+            message — moves it straight to that filter tab in Finds. */}
         {find.status === "sent" && (
-          <button
-            onClick={onFollowUp}
-            disabled={followUpBusy}
-            title={
-              find.gmailThreadId
-                ? "Draft a short in-thread nudge"
-                : "Draft a short follow-up you can send"
-            }
-            className={`rounded-lg px-3 py-1.5 text-xs font-bold shadow-card transition disabled:opacity-50 ${
-              followUpReady
-                ? "bg-brand-gradient text-white hover:opacity-95"
-                : "border border-warm-border text-body hover:bg-warm-bg"
-            }`}
-          >
-            {followUpBusy
-              ? "Writing…"
-              : find.lastFollowUpAt
-              ? "Draft another nudge"
-              : "Draft a follow-up"}
-          </button>
+          <>
+            <button
+              onClick={onFollowUp}
+              disabled={followUpBusy}
+              title={
+                find.gmailThreadId
+                  ? "Draft a short in-thread nudge"
+                  : "Draft a short follow-up you can send"
+              }
+              className={`rounded-lg px-3 py-1.5 text-xs font-bold shadow-card transition disabled:opacity-50 ${
+                followUpReady
+                  ? "bg-brand-gradient text-white hover:opacity-95"
+                  : "border border-warm-border text-body hover:bg-warm-bg"
+              }`}
+            >
+              {followUpBusy
+                ? "Writing…"
+                : find.lastFollowUpAt
+                ? "Draft another nudge"
+                : "Draft a follow-up"}
+            </button>
+            <button
+              onClick={() => onStatus("replied")}
+              title="Mark this contact as having replied"
+              className="rounded-lg border border-sage/50 px-3 py-1.5 text-xs font-semibold text-sage transition hover:bg-sage/10"
+            >
+              Mark replied
+            </button>
+            <button
+              onClick={() => onStatus("denied")}
+              title="Mark this as not going anywhere"
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Mark denied
+            </button>
+          </>
         )}
         {followUpReady && (
           <span className="text-[11px] font-semibold text-sage">
