@@ -2511,6 +2511,29 @@ function ScoutTool({
               Find the right people and draft messages in your voice.
             </p>
           </div>
+
+            {/* -------- Import your existing outreach (dedup + learn) -------- */}
+            <section className="mb-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-ink">
+                  Already reaching out somewhere else?
+                </div>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                  Drop in a CSV of who you've already contacted. Scout won't
+                  resurface them and starts learning what a fit looks like for you.
+                </p>
+              </div>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+              >
+                Import a CSV
+              </button>
+            </section>
+
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-white p-6 shadow-soft sm:p-8">
@@ -3012,7 +3035,6 @@ function ScoutTool({
           goTemplates={() => setTab("templates")}
           goProfile={() => setTab("profile")}
           goFinds={() => setTab("finds")}
-          openImport={() => setImportOpen(true)}
         />
       )}
 
@@ -4991,7 +5013,6 @@ function DashboardTab({
   goTemplates,
   goProfile,
   goFinds,
-  openImport,
 }: {
   activity: Activity;
   profile: Profile;
@@ -5008,7 +5029,6 @@ function DashboardTab({
   goTemplates: () => void;
   goProfile: () => void;
   goFinds: () => void;
-  openImport: () => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -5146,30 +5166,8 @@ function DashboardTab({
         </button>
       )}
 
-      {/* -------- Import your existing outreach -------- */}
-      <section className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-white p-4 shadow-card">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brand-gradient/15 text-brown-deep">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-extrabold text-ink">
-            Already reaching out somewhere else?
-          </div>
-          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-            Drop in a CSV of who you've already contacted. Scout won't resurface
-            them and starts learning what a fit looks like for you.
-          </p>
-        </div>
-        <button
-          onClick={openImport}
-          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-        >
-          Import a CSV
-        </button>
-      </section>
-
       {/* -------- Activity (real counts) -------- */}
-      <Reveal as="section" className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <Reveal as="section" className="mt-7 grid grid-cols-2 gap-4 sm:grid-cols-4">
         <StatTile
           n={activity.searches}
           label="Searches run"
