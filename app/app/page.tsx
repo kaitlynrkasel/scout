@@ -309,6 +309,28 @@ interface Category {
   name: string;
   goal: string;
   projectId: string; // categories belong to a project
+  // Which contact channels this search should try to come back with (values
+  // from CONTACT_CHANNELS below, e.g. ["email","phone"]). Empty/undefined =
+  // no specific preference — Scout returns whatever it finds.
+  wantedChannels?: string[];
+}
+
+// The contact channels a user can ask Scout to prioritize per search.
+const CONTACT_CHANNELS: { key: string; label: string; hint: string }[] = [
+  { key: "email", label: "Email", hint: "an email address" },
+  { key: "phone", label: "Phone", hint: "a phone number" },
+  { key: "linkedin", label: "LinkedIn", hint: "a LinkedIn profile" },
+  { key: "website", label: "Website", hint: "a website link" },
+];
+
+// Read the value on an Opportunity for one of the CONTACT_CHANNELS keys —
+// shared by the find card and detail modal's "requested contact info" sections.
+function channelValue(o: Opportunity, key: string): string {
+  if (key === "email") return o.contactEmail || "";
+  if (key === "phone") return o.contactPhone || "";
+  if (key === "linkedin") return o.contactHandle || "";
+  if (key === "website") return o.url || "";
+  return "";
 }
 
 // A find is a saved person/opportunity you can work through: draft, deny, mark
@@ -715,6 +737,9 @@ function ScoutTool({
   // inherit from profile; anything else overrides for this search only.
   const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
+  // Contact channels this search should prioritize (email/phone/linkedin/website).
+  // Mirrors the selected category's wantedChannels; persisted back onto it.
+  const [wantedChannels, setWantedChannels] = useState<string[]>([]);
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
@@ -920,9 +945,11 @@ function ScoutTool({
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
+      setWantedChannels(mine[0].wantedChannels || []);
     } else {
       setCatId("");
       setGoal(ucInfo(proj.useCase).exampleGoal);
+      setWantedChannels([]);
     }
   }, []);
 
@@ -1587,9 +1614,11 @@ function ScoutTool({
     if (mine.length) {
       setCatId(mine[0].id);
       setGoal(mine[0].goal);
+      setWantedChannels(mine[0].wantedChannels || []);
     } else {
       setCatId("");
       setGoal(proj ? ucInfo(proj.useCase).exampleGoal : "");
+      setWantedChannels([]);
     }
     resetResults();
   }
@@ -1693,7 +1722,12 @@ function ScoutTool({
   function selectCategory(id: string) {
     setCatId(id);
     const c = categories.find((x) => x.id === id);
-    if (c) setGoal(c.goal);
+    if (c) {
+      setGoal(c.goal);
+      setWantedChannels(c.wantedChannels || []);
+    } else {
+      setWantedChannels([]);
+    }
     resetResults();
   }
 
@@ -1707,6 +1741,7 @@ function ScoutTool({
       name: name.trim(),
       goal: goal,
       projectId: activeId,
+      wantedChannels: wantedChannels.length ? wantedChannels : undefined,
     };
     saveCats([...categories, c]);
     setCatId(c.id);
@@ -1725,6 +1760,7 @@ function ScoutTool({
     saveCats([...categories, c]);
     setCatId(c.id);
     setGoal("");
+    setWantedChannels([]);
     resetResults();
   }
 
@@ -1772,8 +1808,10 @@ function ScoutTool({
       if (mine.length) {
         setCatId(mine[0].id);
         setGoal(mine[0].goal);
+        setWantedChannels(mine[0].wantedChannels || []);
       } else {
         setCatId("");
+        setWantedChannels([]);
       }
     }
   }
@@ -1809,8 +1847,10 @@ function ScoutTool({
       if (mine.length) {
         setCatId(mine[0].id);
         setGoal(mine[0].goal);
+        setWantedChannels(mine[0].wantedChannels || []);
       } else {
         setCatId("");
+        setWantedChannels([]);
       }
     }
   }
@@ -1946,6 +1986,22 @@ function ScoutTool({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goal, catId, categories]);
+
+  // Same auto-save, for which contact channels this search should prioritize.
+  // Immediate (not debounced) since it's discrete toggle clicks, not typing.
+  function toggleWantedChannel(key: string) {
+    setWantedChannels((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
+      if (catId) {
+        saveCats(
+          categories.map((c) =>
+            c.id === catId ? { ...c, wantedChannels: next.length ? next : undefined } : c
+          )
+        );
+      }
+      return next;
+    });
+  }
 
   // Finds belonging to the active project (newest first), and the count still to work.
   const myFinds = activeProject
@@ -2661,6 +2717,16 @@ function ScoutTool({
       const extras: string[] = [];
       if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
       if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
+      // Contact channels the user picked for this search — read by discover's
+      // "REQUIRED CHANNELS" instruction, which favors results exposing all of them.
+      if (wantedChannels.length) {
+        const hints = CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map(
+          (c) => c.hint
+        );
+        extras.push(
+          `The user specifically wants these contact channels back for every result: ${hints.join(", ")}.`
+        );
+      }
       const goalForApi = extras.length
         ? `${goal}\n\n${extras.join(" ")}`
         : goal;
@@ -3048,6 +3114,15 @@ function ScoutTool({
                   <p className="mt-1.5 text-xs text-body/70">
                     Tip: add your industry, genre, or city to sharpen the results.
                   </p>
+
+                  <div className="mt-3">
+                    <ContactChannelsPicker
+                      selected={wantedChannels}
+                      onToggle={toggleWantedChannel}
+                      saved={!!catId}
+                    />
+                  </div>
+
                   {!aboutText && (
                     <button
                       onClick={() => setTab("profile")}
@@ -3323,6 +3398,7 @@ function ScoutTool({
       {tab === "finds" && (
         <FindsTab
           finds={myFinds}
+          categories={categories}
           projectName={activeProject?.name || "this project"}
           projects={projects}
           activeProjectId={activeId}
@@ -4348,7 +4424,15 @@ function looksLikeApplication(url?: string): boolean {
  * in-page preview of their website you can expand/contract (or drag to resize),
  * and a prominent link to the application when the target is a job posting.
  * Read-only: the draft/send actions stay on the card behind it. */
-function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void }) {
+function FindDetailModal({
+  find,
+  onClose,
+  wantedChannels,
+}: {
+  find: Find;
+  onClose: () => void;
+  wantedChannels: string[];
+}) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
   const [frameLoaded, setFrameLoaded] = useState(false);
@@ -4496,6 +4580,51 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
               )}
             </div>
 
+            {/* A labeled section for EVERY channel this search asked for — found
+                or not — so it's obvious at a glance what's still missing. */}
+            {wantedChannels.length > 0 && (
+              <div>
+                <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  Requested contact info
+                </div>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map((c) => {
+                    const val = channelValue(o, c.key);
+                    return (
+                      <div
+                        key={c.key}
+                        className={`rounded-lg border px-2.5 py-1.5 text-xs ${
+                          val
+                            ? "border-sage/40 bg-sage/10 text-brown-deep"
+                            : "border-warm-border bg-warm-bg/40 text-body/40"
+                        }`}
+                      >
+                        <div className="font-bold uppercase tracking-wide text-[10px]">
+                          {c.label}
+                        </div>
+                        <div className="mt-0.5 truncate">
+                          {val ? (
+                            c.key === "phone" ? (
+                              <a
+                                href={`tel:${val.replace(/[^\d+]/g, "")}`}
+                                className="hover:underline"
+                              >
+                                {val}
+                              </a>
+                            ) : (
+                              <ContactValue value={val} className="" />
+                            )
+                          ) : (
+                            "Not found yet"
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Quick actions */}
             <div className="flex flex-wrap gap-2">
               {o.url && (
@@ -4620,6 +4749,7 @@ function FindDetailModal({ find, onClose }: { find: Find; onClose: () => void })
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
 function FindsTab({
   finds,
+  categories,
   projectName,
   projects,
   activeProjectId,
@@ -4661,6 +4791,7 @@ function FindsTab({
   goOutreach,
 }: {
   finds: Find[];
+  categories: Category[];
   projectName: string;
   projects: Project[];
   activeProjectId: string;
@@ -4867,13 +4998,22 @@ function FindsTab({
               onToggleAttach={(on) => onToggleAttach(f, on)}
               onTogglePin={() => onTogglePin(f.id)}
               onOpenDetail={() => setDetailId(f.id)}
+              wantedChannels={
+                categories.find((c) => c.id === f.categoryId)?.wantedChannels || []
+              }
             />
           ))}
         </div>
       )}
 
       {detailFind && (
-        <FindDetailModal find={detailFind} onClose={() => setDetailId("")} />
+        <FindDetailModal
+          find={detailFind}
+          onClose={() => setDetailId("")}
+          wantedChannels={
+            categories.find((c) => c.id === detailFind.categoryId)?.wantedChannels || []
+          }
+        />
       )}
     </main>
   );
@@ -5067,6 +5207,7 @@ function FindCard({
   onToggleAttach,
   onTogglePin,
   onOpenDetail,
+  wantedChannels,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -5096,6 +5237,7 @@ function FindCard({
   onToggleAttach: (on: boolean) => void;
   onTogglePin: () => void;
   onOpenDetail: () => void;
+  wantedChannels: string[];
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -5256,6 +5398,41 @@ function FindCard({
       </div>
       {o.whyItFits && (
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
+      )}
+
+      {/* A labeled section for EVERY contact channel this search asked for —
+          found or not — so it's obvious at a glance what's still missing. */}
+      {wantedChannels.length > 0 && (
+        <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map((c) => {
+            const val = channelValue(o, c.key);
+            return (
+              <div
+                key={c.key}
+                className={`rounded-lg border px-2 py-1.5 text-[11px] ${
+                  val
+                    ? "border-sage/40 bg-sage/10 text-brown-deep"
+                    : "border-warm-border bg-warm-bg/40 text-body/40"
+                }`}
+              >
+                <div className="font-bold uppercase tracking-wide">{c.label}</div>
+                <div className="mt-0.5 truncate">
+                  {val ? (
+                    c.key === "phone" ? (
+                      <a href={`tel:${val.replace(/[^\d+]/g, "")}`} className="hover:underline">
+                        {val}
+                      </a>
+                    ) : (
+                      <ContactValue value={val} className="" />
+                    )
+                  ) : (
+                    "Not found yet"
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
 
       {/* Multiple articles that mention this same person — collapsed by default
@@ -7469,6 +7646,83 @@ function MeetingPrepBlock({
           Now that you've reached out, Scout can pull real facts about their
           career, outlet, and recent work so you can walk in informed.
         </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Contact channels picker ----------------
+ * A dropdown on the search form: pick which contact channels this search
+ * should try to come back with (email, phone, LinkedIn, website). Saved onto
+ * the selected category, so re-opening that search remembers the choice —
+ * "Companies" can mean "get me a phone + email + website" every time. */
+function ContactChannelsPicker({
+  selected,
+  onToggle,
+  saved,
+}: {
+  selected: string[];
+  onToggle: (key: string) => void;
+  saved: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (!ref.current) return;
+      if (!ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const label = selected.length
+    ? CONTACT_CHANNELS.filter((c) => selected.includes(c.key))
+        .map((c) => c.label)
+        .join(", ")
+    : "Any contact info";
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-xs font-semibold text-ink outline-none transition hover:bg-warm-bg"
+      >
+        <span className="text-body/60">Contact info wanted:</span>
+        {label}
+        <span aria-hidden className="text-body/50">
+          {open ? "▴" : "▾"}
+        </span>
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-30 mt-1.5 w-60 rounded-xl border border-warm-border bg-surface p-2.5 shadow-soft">
+          {CONTACT_CHANNELS.map((c) => {
+            const on = selected.includes(c.key);
+            return (
+              <label
+                key={c.key}
+                className="flex cursor-pointer items-center gap-2.5 rounded-lg px-2 py-1.5 text-sm text-ink transition hover:bg-warm-bg"
+              >
+                <input
+                  type="checkbox"
+                  checked={on}
+                  onChange={() => onToggle(c.key)}
+                  className="h-3.5 w-3.5 accent-brown"
+                />
+                {c.label}
+              </label>
+            );
+          })}
+          <p className="mt-1.5 border-t border-warm-border px-2 pt-2 text-[10px] leading-relaxed text-body/60">
+            {selected.length
+              ? "Scout favors results with all of these."
+              : "Nothing selected — Scout returns whatever it finds."}
+            {saved ? " Saved to this search." : " Save this search to remember your pick."}
+          </p>
+        </div>
       )}
     </div>
   );
