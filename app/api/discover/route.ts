@@ -3,6 +3,7 @@ import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
+import { computeTuningSignal, buildPersonalOverride } from "@/lib/autotune";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
@@ -56,6 +57,26 @@ export async function POST(req: NextRequest) {
         { status: 500 }
       );
     }
+    // Individual calibration: built fresh from THIS user's own deny data,
+    // never committed anywhere — the per-request counterpart to the
+    // universal auto-tune cron (which edits shared code for everyone).
+    // Best-effort: any failure here just means no personal override, never
+    // blocks the search itself.
+    let personalOverride = "";
+    if (metered && uid) {
+      try {
+        const { data: row } = await supabaseAdmin!
+          .from("user_state")
+          .select("data")
+          .eq("user_id", uid)
+          .maybeSingle();
+        const finds = Array.isArray(row?.data?.finds) ? row!.data.finds : [];
+        personalOverride = buildPersonalOverride(computeTuningSignal(finds));
+      } catch (e) {
+        console.warn("personal calibration lookup failed (search proceeds without it):", e);
+      }
+    }
+
     const result = await discover(
       String(goal),
       String(about || ""),
@@ -63,7 +84,8 @@ export async function POST(req: NextRequest) {
       10,
       feedback && typeof feedback === "object" ? feedback : undefined,
       salt ? String(salt).slice(0, 64) : undefined,
-      cohortHint ? String(cohortHint).slice(0, 400) : undefined
+      cohortHint ? String(cohortHint).slice(0, 400) : undefined,
+      personalOverride || undefined
     );
 
     // Count this successful search against the user's monthly allowance.

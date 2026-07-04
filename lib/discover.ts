@@ -158,7 +158,8 @@ async function planQueries(
   useCase: string,
   feedback?: DiscoverFeedback,
   salt?: string,
-  cohortHint?: string
+  cohortHint?: string,
+  personalOverride?: string
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -268,7 +269,11 @@ async function planQueries(
     (cohortHint ? `PEOPLE-LIKE-YOU SIGNAL (aggregate, use as a soft steer not a rule): ${cohortHint} ` : "") +
     ` The current year is ${year}; for any dated query use ${year} or ${year + 1} (the current or upcoming cycle), never a past year. ` +
     "Return ONLY JSON {\"queries\": string[]} with 6 to 8 short, high-signal queries. Keep each query standalone and " +
-    "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies.";
+    "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies." +
+    // This user's own calibration, appended last so it takes priority over
+    // the guidance above when they conflict (same mechanism as coaching for
+    // drafting) — see buildPersonalOverride in lib/autotune.ts.
+    (personalOverride ? `\n\n${personalOverride}` : "");
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
     feedbackBlock(feedback);
@@ -450,7 +455,8 @@ async function extract(
   goal: string,
   about: string,
   useCase: string,
-  feedback?: DiscoverFeedback
+  feedback?: DiscoverFeedback,
+  personalOverride?: string
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
   // Fit is judged differently depending on what the user is doing:
   // - Prospecting (sales/leads/partners/investors) OR a goal that says "any
@@ -532,7 +538,12 @@ async function extract(
       `is_relevant false — but only when the source explicitly says the wrong window. ` +
       `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off.`;
 
-  const sys = core + fitRules;
+  // Personal calibration wins over the universal baseline above by being the
+  // last, most specific instruction — same mechanism coaching/dismissedAdvice
+  // already use for drafting. Sourced fresh per request from THIS user's own
+  // deny data (see buildPersonalOverride in lib/autotune.ts); never touches
+  // shared code, unlike the universal auto-tune cron.
+  const sys = core + fitRules + (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
@@ -670,9 +681,13 @@ export async function discover(
   maxItems = 10,
   feedback?: DiscoverFeedback,
   salt?: string,
-  cohortHint?: string
+  cohortHint?: string,
+  // This user's own calibration text (see buildPersonalOverride in
+  // lib/autotune.ts) — takes priority over the universal baseline by being
+  // appended last to both the query planner and the extractor's prompts.
+  personalOverride?: string
 ): Promise<DiscoverResult> {
-  const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint);
+  const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint, personalOverride);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name — never resurface a rejected find.
   const deniedNames = new Set(
@@ -739,7 +754,7 @@ export async function discover(
           const people = await extractMultiplePeople(c, goal, about, useCase);
           return { multi: true as const, people, cand: c };
         }
-        const rec = await extract(c, goal, about, useCase, feedback);
+        const rec = await extract(c, goal, about, useCase, feedback, personalOverride);
         return { multi: false as const, rec, cand: c };
       })
     );

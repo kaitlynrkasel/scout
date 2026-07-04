@@ -120,6 +120,32 @@ export function slotForSignal(signal: TuningSignal): TunableSlot | null {
   );
 }
 
+// ---- Individual calibration (personal, not committed to code) ----
+// The universal auto-tune above edits shared code for everyone, gated high
+// (20+ decided, 30%+ bucket share, 7-day cooldown) because a bad edit ships
+// to every user. This is the OTHER tier: a per-request prompt override built
+// fresh from THIS user's own signal, injected at the end of discover()'s
+// prompts (see lib/discover.ts) so it wins over the universal baseline by
+// being the most specific, most recent instruction — same mechanism
+// coaching/dismissedAdvice already use for drafting. No LLM call, no commit,
+// nothing to review: it's just data, formatted as a directive, gone the
+// moment the request finishes. Reuses the SAME threshold as a floor so it
+// never fires on a handful of noisy decisions.
+export function buildPersonalOverride(signal: TuningSignal): string {
+  if (!meetsThreshold(signal)) return "";
+  const b = signal.topBucket!;
+  const fitNote =
+    signal.keptFit != null && signal.deniedFit != null
+      ? ` This user's kept/denied avg fit is ${Math.round(signal.keptFit * 100)}%/${Math.round(signal.deniedFit * 100)}%.`
+      : "";
+  return (
+    `PERSONAL CALIBRATION for this specific user (their own decision history — this takes priority over the general ` +
+    `rules above when they conflict): of their last ${signal.decided} decided finds, "${b.label}" is the reason ` +
+    `${Math.round(b.share * 100)}% of the time they pass (${b.count} instances). Weigh this failure mode more heavily ` +
+    `for this search than the general instruction above.${fitNote}`
+  );
+}
+
 // ---- Safe extraction / replacement of one tunable const's value ----
 // Matches `export const NAME =\n  \`...content...\`;` — content must not
 // itself contain a backtick (enforced by generateNewClause below).
