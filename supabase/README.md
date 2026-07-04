@@ -43,6 +43,22 @@ No new environment variables are needed — Teams reuses the same Supabase keys 
 in `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
 `SUPABASE_SERVICE_ROLE_KEY`).
 
+## Subscription plans + search metering (Stripe)
+
+Run [`supabase/subscriptions.sql`](./subscriptions.sql) once (SQL Editor → paste → Run).
+It adds one `subscriptions` table (one row per user) that tracks the user's Stripe plan
+and their search usage, plus an atomic `consume_search()` function the server calls to
+meter each search. The user's own session can only **read** its row (to show plan +
+usage); all writes happen with the service-role key from the Stripe webhook and the
+metering path.
+
+This powers the two paid tiers (**Starter** $15/mo → 30 searches, **Pro** $30/mo → 60
+searches) and the free allowance (5 searches per calendar month for non-subscribers).
+It needs these extra environment variables (see `.env.local.example`): `STRIPE_SECRET_KEY`,
+`STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_PRO`, and
+`NEXT_PUBLIC_APP_URL`. The metering + webhook also require `SUPABASE_SERVICE_ROLE_KEY`.
+Until you run it, discovery still works but is not metered.
+
 ## How it works
 
 - **Workspace** = your company or crew. It's the basis for teammate recommendations
