@@ -41,11 +41,11 @@ const config: Config = {
         "warm-border": "#e8e3d9", // hairline border (light neutral)
       },
       borderRadius: {
-        // Slightly rounder across the app (bumped one notch from Tailwind defaults).
-        lg: "0.7rem",
-        xl: "1rem",
-        "2xl": "1.35rem",
-        "3xl": "1.75rem",
+        // Tighter, more professional corners (crisper than Tailwind defaults).
+        lg: "0.5rem", // 8px
+        xl: "0.625rem", // 10px
+        "2xl": "0.75rem", // 12px
+        "3xl": "0.875rem", // 14px
       },
       boxShadow: {
         soft: "0 1px 2px rgba(40, 32, 24, 0.05), 0 10px 24px -14px rgba(40, 32, 24, 0.12)",
