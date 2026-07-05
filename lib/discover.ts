@@ -188,7 +188,12 @@ async function planQueries(
   feedback?: DiscoverFeedback,
   salt?: string,
   cohortHint?: string,
-  personalOverride?: string
+  personalOverride?: string,
+  // Broaden mode: a narrower first pass returned nothing, so widen the net —
+  // relax the niche/long-tail/geo/segment constraints and allow bigger, more
+  // obvious targets so a very specific goal degrades to *some* results instead
+  // of an empty screen.
+  broaden = false
 ): Promise<string[]> {
   const g = goal.trim();
   if (!about.trim()) return buildQueries(goal, useCase);
@@ -291,10 +296,17 @@ async function planQueries(
       "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
       "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
       "rather than broad. ";
+  const broadenClause = broaden
+    ? " BROADEN MODE: a narrower version of this search just returned NO results, so widen the net now. DROP the niche / " +
+      "long-tail / hyper-specific push above. Use simpler, broader queries with FEWER combined constraints — relax location, " +
+      "company size, sub-genre, seniority and segment filters, and it is fine to include larger, well-known targets. Stay " +
+      "on-topic for the GOAL, but prioritize surfacing real, reachable results over being specific. "
+    : "";
   const sys =
     anchor +
     guidance +
     longTail +
+    broadenClause +
     (salt
       ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
         "two people with a similar goal get different, equally-relevant results instead of the same list. "
@@ -745,34 +757,39 @@ export async function discover(
   const perQuery = creatorSearch ? 10 : 8;
   const depth: "basic" | "advanced" = creatorSearch ? "advanced" : "basic";
 
-  // 1+2: gather + dedupe candidate pages.
+  // 1+2: gather + dedupe candidate pages. Wrapped so a broadening retry can
+  // append a fresh batch of candidates from wider queries when the first pass
+  // comes up empty.
   const candidates: TavilyResult[] = [];
   const seenLinks = new Set<string>();
-  for (const q of queries) {
-    if (candidates.length >= maxItems * 4) break;
-    const results = await tavilySearch(q, perQuery, { depth });
-    for (const r of results) {
-      if (looksLikeAdvice(r.title, useCase, goal)) {
-        logSkip(r.title, r.url, "title looks like advice / how-to");
-        continue;
+  async function gather(passQueries: string[]) {
+    for (const q of passQueries) {
+      if (candidates.length >= maxItems * 4) break;
+      const results = await tavilySearch(q, perQuery, { depth });
+      for (const r of results) {
+        if (looksLikeAdvice(r.title, useCase, goal)) {
+          logSkip(r.title, r.url, "title looks like advice / how-to");
+          continue;
+        }
+        if (looksLikePodcastOrVideoClip(r.url)) {
+          logSkip(r.title, r.url, "podcast episode or video clip (guest ≠ contact channel)");
+          continue;
+        }
+        const k = canonicalLink(r.url) || urlHost(r.url);
+        if (!k) {
+          logSkip(r.title, r.url, "no usable URL");
+          continue;
+        }
+        if (seenLinks.has(k)) {
+          logSkip(r.title, r.url, "duplicate link");
+          continue;
+        }
+        seenLinks.add(k);
+        candidates.push(r);
       }
-      if (looksLikePodcastOrVideoClip(r.url)) {
-        logSkip(r.title, r.url, "podcast episode or video clip (guest ≠ contact channel)");
-        continue;
-      }
-      const k = canonicalLink(r.url) || urlHost(r.url);
-      if (!k) {
-        logSkip(r.title, r.url, "no usable URL");
-        continue;
-      }
-      if (seenLinks.has(k)) {
-        logSkip(r.title, r.url, "duplicate link");
-        continue;
-      }
-      seenLinks.add(k);
-      candidates.push(r);
     }
   }
+  await gather(queries);
 
   // 3: extract structured records, dedupe by name/host, cap at maxItems.
   const opps: Opportunity[] = [];
@@ -788,9 +805,12 @@ export async function discover(
   // use-case label doesn't say so.
   const isListicle = (c: TavilyResult) => creatorSearch && looksLikeListicle(c.title);
 
-  // Extract in small parallel batches so the spike is reasonably fast.
+  // Extract in small parallel batches so the spike is reasonably fast. Wrapped
+  // as a function taking a start index so a broadening retry can process only
+  // the freshly-gathered candidates instead of re-extracting the first pass.
   const batchSize = 4;
-  for (let i = 0; i < candidates.length && opps.length < maxItems; i += batchSize) {
+  async function extractFrom(start: number) {
+  for (let i = start; i < candidates.length && opps.length < maxItems; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
     const rawResults = await Promise.all(
       batch.map(async (c) => {
@@ -986,6 +1006,32 @@ export async function discover(
       });
     }
   }
+  }
+
+  await extractFrom(0);
+
+  // Nothing survived the specific pass? Widen the net once and try again, so a
+  // very specific "who is this for" degrades to *some* real results instead of an
+  // empty screen. Reuses the same candidate/opp/dedup state and only extracts the
+  // freshly-gathered pages. Skipped for creator searches (which depend on
+  // roundup listicles, a different strategy) and when there were no queries.
+  let broadenedQueries = 0;
+  if (opps.length === 0 && queries.length && !creatorSearch) {
+    const alreadyProcessed = candidates.length;
+    const broadened = await planQueries(
+      goal,
+      about,
+      useCase,
+      feedback,
+      salt,
+      cohortHint,
+      personalOverride,
+      true
+    );
+    broadenedQueries = broadened.length;
+    await gather(broadened);
+    await extractFrom(alreadyProcessed);
+  }
 
   // The same company can slip past name/host dedup by appearing both as a generic
   // entry ("Round Hill Music") and a specific posting ("Round Hill Music, Copyright
@@ -1083,7 +1129,7 @@ export async function discover(
 
   return {
     opportunities: kept,
-    searched: queries.length + enrichSearches,
+    searched: queries.length + broadenedQueries + enrichSearches,
     candidates: candidates.length,
     skippedDupes,
     skippedNotFit,
