@@ -769,6 +769,24 @@ function ScoutTool({
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const [billingBusy, setBillingBusy] = useState(false);
 
+  // ---- Command palette (⌘K) + row peek ----
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [peekFind, setPeekFind] = useState<Find | null>(null);
+  // Global ⌘K / Ctrl+K toggles the palette; Esc closes the open overlays.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setCmdOpen((v) => !v);
+      } else if (e.key === "Escape") {
+        setCmdOpen(false);
+        setPeekFind(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
   const [importOpen, setImportOpen] = useState(false); // CSV import modal open?
@@ -3236,6 +3254,7 @@ function ScoutTool({
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
         billingTier={billing?.tier}
+        openCommand={() => setCmdOpen(true)}
         projects={projects}
         activeId={activeId}
         onSelectProject={selectProject}
@@ -3903,6 +3922,8 @@ function ScoutTool({
             setTab("templates");
           }}
           getToken={getToken}
+          openCommand={() => setCmdOpen(true)}
+          onOpenFind={(f) => setPeekFind(f)}
         />
       )}
 
@@ -4064,6 +4085,30 @@ function ScoutTool({
           </span>
         </div>
       </footer>
+
+      {/* ---------------- Command palette (⌘K) + row peek ---------------- */}
+      <CommandPalette
+        open={cmdOpen}
+        onClose={() => setCmdOpen(false)}
+        finds={finds}
+        hasAccount={!!accountEmail}
+        onGo={(t) => {
+          setTab(t);
+          setCmdOpen(false);
+        }}
+        onOpenFind={(f) => {
+          setPeekFind(f);
+          setCmdOpen(false);
+        }}
+      />
+      <FindPeek
+        find={peekFind}
+        onClose={() => setPeekFind(null)}
+        onOpenInFinds={() => {
+          setPeekFind(null);
+          setTab("finds");
+        }}
+      />
 
       {/* ---------------- Out-of-searches upgrade prompt ---------------- */}
       {upgradePrompt && (
@@ -4398,6 +4443,7 @@ function SideNav({
   profileHasBio,
   hasAccount,
   billingTier,
+  openCommand,
   projects,
   activeId,
   onSelectProject,
@@ -4411,6 +4457,7 @@ function SideNav({
   profileHasBio: boolean;
   hasAccount: boolean;
   billingTier?: "free" | "starter" | "pro";
+  openCommand: () => void;
   projects: Project[];
   activeId: string;
   onSelectProject: (id: string) => void;
@@ -4501,7 +4548,7 @@ function SideNav({
       </a>
 
       <button
-        onClick={() => setTab("outreach")}
+        onClick={openCommand}
         className="mb-1 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13.5px] text-muted transition hover:bg-warm-bg"
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted/80"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
@@ -7015,6 +7062,8 @@ function DashboardTab({
   onEditProject,
   onSeedTemplateForChannel,
   getToken,
+  openCommand,
+  onOpenFind,
 }: {
   activity: Activity;
   profile: Profile;
@@ -7036,6 +7085,8 @@ function DashboardTab({
   onEditProject: (id: string) => void;
   onSeedTemplateForChannel: (channel: string) => void;
   getToken?: () => Promise<string | null>;
+  openCommand: () => void;
+  onOpenFind: (f: Find) => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -7347,8 +7398,8 @@ function DashboardTab({
       <>
       {/* -------- Ask Scout spotlight (signature) -------- */}
       <button
-        onClick={goOutreach}
-        aria-label="Ask Scout — start a search"
+        onClick={openCommand}
+        aria-label="Ask Scout — open the command palette"
         className="mt-6 flex w-full items-center gap-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5 text-left shadow-float transition hover:border-clay"
       >
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown">
@@ -7588,7 +7639,11 @@ function DashboardTab({
                       ? "bg-brown"
                       : "bg-muted";
                   return (
-                    <tr key={f.id} className="border-t border-warm-border transition hover:bg-warm-bg/50">
+                    <tr
+                      key={f.id}
+                      onClick={() => onOpenFind(f)}
+                      className="cursor-pointer border-t border-warm-border transition hover:bg-warm-bg/50"
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <span
@@ -7636,7 +7691,10 @@ function DashboardTab({
                       </td>
                       <td className="px-4 py-3 text-right">
                         <button
-                          onClick={goFinds}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenFind(f);
+                          }}
                           className="text-sm font-medium text-brown transition hover:text-brown-deep"
                         >
                           {st.action}
@@ -9659,6 +9717,313 @@ function SharedFindRow({
         </button>
       </div>
     </div>
+  );
+}
+
+/* ---------------- Command palette (⌘K) ---------------- */
+type NavTab =
+  | "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing";
+
+const MONO_PALETTE = ["#7c5837", "#7d8a6a", "#a9761f", "#5d4026", "#3f7a52", "#3f6a8c"];
+function monogram(name: string) {
+  const initials =
+    (name || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || "")
+      .join("") || "?";
+  const hash = (name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+  return { initials, color: MONO_PALETTE[hash % MONO_PALETTE.length] };
+}
+
+function CommandPalette({
+  open,
+  onClose,
+  finds,
+  onGo,
+  onOpenFind,
+  hasAccount,
+}: {
+  open: boolean;
+  onClose: () => void;
+  finds: Find[];
+  onGo: (t: NavTab) => void;
+  onOpenFind: (f: Find) => void;
+  hasAccount: boolean;
+}) {
+  const [q, setQ] = useState("");
+  const [sel, setSel] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (open) {
+      setQ("");
+      setSel(0);
+      const t = setTimeout(() => inputRef.current?.focus(), 20);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+  if (!open) return null;
+
+  const ql = q.trim().toLowerCase();
+  const m = (s: string) => !ql || s.toLowerCase().includes(ql);
+
+  const actions = [
+    { label: "Run a new search", run: () => onGo("outreach") },
+    { label: "Draft outreach", run: () => onGo("outreach") },
+    { label: "Import contacts", run: () => onGo("outreach") },
+  ].filter((a) => m(a.label));
+  const findItems = finds
+    .filter((f) => m(f.opp.name))
+    .slice(0, 8)
+    .map((f) => ({ find: f }));
+  const goItems = (
+    [
+      ["dashboard", "Home"],
+      ["finds", "Finds"],
+      ["outreach", "Outreach"],
+      ["templates", "Templates"],
+      ["profile", "Profile"],
+      ...(hasAccount
+        ? ([["billing", "Plan & billing"], ["settings", "Settings"]] as [NavTab, string][])
+        : []),
+    ] as [NavTab, string][]
+  ).filter(([, l]) => m(l));
+
+  const selectable: (() => void)[] = [
+    ...actions.map((a) => a.run),
+    ...findItems.map((fi) => () => onOpenFind(fi.find)),
+    ...goItems.map(([t]) => () => onGo(t)),
+  ];
+  const csel = Math.min(sel, Math.max(0, selectable.length - 1));
+
+  const onKey = (e: React.KeyboardEvent) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setSel((s) => Math.min(s + 1, selectable.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setSel((s) => Math.max(s - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      selectable[csel]?.();
+    }
+  };
+
+  let running = -1;
+  const rowCls = (i: number) =>
+    `flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
+      i === csel ? "bg-warm-bg" : ""
+    }`;
+  const sectionCls = "px-3 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-wider text-faint";
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-start justify-center bg-ink/25 px-4 pt-[13vh] backdrop-blur-[2px]"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[580px] overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-float"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 border-b border-warm-border px-4 py-3.5">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setSel(0);
+            }}
+            onKeyDown={onKey}
+            placeholder="Ask Scout or jump anywhere…"
+            className="flex-1 bg-transparent text-[15.5px] text-ink outline-none placeholder:text-faint"
+          />
+        </div>
+        <div className="max-h-[366px] overflow-y-auto p-1.5">
+          {selectable.length === 0 && (
+            <div className="px-3 py-6 text-center text-sm text-muted">No matches</div>
+          )}
+          {actions.length > 0 && <div className={sectionCls}>Ask Scout</div>}
+          {actions.map((a) => {
+            running++;
+            const i = running;
+            return (
+              <button key={a.label} onMouseEnter={() => setSel(i)} onClick={a.run} className={rowCls(i)}>
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-warm-bg">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted"><path d="M12 5v14M5 12h14" /></svg>
+                </span>
+                <span className="text-ink">{a.label}</span>
+              </button>
+            );
+          })}
+          {findItems.length > 0 && <div className={sectionCls}>Finds</div>}
+          {findItems.map(({ find }) => {
+            running++;
+            const i = running;
+            const mo = monogram(find.opp.name);
+            const fit = typeof find.opp.fitScore === "number" ? Math.round(find.opp.fitScore * 100) : null;
+            return (
+              <button key={find.id} onMouseEnter={() => setSel(i)} onClick={() => onOpenFind(find)} className={rowCls(i)}>
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md text-[9px] font-semibold text-white" style={{ backgroundColor: mo.color }}>
+                  {mo.initials}
+                </span>
+                <span className="min-w-0 flex-1 truncate text-ink">{find.opp.name}</span>
+                {fit != null && <span className="text-xs tabular-nums text-faint">{fit}%</span>}
+              </button>
+            );
+          })}
+          {goItems.length > 0 && <div className={sectionCls}>Go to</div>}
+          {goItems.map(([t, label]) => {
+            running++;
+            const i = running;
+            return (
+              <button key={t} onMouseEnter={() => setSel(i)} onClick={() => onGo(t)} className={rowCls(i)}>
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-warm-bg">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-muted"><path d="M9 6l6 6-6 6" /></svg>
+                </span>
+                <span className="text-ink">{label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex gap-4 border-t border-warm-border px-4 py-2.5 text-[11px] text-faint">
+          <span>↑↓ navigate</span>
+          <span>↵ select</span>
+          <span>esc close</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- Find peek (slide-over) ---------------- */
+function FindPeek({
+  find,
+  onClose,
+  onOpenInFinds,
+}: {
+  find: Find | null;
+  onClose: () => void;
+  onOpenInFinds: (f: Find) => void;
+}) {
+  const [tab, setTab] = useState(0);
+  const [shown, setShown] = useState<Find | null>(null);
+  useEffect(() => {
+    if (find) {
+      setShown(find);
+      setTab(0);
+    }
+  }, [find]);
+  const open = !!find;
+  const f = shown;
+  const mo = f ? monogram(f.opp.name) : { initials: "", color: "#7c5837" };
+  const st = f ? FIND_STATUS[f.status] : null;
+  const fit = f && typeof f.opp.fitScore === "number" ? Math.round(f.opp.fitScore * 100) : null;
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-40 bg-ink/20 transition-opacity duration-200 ${
+          open ? "opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        onClick={onClose}
+      />
+      <aside
+        className={`fixed right-0 top-0 z-50 flex h-screen w-[600px] max-w-[96vw] flex-col border-l border-warm-border bg-surface shadow-float transition-transform duration-300 ${
+          open ? "translate-x-0" : "translate-x-full"
+        }`}
+        style={{ transitionTimingFunction: "cubic-bezier(.32,.72,0,1)" }}
+        aria-hidden={!open}
+      >
+        {f && (
+          <>
+            <div className="flex h-12 items-center gap-2 border-b border-warm-border px-3 text-sm text-muted">
+              <button onClick={onClose} className="rounded-md p-1.5 transition hover:bg-warm-bg" aria-label="Close">✕</button>
+              <button onClick={() => onOpenInFinds(f)} className="rounded-md px-2 py-1 transition hover:bg-warm-bg">
+                Open in Finds ↗
+              </button>
+            </div>
+            <div className="overflow-y-auto px-11 py-8">
+              <div className="grid h-12 w-12 place-items-center rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: mo.color }}>
+                {mo.initials}
+              </div>
+              <h2 className="mt-4 text-2xl font-semibold tracking-tight text-ink">{f.opp.name}</h2>
+
+              <div className="mt-2 space-y-1">
+                {st && (
+                  <div className="grid grid-cols-[132px_1fr] items-center py-1.5 text-sm">
+                    <span className="text-muted">Status</span>
+                    <span><span className={`inline-flex rounded-md px-2 py-0.5 text-xs font-medium ${st.cls}`}>{st.label}</span></span>
+                  </div>
+                )}
+                {fit != null && (
+                  <div className="grid grid-cols-[132px_1fr] items-center py-1.5 text-sm">
+                    <span className="text-muted">Fit</span>
+                    <span className="tabular-nums text-ink">{fit}%</span>
+                  </div>
+                )}
+                {f.opp.channel && (
+                  <div className="grid grid-cols-[132px_1fr] items-center py-1.5 text-sm">
+                    <span className="text-muted">Source</span>
+                    <span className="text-ink">{f.opp.channel}</span>
+                  </div>
+                )}
+                {f.opp.contactEmail && (
+                  <div className="grid grid-cols-[132px_1fr] items-center py-1.5 text-sm">
+                    <span className="text-muted">Contact</span>
+                    <span className="truncate text-ink">{f.opp.contactEmail}</span>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-5 flex gap-1 border-b border-warm-border">
+                {["Draft", "Why it fits", "Activity"].map((label, i) => (
+                  <button
+                    key={label}
+                    onClick={() => setTab(i)}
+                    className={`-mb-px px-3 py-2 text-sm transition ${
+                      tab === i ? "border-b-2 border-brown font-medium text-brown-deep" : "text-muted hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="mt-4">
+                {tab === 0 &&
+                  (f.draft?.body ? (
+                    <div className="whitespace-pre-wrap rounded-xl border border-warm-border bg-cream p-4 text-[14.5px] leading-relaxed text-body">
+                      {f.draft.body}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-warm-border p-6 text-center text-sm text-muted">
+                      No draft yet.
+                      <button onClick={() => onOpenInFinds(f)} className="ml-1 font-medium text-brown hover:text-brown-deep">
+                        Draft it in Finds →
+                      </button>
+                    </div>
+                  ))}
+                {tab === 1 && (
+                  <p className="text-sm leading-relaxed text-body">
+                    {f.opp.whyItFits?.trim() || "Scout will note why this one fits once you've worked a few more finds."}
+                  </p>
+                )}
+                {tab === 2 && (
+                  <p className="text-sm text-faint">
+                    {f.sentAt ? "Reached out — waiting on a reply." : "No activity yet. Draft and send to start the thread."}
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </aside>
+    </>
   );
 }
 
