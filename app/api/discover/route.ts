@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
       );
     }
     // Individual calibration: built fresh from THIS user's own deny data,
-    // never committed anywhere — the per-request counterpart to the
+    // never committed anywhere, the per-request counterpart to the
     // universal auto-tune cron (which edits shared code for everyone).
     // Best-effort: any failure here just means no personal override, never
     // blocks the search itself.

@@ -7,7 +7,7 @@ export const runtime = "nodejs";
 export const maxDuration = 120;
 
 // Apply ONE free-text instruction ("make it shorter", "more casual", "mention
-// I'm a recent grad") across every draft currently shown, in a single pass —
+// I'm a recent grad") across every draft currently shown, in a single pass, 
 // the chat box above the Messages list. Revises subject/body only; every
 // other field on the draft (to, channelType, whyItFits, attachResume) is
 // carried through unchanged.

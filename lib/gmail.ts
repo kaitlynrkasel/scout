@@ -247,7 +247,7 @@ export async function gmailThreadsWithReplies(
         needsReconnect: true,
       });
     }
-    if (!r.ok) continue; // thread gone/inaccessible — skip, don't fail the batch
+    if (!r.ok) continue; // thread gone/inaccessible, skip, don't fail the batch
     const j = await r.json();
     const msgs = j.messages || [];
     const hasReply = msgs.some((m: any) => {

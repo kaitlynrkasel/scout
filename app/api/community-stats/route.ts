@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 const MIN_COHORT = 5;
 
 // Real, aggregate-only community benchmarks computed from everyone else's saved
-// state. Returns averages only — never any individual's data. "Everyone else"
+// state. Returns averages only, never any individual's data. "Everyone else"
 // excludes the requesting user, so the comparison is honest.
 function userMetrics(data: any) {
   const finds = Array.isArray(data?.finds) ? data.finds : [];

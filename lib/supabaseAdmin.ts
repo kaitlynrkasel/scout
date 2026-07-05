@@ -1,5 +1,5 @@
 // Server-only Supabase client using the service-role key. NEVER import this from
-// a client component — it bypasses row-level security. Used by the Gmail routes
+// a client component, it bypasses row-level security. Used by the Gmail routes
 // to store tokens and to validate the caller's access token.
 
 import { createClient, SupabaseClient } from "@supabase/supabase-js";

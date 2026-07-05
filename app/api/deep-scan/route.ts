@@ -54,7 +54,7 @@ async function readPage(u: URL): Promise<string> {
 
 // Deep-scan one find's site: read the page (and a likely contact/careers page if
 // linked) and pull out a SPECIFIC contact plus what they ask submitters/applicants
-// for. Never invents anything — only what appears on the page.
+// for. Never invents anything, only what appears on the page.
 export async function POST(req: NextRequest) {
   try {
     const { url, name, outlet, goal, useCase } = await req.json();
@@ -124,7 +124,7 @@ export async function POST(req: NextRequest) {
       `You read a company/opportunity's own web pages and extract two things for someone reaching out. ` +
       `Return ONLY JSON {contact:{name,role,email,handle}, requirements}. ` +
       `contact = ONE specific, named person to reach (recruiter, hiring manager, editor, partnerships lead, team member) with their ` +
-      `real email or LinkedIn/@handle if shown. NEVER invent an email, name, or handle — use only what appears verbatim ` +
+      `real email or LinkedIn/@handle if shown. NEVER invent an email, name, or handle, use only what appears verbatim ` +
       `on the pages. Prefer a named person's real email over a generic inbox (info@, careers@, submit@). If only a generic ` +
       `inbox exists, put it in email and leave name empty. If nothing is present, use empty strings. ` +
       `requirements = a short, plain-language summary of what THEY ask a person reaching out to provide or do: submission ` +

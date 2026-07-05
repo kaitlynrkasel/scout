@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * Scout the dog — a small mascot with a fixed resting spot at the bottom-left of
+ * Scout the dog, a small mascot with a fixed resting spot at the bottom-left of
  * each tab, sitting in the tan just above the footer row (it's rendered inside
  * the footer and lifted up, so it does not ride the viewport). You only see it
  * once you scroll to the bottom of a tab. The first time it comes into view it

@@ -110,7 +110,7 @@ export async function listJoinableWorkspaces(uid: string, email: string) {
 }
 
 // Join an existing company directly (onboarding "select from a dropdown"). Open
-// join by design — a new hire picks their company and is added as a member.
+// join by design, a new hire picks their company and is added as a member.
 export async function joinWorkspace(uid: string, email: string, workspaceId: string) {
   const { data: ws } = await db()
     .from("workspaces")

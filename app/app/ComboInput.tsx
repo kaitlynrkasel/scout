@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 /**
  * An editable combobox: a normal text input with a type-to-filter dropdown of
  * suggestions beneath it. Picking a suggestion fills the field, but the field
- * stays free-text — anything not in the list can still be typed. Keyboard:
+ * stays free-text, anything not in the list can still be typed. Keyboard:
  * ↑/↓ move the highlight, Enter selects it, Esc closes. Matches the app's input
  * styling so it drops in for a plain <input>.
  */
@@ -29,8 +29,8 @@ export default function ComboInput({
 
   const q = value.trim().toLowerCase();
   // Rank matches: whole-string prefix first, then substring, then token match
-  // (every typed word is a prefix of some word in the option — so "univ cal"
-  // finds "University of California"). Skip an exact match — nothing to suggest
+  // (every typed word is a prefix of some word in the option, so "univ cal"
+  // finds "University of California"). Skip an exact match, nothing to suggest
   // once the field already equals a suggestion.
   const matches: string[] = [];
   if (q) {

@@ -7,8 +7,8 @@ import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate } from "./types";
 
-// A LinkedIn target is defined by the actual recipient — their channel or
-// handle URL — not just by which draft "kind" happens to be selected.
+// A LinkedIn target is defined by the actual recipient, their channel or
+// handle URL, not just by which draft "kind" happens to be selected.
 // Otherwise picking a generic DM kind for someone whose real contact is
 // LinkedIn would skip LinkedIn's hard 200-character connection-note limit.
 function isLinkedInTarget(channel = "", contactHandle = "", kindLabel = ""): boolean {
@@ -56,7 +56,7 @@ function templateBlock(
   );
 }
 
-// Coaching directives the user approved from their dashboard — applied to every draft.
+// Coaching directives the user approved from their dashboard, applied to every draft.
 function coachingBlock(coaching?: string[]): string {
   const c = (coaching || []).map((s) => String(s || "").trim()).filter(Boolean).slice(0, 8);
   if (!c.length) return "";
@@ -66,7 +66,7 @@ function coachingBlock(coaching?: string[]): string {
   );
 }
 
-// Advice the user marked "Not helpful" — the negative mirror of coachingBlock.
+// Advice the user marked "Not helpful", the negative mirror of coachingBlock.
 // These are suggestions Scout's dashboard surfaced that the user rejected, so
 // treat them as things to actively AVOID, not just skip applying.
 function dismissedAdviceBlock(dismissedAdvice?: string[]): string {
@@ -83,7 +83,7 @@ function editBlock(editPairs?: { before: string; after: string }[]): string {
   const p = (editPairs || []).filter((x) => x && x.after).slice(0, 4);
   if (!p.length) return "";
   return (
-    "\n\nMOST IMPORTANT — corrections the user made to earlier drafts. Study what changed from BEFORE " +
+    "\n\nMOST IMPORTANT, corrections the user made to earlier drafts. Study what changed from BEFORE " +
     "(what the engine wrote) to AFTER (how the user rewrote it): the tone, cuts, softening, length, openings/closings. " +
     "Proactively make those same kinds of changes and match that tone here. Do NOT copy the content, copy the pattern:\n" +
     p.map((x, i) => `${i + 1}. BEFORE: ${x.before.slice(0, 500)}\n   AFTER: ${x.after.slice(0, 500)}`).join("\n\n")
@@ -95,7 +95,7 @@ function requirementsBlock(requirements?: string): string {
   const r = String(requirements || "").trim();
   if (!r) return "";
   return (
-    "\n\nREQUIREMENTS this specific recipient asks for (make the message satisfy them exactly — " +
+    "\n\nREQUIREMENTS this specific recipient asks for (make the message satisfy them exactly, " +
     "put a requested detail in the subject, hit a requested length/format, mention what they ask to mention): " +
     r.replace(/\s+/g, " ").slice(0, 900)
   );
@@ -118,7 +118,7 @@ function routeForKind(
   if (emailish) {
     return { channelType: "email", to: opp.contactEmail || "", kindLabel: kind! };
   }
-  // DMs / text / other — write as a short note; prefer a handle, else fall back.
+  // DMs / text / other, write as a short note; prefer a handle, else fall back.
   return {
     channelType: "message",
     to: opp.contactHandle || opp.contactEmail || "",
@@ -149,7 +149,7 @@ export async function draftFor(
 
   // Job/internship hunts can surface a company with NO specific opening (see the
   // discovery jobsRules). For those, the message is a proactive "please consider
-  // me" note with the resume attached — not a reply to a listing. Detect it here
+  // me" note with the resume attached, not a reply to a listing. Detect it here
   // so the prompt frames it correctly instead of referencing a posting that
   // doesn't exist.
   const jobLike =
@@ -164,7 +164,7 @@ export async function draftFor(
     );
   if (jobLike && !isPosting) {
     draftStyle +=
-      " NOTE: there is no posted opening for this recipient — it's a good-fit company the sender is approaching proactively. " +
+      " NOTE: there is no posted opening for this recipient, it's a good-fit company the sender is approaching proactively. " +
       "Write a warm, brief, humble note: introduce the sender in a line, say specifically why this company caught their eye " +
       "(use the recipient note if present), express genuine interest in being CONSIDERED for a role or internship there even " +
       "if nothing is currently posted, name ONE concrete relevant strength, and mention their resume is attached for " +
@@ -189,7 +189,7 @@ export async function draftFor(
   // Whether the sender's personal resume/career details belong in this message
   // at all. Prospecting/biz-dev outreach (selling a product, pitching a
   // company, partnering on behalf of a project) is about the COMPANY/PRODUCT,
-  // not the sender's individual accomplishments — those read as irrelevant
+  // not the sender's individual accomplishments, those read as irrelevant
   // noise in a cold pitch to, say, a nail salon. Networking/job-search/PR are
   // the opposite: the sender's personal background IS the point.
   const prospecting = isProspectingUseCase(useCase);
@@ -197,7 +197,7 @@ export async function draftFor(
     ? `ABOUT THE SENDER: ${about}\n` +
       `This outreach represents a COMPANY, PRODUCT, or PROJECT, not the sender's personal career. Do NOT mention the ` +
       `sender's resume, education, age, or personal accomplishments unless the note above frames them as directly ` +
-      `relevant credibility for THIS pitch — most of the time they are not. Center the message on what's being offered ` +
+      `relevant credibility for THIS pitch, most of the time they are not. Center the message on what's being offered ` +
       `and why it fits this specific recipient, not on the sender's individual background.`
     : `ABOUT THE SENDER (draw on what fits, do not list it all): ${about}`;
 
@@ -249,7 +249,7 @@ export async function draftFor(
       dmLabel === "text message"
         ? "1 to 2 sentences, very informal"
         : isLinkedIn
-          ? "STRICTLY 200 characters or fewer, including spaces — this is a hard LinkedIn limit, so be concise and cut anything non-essential"
+          ? "STRICTLY 200 characters or fewer, including spaces, this is a hard LinkedIn limit, so be concise and cut anything non-essential"
           : "2 to 4 sentences";
     task =
       `Write ${formatHint} (${length}). ` +
@@ -276,7 +276,7 @@ export async function draftFor(
       )
     );
   } catch (e) {
-    if (e instanceof ApiCreditError) throw e; // credits/auth/limit — don't swallow
+    if (e instanceof ApiCreditError) throw e; // credits/auth/limit, don't swallow
     gen = null;
   }
 
@@ -334,7 +334,7 @@ function suggestsResume(
 
 // Revise an already-drafted message per the sender's free-text instruction
 // ("make it shorter", "more casual", "mention I'm a student", etc). Unlike
-// draftFor, this doesn't regenerate from scratch — it edits the existing
+// draftFor, this doesn't regenerate from scratch, it edits the existing
 // subject/body so earlier personalization survives, and re-applies the same
 // channel constraints (LinkedIn's 200-character cap) since the instruction
 // could otherwise blow past them.
@@ -346,17 +346,17 @@ export async function reviseDraft(
   about: string,
   to = ""
 ): Promise<{ subject: string; body: string }> {
-  // `to` holds the contact handle for message-type drafts — check it for an
+  // `to` holds the contact handle for message-type drafts, check it for an
   // actual linkedin.com URL first; fall back to "any generic message" the
   // same way draftFor does when we have no better signal.
   const isLinkedIn = isLinkedInTarget("", to) || channelType === "message";
   const sys =
     `You revise an outreach message the sender already drafted, per their instruction. Keep it in their voice and ` +
-    `keep it TRUE — never invent new facts, names, or details beyond what's already in the message or ABOUT THE SENDER. ` +
+    `keep it TRUE, never invent new facts, names, or details beyond what's already in the message or ABOUT THE SENDER. ` +
     `Apply the instruction faithfully; if it conflicts with sounding warm and human, still honor it, that's the ` +
     `sender's call. NEVER use em-dashes or en-dashes; use commas and periods. ` +
     (isLinkedIn
-      ? `This is a LinkedIn/DM note — STRICTLY 200 characters or fewer in the revised body, including spaces. `
+      ? `This is a LinkedIn/DM note, STRICTLY 200 characters or fewer in the revised body, including spaces. `
       : "") +
     `Return ONLY JSON {subject, body}.`;
   const user =

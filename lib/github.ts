@@ -1,7 +1,7 @@
-// Minimal GitHub Contents API client — used only by the auto-tune cron to
+// Minimal GitHub Contents API client, used only by the auto-tune cron to
 // read/write lib/discover.ts directly on main. Scoped to one repo, one token
 // (GITHUB_AUTOTUNE_TOKEN), read via a fine-grained PAT with just
-// "Contents: Read and write" on this repo — never the full account.
+// "Contents: Read and write" on this repo, never the full account.
 
 const OWNER = "kaitlynrkasel";
 const REPO = "scout";

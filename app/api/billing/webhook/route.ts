@@ -46,7 +46,7 @@ async function syncSubscription(subId: string) {
 
   const priceId = sub.items.data[0]?.price?.id;
   const tier = tierForPriceId(priceId);
-  if (!tier) return; // a price we don't recognize — ignore
+  if (!tier) return; // a price we don't recognize, ignore
 
   const periodStart = toISO((sub as any).current_period_start);
   const periodEnd = toISO((sub as any).current_period_end);
@@ -126,7 +126,7 @@ export async function POST(req: NextRequest) {
         break;
       }
       case "invoice.paid": {
-        // Renewal — re-sync to roll the period + reset the usage counter.
+        // Renewal, re-sync to roll the period + reset the usage counter.
         const inv = event.data.object as Stripe.Invoice;
         const subId = (inv as any).subscription as string | null;
         if (subId) await syncSubscription(subId);

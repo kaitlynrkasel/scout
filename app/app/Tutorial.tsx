@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 /**
- * Scout guided tour — a first-run introduction that walks a new user through the
+ * Scout guided tour, a first-run introduction that walks a new user through the
  * app. It dims the screen, spotlights one element at a time (matched by a
  * `data-tour="<id>"` attribute), and shows a coach-mark card with Back / Next /
  * Skip. Steps can also switch the active tab so the real screen shows behind the

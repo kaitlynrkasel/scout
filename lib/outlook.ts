@@ -200,7 +200,7 @@ export async function outlookConversationsWithReplies(
         needsReconnect: true,
       });
     }
-    if (!r.ok) continue; // conversation gone/inaccessible — skip, don't fail the batch
+    if (!r.ok) continue; // conversation gone/inaccessible, skip, don't fail the batch
     const j = await r.json();
     const msgs = j.value || [];
     const hasReply = msgs.some((m: any) => {

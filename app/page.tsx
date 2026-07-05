@@ -110,7 +110,7 @@ export default function Landing() {
       <section className="border-y border-warm-border bg-surface">
         <div className="mx-auto grid max-w-6xl gap-px overflow-hidden rounded-none sm:grid-cols-3">
           <Stat big="Minutes, not hours" small="Find, research, and draft outreach in about a minute per person." />
-          <Stat big="3–10× more replies" small="Personalized, targeted outreach vs. generic blasts (industry estimates)." />
+          <Stat big="3-10× more replies" small="Personalized, targeted outreach vs. generic blasts (industry estimates)." />
           <Stat big="Real contacts only" small="Pulled from the public web. Never invented, never fabricated." />
         </div>
       </section>
@@ -213,7 +213,7 @@ export default function Landing() {
 }
 
 const USE_CASES = [
-  { who: "Consultant", q: "Operations leads at DTC brands doing $10M–$50M revenue" },
+  { who: "Consultant", q: "Operations leads at DTC brands doing $10M, $50M revenue" },
   { who: "Health brand", q: "Fitness influencers to promote my new supplement" },
   { who: "Professional", q: "Find me a job or internship in my field" },
   { who: "Student", q: "Alumni in my field for a quick coffee chat" },
@@ -312,7 +312,7 @@ function Pricing() {
         ))}
       </div>
       <p className="mt-5 text-center text-xs text-body/60">
-        Secure checkout by Stripe. Every plan searches the real public web — never invented
+        Secure checkout by Stripe. Every plan searches the real public web, never invented
         contacts.
       </p>
     </section>
@@ -413,7 +413,7 @@ function HowStep({ n, title, body }: { n: string; title: string; body: string })
 
 // ------------------- Meet the team -------------------
 // Two subsections: the humans (circular headshot cards) and "Our Scouts",
-// a horizontal scroller of their dogs. Portrait slots are placeholders —
+// a horizontal scroller of their dogs. Portrait slots are placeholders, 
 // swap in <img src="/team/<name>.jpg" /> when real photos land.
 const TEAM: { name: string; role: string; blurb: string; photo?: string }[] = [
   {
@@ -424,16 +424,16 @@ const TEAM: { name: string; role: string; blurb: string; photo?: string }[] = [
   {
     name: "Mera Kasel",
     role: "Team",
-    blurb: "TBD — add a short line about Mera here.",
+    blurb: "TBD, add a short line about Mera here.",
   },
   {
     name: "Suri Kasel",
     role: "Team",
-    blurb: "TBD — add a short line about Suri here.",
+    blurb: "TBD, add a short line about Suri here.",
   },
 ];
 
-// The dogs. Add or remove as the pack grows — the horizontal scroller just
+// The dogs. Add or remove as the pack grows, the horizontal scroller just
 // stretches. Keep names short; the card is compact by design.
 const SCOUTS: { name: string; owner?: string; photo?: string }[] = [
   { name: "Scout", owner: "Kaitlyn" },
@@ -470,7 +470,7 @@ function MeetTheTeam() {
           ))}
         </div>
 
-        {/* Our Scouts — horizontal scroller of the dogs. */}
+        {/* Our Scouts, horizontal scroller of the dogs. */}
         <div className="mt-16">
           <div className="flex items-baseline justify-between gap-4">
             <div>

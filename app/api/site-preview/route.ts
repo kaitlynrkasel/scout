@@ -7,7 +7,7 @@ export const maxDuration = 20;
 // Serves a site's HTML back through OUR origin so the find-detail preview
 // iframe can embed it. Embedding the target URL directly gets blocked by
 // X-Frame-Options / CSP frame-ancestors on most real sites ("refused to
-// connect") — that's the browser enforcing headers on the direct cross-origin
+// connect"), that's the browser enforcing headers on the direct cross-origin
 // request. Proxying means the browser only ever requests OUR route, which sets
 // no such headers, so the iframe loads. A <base> tag keeps every relative
 // link/asset resolving against the real site. This is a single-request,
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Cap payload size — this is a visual preview, not a full mirror.
+  // Cap payload size, this is a visual preview, not a full mirror.
   if (html.length > 2_000_000) html = html.slice(0, 2_000_000);
 
   // Neutralize any framing directives the page sets itself via <meta> tags
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
     : `${base}${html}`;
 
   // Inject the autofill bridge (see AUTOFILL_SCRIPT). It lets the Scout panel
-  // pre-fill a contact form the user is looking at — it never submits.
+  // pre-fill a contact form the user is looking at, it never submits.
   html = /<\/body>/i.test(html)
     ? html.replace(/<\/body>/i, `${AUTOFILL_SCRIPT}</body>`)
     : `${html}${AUTOFILL_SCRIPT}`;
@@ -119,7 +119,7 @@ async function fetchPage(url: string): Promise<Response> {
 //      panel only offers "Fill this form" when there's something to fill.
 //   2. On a 'scout-autofill' message, heuristically map the sender's details +
 //      drafted message onto the form's fields and highlight them. It stops
-//      short of submitting — the user reviews and sends themselves.
+//      short of submitting, the user reviews and sends themselves.
 const AUTOFILL_SCRIPT = `<script>(function(){
   function sig(el){
     var bits=[el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.type];
@@ -203,7 +203,7 @@ function errorPage(message: string, realUrl?: string): string {
 }
 
 // A site that refused the automated preview (403/401/429/451). This is the site
-// blocking bots, not a broken link — so lead with opening it in a real tab,
+// blocking bots, not a broken link, so lead with opening it in a real tab,
 // where the user's own browser session sails through.
 function blockedPage(status: number, realUrl: string): string {
   const why =
@@ -220,7 +220,7 @@ function blockedPage(status: number, realUrl: string): string {
     `</style></head><body><div class="w">` +
     `<p>${why} It usually opens fine in your own browser.</p>` +
     `<a href="${realUrl}" target="_blank" rel="noreferrer">Open ${escapeHost(realUrl)} ↗</a>` +
-    `<small>Scout can still draft outreach and scan for contacts — the preview is just the site&rsquo;s own block.</small>` +
+    `<small>Scout can still draft outreach and scan for contacts, the preview is just the site&rsquo;s own block.</small>` +
     `</div></body></html>`
   );
 }

@@ -1,5 +1,5 @@
 // A typed error for when an API can't be used because of credits, a bad key, or
-// rate limits — so the UI can tell the user exactly what's wrong instead of
+// rate limits, so the UI can tell the user exactly what's wrong instead of
 // silently returning nothing.
 
 export type ApiProvider = "Anthropic" | "Tavily";

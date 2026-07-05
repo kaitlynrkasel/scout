@@ -223,7 +223,7 @@ export default function AccountOnboarding({
               >
                 <div className="text-base font-bold text-ink">Create a new company</div>
                 <p className="mt-1 text-sm leading-relaxed text-body/80">
-                  Set up your company on Scout — you&apos;ll answer a few questions about it.
+                  Set up your company on Scout, you&apos;ll answer a few questions about it.
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brown">
                   Set it up
@@ -366,7 +366,7 @@ export default function AccountOnboarding({
                     {companies.map((c) => (
                       <option key={c.id} value={c.id} disabled={c.alreadyMember}>
                         {c.name}
-                        {c.industry ? ` — ${c.industry}` : ""}
+                        {c.industry ? `, ${c.industry}` : ""}
                         {` (${c.memberCount} ${c.memberCount === 1 ? "member" : "members"})`}
                         {c.domainMatch ? " • matches your email" : ""}
                         {c.alreadyMember ? " • already joined" : ""}

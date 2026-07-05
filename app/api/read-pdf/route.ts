@@ -4,9 +4,9 @@ import { extractText, getDocumentProxy } from "unpdf";
 export const runtime = "nodejs";
 export const maxDuration = 60; // large PDFs (multi-page resumes) can exceed the low ceiling
 
-// Extract text from a PDF on the SERVER so it works in every browser — even
+// Extract text from a PDF on the SERVER so it works in every browser, even
 // older Safari/iOS that can't run pdf.js's worker. Uses unpdf, which ships a
-// serverless-safe pdf.js build (no worker-file resolution — the exact thing
+// serverless-safe pdf.js build (no worker-file resolution, the exact thing
 // that failed on Vercel with the plain pdfjs-dist import).
 export async function POST(req: NextRequest) {
   try {

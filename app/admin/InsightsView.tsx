@@ -121,7 +121,7 @@ export default function InsightsView({
             <span className="brand-text">Insights</span>
           </h1>
           <p className="mt-1 text-sm text-body">
-            Owner-only. Every user's denials, approvals, and reasons — the
+            Owner-only. Every user's denials, approvals, and reasons, the
             signal for tuning the extract prompt and filter.
           </p>
         </div>
@@ -177,7 +177,7 @@ export default function InsightsView({
                 "Deny rate",
                 data.totals.finds
                   ? `${Math.round((data.totals.denied / data.totals.finds) * 100)}%`
-                  : "—",
+                  : "-",
               ],
             ].map(([label, value]) => (
               <div
@@ -280,9 +280,9 @@ export default function InsightsView({
                       <td className="py-1.5 pr-2 text-right tabular-nums font-semibold text-sage-deep">
                         {u.replied}
                       </td>
-                      <td className="py-1.5 pr-2 text-body/80">{u.useCase || "—"}</td>
+                      <td className="py-1.5 pr-2 text-body/80">{u.useCase || "-"}</td>
                       <td className="py-1.5 text-body/60">
-                        {u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : "—"}
+                        {u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : "-"}
                       </td>
                     </tr>
                   ))}
@@ -339,7 +339,7 @@ export default function InsightsView({
                         {u.approved}
                       </td>
                       <td className="py-1.5 pr-2 text-body/80">
-                        {u.useCase || "—"}
+                        {u.useCase || "-"}
                       </td>
                       <td className="py-1.5 pr-2 text-body/80">
                         {u.hasFindsField ? "yes" : (
@@ -347,7 +347,7 @@ export default function InsightsView({
                         )}
                       </td>
                       <td className="py-1.5 pr-2 text-body/60">
-                        {u.updatedAt ? new Date(u.updatedAt).toLocaleString() : "—"}
+                        {u.updatedAt ? new Date(u.updatedAt).toLocaleString() : "-"}
                       </td>
                     </tr>
                   ))}

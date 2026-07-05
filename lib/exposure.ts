@@ -60,7 +60,7 @@ export async function recordContact(userId: string, o: any): Promise<void> {
   }
 }
 
-// Of the given keys, which are saturated — contacted by >= EXPOSURE_CAP distinct
+// Of the given keys, which are saturated, contacted by >= EXPOSURE_CAP distinct
 // users within the window. Returns an empty set on any failure (fail-open).
 export async function cappedKeys(keys: string[]): Promise<Set<string>> {
   const capped = new Set<string>();

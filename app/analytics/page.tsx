@@ -1,7 +1,7 @@
 import { Nav, Footer } from "../site";
 
 export const metadata = {
-  title: "Scout — Proof it works",
+  title: "Scout, Proof it works",
   description:
     "The data behind Scout: the search funnel, response-rate benchmarks, and real sample output.",
 };
@@ -56,18 +56,18 @@ export default function Analytics() {
           sub="Reply rates for cold outreach, by approach. Scout writes the personalized kind."
         >
           <div className="space-y-5">
-            <Bar label="Generic mass cold email" value={2} display="~1–3%" tone="muted" />
-            <Bar label="Cold email with a name dropped in" value={6} display="~5–8%" tone="muted" />
+            <Bar label="Generic mass cold email" value={2} display="~1-3%" tone="muted" />
+            <Bar label="Cold email with a name dropped in" value={6} display="~5-8%" tone="muted" />
             <Bar
               label="Targeted + personalized (what Scout writes)"
               value={20}
-              display="~12–25%"
+              display="~12-25%"
               tone="brand"
             />
             <Bar
               label="Warm intro / coffee-chat ask"
               value={28}
-              display="~25–30%"
+              display="~25-30%"
               tone="brand"
             />
           </div>

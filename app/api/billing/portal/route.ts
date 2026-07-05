@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   const ent = await getEntitlement(u.id);
   if (!ent.stripeCustomerId) {
     return NextResponse.json(
-      { error: "No billing account yet — subscribe to a plan first." },
+      { error: "No billing account yet, subscribe to a plan first." },
       { status: 400 }
     );
   }

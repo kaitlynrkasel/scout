@@ -12,7 +12,7 @@ const prefersReducedMotion = () =>
   window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
- * Reveal — fades and lifts its direct children into view with a small stagger the
+ * Reveal, fades and lifts its direct children into view with a small stagger the
  * first time the group scrolls into the viewport. Renders as `as` (default div)
  * so it can stand in for a section/grid without changing layout. Respects
  * prefers-reduced-motion (renders statically).
@@ -37,8 +37,8 @@ export function Reveal({
     () => {
       const el = ref.current;
       if (!el || prefersReducedMotion() || el.children.length === 0) return;
-      // If the group is already on screen (or above it) at mount — e.g. it was
-      // inserted after a search, or the tab just switched — play immediately
+      // If the group is already on screen (or above it) at mount, e.g. it was
+      // inserted after a search, or the tab just switched, play immediately
       // instead of waiting for a scroll event. A ScrollTrigger on already-in-
       // view content whose positions are stale never fires, which would leave
       // the children stuck at opacity 0 (invisible). Only defer to scroll for
@@ -67,7 +67,7 @@ export function Reveal({
 }
 
 /**
- * FadeIn — fades and lifts a single element in as one block when it scrolls into
+ * FadeIn, fades and lifts a single element in as one block when it scrolls into
  * view (no per-child stagger). Good for forms/cards where staggering fields would
  * feel gimmicky. Respects prefers-reduced-motion.
  */
@@ -114,7 +114,7 @@ export function FadeIn({
 }
 
 /**
- * CountUp — animates a number from 0 to `value` once it scrolls into view.
+ * CountUp, animates a number from 0 to `value` once it scrolls into view.
  * Falls back to the final value immediately under reduced-motion.
  */
 export function CountUp({

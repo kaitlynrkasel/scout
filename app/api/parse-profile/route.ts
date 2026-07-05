@@ -24,8 +24,8 @@ export async function POST(req: NextRequest) {
       "You read a resume, bio, or company description and extract profile fields " +
       "for a personal outreach tool. Return ONLY a JSON object, no prose. Never invent facts, " +
       "leave a field as an empty string (or null for numbers) if it is not present or reasonably inferable. " +
-      "Lean toward filling every field you can from the evidence in the document — the user prefers a full " +
-      "profile they can edit over a blank one — but do NOT fabricate. Inference from concrete evidence is fine; " +
+      "Lean toward filling every field you can from the evidence in the document, the user prefers a full " +
+      "profile they can edit over a blank one, but do NOT fabricate. Inference from concrete evidence is fine; " +
       "guessing without evidence is not.\n\n" +
       "name = the person's full name (or the company name if this is a company document); empty if unclear.\n" +
       "use_case = a short phrase (2 to 5 words) for what this person would most likely use an outreach tool for, " +
@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
       "'intermediate' (a few real internships or notable projects, mid-tier school, some track record), 'beginner' " +
       "(no prior internships, freshman/sophomore, few projects listed, or a first-time applicant vibe), or 'any' when " +
       "the document doesn't reveal enough to place them. Bias toward 'beginner' when in doubt for students without a " +
-      "clear track record — Scout users tend to be beginners looking for their first shot.";
+      "clear track record, Scout users tend to be beginners looking for their first shot.";
     const user =
       `Fields: name (string), use_case (string), signature (string with newlines), age (integer or null), ` +
       `education (string), location (string), company_size ('any'|'small'|'big'), ` +

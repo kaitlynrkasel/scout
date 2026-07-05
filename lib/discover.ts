@@ -15,7 +15,7 @@ import type { Opportunity } from "./types";
 // template-literal concatenation) so /api/cron/auto-tune can safely locate,
 // replace, and re-commit just ONE of these based on real deny-reason data,
 // without touching the rest of extract()'s logic. Each must stay a single
-// backtick-delimited string ending in a semicolon on its own — that's what
+// backtick-delimited string ending in a semicolon on its own, that's what
 // makes the auto-editor's regex extraction reliable. See lib/autotune.ts.
 export const TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE =
   `INDUSTRY ALIGNMENT: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. Never surface cross-industry hits unless the goal explicitly asks for that other industry.`;
@@ -37,12 +37,12 @@ function feedbackBlock(feedback?: DiscoverFeedback): string {
   let s = "";
   if (favor.length) {
     s +=
-      "\n\nWORKED BEFORE — the user KEPT and reached out to these, so favor results like them:\n" +
+      "\n\nWORKED BEFORE, the user KEPT and reached out to these, so favor results like them:\n" +
       favor.map((f) => `- ${f.name}${f.why ? ` (${f.why})` : ""}`).join("\n");
   }
   if (avoid.length) {
     s +=
-      "\n\nREJECTED BEFORE — the user passed on these; treat the reasons as firm rules and steer away from similar results:\n" +
+      "\n\nREJECTED BEFORE, the user passed on these; treat the reasons as firm rules and steer away from similar results:\n" +
       avoid.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n");
   }
   return s;
@@ -64,7 +64,7 @@ function isNetworkingUseCase(useCase: string): boolean {
 
 // isProspectingUseCase (imported above) covers: the user is finding EXTERNAL
 // targets to pitch, sell to, partner with, get sponsored by, or raise money
-// from. The target lives in a DIFFERENT world than the user — a marketing
+// from. The target lives in a DIFFERENT world than the user, a marketing
 // agency pitching restaurants, a SaaS founder selling to any industry, a
 // nonprofit chasing sponsors. For these, the user's own industry must NOT
 // filter results; the GOAL defines the target profile. Contrast with
@@ -76,7 +76,7 @@ function isNetworkingUseCase(useCase: string): boolean {
 // case, because the user is telling us the net is intentionally wide.
 function goalWantsAnyIndustry(goal: string): boolean {
   // Loose enough to catch "any other industry", "any type of industry", "any
-  // kind of business", etc, not just the exact phrase "any industry" — a
+  // kind of business", etc, not just the exact phrase "any industry", a
   // fixed two-word match was silently missing common real-world phrasings.
   return /\b(any (other |type of |kind of |given )*(industry|field|sector|vertical|niche|business)|all (industries|sectors|fields|businesses)|every (industry|sector|business)|industry.?agnostic|no (specific )?industry|regardless of (the )?industry|(not|isn'?t) industry.?specific|across industries|open to (any|all) industr(y|ies)|doesn'?t matter (the |what )?industry)\b/i.test(
     goal || ""
@@ -90,7 +90,7 @@ function goalWantsAnywhere(goal: string): boolean {
 
 // Influencer / creator discovery: brand looking for social creators, PR looking
 // for TikTokers to send product to, etc. These use cases live mostly outside
-// Scout's crawlable web — IG/TikTok/X are login-walled — so we lean on
+// Scout's crawlable web, IG/TikTok/X are login-walled, so we lean on
 // roundup articles, blog listicles, and aggregator sites that name creators
 // and link out to their socials.
 function isInfluencerUseCase(useCase: string): boolean {
@@ -101,7 +101,7 @@ function isInfluencerUseCase(useCase: string): boolean {
 
 // Same intent, read from the GOAL text rather than the use-case label. Without
 // this, "find TikTok creators posting folk covers" typed under a "Music PR"
-// use case never triggered the creator pipeline — the single most common way
+// use case never triggered the creator pipeline, the single most common way
 // social searches quietly under-performed. Kept a touch stricter than the
 // use-case check so a normal search that merely mentions a platform (e.g.
 // "companies that have an Instagram") doesn't get pulled into creator mode:
@@ -128,7 +128,7 @@ function isSocialCreatorSearch(useCase: string, goal: string): boolean {
   return isInfluencerUseCase(useCase) || goalWantsSocialCreators(goal);
 }
 
-// Pages structured as ranked / listed roundups — the primary source for
+// Pages structured as ranked / listed roundups, the primary source for
 // finding creators when we can't crawl the social platforms themselves.
 // "Top 10 beauty TikTokers", "Best Nashville influencers to follow", etc.
 export function looksLikeListicle(title: string): boolean {
@@ -141,7 +141,7 @@ export function looksLikeListicle(title: string): boolean {
   );
 }
 
-// Obvious how-to / advice pages — never actual prospects. For influencer use
+// Obvious how-to / advice pages, never actual prospects. For influencer use
 // cases, listicle-style roundups DO count as source material (that's how you
 // find creators when their content lives inside login-walled apps), so those
 // bypass this filter. Standard how-to / tips content still gets dropped.
@@ -159,14 +159,14 @@ function looksLikeAdvice(title: string, useCase = "", goal = ""): boolean {
 }
 
 // Podcast episodes, video clips, and interview transcripts almost never make
-// the person reachable — being a guest on a show isn't a contact channel.
+// the person reachable, being a guest on a show isn't a contact channel.
 // Filtered before extraction so we don't waste Claude calls on obvious dead
 // ends. Own-account URLs on these hosts (a channel page, a profile) can still
 // be legit, so we only skip individual-episode / individual-video URLs.
 function looksLikePodcastOrVideoClip(url: string): boolean {
   const u = String(url || "").toLowerCase();
   if (!u) return false;
-  // Podcast hosts — episode pages are the whole point of these hosts.
+  // Podcast hosts, episode pages are the whole point of these hosts.
   if (/(^|\.)(buzzsprout|anchor\.fm|podbean|libsyn|transistor\.fm|captivate\.fm|simplecast|blubrry)\.com/.test(u))
     return true;
   if (/podcasts\.apple\.com\/[a-z-]+\/podcast\/.+\/id\d+\?i=\d+/.test(u)) return true; // apple episode url
@@ -189,7 +189,7 @@ async function planQueries(
   salt?: string,
   cohortHint?: string,
   personalOverride?: string,
-  // Broaden mode: a narrower first pass returned nothing, so widen the net —
+  // Broaden mode: a narrower first pass returned nothing, so widen the net, 
   // relax the niche/long-tail/geo/segment constraints and allow bigger, more
   // obvious targets so a very specific goal degrades to *some* results instead
   // of an empty screen.
@@ -206,7 +206,7 @@ async function planQueries(
   // field. Location needs the exact same guard: ABOUT is the only place a
   // city ever appears for this user, so with no explicit instruction the
   // model quietly grounds queries in the sender's own city even when the
-  // goal says "any location" — this was the actual cause of prospecting
+  // goal says "any location", this was the actual cause of prospecting
   // searches still coming back Nashville/music-flavored.
   const anywhere = goalWantsAnywhere(goal);
 
@@ -216,7 +216,7 @@ async function planQueries(
   // directory one, so it must win over the prospecting branch below.
   if (influencer) {
     guidance =
-      "Target curated ROUNDUP articles and listicles that NAME real social creators — that's where we find them, " +
+      "Target curated ROUNDUP articles and listicles that NAME real social creators, that's where we find them, " +
       "since Instagram / TikTok / X / YouTube block deep search. Combine the specific niche + platform + geography + a " +
       "roundup signal. Good query patterns: 'top 10 {niche} {platform} {city}', 'best {niche} creators to follow', " +
       "'{niche} {platform} accounts to know', '{niche} micro-influencer roundup', '{niche} {platform} directory', " +
@@ -225,10 +225,10 @@ async function planQueries(
       "Prefer queries that will surface: local magazine / press features (Voyager, Time Out, city guides), brand blog " +
       "roundups, agency directories, aggregator sites (Later, Modash public pages, HypeAuditor blog, Klear, Collabstr, " +
       "SocialBlade). Include '{platform}.com' in some queries so pages that mention creator @handles surface. NEVER use " +
-      "'how to' or 'tips' — those are advice, not creator lists.";
+      "'how to' or 'tips', those are advice, not creator lists.";
   } else if (prospecting) {
     guidance =
-      "The user is PROSPECTING — finding external companies / people to pitch, sell to, partner with, or raise from. The " +
+      "The user is PROSPECTING, finding external companies / people to pitch, sell to, partner with, or raise from. The " +
       "targets live in DIFFERENT industries than the user, so do NOT bias queries toward the user's own field. Build queries " +
       "from the GOAL's target profile (size, type, stage, location) plus a findability signal that surfaces a contact route. " +
       "Good query patterns: '{target type} companies contact email', '{target type} directory', 'list of {target type} " +
@@ -239,14 +239,14 @@ async function planQueries(
       "for SaaS startups) to cast a wide net. NEVER use 'how to', 'tips', 'guide', or 'advice'.";
   } else if (jobs) {
     guidance =
-      "Find places the user could work IN THEIR INDUSTRY — and do NOT limit yourself to posted openings. Split the query " +
+      "Find places the user could work IN THEIR INDUSTRY, and do NOT limit yourself to posted openings. Split the query " +
       "set roughly in half: (1) REAL open job/internship listings, and (2) GOOD-FIT COMPANIES that likely hire people like " +
       "the user even if no listing is public, so they can send a proactive 'please consider me' email. For (1) pair the " +
       "role/field with the user's sub-field and an apply signal (e.g. 'brand marketing internship summer 2026 apply', " +
       "'growth marketing intern DTC careers'). For (2) surface actual COMPANIES and their contact/careers/about pages " +
       "(e.g. 'small brand marketing agencies New York', 'boutique DTC studios careers email', 'independent {industry} firms " +
       "contact'), business directories, and local roundups. STRONGLY prefer SMALL companies, startups, studios, boutiques, " +
-      "and local firms — they are far more responsive to a cold note than big brands. If the profile signals a beginner or " +
+      "and local firms, they are far more responsive to a cold note than big brands. If the profile signals a beginner or " +
       "small-company preference, lean almost entirely on small/local/early-stage employers and AVOID the famous, ultra-" +
       "competitive names. Add the user's city or a hub city for their industry. Never use 'how to', 'tips', or 'guide'.";
   } else if (networking) {
@@ -267,25 +267,25 @@ async function planQueries(
   const anyIndustry = goalWantsAnyIndustry(goal);
   // In prospecting / any-industry mode the TARGET lives in a different world than
   // the user, so anchoring queries to the user's own field (e.g. a music-industry
-  // profile) is exactly wrong — it's why an "any industry" search kept returning
+  // profile) is exactly wrong, it's why an "any industry" search kept returning
   // only music. The GOAL defines the target; the user's field must not filter.
   const anchor = prospecting
     ? "You are a search strategist for an outreach tool. The user is PROSPECTING: write web-search queries that surface " +
-      "the TARGETS DESCRIBED BY THE GOAL. Do NOT anchor to the user's own industry, field, or genre (from ABOUT) — those " +
+      "the TARGETS DESCRIBED BY THE GOAL. Do NOT anchor to the user's own industry, field, or genre (from ABOUT), those " +
       "targets live in DIFFERENT industries than the user, and biasing toward the user's field would return the wrong " +
       "results. Use ABOUT only to understand what the user sells/offers, never as an industry filter on the targets. " +
-      "USE CASE is just a category label for this search, not the product being pitched — if ABOUT describes a specific " +
+      "USE CASE is just a category label for this search, not the product being pitched, if ABOUT describes a specific " +
       "product, tool, or service (even one sentence naming it), THAT is what's being offered; never substitute the USE " +
       "CASE label as the offering (e.g. a 'Music PR' use case prospecting for a software tool's customers is NOT selling " +
-      "music services — it's selling that tool, so don't bias queries toward buyers of music-related things). " +
+      "music services, it's selling that tool, so don't bias queries toward buyers of music-related things). " +
       (anywhere
-        ? "The user has said the target can be ANYWHERE — do NOT use the sender's own city, state, or region from ABOUT " +
+        ? "The user has said the target can be ANYWHERE, do NOT use the sender's own city, state, or region from ABOUT " +
           "as a query parameter, even implicitly; it is not a location constraint on the targets. "
         : "Only use a location in queries if the GOAL ITSELF explicitly names one. The sender's own city/region in ABOUT " +
-          "describes the sender, not where the targets should be — never default to it as a stand-in location. ")
+          "describes the sender, not where the targets should be, never default to it as a stand-in location. ")
     : "You are a search strategist for an outreach tool. From the user's goal and their profile, write web-search " +
       "queries that surface results matching BOTH the goal AND the user's industry/field/level/location (infer all of " +
-      "these from ABOUT THE USER — do not ask). ";
+      "these from ABOUT THE USER, do not ask). ";
   // The long-tail push: for prospecting, "specific" means the GOAL's target
   // profile (type/size/stage/place), not the user's sub-field/genre.
   const longTail = prospecting
@@ -303,7 +303,7 @@ async function planQueries(
       "rather than broad. ";
   const broadenClause = broaden
     ? " BROADEN MODE: a narrower version of this search just returned NO results, so widen the net now. DROP the niche / " +
-      "long-tail / hyper-specific push above. Use simpler, broader queries with FEWER combined constraints — relax location, " +
+      "long-tail / hyper-specific push above. Use simpler, broader queries with FEWER combined constraints, relax location, " +
       "company size, sub-genre, seniority and segment filters, and it is fine to include larger, well-known targets. Stay " +
       "on-topic for the GOAL, but prioritize surfacing real, reachable results over being specific. "
     : "";
@@ -323,7 +323,7 @@ async function planQueries(
     "natural (avoid heavy boolean syntax). Do not invent facts about the user beyond what ABOUT implies." +
     // This user's own calibration, appended last so it takes priority over
     // the guidance above when they conflict (same mechanism as coaching for
-    // drafting) — see buildPersonalOverride in lib/autotune.ts.
+    // drafting), see buildPersonalOverride in lib/autotune.ts.
     (personalOverride ? `\n\n${personalOverride}` : "");
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
@@ -359,7 +359,7 @@ function canonicalLink(u: string): string {
 }
 
 // Decide which URL to attach to an extracted opp. Prefers the LLM's URL when
-// it's demonstrably real — its host either matches the Tavily source URL's
+// it's demonstrably real, its host either matches the Tavily source URL's
 // host (a canonical link off the same domain) or appears somewhere in the
 // source page's content (the LLM cleaned up a jobs-board link to the direct
 // company page). Otherwise falls back to the actual Tavily source URL so a
@@ -371,7 +371,7 @@ function pickTrustedUrl(llmUrl: string, candUrl: string, candContent: string): s
   const llmHost = urlHost(llm);
   if (!llmHost) return cand || "";
   const candHost = urlHost(cand);
-  // Same-domain: LLM stripped tracking params or picked a canonical URL — trust.
+  // Same-domain: LLM stripped tracking params or picked a canonical URL, trust.
   if (candHost && llmHost === candHost) return llm;
   // Cross-domain: only trust when the LLM's host actually appears in the
   // source page's content (case-insensitive substring). Hallucinated hosts
@@ -395,7 +395,7 @@ function normName(s: string): string {
   const cleaned = dropRoleSuffix
     .toLowerCase()
     // Drop leading role/title prefixes ("VP of Marketing at John Smith" style
-    // never actually appears — extractor puts the name first — so this is
+    // never actually appears, extractor puts the name first, so this is
     // safe.)
     .replace(/\b(dr|mr|mrs|ms|prof|rev|hon|sir)\.?\s+/g, "")
     // Drop suffixes that come after the last name.
@@ -433,7 +433,7 @@ function isJobUseCase(useCase: string): boolean {
   );
 }
 
-// Generic inbox prefixes — not a specific person, so we still try to find one.
+// Generic inbox prefixes, not a specific person, so we still try to find one.
 const GENERIC_EMAIL =
   /^(careers?|jobs?|hr|recruit(ing|ment)?|talent|info|hello|contact|apply|applications?|resumes?|staffing|people|hiring|admin|support|team|noreply|no-reply)@/i;
 
@@ -446,7 +446,7 @@ function hasPersonalEmail(o: Opportunity): boolean {
 }
 
 // For one opening, hunt for a specific person in recruiting or on the team who an
-// applicant could email. Never invents contacts — only what appears in results.
+// applicant could email. Never invents contacts, only what appears in results.
 async function findRecruiterContact(
   opp: Opportunity,
   goal: string
@@ -517,7 +517,7 @@ async function extract(
   //   so aligning to the user's industry/location is correct.
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
   // Job/internship hunts accept COMPANIES as targets (for a proactive "please
-  // consider me" email), not just postings with a named person — so they get
+  // consider me" email), not just postings with a named person, so they get
   // their own fit rules below rather than the person-centric networking ones.
   const jobs = !prospecting && isJobUseCase(useCase);
   // The template's targetNoun (e.g. "outlet" for music PR) primes the extractor
@@ -533,12 +533,12 @@ async function extract(
   const anyIndustry = goalWantsAnyIndustry(goal);
   const anywhere = goalWantsAnywhere(goal);
 
-  // Core quality gates — apply to every mode. These are about whether the
+  // Core quality gates, apply to every mode. These are about whether the
   // result is a REAL, REACHABLE target, not about fit.
   const core =
     `You are a research assistant. From a web search result, extract a structured record of ONE REAL, SPECIFIC ${noun || "target"} ` +
     `the user could actually reach out to, matching their GOAL and USE CASE. Return ONLY a JSON object, no prose, no markdown. ` +
-    `Never invent contact details or facts — leave a field empty if it is not present in the result. ` +
+    `Never invent contact details or facts, leave a field empty if it is not present in the result. ` +
     `URL DISCIPLINE: the url field MUST appear verbatim in the search result's content or URL. Never construct ` +
     `a URL by guessing what the company's domain probably is (e.g. do NOT write "concordgroupinsurance.com" ` +
     `just because the company is "Concord"; that risks pointing at a completely different company that happens ` +
@@ -550,40 +550,40 @@ async function extract(
     `A real person's LinkedIn profile, a staff/team page, or a specific company IS a valid prospect; ` +
     `an article teaching you how to do outreach is NOT. ` +
     `MENTIONED IS NOT ENOUGH: for target_type "person", if the source is about a PROGRAM, EVENT, ORGANIZATION, or EMPLOYER and ` +
-    `only mentions a person by name in passing — no personal profile page, no interview, no direct contact channel — set ` +
+    `only mentions a person by name in passing, no personal profile page, no interview, no direct contact channel, set ` +
     `is_relevant to false. For a "person" the source must EITHER be about them OR give a direct contact channel ` +
     `(email or LinkedIn URL / handle). ` +
     `PODCASTS / VIDEO CLIPS: an episode or video where the person is just a guest, with no contact channel, is not reachable; ` +
     `set is_relevant false. `;
 
-  // Fit / alignment section — this is the part that differs by mode.
+  // Fit / alignment section, this is the part that differs by mode.
   const jobsRules =
-    `JOB / INTERNSHIP SEARCH — BOTH openings AND fittable employers count. A specific open posting is valid, and so is a ` +
+    `JOB / INTERNSHIP SEARCH, BOTH openings AND fittable employers count. A specific open posting is valid, and so is a ` +
     `real COMPANY in the user's field even with NO public listing: the user will send a proactive note asking to be ` +
-    `considered, so target_type "organization" is fully valid — do NOT set is_relevant false just because there's no posted ` +
+    `considered, so target_type "organization" is fully valid, do NOT set is_relevant false just because there's no posted ` +
     `role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the user's ` +
-    `industry. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms — ` +
+    `industry. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms, ` +
     `they are realistic to hear back from. If the GOAL text says to favor beginner-friendly / small / less-selective ` +
     `employers, give ultra-selective, famous, big-name targets a LOW fit_score even when they're on-industry. WHY_IT_FITS: a ` +
     `specific true detail about the COMPANY (what they do, their size/stage, why they'd be a good place for someone at the ` +
-    `user's level) or about the specific role — never phrased in terms of the sender's own resume. REACHABILITY: favor ` +
+    `user's level) or about the specific role, never phrased in terms of the sender's own resume. REACHABILITY: favor ` +
     `results that expose a contact route (careers/contact page, an email, a named recruiter or team member). ` +
     `PREFER THE ACTUAL EMPLOYER over a job-board aggregator: a specific company's own site is much better than a ` +
     `ZipRecruiter / Indeed / LinkedIn-Jobs / Glassdoor / BuiltIn search or aggregate listing page (which is a list of many ` +
-    `jobs, not one reachable employer) — give those aggregate list pages a low fit_score. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
+    `jobs, not one reachable employer), give those aggregate list pages a low fit_score. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
     `fit_score: 0.7+ for an on-industry, accessible employer with a contact route; lower it for big/ultra-competitive names ` +
     `when the user wants accessible ones, for aggregator list pages, and for results missing any contact route; below 0.3 ` +
     `only when clearly off-industry.`;
   const fitRules = prospecting
-    ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting — finding external ${noun || "target"}s to ` +
+    ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting, finding external ${noun || "target"}s to ` +
       `pitch, sell to, partner with, or raise from. Do NOT reject a result for being in a different industry than the user. ` +
       `The GOAL states the target profile (size, type, stage, location if any); judge fit against THAT, and ignore the user's ` +
       `own field entirely for filtering. WHAT'S BEING OFFERED comes from ABOUT's actual description of the product/service/ ` +
-      `project (even one sentence naming it) — the USE CASE label is only a category for this search, never assume it IS ` +
+      `project (even one sentence naming it), the USE CASE label is only a category for this search, never assume it IS ` +
       `the offering (e.g. a "Music PR" use case prospecting for a software tool's customers is selling that tool, not music ` +
-      `services — do not bias fit or why_it_fits toward buyers of music-related things just because of the USE CASE label). ` +
+      `services, do not bias fit or why_it_fits toward buyers of music-related things just because of the USE CASE label). ` +
       (anyIndustry
-        ? `The user has said ANY INDUSTRY is fine, so industry is NOT a filter at all — a bakery, a law firm, and a game studio ` +
+        ? `The user has said ANY INDUSTRY is fine, so industry is NOT a filter at all, a bakery, a law firm, and a game studio ` +
           `are all equally valid if they otherwise match the goal. `
         : `Match the target types the goal describes. `) +
       (anywhere
@@ -592,11 +592,11 @@ async function extract(
       `REACHABILITY MATTERS MOST: since the user needs to actually contact these targets, favor results that expose a way in ` +
       `(a company contact page, an email, a phone number, a named person). A real company with a contact route is a strong ` +
       `fit even in an unrelated industry. REQUIRED CHANNELS: if the GOAL says it needs specific contact channels (e.g. "a phone ` +
-      `number", "an email", "a website"), treat those as hard preferences — capture each one that appears (contact_phone, ` +
+      `number", "an email", "a website"), treat those as hard preferences, capture each one that appears (contact_phone, ` +
       `contact_email, url for the website) and give a clearly higher fit_score to results that expose ALL the requested ` +
       `channels, a lower one to results missing some. WHY_IT_FITS: a specific true detail about the TARGET's OWN business ` +
       `(size, recent growth, what they do, why they'd want this) that makes them a good prospect for what the user offers. ` +
-      `FORBIDDEN: never phrase why_it_fits in terms of the SENDER's background, employer, career, or industry — do not ` +
+      `FORBIDDEN: never phrase why_it_fits in terms of the SENDER's background, employer, career, or industry, do not ` +
       `write things like "a good fit given the sender's X experience" or reference the sender's field/employer at all; if ` +
       `the target's own details don't stand on their own, describe the target's business instead, or leave why_it_fits empty. ` +
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
@@ -606,28 +606,28 @@ async function extract(
     ? jobsRules
     : `${TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE} ` +
       `WHY_IT_FITS DISCIPLINE: a specific true detail about THE PERSON'S OWN work, career, or interests tied to the user's ` +
-      `field — not about their employer or program. If you can only describe the program they work at, set is_relevant false. ` +
+      `field, not about their employer or program. If you can only describe the program they work at, set is_relevant false. ` +
       `${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
       `TIME WINDOW ALIGNMENT: if the GOAL specifies a semester or year and the posting is clearly for a different window, set ` +
-      `is_relevant false — but only when the source explicitly says the wrong window. ` +
+      `is_relevant false, but only when the source explicitly says the wrong window. ` +
       `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off.`;
 
   // Personal calibration wins over the universal baseline above by being the
-  // last, most specific instruction — same mechanism coaching/dismissedAdvice
+  // last, most specific instruction, same mechanism coaching/dismissedAdvice
   // already use for drafting. Sourced fresh per request from THIS user's own
   // deny data (see buildPersonalOverride in lib/autotune.ts); never touches
   // shared code, unlike the universal auto-tune cron.
   const sys = core + fitRules + (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
-    `Fields: is_relevant (bool), target_type (one of "person", "organization", "other" — use "other" for any article/guide/advice/listicle), ` +
+    `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
-    `contact_phone (a phone number ONLY if it appears verbatim in the result — for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
+    `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
     `url (best link), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
-    `fit_score (0 to 1 — follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
-    `why_it_fits (one specific, true detail used to personalize outreach — follow the WHY_IT_FITS rule above exactly for what it should describe; empty if unknown).`;
+    `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
+    `why_it_fits (one specific, true detail used to personalize outreach, follow the WHY_IT_FITS rule above exactly for what it should describe; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
   const learned = feedbackBlock(feedback);
@@ -636,7 +636,7 @@ async function extract(
   try {
     return parseJsonLoose(await claudeJson(sys, user));
   } catch (e) {
-    if (e instanceof ApiCreditError) throw e; // credits/auth/limit — don't swallow
+    if (e instanceof ApiCreditError) throw e; // credits/auth/limit, don't swallow
     return null;
   }
 }
@@ -670,14 +670,14 @@ async function extractMultiplePeople(
     `You are a research assistant reading a curated ROUNDUP article that lists multiple real social creators / ` +
     `influencers. Extract EVERY named creator from the article that fits the user's GOAL. Return ONLY a JSON ` +
     `object with a "people" array, no prose. Each element: {name (their real name or handle if that's all shown), ` +
-    `handle (their @handle or full social URL — e.g. instagram.com/example, tiktok.com/@example, ` +
-    `youtube.com/@example — prefer the platform the user's GOAL implies), email (only if the article lists a ` +
+    `handle (their @handle or full social URL, e.g. instagram.com/example, tiktok.com/@example, ` +
+    `youtube.com/@example, prefer the platform the user's GOAL implies), email (only if the article lists a ` +
     `direct contact email; leave empty otherwise), role (what they do / niche: "beauty creator", "food TikToker", ` +
     `etc.), outlet (the platform they're mostly on or their brand), location (city or country if the article ` +
     `mentions it), why_it_fits (one specific true detail about THIS creator's own content or angle from the ` +
     `article, not the article's premise; empty if unknown), fit_score (0..1 how well this specific creator ` +
     `matches the goal), channel (one of "Instagram", "TikTok", "YouTube", "X", "Email", "Website Form", ` +
-    `"Unknown" — pick the platform their handle points at)}. Never invent handles or emails; if the article ` +
+    `"Unknown", pick the platform their handle points at)}. Never invent handles or emails; if the article ` +
     `only mentions a name in passing without any social handle or way to reach them, SKIP that person. Return ` +
     `an empty array if there are no genuinely reachable creators on the page.`;
   const user =
@@ -757,13 +757,13 @@ export async function discover(
   salt?: string,
   cohortHint?: string,
   // This user's own calibration text (see buildPersonalOverride in
-  // lib/autotune.ts) — takes priority over the universal baseline by being
+  // lib/autotune.ts), takes priority over the universal baseline by being
   // appended last to both the query planner and the extractor's prompts.
   personalOverride?: string
 ): Promise<DiscoverResult> {
   const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint, personalOverride);
   const networking = isNetworkingUseCase(useCase);
-  // Skip anyone the user already denied by name — never resurface a rejected find.
+  // Skip anyone the user already denied by name, never resurface a rejected find.
   const deniedNames = new Set(
     (feedback?.avoid || []).map((a) => normName(a.name)).filter(Boolean)
   );
@@ -777,7 +777,7 @@ export async function discover(
   };
 
   // Creator/social searches lean entirely on roundup articles, so pull more
-  // candidates per query and crawl each page deeper — advanced depth returns
+  // candidates per query and crawl each page deeper, advanced depth returns
   // richer content, which is exactly what the multi-person listicle extractor
   // reads to pull many creators out of one article. Everything else stays on
   // the cheaper basic depth.
@@ -864,7 +864,7 @@ export async function discover(
         continue;
       }
       if (!r.people.length) {
-        // The listicle extractor said "no reachable creators here" — log it as
+        // The listicle extractor said "no reachable creators here", log it as
         // a skip so it's visible in the filter panel, don't retry with the
         // single-person extractor.
         logSkip(r.cand.title, r.cand.url, "listicle produced no reachable creators");
@@ -928,7 +928,7 @@ export async function discover(
       const r = rec as any;
       // Backstop for the "name mentioned in an article about their program" case:
       // if we've got a person with no email, no LinkedIn/handle, and no known
-      // channel, there's no real way to reach them — skip. Company Portal / staff
+      // channel, there's no real way to reach them, skip. Company Portal / staff
       // pages / etc. still pass because their channel isn't "Unknown".
       if (ttype === "person") {
         const channel = String(r.channel || "").toLowerCase();
@@ -952,7 +952,7 @@ export async function discover(
       }
       // Same-person detection across articles: match either the normalized
       // name or the same LinkedIn/Twitter/Instagram handle. When we hit one,
-      // don't drop the article — attach it as another source on the existing
+      // don't drop the article, attach it as another source on the existing
       // opp so the user can see every place we found this person.
       const dupIdx = opps.findIndex((o) => {
         if (nm && normName(o.name) === nm) return true;
@@ -1129,7 +1129,7 @@ export async function discover(
   //
   // IMPORTANT: only cap PERSONAL outreach (networking, PR, individual contacts).
   // Job/internship postings are MEANT to receive many applicants, so there is no
-  // cap on those — everyone can and should apply to the same opening.
+  // cap on those, everyone can and should apply to the same opening.
   let kept = opps;
   let skippedCapped = 0;
   if (!isJobUseCase(useCase)) {

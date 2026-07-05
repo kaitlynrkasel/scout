@@ -50,9 +50,9 @@ export async function POST(req: NextRequest) {
       `USE CASE: ${useCase || "(unspecified)"}\n` +
       `DECIDED FINDS: ${decided}\n` +
       `DENY RATE: ${pct(denyRate)}\n` +
-      `AVG FIT — kept: ${keptFit != null ? pct(keptFit) : "n/a"}, denied: ${deniedFit != null ? pct(deniedFit) : "n/a"}\n` +
+      `AVG FIT, kept: ${keptFit != null ? pct(keptFit) : "n/a"}, denied: ${deniedFit != null ? pct(deniedFit) : "n/a"}\n` +
       `DENY REASONS (bucketed, most common first): ${fmtPairs(deniedReasons)}\n` +
-      `CHANNELS — kept: ${fmtPairs(keptChannels)} | denied: ${fmtPairs(deniedChannels)}\n` +
+      `CHANNELS, kept: ${fmtPairs(keptChannels)} | denied: ${fmtPairs(deniedChannels)}\n` +
       `REPLY RATE: ${replyRate != null ? `${pct(replyRate)} (${repliedCount}/${sentCount} tracked)` : "not enough tracked sends yet"}`;
 
     const sys =
@@ -60,14 +60,14 @@ export async function POST(req: NextRequest) {
       `discovery engine's search/extraction prompts based on REAL usage data from one account. The engine lives in ` +
       `lib/discover.ts: planQueries() builds web-search queries from the goal + user profile, and extract()'s fitRules ` +
       `judge is_relevant/fit_score for each search result. Your job is to translate the DATA below into 2 to 4 concrete, ` +
-      `specific directives referencing the actual numbers — e.g. "34% of denials cite wrong location; tighten the ` +
+      `specific directives referencing the actual numbers, e.g. "34% of denials cite wrong location; tighten the ` +
       `LOCATION ALIGNMENT clause in extract()'s fitRules to penalize fit_score below 0.25, not just deprioritize, when ` +
       `the result's location clearly conflicts with the user's stated location." Ground every directive in a specific ` +
-      `number from the data — never generic advice like "improve relevance." If kept-vs-denied fit scores are close ` +
+      `number from the data, never generic advice like "improve relevance." If kept-vs-denied fit scores are close ` +
       `together (a small gap), call that out explicitly as evidence fit_score isn't discriminating well and needs a ` +
       `sharper rubric. If a channel is denied far more than kept, flag it. If reply rate is available and low, note ` +
       `that outreach volume isn't the bottleneck, targeting quality is. Write it as an instruction addressed to Claude ` +
-      `Code ("Open lib/discover.ts and...") — a developer will paste this directly into a coding session. Keep it under ` +
+      `Code ("Open lib/discover.ts and..."), a developer will paste this directly into a coding session. Keep it under ` +
       `200 words, no preamble, no markdown headers, just the directives as short paragraphs or a tight list.`;
 
     const prompt = await claudeJson(sys, dataBlock);

@@ -1,25 +1,25 @@
 // Closed-loop auto-tuning: reads real deny-reason data from the owner's own
-// account, and — only once it crosses a confidence threshold — edits ONE named
+// account, and, only once it crosses a confidence threshold, edits ONE named
 // tunable clause in lib/discover.ts and commits it straight to main. No human
 // review step, by design (see the chat that asked for "fully autonomous").
 // The safety net is scope, not review: this can ONLY ever replace the full
 // value of one of the TUNABLE_*_CLAUSE constants below, never arbitrary code,
 // and every edit is validated for structural sanity before it's committed.
 
-// Confidence gate — tune these three numbers to change how reckless this is.
+// Confidence gate, tune these three numbers to change how reckless this is.
 export const MIN_DECIDED = 20; // sample size floor before any auto-tune can fire
 export const MIN_BUCKET_SHARE = 0.3; // a deny-reason bucket must be this share of denials
 export const COOLDOWN_DAYS = 7; // minimum time between auto-tunes
 
 // The only two edit sites this system is allowed to touch. Each name must
-// match an `export const NAME = \`...\`;` statement in lib/discover.ts —
+// match an `export const NAME = \`...\`;` statement in lib/discover.ts, 
 // exactly one backtick-delimited string, so regex extraction/replacement is
 // unambiguous. Adding a new tunable clause means: (1) extract it into a named
 // const in discover.ts the same way, (2) add an entry here.
 export interface TunableSlot {
   constName: string;
   label: string;
-  // Which bucketed deny-reason label(s) this clause is responsible for —
+  // Which bucketed deny-reason label(s) this clause is responsible for, 
   // used to decide which slot to edit when a bucket dominates.
   reasonBuckets: string[];
 }
@@ -126,7 +126,7 @@ export function slotForSignal(signal: TuningSignal): TunableSlot | null {
 // to every user. This is the OTHER tier: a per-request prompt override built
 // fresh from THIS user's own signal, injected at the end of discover()'s
 // prompts (see lib/discover.ts) so it wins over the universal baseline by
-// being the most specific, most recent instruction — same mechanism
+// being the most specific, most recent instruction, same mechanism
 // coaching/dismissedAdvice already use for drafting. No LLM call, no commit,
 // nothing to review: it's just data, formatted as a directive, gone the
 // moment the request finishes. Reuses the SAME threshold as a floor so it
@@ -139,7 +139,7 @@ export function buildPersonalOverride(signal: TuningSignal): string {
       ? ` This user's kept/denied avg fit is ${Math.round(signal.keptFit * 100)}%/${Math.round(signal.deniedFit * 100)}%.`
       : "";
   return (
-    `PERSONAL CALIBRATION for this specific user (their own decision history — this takes priority over the general ` +
+    `PERSONAL CALIBRATION for this specific user (their own decision history, this takes priority over the general ` +
     `rules above when they conflict): of their last ${signal.decided} decided finds, "${b.label}" is the reason ` +
     `${Math.round(b.share * 100)}% of the time they pass (${b.count} instances). Weigh this failure mode more heavily ` +
     `for this search than the general instruction above.${fitNote}`
@@ -147,7 +147,7 @@ export function buildPersonalOverride(signal: TuningSignal): string {
 }
 
 // ---- Safe extraction / replacement of one tunable const's value ----
-// Matches `export const NAME =\n  \`...content...\`;` — content must not
+// Matches `export const NAME =\n  \`...content...\`;`, content must not
 // itself contain a backtick (enforced by generateNewClause below).
 function slotRegex(constName: string): RegExp {
   return new RegExp(`export const ${constName} =\\s*\`([\\s\\S]*?)\`;`);
@@ -170,7 +170,7 @@ export function replaceSlotValue(
   return fileText.replace(re, `export const ${constName} =\n  \`${safe}\`;`);
 }
 
-// Structural sanity check on the WHOLE file after a slot replacement — this
+// Structural sanity check on the WHOLE file after a slot replacement, this
 // is what stands in for human review. Fails closed: any doubt, skip the commit.
 export function sanityCheck(original: string, revised: string): { ok: boolean; reason?: string } {
   if (!revised.trim()) return { ok: false, reason: "revised file is empty" };
@@ -178,7 +178,7 @@ export function sanityCheck(original: string, revised: string): { ok: boolean; r
   if (lenRatio < 0.85 || lenRatio > 1.15) {
     return { ok: false, reason: `file size changed by ${Math.round((lenRatio - 1) * 100)}%, expected a small in-place edit` };
   }
-  // Every export the file had before must still be there — a corrupted edit
+  // Every export the file had before must still be there, a corrupted edit
   // that clobbers a function boundary would drop one of these.
   const exportNames = Array.from(original.matchAll(/export (?:async )?function (\w+)/g)).map(
     (m) => m[1]
@@ -193,7 +193,7 @@ export function sanityCheck(original: string, revised: string): { ok: boolean; r
       return { ok: false, reason: `${slot.constName} is missing from the revised file` };
     }
   }
-  // Backtick count must stay even — an unterminated template literal is the
+  // Backtick count must stay even, an unterminated template literal is the
   // single most likely way a naive edit breaks the build.
   const backticks = (revised.match(/`/g) || []).length;
   if (backticks % 2 !== 0) {

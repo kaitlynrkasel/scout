@@ -79,7 +79,7 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
 
 // Grant free-forever (comp) access: store a 'pro'/'active' subscription tagged
 // so it's unlimited and distinguishable from a real Stripe subscription. No
-// migration needed — reuses existing columns. Idempotent per user.
+// migration needed, reuses existing columns. Idempotent per user.
 export async function redeemComp(uid: string, code: string): Promise<string | null> {
   if (!supabaseAdmin) return "Accounts aren't configured yet.";
   const { error } = await supabaseAdmin.from("subscriptions").upsert(

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 
-// Inter — a clean, neutral, highly legible UI sans in the spirit of Claude's
+// Inter, a clean, neutral, highly legible UI sans in the spirit of Claude's
 // interface (whose actual face, Styrene, is proprietary). Full weight range,
 // self-hosted by next/font at build time.
 const sans = Inter({

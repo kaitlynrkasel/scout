@@ -20,7 +20,7 @@ export function setRememberMe(remember: boolean) {
   try {
     localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
   } catch {
-    /* storage unavailable — default (remember) applies */
+    /* storage unavailable, default (remember) applies */
   }
 }
 

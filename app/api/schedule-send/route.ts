@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
   if (!sendAtDate || Number.isNaN(sendAtDate.getTime())) {
     return NextResponse.json({ error: "Invalid send time." }, { status: 400 });
   }
-  // Guard against absurd future dates — a year is more than enough headroom for
+  // Guard against absurd future dates, a year is more than enough headroom for
   // outreach; anything past that is almost certainly a typo.
   const oneYear = 365 * 86400 * 1000;
   if (sendAtDate.getTime() > Date.now() + oneYear) {
@@ -46,7 +46,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Confirm the user actually has that provider connected — no point queueing
+  // Confirm the user actually has that provider connected, no point queueing
   // a message we couldn't send when the cron fires.
   const conn = await supabaseAdmin
     .from(provider === "gmail" ? "gmail_connections" : "outlook_connections")

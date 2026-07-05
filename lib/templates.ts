@@ -2,7 +2,7 @@ import type { Template, TemplateKey } from "./types";
 
 // The "one engine, multiple templates" core. Each template is the same kind of
 // config object your Internship Scout used (PROFILES) and your Anna Belt Scout
-// used (CONFIG_DEFAULTS) — just data. Adding a new vertical = adding an entry here.
+// used (CONFIG_DEFAULTS), just data. Adding a new vertical = adding an entry here.
 
 export const TEMPLATES: Record<TemplateKey, Template> = {
   networking: {
@@ -12,7 +12,7 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
     targetNoun: "people",
     goalPlaceholder: "e.g. brand partnerships leads at consumer beauty startups",
     aboutPlaceholder:
-      "A sentence or two about you — who you are and what you're hoping to learn.",
+      "A sentence or two about you, who you are and what you're hoping to learn.",
     exampleGoal: "brand partnerships leads at consumer beauty and wellness startups",
     exampleAbout:
       "I run marketing for a small indie beauty brand and I'm hoping to learn from people doing partnerships and PR at bigger consumer brands.",
@@ -36,7 +36,7 @@ export const TEMPLATES: Record<TemplateKey, Template> = {
       "Your background, skills, school/role, and what you're looking for.",
     exampleGoal: "find me a job or internship in my field",
     exampleAbout:
-      "A professional with a few years of experience in marketing and communications, strong in social media, writing, and campaign strategy — open to full-time roles and stretch internships that build a new specialty.",
+      "A professional with a few years of experience in marketing and communications, strong in social media, writing, and campaign strategy, open to full-time roles and stretch internships that build a new specialty.",
     queryTails: [
       "{goal} apply",
       "{goal} hiring",

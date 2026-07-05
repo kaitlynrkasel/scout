@@ -49,7 +49,7 @@ export interface Opportunity {
   sourceTitle: string;
   sourceSnippet: string;
   // All the articles/pages that mentioned this person, in the order they were
-  // found. Older opps saved before this field existed have `sources` undefined —
+  // found. Older opps saved before this field existed have `sources` undefined, 
   // reader code should treat that as [{ title: sourceTitle, url }].
   sources?: SourceRef[];
 }

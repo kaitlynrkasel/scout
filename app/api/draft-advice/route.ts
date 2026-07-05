@@ -5,7 +5,7 @@ import { ApiCreditError } from "@/lib/apiErrors";
 export const runtime = "nodejs";
 export const maxDuration = 60; // reads many drafts + one Claude pass; scales with draft count
 
-// Read the user's own recent drafts and coach them on their actual writing —
+// Read the user's own recent drafts and coach them on their actual writing, 
 // specific observations about THESE messages, not generic outreach tips.
 export async function POST(req: NextRequest) {
   try {
@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
     const sys =
       "You are a warm, sharp outreach coach reviewing someone's real messages. " +
       "Return ONLY a JSON object {\"tips\": [{\"title\": string, \"advice\": string}]} with 3 to 5 tips. " +
-      "Every tip must come from patterns you actually see in THESE drafts — quote or reference " +
+      "Every tip must come from patterns you actually see in THESE drafts, quote or reference " +
       "short phrases from them so the person can see exactly what you mean. Point out what's working, " +
       "not just problems. Weigh outcomes heavily: when some drafts GOT A REPLY and others didn't, " +
       "identify what the replied ones do differently and tell the person to do more of that. " +

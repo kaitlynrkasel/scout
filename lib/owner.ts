@@ -1,6 +1,6 @@
 // Owner-only backdoor for the Insights tab. Reads a comma-separated allowlist
 // from the SCOUT_OWNER_EMAILS env var (case-insensitive). Anyone whose signed-in
-// email isn't on the list is treated as a normal user — the tab is hidden and
+// email isn't on the list is treated as a normal user, the tab is hidden and
 // the admin API route rejects them.
 
 function ownerEmails(): Set<string> {

@@ -5,7 +5,7 @@ import { isOwnerEmail } from "@/lib/owner";
 export const maxDuration = 60; // walks every user_state row; scales with user count
 export const dynamic = "force-dynamic";
 
-// GET /api/admin/insights — owner-only aggregate across every user's AppState.
+// GET /api/admin/insights, owner-only aggregate across every user's AppState.
 // Walks the user_state table, parses each row's `finds` array, and tallies
 // denials, approvals, deny reasons, top denied hosts, per-use-case rates, and
 // the raw denial list (capped) so we can tune the extract + filter logic

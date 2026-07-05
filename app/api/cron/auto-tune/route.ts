@@ -21,16 +21,16 @@ export const dynamic = "force-dynamic";
 const DISCOVER_PATH = "lib/discover.ts";
 
 // Fully autonomous algorithm tuning: checks the owner account's real search
-// outcomes against a confidence gate (lib/autotune.ts), and — only when it
-// clears that gate and the cooldown has elapsed — edits ONE named tunable
+// outcomes against a confidence gate (lib/autotune.ts), and, only when it
+// clears that gate and the cooldown has elapsed, edits ONE named tunable
 // clause in lib/discover.ts and commits it to main, no human review. Vercel's
 // existing git integration deploys it from there. See the chat that requested
 // this ("fully autonomous, no review") for the reasoning and chosen
 // thresholds (MIN_DECIDED=20, MIN_BUCKET_SHARE=0.3, COOLDOWN_DAYS=7).
 //
-// Every applied edit is (a) logged to the auto_tune_log table — the
+// Every applied edit is (a) logged to the auto_tune_log table, the
 // before/after clause text, the data that triggered it, and the GitHub commit
-// link — surfaced in-app as the algorithm change log, and (b) emailed to the
+// link, surfaced in-app as the algorithm change log, and (b) emailed to the
 // owner's connected mailbox as a best-effort notification. The log write is
 // the source of truth; email failing never blocks it.
 export async function GET(req: NextRequest) {
@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ skipped: true, reason: "SCOUT_OWNER_EMAILS not set." });
   }
 
-  // Find the owner's user id(s) — auto-tune only ever reads the account(s)
+  // Find the owner's user id(s), auto-tune only ever reads the account(s)
   // that are actually driving this decision, never other users' data.
   const { data: userList, error: userErr } = await supabaseAdmin.auth.admin.listUsers({
     perPage: 200,
@@ -80,7 +80,7 @@ export async function GET(req: NextRequest) {
 }
 
 async function runForUser(userId: string, ownerEmail: string) {
-  // Cooldown lives in the audit log itself (most recent row's timestamp) —
+  // Cooldown lives in the audit log itself (most recent row's timestamp), 
   // single source of truth, no separate state field that could drift from it.
   const { data: lastEntry } = await supabaseAdmin!
     .from("auto_tune_log")
@@ -135,7 +135,7 @@ async function runForUser(userId: string, ownerEmail: string) {
 
   const sys =
     `You tighten ONE instructional clause inside an outreach-discovery engine's fit-scoring prompt, based on real deny ` +
-    `data. Return ONLY the revised clause text — no backticks, no code, no markdown, no preamble, one paragraph, same ` +
+    `data. Return ONLY the revised clause text, no backticks, no code, no markdown, no preamble, one paragraph, same ` +
     `ALL-CAPS label prefix style as the original (e.g. "LOCATION ALIGNMENT: ..."). Make it more specific and stricter ` +
     `about the failure mode the data shows, without changing what it's fundamentally judging. Keep it roughly the same ` +
     `length as the original.`;
@@ -144,14 +144,14 @@ async function runForUser(userId: string, ownerEmail: string) {
     `DATA: of ${signal.decided} decided finds, ${signal.denied} were denied. The dominant deny reason is ` +
     `"${signal.topBucket!.label}" at ${signal.topBucket!.count} of the bucketed denials (${Math.round(signal.topBucket!.share * 100)}% share). ` +
     (signal.keptFit != null && signal.deniedFit != null
-      ? `Avg fit score: kept ${Math.round(signal.keptFit * 100)}%, denied ${Math.round(signal.deniedFit * 100)}% — ` +
+      ? `Avg fit score: kept ${Math.round(signal.keptFit * 100)}%, denied ${Math.round(signal.deniedFit * 100)}%, ` +
         `a gap under 10 points means fit_score isn't discriminating well; push denied cases in this failure mode lower. `
       : "") +
     `Revise the clause so it penalizes this failure mode more decisively.`;
 
   let newClause = (await claudeJson(sys, user)).trim();
   if (newClause.includes("`")) {
-    return { userId, applied: false, reason: "generated clause contained a backtick — refused to risk a broken template literal" };
+    return { userId, applied: false, reason: "generated clause contained a backtick, refused to risk a broken template literal" };
   }
   if (!newClause) {
     return { userId, applied: false, reason: "model returned an empty clause" };
@@ -172,7 +172,7 @@ async function runForUser(userId: string, ownerEmail: string) {
     `of denials (${signal.topBucket!.count} instances). Kept/denied avg fit: ` +
     `${signal.keptFit != null ? Math.round(signal.keptFit * 100) : "n/a"}% / ` +
     `${signal.deniedFit != null ? Math.round(signal.deniedFit * 100) : "n/a"}%.\n\n` +
-    `Autonomous edit, no human review — see lib/autotune.ts.`;
+    `Autonomous edit, no human review, see lib/autotune.ts.`;
   const { commitUrl } = await putFile(DISCOVER_PATH, revised, sha, commitMessage);
 
   await supabaseAdmin!.from("auto_tune_log").insert({
@@ -191,7 +191,7 @@ async function runForUser(userId: string, ownerEmail: string) {
 }
 
 // Best-effort email through whichever mailbox the owner has connected. Never
-// throws — the log entry above is the actual record; this is just the alert.
+// throws, the log entry above is the actual record; this is just the alert.
 async function notifyOwner(
   userId: string,
   ownerEmail: string,
@@ -205,7 +205,7 @@ async function notifyOwner(
   const subject = `Scout auto-tuned itself: ${label}`;
   const body =
     `Scout's search algorithm just tuned itself, no review, straight to production.\n\n` +
-    `WHAT CHANGED — ${label}\n\n` +
+    `WHAT CHANGED, ${label}\n\n` +
     `BEFORE:\n${oldClause}\n\n` +
     `AFTER:\n${newClause}\n\n` +
     `WHY: of ${signal.decided} decided finds, "${signal.topBucket?.label}" was ${Math.round((signal.topBucket?.share || 0) * 100)}% of denials ` +

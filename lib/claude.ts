@@ -1,5 +1,5 @@
 // Anthropic wrapper + the loose-JSON parser, ported from claudeJson() and
-// parseJsonLoose() in your scripts (07_Discovery.gs). No SDK needed — one fetch.
+// parseJsonLoose() in your scripts (07_Discovery.gs). No SDK needed, one fetch.
 
 import { classifyApiError } from "./apiErrors";
 
@@ -99,8 +99,8 @@ function escapeRawControlCharsInJsonStrings(s: string): string {
 export function noDash(s: string): string {
   return (
     String(s == null ? "" : s)
-      // Every real dash character: em —, en –, figure ‒, horizontal bar ―,
-      // minus −, plus the small/fullwidth variants, with any surrounding
+      // Every real dash character: em, , en, , figure, , horizontal bar, ,
+      // minus, , plus the small/fullwidth variants, with any surrounding
       // whitespace, collapses to a comma.
       .replace(/\s*[‒–—―−﹘﹣－]\s*/g, ", ")
       // A spaced double-hyphen used as an em-dash stand-in ("soon -- Kaitlyn"),

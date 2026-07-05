@@ -5,7 +5,7 @@ import { outlookSendOrDraft } from "@/lib/outlook";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
-// Never cache — the cron runs on a schedule and must see the current queue.
+// Never cache, the cron runs on a schedule and must see the current queue.
 export const dynamic = "force-dynamic";
 
 // Vercel Cron target. Runs on the schedule set in vercel.json and drains any
@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
         throw new Error(`No ${provider} connection.`);
       }
 
-      // Attachment stored as { name, mime, dataUrl } — unpack to base64 for
+      // Attachment stored as { name, mime, dataUrl }, unpack to base64 for
       // the provider send helpers, same shape as the /api/gmail/send route.
       let att: { name: string; mime: string; dataBase64: string } | undefined;
       const raw = row.attachment as any;
@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       // Best-effort: mark the corresponding Find as sent so the user's UI
       // matches reality after their next hydrate. We only have the string
       // find_id (Scout's local key), which lives inside the user_state JSON
-      // blob — updating that safely is a big diff, so we skip it here. On
+      // blob, updating that safely is a big diff, so we skip it here. On
       // next login the client's own status-badge on that find can be
       // re-checked, or the send tracker (Gmail thread id) will catch replies.
 

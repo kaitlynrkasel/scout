@@ -11,7 +11,7 @@ export const maxDuration = 120; // two Tavily searches + one Claude pass
 // outlet so the facts reflect what's happening now, not what was in the
 // original discovery snippet.
 //
-// Returns categorized FACTS about the opportunity — never invented questions
+// Returns categorized FACTS about the opportunity, never invented questions
 // to ask. If Tavily or Claude fails, degrades to whatever was already in the
 // opp record so we still hand back something useful.
 export async function POST(req: NextRequest) {
@@ -62,16 +62,16 @@ export async function POST(req: NextRequest) {
       "Each element is ONE concrete, TRUE fact about the contact or their outlet drawn from the SEARCH SOURCES below " +
       "OR from the KNOWN CONTEXT. Never invent details. If a claim comes from a source, set sourceIdx to that source's " +
       "number; if it comes from the known context and you have no source, leave sourceIdx null. Never ask questions, " +
-      "never give advice — every element is a FACT the user can quietly reference during a meeting to sound informed. " +
+      "never give advice, every element is a FACT the user can quietly reference during a meeting to sound informed. " +
       "\n\nCategories to spread across (aim for 6 to 9 total facts, mix and match):\n" +
-      "- 'About their work' — role, focus areas, recent projects, career highlights\n" +
-      "- 'Recent news' — announcements, launches, awards, hires, moves in the last ~6 months\n" +
-      "- 'Outlet context' — what their company / publication is known for, market position, notable clients or reach\n" +
-      "- 'Common ground' — genuine overlaps between the user's background (see ABOUT THE USER) and this contact\n" +
-      "- 'Priorities right now' — what they seem focused on lately, based on what they've published or shipped\n" +
+      "- 'About their work', role, focus areas, recent projects, career highlights\n" +
+      "- 'Recent news', announcements, launches, awards, hires, moves in the last ~6 months\n" +
+      "- 'Outlet context', what their company / publication is known for, market position, notable clients or reach\n" +
+      "- 'Common ground', genuine overlaps between the user's background (see ABOUT THE USER) and this contact\n" +
+      "- 'Priorities right now', what they seem focused on lately, based on what they've published or shipped\n" +
       "\nSkip categories if there's no honest fact for them. Do NOT pad with generic filler ('they seem interesting'). " +
       "If the sources are thin, return fewer facts rather than making things up. Facts must be concrete: specific " +
-      "project names, real numbers, dated announcements, named collaborators — not vague adjectives.";
+      "project names, real numbers, dated announcements, named collaborators, not vague adjectives.";
 
     const known =
       `KNOWN CONTEXT (from the original Scout find, treat as verified):\n` +
@@ -92,7 +92,7 @@ export async function POST(req: NextRequest) {
                 `[${s.idx}] ${s.title}\n${s.url}\n${s.content.replace(/\s+/g, " ").trim()}`
             )
             .join("\n\n")
-        : "(no fresh sources found — rely on KNOWN CONTEXT and return only well-supported facts)");
+        : "(no fresh sources found, rely on KNOWN CONTEXT and return only well-supported facts)");
 
     let facts: Array<{ category: string; fact: string; sourceIdx?: number | null }> = [];
     try {

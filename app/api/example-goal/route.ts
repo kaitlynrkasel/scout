@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
     const uc = String(useCase || "").trim();
     const aboutStr = String(about || "").trim();
 
-    // Nothing to personalize from — let the client keep its static placeholder.
+    // Nothing to personalize from, let the client keep its static placeholder.
     if (!aboutStr) {
       return NextResponse.json({ example: "" });
     }
@@ -29,14 +29,14 @@ export async function POST(req: NextRequest) {
       `You write ONE short example search phrase for an outreach tool's input placeholder. ` +
       `It shows greyed-out as "e.g. <phrase>" to inspire the user, so it must read like something THEY would plausibly type. ` +
       `Requirements: ` +
-      `(1) It is specific to the USER'S OWN industry/field/city — infer these from ABOUT THE USER; never generic. ` +
+      `(1) It is specific to the USER'S OWN industry/field/city, infer these from ABOUT THE USER; never generic. ` +
       `(2) It matches the CATEGORY of search they're about to run (the kind of contact/target that category names). ` +
       `(3) It is concrete and reachable: name the target type + a sharpening detail (sub-niche, company size/stage, ` +
-      `a city, or a needed contact channel) — the kind of specifics that make discovery work well. ` +
+      `a city, or a needed contact channel), the kind of specifics that make discovery work well. ` +
       `(4) 6 to 14 words, lowercase, no trailing period, no "e.g." prefix (that's added by the UI), no quotes. ` +
       `(5) NEVER use em-dashes. ` +
       `Return ONLY JSON {"example": string}. ` +
-      `Examples of the STYLE (do not copy — tailor to THIS user): "indie folk spotify playlist curators accepting submissions", ` +
+      `Examples of the STYLE (do not copy, tailor to THIS user): "indie folk spotify playlist curators accepting submissions", ` +
       `"boutique fitness studios in austin we could sell our booking software to", "seed-stage fintech founders open to a quick intro call". ` +
       (salt
         ? `Variation seed "${String(salt).slice(0, 40)}": pick a DIFFERENT valid angle/segment than a generic run would, so two similar users get different examples. `

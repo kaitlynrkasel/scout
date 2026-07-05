@@ -43,7 +43,7 @@ const OUTREACH_KINDS = [
 
 // Suggested categories of search, seeded from the profile's use case. Users can
 // add their own and remove any of these, so the options become their own.
-// Keyed by ucKey() — the deep presets have tailored sets; anything else falls
+// Keyed by ucKey(), the deep presets have tailored sets; anything else falls
 // back to GENERIC_SUGGESTIONS.
 const SUGGESTED: Record<string, { name: string; goal: string }[]> = {
   networking: [
@@ -140,7 +140,7 @@ const ACT_KEY = "scout_activity";
 const FINDS_KEY = "scout_finds";
 const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
-// Advice the user marked "Not helpful" — the negative mirror of COACH_KEY.
+// Advice the user marked "Not helpful", the negative mirror of COACH_KEY.
 // Same key OutreachAdvice used to hide dismissed tips locally; lifted to
 // top-level state so drafting can also avoid what the user rejected.
 const DISMISSED_ADVICE_KEY = "scout_dismissed_tips";
@@ -172,7 +172,7 @@ const TOUR_STEPS: TourStep[] = [
     tab: "dashboard",
     target: "nav-dashboard",
     title: "Your Dashboard",
-    body: "Your home base — a snapshot of activity, saved templates, and coaching tips that sharpen every draft over time.",
+    body: "Your home base, a snapshot of activity, saved templates, and coaching tips that sharpen every draft over time.",
   },
   {
     tab: "outreach",
@@ -184,13 +184,13 @@ const TOUR_STEPS: TourStep[] = [
     tab: "outreach",
     target: "project-switcher",
     title: "Projects: one workspace per goal",
-    body: "A project is a self-contained workspace — one per client, brand, or goal. Each keeps its own categories, finds, and context so pitches sound like they're really about that project.",
+    body: "A project is a self-contained workspace, one per client, brand, or goal. Each keeps its own categories, finds, and context so pitches sound like they're really about that project.",
   },
   {
     tab: "outreach",
     target: "category-switcher",
     title: "Categories: presets for each kind of search",
-    body: "Inside a project, categories are reusable search presets — e.g. \"brand partnerships\" vs \"press writers\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
+    body: "Inside a project, categories are reusable search presets, e.g. \"brand partnerships\" vs \"press writers\" vs \"software engineering internships.\" Pick one to shape who Scout looks for, or type your own goal for a one-off search.",
   },
   {
     tab: "finds",
@@ -280,7 +280,7 @@ const EDU_STATUS_LABEL: Record<Exclude<EducationStatus, "">, string> = {
   graduated: "Graduated",
 };
 
-// Chosen once at first sign-in (blocking) and never toggled afterward — it
+// Chosen once at first sign-in (blocking) and never toggled afterward, it
 // decides which onboarding + profile shape the user gets. "" = not chosen yet,
 // which is what gates the app behind the account-type modal.
 type AccountType = "" | "individual" | "company";
@@ -330,9 +330,9 @@ interface Project {
   id: string;
   name: string;
   useCase: string;
-  context: string; // who this outreach is for — fed into discovery + drafting
+  context: string; // who this outreach is for, fed into discovery + drafting
   // Optional per-project email signature. Falls back to the account-wide
-  // default (SIG_KEY/profile signature) when unset — different projects can
+  // default (SIG_KEY/profile signature) when unset, different projects can
   // sign off as different people/brands without touching the global default.
   signature?: string;
 }
@@ -343,7 +343,7 @@ interface Category {
   projectId: string; // categories belong to a project
   // Which contact channels this search should try to come back with (values
   // from CONTACT_CHANNELS below, e.g. ["email","phone"]). Empty/undefined =
-  // no specific preference — Scout returns whatever it finds.
+  // no specific preference, Scout returns whatever it finds.
   wantedChannels?: string[];
 }
 
@@ -355,7 +355,7 @@ const CONTACT_CHANNELS: { key: string; label: string; hint: string }[] = [
   { key: "website", label: "Website", hint: "a website link" },
 ];
 
-// Read the value on an Opportunity for one of the CONTACT_CHANNELS keys —
+// Read the value on an Opportunity for one of the CONTACT_CHANNELS keys, 
 // shared by the find card and detail modal's "requested contact info" sections.
 function channelValue(o: Opportunity, key: string): string {
   if (key === "email") return o.contactEmail || "";
@@ -376,8 +376,8 @@ interface Find {
   opp: Opportunity;
   draft?: Draft;
   addedAt: number;
-  gmailThreadId?: string; // set when sent/drafted via Gmail — enables reply tracking
-  outlookThreadId?: string; // Outlook conversation id — enables reply tracking
+  gmailThreadId?: string; // set when sent/drafted via Gmail, enables reply tracking
+  outlookThreadId?: string; // Outlook conversation id, enables reply tracking
   denyReason?: string; // why the user passed on this find
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
@@ -385,7 +385,7 @@ interface Find {
   scanned?: boolean; // deep-scan has already run on this find's site
   pinned?: boolean; // pinned to the top of the finds list
   scheduledSendAt?: string; // ISO timestamp: when the queued send will fire (via cron)
-  // Meeting / interview prep — factual highlights about the contact + outlet,
+  // Meeting / interview prep, factual highlights about the contact + outlet,
   // fetched via a fresh Tavily + Claude pass after the user updates status to
   // "sent" or "replied". Persists so re-opening the find shows the same facts.
   meetingPrep?: {
@@ -424,7 +424,7 @@ const DENY_REASONS = [
 
 // Same normalization the discover engine uses so IDs match across the boundary.
 // Strips role suffixes (", VP of…", " at Acme", " (Head of X)"), honorifics,
-// name suffixes, and middle names/initials — then keeps first + last token.
+// name suffixes, and middle names/initials, then keeps first + last token.
 // So "John Smith", "John J. Smith", "John Smith, Marketing Lead", and
 // "Dr. John Smith Jr" all collapse to "johnsmith".
 function normNameKey(s: string): string {
@@ -577,7 +577,7 @@ function LocalShell() {
 function AuthedShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
-  // Set when the user arrives via a password-reset email link — shows the
+  // Set when the user arrives via a password-reset email link, shows the
   // "set a new password" screen even though a (recovery) session now exists.
   const [recovery, setRecovery] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
@@ -593,7 +593,7 @@ function AuthedShell() {
 
   // When the tab is about to go away (backgrounded, minimized, phone locked,
   // navigated), fire any pending saves immediately. visibilitychange==hidden
-  // is the reliable cross-browser signal — beforeunload gets killed on mobile.
+  // is the reliable cross-browser signal, beforeunload gets killed on mobile.
   useEffect(() => {
     if (!supabase) return;
     const flush = () => {
@@ -678,7 +678,7 @@ function AuthedShell() {
             localExtras.competitiveness = parsed.competitiveness;
         }
       } catch {
-        /* localStorage unavailable — nothing to migrate */
+        /* localStorage unavailable, nothing to migrate */
       }
       const raw = { ...localExtras, ...remoteExtras };
       // AppState stores companySize/competitiveness as string; narrow to the
@@ -854,7 +854,7 @@ function ScoutTool({
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
   // When discovery started (ms epoch), so the progress bar can resume at the
-  // right % after tab switches — SearchProgress is scoped to the Outreach tab
+  // right % after tab switches, SearchProgress is scoped to the Outreach tab
   // and remounts when the user comes back.
   const [discoverStartedAt, setDiscoverStartedAt] = useState<number | null>(null);
   const [drafting, setDrafting] = useState(false);
@@ -874,7 +874,7 @@ function ScoutTool({
   const [redraftBusyId, setRedraftBusyId] = useState("");
   // The refine box above Messages: you type an instruction ("make these
   // shorter", "more casual", "mention I'm a recent grad") and it rewrites every
-  // draft shown. Scout does NOT chat back — it just applies the change.
+  // draft shown. Scout does NOT chat back, it just applies the change.
   // redraftChat is only a log of the instructions you've sent, so you can see
   // what you've already asked for.
   const [redraftInstruction, setRedraftInstruction] = useState("");
@@ -890,7 +890,7 @@ function ScoutTool({
   const [expanded, setExpanded] = useState(false);
 
   // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
-  // to wag. Proximity, not hover — it starts as you head that way. Throttled
+  // to wag. Proximity, not hover, it starts as you head that way. Throttled
   // to one signal per ~350ms while near, and skipped under reduced-motion.
   const scoutBtnRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
@@ -940,11 +940,11 @@ function ScoutTool({
   // Coaching directives the user approved (applied to every draft) + the
   // before/after voice deltas learned from drafts they hand-edited.
   const [coaching, setCoaching] = useState<string[]>([]);
-  // Advice the user marked "Not helpful" — fed into drafting as things to
+  // Advice the user marked "Not helpful", fed into drafting as things to
   // avoid, the negative mirror of `coaching`.
   const [dismissedAdvice, setDismissedAdvice] = useState<string[]>([]);
   const [editPairs, setEditPairs] = useState<{ before: string; after: string }[]>([]);
-  // True after the user edits a draft while other un-sent drafts still exist —
+  // True after the user edits a draft while other un-sent drafts still exist, 
   // Scout can re-write those with the freshly-learned voice. Cleared once the
   // user runs the refresh (or has no other drafts left to update).
   const [voiceRefreshAvailable, setVoiceRefreshAvailable] = useState(false);
@@ -1067,7 +1067,7 @@ function ScoutTool({
 
     if (!projs.length) {
       // First run under the projects model. Create one empty project that
-      // invites the user to name it and set their own use case — no seeded
+      // invites the user to name it and set their own use case, no seeded
       // name from the profile, no inherited use case. Categories still seed
       // from a blank use case (falls to GENERIC_SUGGESTIONS) so the user has
       // something to work from immediately.
@@ -1136,7 +1136,7 @@ function ScoutTool({
       signature,
       // Ride the extras along in the JSON blob so they survive a redeploy.
       // The profiles table only has name/bio/useCase/linkedin; everything else
-      // lived in localStorage before this — which meant it evaporated on any
+      // lived in localStorage before this, which meant it evaporated on any
       // fresh hydrate.
       profileExtras: {
         accountType: profile.accountType,
@@ -1170,11 +1170,11 @@ function ScoutTool({
         return () => clearTimeout(t);
       }
     } catch {
-      /* localStorage unavailable — skip the tour rather than crash */
+      /* localStorage unavailable, skip the tour rather than crash */
     }
   }, []);
 
-  // Probe /api/admin/whoami on load. Server never leaks the allowlist —
+  // Probe /api/admin/whoami on load. Server never leaks the allowlist, 
   // returns { owner: false } for anyone not on it, so a normal customer
   // gets no hint the admin surface exists.
   useEffect(() => {
@@ -1191,7 +1191,7 @@ function ScoutTool({
         const body = await res.json();
         if (!cancelled) setIsOwner(!!body?.owner);
       } catch {
-        /* silent — user is just treated as non-owner */
+        /* silent, user is just treated as non-owner */
       }
     })();
     return () => {
@@ -1205,7 +1205,7 @@ function ScoutTool({
   }
 
   // Download everything Scout has stored for this user as one JSON file.
-  // Runs entirely client-side — nothing leaves the browser except the download.
+  // Runs entirely client-side, nothing leaves the browser except the download.
   function exportMyData() {
     try {
       const payload = {
@@ -1366,7 +1366,7 @@ function ScoutTool({
     if (Math.abs(a.length - b.length) < 8 && a.slice(0, 40) === b.slice(0, 40)) return;
     saveEditPairs([{ before: b, after: a }, ...editPairs].slice(0, 6));
     // If the user still has other un-sent drafts, offer to re-write them with
-    // this freshly-learned voice. Only "drafted" finds are eligible — sent or
+    // this freshly-learned voice. Only "drafted" finds are eligible, sent or
     // replied ones already went out and shouldn't change.
     const otherDrafts = finds.filter(
       (f) => f.id !== editedFindId && f.status === "drafted" && f.draft?.body
@@ -1749,7 +1749,7 @@ function ScoutTool({
   // into a real message the user can act on.
   async function parseApiResponse(res: Response): Promise<any> {
     const text = await res.text().catch(() => "");
-    // Empty body — trust the HTTP status.
+    // Empty body, trust the HTTP status.
     if (!text.trim()) {
       if (res.ok) return {};
       return {
@@ -1759,7 +1759,7 @@ function ScoutTool({
             : `Request failed (HTTP ${res.status}).`,
       };
     }
-    // Try JSON first — every well-behaved route returns it.
+    // Try JSON first, every well-behaved route returns it.
     try {
       return JSON.parse(text);
     } catch {
@@ -1883,7 +1883,7 @@ function ScoutTool({
       competitiveness?: string;
     }
   ) {
-    // Only fill fields the user hasn't set — a resume drop never overwrites
+    // Only fill fields the user hasn't set, a resume drop never overwrites
     // something they typed. Every field is optional coming from the API.
     setProfile((prev) => {
       const next: Profile = { ...prev };
@@ -1943,7 +1943,7 @@ function ScoutTool({
     resetResults();
   }
 
-  // A short, readable default name from a goal string — first few words, capped
+  // A short, readable default name from a goal string, first few words, capped
   // length. Used to auto-save a custom search as a category (see
   // autoSaveCustomSearch below); renameable anytime via the pencil.
   function deriveCategoryName(g: string): string {
@@ -1954,12 +1954,12 @@ function ScoutTool({
     return capped.charAt(0).toUpperCase() + capped.slice(1);
   }
 
-  // Every search you run is automatically saved as a category — no manual
+  // Every search you run is automatically saved as a category, no manual
   // "Save Search" step. If the "Custom search…" slot is still active, promote
   // the current goal to a real category now and select it. Returns the
   // category id to use for this run (existing catId, or the freshly created
   // one) since `catId` state won't reflect a same-tick setCatId until the next
-  // render — callers that create finds in this same pass need the fresh id.
+  // render, callers that create finds in this same pass need the fresh id.
   function autoSaveCustomSearch(): string {
     if (catId || !goal.trim()) return catId;
     const c: Category = {
@@ -2122,7 +2122,7 @@ function ScoutTool({
   // templates (no projectId) always apply; project-scoped ones apply to that
   // project; category-scoped ones only when that exact category is in play.
   // If a project has none of its own (and no global ones exist either), fall
-  // back to ALL the user's templates as a voice reference — a template saved
+  // back to ALL the user's templates as a voice reference, a template saved
   // under a different project is still real evidence of how this person
   // writes. Safe to borrow: draftFor's prompt already says to match voice, not
   // copy content, and to adapt every detail to the actual recipient.
@@ -2170,13 +2170,13 @@ function ScoutTool({
     .join(". ")
     .trim();
   // A light gate: a name OR a bio is enough to start. Resume and LinkedIn are
-  // optional — they just make outreach more personal.
+  // optional, they just make outreach more personal.
   const profileComplete = !!(profile.name.trim() || profile.bio.trim());
 
   // ---- Personalized "who are you looking for?" placeholder ----
   // The greyed-out example under the goal field is tailored to THIS user's
   // industry (from aboutText) and the category they're about to search, and it
-  // varies per person via their salt — so the example looks different for
+  // varies per person via their salt, so the example looks different for
   // everyone instead of being one static string. Falls back to the static
   // template placeholder until a personalized one loads (or if there's no
   // profile to personalize from). Cached per (useCase + category + profile) so
@@ -2234,9 +2234,9 @@ function ScoutTool({
   // you retype the search every time. Debounced; only writes when the text
   // actually changed from what's stored, and never for the "Custom search" slot
   // (catId === ""). saveCats bumps `categories`, which re-runs this effect, but
-  // then goal === cat.goal so it no-ops — no loop.
+  // then goal === cat.goal so it no-ops, no loop.
   useEffect(() => {
-    if (!catId) return; // "Custom search…" — one-off, nothing to persist onto
+    if (!catId) return; // "Custom search…", one-off, nothing to persist onto
     const cat = categories.find((c) => c.id === catId);
     if (!cat || goal === cat.goal) return;
     const t = setTimeout(() => {
@@ -2274,14 +2274,14 @@ function ScoutTool({
   // Add newly discovered people to the active project's finds (deduped, keeping
   // any status/draft already set). Returns how many were genuinely new.
   // categoryIdOverride: when a search auto-saves as a brand-new category mid-run
-  // (see runDiscover), `catId` state hasn't re-rendered yet — this closure would
+  // (see runDiscover), `catId` state hasn't re-rendered yet, this closure would
   // still see the old "" and tag fresh finds as uncategorized. Pass the fresh
   // id explicitly so newly-found people land under the new category right away.
   function mergeFinds(newOpps: Opportunity[], categoryIdOverride?: string): number {
     const effectiveCatId = categoryIdOverride !== undefined ? categoryIdOverride : catId;
     // Two dedup layers: exact id match (same person + same host, historic key)
     // AND normalized-name/handle match against every find in this project. The
-    // second catches "same person, different article" cases — for those we
+    // second catches "same person, different article" cases, for those we
     // MERGE the incoming article into the existing find's sources instead of
     // adding a second row.
     const existingIds = new Set(finds.map((f) => f.id));
@@ -2304,7 +2304,7 @@ function ScoutTool({
       const matched =
         (nm && byName.get(nm)) || (hk && byHandle.get(hk)) || null;
       if (matched) {
-        // Same person, different article — append this URL as another source
+        // Same person, different article, append this URL as another source
         // on the matched find rather than surface a duplicate row.
         const target = updates.get(matched.id) || matched;
         const currentSources: SourceRef[] = target.opp.sources
@@ -2325,7 +2325,7 @@ function ScoutTool({
           currentSources.push(newRef);
         }
         // Also add all sources from the incoming opp (in case discover already
-        // multi-source'd it) — same URL check keeps things clean.
+        // multi-source'd it), same URL check keeps things clean.
         if (o.sources) {
           for (const s of o.sources) {
             if (s.url && !currentSources.find((c) => c.url === s.url)) {
@@ -2395,7 +2395,7 @@ function ScoutTool({
       )
     );
   }
-  // Mark contacted from the button — same as setting status to sent.
+  // Mark contacted from the button, same as setting status to sent.
   function markContacted(id: string) {
     setFindStatus(id, "sent");
     const f = finds.find((x) => x.id === id);
@@ -2406,7 +2406,7 @@ function ScoutTool({
     saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
   }
   // Move a find to a different project. `id` bakes in the project (project::
-  // name::host), so a move needs a fresh id in the target project's scheme —
+  // name::host), so a move needs a fresh id in the target project's scheme, 
   // otherwise a future search there wouldn't recognize this person as already
   // found and would add a duplicate. Categories are project-scoped, so the old
   // categoryId no longer means anything in the new project; drop it.
@@ -2456,7 +2456,7 @@ function ScoutTool({
   }
   // Re-draft every un-sent ("drafted") find with the current voice edits +
   // coaching, so past drafts benefit from what Scout just learned. Sent and
-  // replied finds are left alone — they already went out. Batched through
+  // replied finds are left alone, they already went out. Batched through
   // /api/draft (capped at 8 per call) to stay within the time budget.
   async function refreshDraftsWithVoice() {
     const eligible = finds.filter((f) => f.status === "drafted" && f.draft?.body);
@@ -2536,7 +2536,7 @@ function ScoutTool({
 
   // Tell the shared ledger this user is pursuing a contact, so it isn't
   // over-surfaced to everyone else. Fire-and-forget; no-op for signed-out users.
-  // Only personal outreach counts — job/internship openings are meant to get many
+  // Only personal outreach counts, job/internship openings are meant to get many
   // applicants, so they're never capped and never recorded.
   const recordExposure = (opp: Opportunity) => {
     if (!getToken || isJobUseCaseClient(activeUseCase)) return;
@@ -2562,7 +2562,7 @@ function ScoutTool({
   // Deep-scan a find's site for a specific contact + submission requirements.
   // Ask Scout to prep the user for a meeting / interview with this contact.
   // Runs fresh Tavily searches on the person + their outlet and returns
-  // categorized facts — not questions to ask. Gated at the UI layer to
+  // categorized facts, not questions to ask. Gated at the UI layer to
   // status "sent" or later, so this doubles as an incentive to keep statuses
   // current (see the button visibility rules in FindCard).
   const [meetingPrepId, setMeetingPrepId] = useState("");
@@ -2642,7 +2642,7 @@ function ScoutTool({
         finds.map((f) => {
           if (f.id !== find.id) return f;
           const opp = { ...f.opp };
-          // Only fill gaps — never overwrite a contact we already trust.
+          // Only fill gaps, never overwrite a contact we already trust.
           if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
           if (c.name && !opp.contactName) opp.contactName = c.name;
           if (c.role && !opp.contactRole) opp.contactRole = c.role;
@@ -2867,7 +2867,7 @@ function ScoutTool({
         setError(data?.error || "Could not schedule that send.");
         return;
       }
-      // Mark the find locally as scheduled so the UI reflects the queue —
+      // Mark the find locally as scheduled so the UI reflects the queue, 
       // the actual send happens later; setting status to "sent" now would
       // lie. We reuse the "drafted" status and stash a note on the find.
       saveFinds(
@@ -3006,7 +3006,7 @@ function ScoutTool({
         : "any";
       // Beginners get pointed at small companies by default (more responsive,
       // less competitive, and the right audience for a "please consider me"
-      // cold email) — unless they've explicitly chosen a company size.
+      // cold email), unless they've explicitly chosen a company size.
       const explicitSize = profile.companySize && profile.companySize !== "any";
       const sizePref: CompanySize = jobish
         ? explicitSize
@@ -3018,7 +3018,7 @@ function ScoutTool({
       const extras: string[] = [];
       if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
       if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
-      // Contact channels the user picked for this search — read by discover's
+      // Contact channels the user picked for this search, read by discover's
       // "REQUIRED CHANNELS" instruction, which favors results exposing all of them.
       if (wantedChannels.length) {
         const hints = CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map(
@@ -3048,7 +3048,7 @@ function ScoutTool({
         }),
       });
       const data = await parseApiResponse(res);
-      // Out of searches on the plan — show the upgrade prompt (a billing 402
+      // Out of searches on the plan, show the upgrade prompt (a billing 402
       // carries a `code`; the API-credit 402 does not, so it still errors below).
       if (res.status === 402 && data?.code) {
         setUpgradePrompt({ code: data.code, tier: data.tier || "free" });
@@ -3059,7 +3059,7 @@ function ScoutTool({
         return;
       }
       setOpps(data.opportunities || []);
-      setSelected({}); // nothing pre-approved — you approve who you want to reach
+      setSelected({}); // nothing pre-approved, you approve who you want to reach
       setSkipped(Array.isArray(data.skipped) ? data.skipped : []);
       setStats(
         `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
@@ -3106,7 +3106,7 @@ function ScoutTool({
       if (j?.url) {
         window.location.href = j.url;
       } else if (j?.updated) {
-        // Plan switched in place (existing subscriber) — no redirect needed.
+        // Plan switched in place (existing subscriber), no redirect needed.
         setUpgradePrompt(null);
         setRepliesNote("Your plan was updated. Enjoy the extra searches!");
         setTimeout(loadBilling, 1500);
@@ -3238,7 +3238,7 @@ function ScoutTool({
     if (params.get("tab") === "billing") setTab("billing");
     if (billingParam === "success") {
       setTab("billing");
-      setRepliesNote("Thanks — your plan is active. It may take a moment to update.");
+      setRepliesNote("Thanks, your plan is active. It may take a moment to update.");
       const t = setTimeout(loadBilling, 2500);
       window.history.replaceState({}, "", "/app");
       return () => clearTimeout(t);
@@ -3307,7 +3307,7 @@ function ScoutTool({
 
   // "Direct the AI" chat box above Messages: apply one free-text instruction
   // across every draft currently shown, in a single pass. Revises subject/body
-  // only (see reviseDraft in lib/draft.ts) — everything else about the draft
+  // only (see reviseDraft in lib/draft.ts), everything else about the draft
   // (recipient, channel, attach-resume) stays put. Persists onto the matching
   // finds so the revision survives navigating away.
   async function reviseAllDrafts() {
@@ -3315,7 +3315,7 @@ function ScoutTool({
     if (!instruction || !drafts.length || revisingBatch) return;
     setError("");
     // Log the request (so you can see what you've already asked for) and clear
-    // the input. Scout never replies here — it just applies the change.
+    // the input. Scout never replies here, it just applies the change.
     setRedraftChat((c) => [...c, { text: instruction }]);
     setRedraftInstruction("");
     setRevisingBatch(true);
@@ -3420,7 +3420,7 @@ function ScoutTool({
       {/* Blocking first-run gate: you can't reach Scout until you pick
           individual vs company (and answer the company questions if company).
           profileLoaded gates ScoutTool, so profile.accountType is already
-          authoritative here — no flash for returning users. */}
+          authoritative here, no flash for returning users. */}
       {!profile.accountType && (
         <AccountOnboarding
           name={profile.name.trim().split(/\s+/)[0] || ""}
@@ -3656,7 +3656,7 @@ function ScoutTool({
                                 : ""
                             }.`
                           : searchComp === "any"
-                            ? "Any level — Scout won't filter by selectivity."
+                            ? "Any level, Scout won't filter by selectivity."
                             : `Scout will focus on ${searchComp} opportunities for this search.`}
                       </p>
                     </div>
@@ -3842,7 +3842,7 @@ function ScoutTool({
             {drafts.length > 0 && (
               <section className="mt-12">
                 {/* Refine box: type an instruction, it rewrites every draft
-                    below. No back-and-forth — it just applies the change and
+                    below. No back-and-forth, it just applies the change and
                     keeps a short log of what you've asked for. */}
                 <div className="mb-5 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-soft">
                   <div className="border-b border-warm-border px-4 py-3">
@@ -3907,7 +3907,7 @@ function ScoutTool({
                   {drafts.map((d, i) => {
                     const opp = opps.find((o) => o.id === d.opportunityId);
                     // Every draft here already has a backing Find record (runDraft
-                    // stamps status "drafted" onto it) — look it up so status can
+                    // stamps status "drafted" onto it), look it up so status can
                     // be changed right here instead of forcing a trip to Finds.
                     const relatedFind = opp
                       ? finds.find((f) => f.id === findKey(activeId, opp))
@@ -4208,7 +4208,7 @@ function ScoutTool({
                   </h2>
                   <p className="mt-1.5 text-sm leading-relaxed text-body">
                     Aggregate view of every user's denials, approvals, and
-                    reasons — the signal for tuning Scout's discovery. Only
+                    reasons, the signal for tuning Scout's discovery. Only
                     visible to owners.
                   </p>
                 </div>
@@ -4308,9 +4308,9 @@ function ScoutTool({
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-body">
               {upgradePrompt.code === "free_exhausted"
-                ? "You get 5 free searches a month. Pick a plan to keep scouting — it resets on the 1st either way."
+                ? "You get 5 free searches a month. Pick a plan to keep scouting, it resets on the 1st either way."
                 : upgradePrompt.tier === "starter"
-                ? "Starter includes 30 searches a month. Upgrade to Pro for 60 — you keep going right away, and Stripe only charges the difference."
+                ? "Starter includes 30 searches a month. Upgrade to Pro for 60, you keep going right away, and Stripe only charges the difference."
                 : "Pro includes 60 searches a month. Your allowance refreshes at the start of your next billing cycle."}
             </p>
 
@@ -4323,7 +4323,7 @@ function ScoutTool({
                     className="flex w-full items-center justify-between rounded-xl border border-warm-border px-4 py-3 text-left transition hover:border-brown hover:bg-brown-tint/40 disabled:opacity-50"
                   >
                     <span>
-                      <span className="block text-sm font-semibold text-ink">Starter — 30 searches</span>
+                      <span className="block text-sm font-semibold text-ink">Starter, 30 searches</span>
                       <span className="block text-xs text-muted">$15 / month</span>
                     </span>
                     <span className="text-sm font-semibold text-brown">Choose →</span>
@@ -4334,7 +4334,7 @@ function ScoutTool({
                     className="flex w-full items-center justify-between rounded-xl border border-brown bg-brown-tint/40 px-4 py-3 text-left transition hover:bg-brown-tint disabled:opacity-50"
                   >
                     <span>
-                      <span className="block text-sm font-semibold text-ink">Pro — 60 searches</span>
+                      <span className="block text-sm font-semibold text-ink">Pro, 60 searches</span>
                       <span className="block text-xs text-muted">$30 / month</span>
                     </span>
                     <span className="text-sm font-semibold text-brown">Choose →</span>
@@ -4347,7 +4347,7 @@ function ScoutTool({
                   disabled={billingBusy}
                   className="w-full rounded-xl bg-brown px-4 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
                 >
-                  {billingBusy ? "Opening checkout…" : "Upgrade to Pro — $30/mo for 60"}
+                  {billingBusy ? "Opening checkout…" : "Upgrade to Pro, $30/mo for 60"}
                 </button>
               )}
             </div>
@@ -4457,10 +4457,10 @@ function DraftKindPicker({
 }
 
 /* ---------------- Search progress bar ----------------
- * Discovery takes ~30–60s and the API doesn't stream progress, so we show a
+ * Discovery takes ~30-60s and the API doesn't stream progress, so we show a
  * synthetic bar that eases toward ~92% (fast at first, slow near the end) and
  * rotates through stage labels. `startedAt` is a timestamp lifted to the parent
- * so the bar computes progress from the real search start — that way switching
+ * so the bar computes progress from the real search start, that way switching
  * tabs and coming back resumes at the correct percentage instead of restarting.
  * When `active` flips false we snap to 100% before unmounting. */
 const SEARCH_STAGES = [
@@ -4470,7 +4470,7 @@ const SEARCH_STAGES = [
   "Ranking your matches",
   "Almost there",
 ];
-const SEARCH_TAU = 22000; // easing time constant — controls approach speed
+const SEARCH_TAU = 22000; // easing time constant, controls approach speed
 const SEARCH_CAP = 92; // hold here until the request actually finishes
 
 function searchPctFor(startedAt: number | null): number {
@@ -4491,7 +4491,7 @@ function SearchProgress({
   active: boolean;
   startedAt: number | null;
 }) {
-  // Transient display values — updated every animation frame directly on the
+  // Transient display values, updated every animation frame directly on the
   // DOM so we don't rerender the component 60×/sec. React state was churning
   // the whole subtree; refs let CSS + textContent carry the update.
   const barRef = useRef<HTMLDivElement | null>(null);
@@ -4558,7 +4558,7 @@ function GlobalScoutStatus({
   startedAt: number | null;
   onGo: () => void;
 }) {
-  // Same trick as SearchProgress — write to the DOM directly in the RAF tick
+  // Same trick as SearchProgress, write to the DOM directly in the RAF tick
   // so the chip doesn't rerender every frame.
   const fillRef = useRef<HTMLSpanElement | null>(null);
   const pctRef = useRef<HTMLSpanElement | null>(null);
@@ -5120,7 +5120,7 @@ function linkHref(v: string): string | null {
   const s = String(v || "").trim();
   if (!s || s.includes("@")) return null;
   if (/^https?:\/\//i.test(s)) return s;
-  // A domain/handle like "linkedin.com/in/x" or "twitter.com/x" — make it absolute.
+  // A domain/handle like "linkedin.com/in/x" or "twitter.com/x", make it absolute.
   if (/^[a-z0-9.-]+\.[a-z]{2,}(\/|$)/i.test(s)) return "https://" + s.replace(/^\/+/, "");
   return null;
 }
@@ -5155,7 +5155,7 @@ function parseDenyReason(current?: string): { base: string | null; extra: string
   if (!c) return { base: null, extra: "" };
   for (const r of DENY_REASONS) {
     if (c === r) return { base: r, extra: "" };
-    if (c.startsWith(r + " — ")) return { base: r, extra: c.slice((r + " — ").length) };
+    if (c.startsWith(r + ", ")) return { base: r, extra: c.slice((r + ", ").length) };
   }
   return { base: "", extra: c }; // fully custom ("Other") reason
 }
@@ -5183,7 +5183,7 @@ function DenyReasons({
   function commit() {
     const b = base.trim();
     const e = extra.trim();
-    const final = b && e ? `${b} — ${e}` : b || e;
+    const final = b && e ? `${b}, ${e}` : b || e;
     if (!final) return;
     onPick(final);
   }
@@ -5241,7 +5241,7 @@ function DenyReasons({
           }}
           rows={2}
           placeholder={
-            base ? "Add a detail (optional) — e.g. what made them wrong" : "Your reason…"
+            base ? "Add a detail (optional), e.g. what made them wrong" : "Your reason…"
           }
           className="w-full resize-y rounded-lg border border-warm-border bg-warm-bg/30 px-2.5 py-2 pr-9 text-[12px] leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-2 focus:ring-coral/15"
         />
@@ -5254,7 +5254,7 @@ function DenyReasons({
           <path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2Z" />
           <path d="M9 22h6" />
         </svg>
-        <span>Elaborating teaches Scout what to skip next time — the more you say, the better it learns your taste.</span>
+        <span>Elaborating teaches Scout what to skip next time, the more you say, the better it learns your taste.</span>
       </div>
       <div className="mt-2 flex items-center gap-2">
         <button
@@ -5323,7 +5323,7 @@ function DictateButton({ onText }: { onText: (t: string) => void }) {
         rec.start();
         setListening(true);
       } catch {
-        /* start() throws if already running — ignore */
+        /* start() throws if already running, ignore */
       }
     }
   }
@@ -5351,7 +5351,7 @@ function DictateButton({ onText }: { onText: (t: string) => void }) {
 }
 
 // URLs that are almost certainly a job/application posting rather than a plain
-// company site — used to label the primary link as "Open application".
+// company site, used to label the primary link as "Open application".
 function looksLikeApplication(url?: string): boolean {
   const u = String(url || "").toLowerCase();
   if (!u) return false;
@@ -5362,7 +5362,7 @@ function looksLikeApplication(url?: string): boolean {
 
 /* ---------------- Find detail modal ----------------
  * Click into a find to see everything about it in one place: all contact info
- * neatly formatted, why it fits, what they ask for, its sources — plus a live,
+ * neatly formatted, why it fits, what they ask for, its sources, plus a live,
  * in-page preview of their website you can expand/contract (or drag to resize),
  * and a prominent link to the application when the target is a job posting.
  * Read-only: the draft/send actions stay on the card behind it. */
@@ -5453,7 +5453,7 @@ function FindDetailModal({
         setFillNote(
           d.filled
             ? "Filled what Scout could match. Review it, then submit on the site."
-            : "Couldn't match this form's fields — use Open ↗ to fill it directly."
+            : "Couldn't match this form's fields, use Open ↗ to fill it directly."
         );
       }
     }
@@ -5466,7 +5466,7 @@ function FindDetailModal({
     setFillNote("");
   }, [o.url]);
   // Pre-fill the previewed contact form with the sender's details + drafted
-  // message. Never submits — the bridge only populates fields.
+  // message. Never submits, the bridge only populates fields.
   function fillForm() {
     const win = frameRef.current?.contentWindow;
     if (!win) return;
@@ -5503,9 +5503,9 @@ function FindDetailModal({
     return () => window.removeEventListener("keydown", h);
   }, [onClose]);
 
-  // Neatly-formatted contact rows — only the ones we actually have.
+  // Neatly-formatted contact rows, only the ones we actually have.
   // Any channel the search explicitly requested gets its own labeled box
-  // below ("Requested contact info") — found or not, so leave it out of this
+  // below ("Requested contact info"), found or not, so leave it out of this
   // general list too, or it shows twice.
   const rows: { label: string; node: React.ReactNode }[] = [];
   if (o.contactEmail && !wantedChannels.includes("email"))
@@ -5606,7 +5606,7 @@ function FindDetailModal({
           </button>
         </div>
 
-        {/* Body: info + website preview — fills the rest of the fullscreen modal */}
+        {/* Body: info + website preview, fills the rest of the fullscreen modal */}
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(280px,340px)_1fr]">
           {/* Left: neatly formatted info */}
           <div className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
@@ -5630,8 +5630,8 @@ function FindDetailModal({
               )}
             </div>
 
-            {/* A labeled section for EVERY channel this search asked for — found
-                or not — so it's obvious at a glance what's still missing. */}
+            {/* A labeled section for EVERY channel this search asked for, found
+                or not, so it's obvious at a glance what's still missing. */}
             {wantedChannels.length > 0 && (
               <div>
                 <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
@@ -5723,8 +5723,8 @@ function FindDetailModal({
 
             {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
 
-            {/* The whole drafting-and-sending workflow, right here — draft, edit,
-                send/schedule, deny, follow up — without leaving this popup. */}
+            {/* The whole drafting-and-sending workflow, right here, draft, edit,
+                send/schedule, deny, follow up, without leaving this popup. */}
             <div className="border-t border-warm-border pt-4">
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Outreach
@@ -5763,7 +5763,7 @@ function FindDetailModal({
             </div>
           </div>
 
-          {/* Right: live website preview — fills all remaining height */}
+          {/* Right: live website preview, fills all remaining height */}
           <div className="flex h-full min-h-0 flex-col p-5">
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
@@ -5812,7 +5812,7 @@ function FindDetailModal({
                   ref={frameRef}
                   // Routed through our own origin (see app/api/site-preview) so
                   // X-Frame-Options / CSP frame-ancestors on the target site
-                  // can't refuse the embed — those headers apply to a direct
+                  // can't refuse the embed, those headers apply to a direct
                   // cross-origin request, not to our own proxied response.
                   src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
                   title={`Preview of ${host || o.name}`}
@@ -5951,7 +5951,7 @@ function FindsTab({
   senderEmail: string;
 }) {
   // Pinned finds live in their own tab and are excluded from the status/all
-  // lists — so status counts count only the un-pinned ones.
+  // lists, so status counts count only the un-pinned ones.
   const counts: Record<string, number> = {
     pinned: finds.filter((f) => f.pinned).length,
     all: finds.filter((f) => !f.pinned).length,
@@ -6439,7 +6439,7 @@ function FindCard({
         {recipientTz && (
           <span
             title={`${o.name}'s local time${
-              isBusinessHours(recipientTz) ? "" : " — outside business hours"
+              isBusinessHours(recipientTz) ? "" : ", outside business hours"
             }`}
             className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${
               isBusinessHours(recipientTz)
@@ -6495,14 +6495,14 @@ function FindCard({
         </div>
       )}
       {/* Any channel the search explicitly requested gets its own labeled box
-          below ("Requested contact info") — found or not, so leave it out of
+          below ("Requested contact info"), found or not, so leave it out of
           this compact line too, or it shows twice. */}
       {(() => {
         const showEmail = !!o.contactEmail && !wantedChannels.includes("email");
         const showHandle = !!o.contactHandle && !wantedChannels.includes("linkedin");
         const showPhone = !!o.contactPhone && !wantedChannels.includes("phone");
         // Nothing left to show inline (e.g. a company search where every
-        // channel is in the requested-info row below) — skip the empty line.
+        // channel is in the requested-info row below), skip the empty line.
         if (!showEmail && !o.contactName && !showHandle && !showPhone) return null;
         return (
           <div className="mt-1 text-xs">
@@ -6569,7 +6569,7 @@ function FindCard({
                       <ContactValue value={val} className="text-body" />
                     )
                   ) : (
-                    <span className="text-body/35">—</span>
+                    <span className="text-body/35">, </span>
                   )}
                 </span>
               </span>
@@ -6578,7 +6578,7 @@ function FindCard({
         </div>
       )}
 
-      {/* Multiple articles that mention this same person — collapsed by default
+      {/* Multiple articles that mention this same person, collapsed by default
           so the card stays compact. Renders only when 2+ sources exist. */}
       {o.sources && o.sources.length > 1 && (
         <SourcesList sources={o.sources} />
@@ -6629,7 +6629,7 @@ function FindCard({
 
 /* ---------------- Find workflow: draft, edit, send/schedule, deny, follow up ----------------
  * The whole drafting-and-sending process for one find, factored out of
- * FindCard so it can also run inside FindDetailModal — the fullscreen "Details"
+ * FindCard so it can also run inside FindDetailModal, the fullscreen "Details"
  * popup goes through the entire workflow (draft, edit, send, schedule, deny,
  * follow up) without leaving the popup. */
 function FindWorkflow({
@@ -6705,10 +6705,10 @@ function FindWorkflow({
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
   // When the draft's body cleanly ends with this project's current signature,
-  // the editor splits it into its own field — editing just the sign-off and
+  // the editor splits it into its own field, editing just the sign-off and
   // saving updates THAT PROJECT's signature going forward, not just this one
   // draft. Null means no clean split was found (body edited as one blob, as
-  // before — never silently mangles a draft we can't confidently split).
+  // before, never silently mangles a draft we can't confidently split).
   const [editSignature, setEditSignature] = useState<string | null>(null);
   const hasSignatureSplit = editSignature !== null;
   // How long since the outreach went out, for the follow-up nudge.
@@ -6749,7 +6749,7 @@ function FindWorkflow({
 
   return (
     <>
-      {/* Meeting / interview prep — factual highlights about the contact.
+      {/* Meeting / interview prep, factual highlights about the contact.
           Unlocked once status ≥ sent, so keeping statuses current pays out
           with real prep. Prep persists on the find once generated. */}
       <MeetingPrepBlock
@@ -6758,7 +6758,7 @@ function FindWorkflow({
         onGenerate={onMeetingPrep}
       />
 
-      {/* Stored draft — read view or inline editor */}
+      {/* Stored draft, read view or inline editor */}
       {d && !editing && (
         <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 p-3">
           {d.subject && (
@@ -6801,7 +6801,7 @@ function FindWorkflow({
               setEditSubject(d.subject || "");
               const body = d.body || "";
               // Only split when this draft's body cleanly ends with the
-              // project's CURRENT signature — anything less exact (already
+              // project's CURRENT signature, anything less exact (already
               // customized, signature changed since drafting, no signature at
               // all) falls back to editing the whole body as one blob.
               const sig = currentSignature.trim();
@@ -6840,7 +6840,7 @@ function FindWorkflow({
           {hasSignatureSplit && (
             <div className="mt-2">
               <div className="mb-1 text-[11px] font-semibold text-body/60">
-                Signature — editing this updates the default for every draft in this project
+                Signature, editing this updates the default for every draft in this project
               </div>
               <textarea
                 value={editSignature || ""}
@@ -6895,7 +6895,7 @@ function FindWorkflow({
           </button>
         )}
 
-        {/* Move to a different project — a find isn't stuck wherever it was
+        {/* Move to a different project, a find isn't stuck wherever it was
             first surfaced. Resets after firing since the find leaves this list. */}
         {otherProjects.length > 0 && (
           <select
@@ -6995,7 +6995,7 @@ function FindWorkflow({
         {/* The status pill dropdown at the top of the card can set any status;
             these two sit right next to the follow-up action since "did they
             reply" / "not going anywhere" are the two real outcomes of a sent
-            message — moves it straight to that filter tab in Finds. */}
+            message, moves it straight to that filter tab in Finds. */}
         {find.status === "sent" && (
           <>
             <button
@@ -7119,7 +7119,7 @@ function FindWorkflow({
         </div>
       )}
 
-      {/* Deny reason on passed finds — editable */}
+      {/* Deny reason on passed finds, editable */}
       {denied && (
         <div className="mt-2.5 border-t border-warm-border pt-2.5">
           <div className="mb-1.5 text-[11px] font-semibold text-body/60">
@@ -7142,7 +7142,7 @@ function learnedFromFinds(finds: Find[]) {
     (f) => f.status === "drafted" || f.status === "sent" || f.status === "replied"
   );
   const denyRate = decided.length ? denied.length / decided.length : 0;
-  // Reply rate over messages known to have gone out (sent or replied) — the
+  // Reply rate over messages known to have gone out (sent or replied), the
   // replies logged/tracked, not a claim about untracked sends.
   const sentish = finds.filter((f) => f.status === "sent" || f.status === "replied");
   const repliedCount = finds.filter((f) => f.status === "replied").length;
@@ -7250,8 +7250,8 @@ function learnedFromFinds(finds: Find[]) {
 
 // Concrete, honestly-derived things Scout has learned about THIS user recently,
 // each only shown when the real data supports it. Individual + private.
-// Concrete signals about HOW the user writes their drafts — opener style,
-// sign-off, sentence length, formality — surfaced under "What Scout has
+// Concrete signals about HOW the user writes their drafts, opener style,
+// sign-off, sentence length, formality, surfaced under "What Scout has
 // learned about you" so the section shows specific patterns rather than
 // generic claims.
 function learnedFromDrafts(finds: Find[]) {
@@ -7397,18 +7397,18 @@ function recentInsights(
             ? "medium length, a few short paragraphs"
             : "on the longer, more detailed side";
       out.push({
-        text: `Your messages average ${writing.avgWords} words — ${feel}.`,
+        text: `Your messages average ${writing.avgWords} words, ${feel}.`,
         basis: `${writing.count} drafts`,
       });
     }
     if (writing.contractionRate != null && writing.contractionRate >= 0.6) {
       out.push({
-        text: "You write informally — contractions like \"don't\" and \"I'll\" show up in most drafts. Scout matches that register.",
+        text: "You write informally, contractions like \"don't\" and \"I'll\" show up in most drafts. Scout matches that register.",
         basis: `${writing.count} drafts`,
       });
     } else if (writing.contractionRate != null && writing.contractionRate <= 0.2 && writing.count >= 4) {
       out.push({
-        text: "You lean formal — contractions rarely appear. Scout keeps drafts professional and full-form.",
+        text: "You lean formal, contractions rarely appear. Scout keeps drafts professional and full-form.",
         basis: `${writing.count} drafts`,
       });
     }
@@ -7493,7 +7493,7 @@ function DashboardTab({
 
   // Dev tool: turn real usage data into a ready-to-paste engineering prompt
   // for recalibrating lib/discover.ts. Separate from the user-facing "learned
-  // about you" narrative above — this is raw numbers meant for tuning code.
+  // about you" narrative above, this is raw numbers meant for tuning code.
   const [tuningPrompt, setTuningPrompt] = useState("");
   const [tuningBusy, setTuningBusy] = useState(false);
   const [tuningErr, setTuningErr] = useState("");
@@ -7561,7 +7561,7 @@ function DashboardTab({
         if (res.ok) setAutoTuneEntries(data.entries || []);
         else setAutoTuneLogErr(data?.error || "");
       } catch {
-        /* silent — the badge/log just stays empty */
+        /* silent, the badge/log just stays empty */
       }
     })();
   }, [getToken]);
@@ -7577,7 +7577,7 @@ function DashboardTab({
     } catch {}
   }
 
-  // Contacts you reached out to about a week ago that still haven't replied — a
+  // Contacts you reached out to about a week ago that still haven't replied, a
   // gentle nudge roughly doubles response rates, so surface them here.
   const dueFollowUps = finds.filter(
     (f) =>
@@ -7670,7 +7670,7 @@ function DashboardTab({
       ? `${(minutesSaved / 60).toFixed(1)} hrs`
       : `${minutesSaved} min`;
 
-  // Rhythm stats — how much you've done in the last 7 and 30 days. Uses the
+  // Rhythm stats, how much you've done in the last 7 and 30 days. Uses the
   // find's addedAt (when Scout surfaced it) for drafts, sentAt for sends.
   const WEEK = 7 * 86400000;
   const MONTH = 30 * 86400000;
@@ -7693,7 +7693,7 @@ function DashboardTab({
     return days.size;
   })();
 
-  // What Scout uses to personalize FOR YOU — each item is a real signal or a
+  // What Scout uses to personalize FOR YOU, each item is a real signal or a
   // concrete way to make your outreach sharper.
   const signals = [
     {
@@ -7796,7 +7796,7 @@ function DashboardTab({
       {/* -------- Ask Scout spotlight (signature) -------- */}
       <button
         onClick={openCommand}
-        aria-label="Ask Scout — open the command palette"
+        aria-label="Ask Scout, open the command palette"
         className="mt-6 flex w-full items-center gap-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5 text-left shadow-float transition hover:border-clay"
       >
         <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown">
@@ -7894,7 +7894,7 @@ function DashboardTab({
                 </div>
                 <p className="mt-2 text-center text-xs leading-relaxed text-muted">
                   {learned.trend && learned.trend.delta < -0.01
-                    ? "Sharper than when you started — fewer of Scout's finds are misses."
+                    ? "Sharper than when you started, fewer of Scout's finds are misses."
                     : learned.trend && learned.trend.delta > 0.01
                     ? "Landing less often lately. Tightening your goal or project context helps."
                     : `${learned.kept} of ${learned.decided} finds kept so far.`}
@@ -7949,7 +7949,7 @@ function DashboardTab({
             </h3>
             <p className="mt-1 max-w-[52ch] text-sm leading-relaxed text-[#c9c0b4]">
               {(pick.opp.whyItFits || "").trim() ||
-                "Your strongest still-open match — worth a short, specific intro."}
+                "Your strongest still-open match, worth a short, specific intro."}
             </p>
           </div>
           <div className="z-[1] flex shrink-0 items-center gap-5">
@@ -8063,7 +8063,7 @@ function DashboardTab({
                         </div>
                       </td>
                       <td className="hidden px-4 py-3 text-muted sm:table-cell">
-                        {f.opp.channel || "—"}
+                        {f.opp.channel || "-"}
                       </td>
                       <td className="px-4 py-3">
                         {fit != null ? (
@@ -8077,7 +8077,7 @@ function DashboardTab({
                             </span>
                           </div>
                         ) : (
-                          <span className="text-muted">—</span>
+                          <span className="text-muted">, </span>
                         )}
                       </td>
                       <td className="px-4 py-3">
@@ -8555,7 +8555,7 @@ function DashboardTab({
       </section>
 
       {/* -------- Tune the search algorithm (dev tool) --------
-          Raw, specific numbers from real decisions on this account — meant to
+          Raw, specific numbers from real decisions on this account, meant to
           be fed back into lib/discover.ts's search/extraction prompts, not
           just read. The button turns them into a ready-to-paste engineering
           prompt for a future Claude Code session. */}
@@ -8563,7 +8563,7 @@ function DashboardTab({
         <section className="mt-10 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
           <h2 className="text-lg font-bold text-ink">Tune the search algorithm</h2>
           <p className="mt-1 text-sm text-body/80">
-            Specific numbers from your {learned.decided} decided finds — the kind
+            Specific numbers from your {learned.decided} decided finds, the kind
             of data that should shape lib/discover.ts&apos;s search and
             fit-scoring prompts, not just sit in a dashboard.
           </p>
@@ -8577,19 +8577,19 @@ function DashboardTab({
             </div>
             <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
               <div className="text-xl font-extrabold text-ink">
-                {learned.keptFit != null ? `${Math.round(learned.keptFit * 100)}%` : "—"}
+                {learned.keptFit != null ? `${Math.round(learned.keptFit * 100)}%` : "-"}
               </div>
               <div className="text-[11px] text-body/70">avg fit, kept</div>
             </div>
             <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
               <div className="text-xl font-extrabold text-ink">
-                {learned.deniedFit != null ? `${Math.round(learned.deniedFit * 100)}%` : "—"}
+                {learned.deniedFit != null ? `${Math.round(learned.deniedFit * 100)}%` : "-"}
               </div>
               <div className="text-[11px] text-body/70">avg fit, denied</div>
             </div>
             <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
               <div className="text-xl font-extrabold text-ink">
-                {learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "—"}
+                {learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "-"}
               </div>
               <div className="text-[11px] text-body/70">reply rate</div>
             </div>
@@ -8600,7 +8600,7 @@ function DashboardTab({
             learned.keptFit - learned.deniedFit < 0.1 && (
               <p className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-900">
                 Kept and denied fit scores are only{" "}
-                {Math.round((learned.keptFit - learned.deniedFit) * 100)} points apart —
+                {Math.round((learned.keptFit - learned.deniedFit) * 100)} points apart, 
                 fit_score isn&apos;t discriminating well and the extract() rubric in
                 lib/discover.ts likely needs sharpening.
               </p>
@@ -8634,7 +8634,7 @@ function DashboardTab({
                 <div className="mt-1 text-xs text-body/80">
                   {learned.keptChannels.length
                     ? learned.keptChannels.map(([c, n]) => `${c} (${n})`).join(", ")
-                    : "—"}
+                    : "-"}
                 </div>
               </div>
               <div>
@@ -8644,7 +8644,7 @@ function DashboardTab({
                 <div className="mt-1 text-xs text-body/80">
                   {learned.deniedChannels.length
                     ? learned.deniedChannels.map(([c, n]) => `${c} (${n})`).join(", ")
-                    : "—"}
+                    : "-"}
                 </div>
               </div>
             </div>
@@ -8684,7 +8684,7 @@ function DashboardTab({
           )}
 
           {/* -------- Algorithm change log --------
-              Everything the auto-tune cron has actually done, in full —
+              Everything the auto-tune cron has actually done, in full, 
               exactly what changed, why, and a link to the commit. */}
           <div className="mt-6 border-t border-warm-border pt-4">
             <button
@@ -8703,7 +8703,7 @@ function DashboardTab({
             </button>
             <p className="mt-1 text-xs leading-relaxed text-body/70">
               Every edit the auto-tune cron has made to lib/discover.ts, unreviewed and
-              already live — this is the audit trail.
+              already live, this is the audit trail.
             </p>
             {autoTuneLogOpen && (
               <div className="mt-3 space-y-3">
@@ -8714,7 +8714,7 @@ function DashboardTab({
                   <p className="text-xs text-body/50">Loading…</p>
                 ) : autoTuneEntries.length === 0 ? (
                   <p className="text-xs text-body/50">
-                    No auto-tune edits yet — nothing has crossed the confidence gate.
+                    No auto-tune edits yet, nothing has crossed the confidence gate.
                   </p>
                 ) : (
                   autoTuneEntries.map((e) => (
@@ -8877,7 +8877,7 @@ function OutreachAdvice({
   // Detect the specific outreach channel a tip references. Returns the
   // OUTREACH_KINDS label (matching the Templates dropdown) when found, so
   // "LinkedIn is doing well" → "LinkedIn message". If the user already has a
-  // template for that channel we don't nudge — the goal is to seed the FIRST
+  // template for that channel we don't nudge, the goal is to seed the FIRST
   // one, not spam.
   const detectChannel = (text: string): string | null => {
     const t = String(text || "").toLowerCase();
@@ -8990,7 +8990,7 @@ function OutreachAdvice({
     }
   }
 
-  // Real, data-backed insights — each renders only when the community data
+  // Real, data-backed insights, each renders only when the community data
   // actually supports it (enough decisions, and the effect is really there).
   const insights: { title: string; body: string; basis: string }[] = [];
   if (p) {
@@ -8998,7 +8998,7 @@ function OutreachAdvice({
     if (top) {
       insights.push({
         title: `${top.channel} finds get acted on most`,
-        body: `${pct(top.keptRate)} of ${top.channel.toLowerCase()} finds are drafted or contacted — lead with searches likely to surface ${top.channel.toLowerCase()} contacts.`,
+        body: `${pct(top.keptRate)} of ${top.channel.toLowerCase()} finds are drafted or contacted, lead with searches likely to surface ${top.channel.toLowerCase()} contacts.`,
         basis: `${top.total} community decisions`,
       });
     }
@@ -9024,11 +9024,11 @@ function OutreachAdvice({
     }
   }
 
-  // Established outreach practice — honestly labeled, not dressed up as Scout data.
+  // Established outreach practice, honestly labeled, not dressed up as Scout data.
   const playbook: { title: string; body: string; cta?: { label: string; go: () => void } }[] = [
     {
       title: "Open with something real about them",
-      body: "One specific, true line about their work beats any template. Personalized outreach earns roughly 12–25% replies vs 1–3% for generic blasts (industry benchmarks).",
+      body: "One specific, true line about their work beats any template. Personalized outreach earns roughly 12-25% replies vs 1-3% for generic blasts (industry benchmarks).",
     },
     {
       title: "Keep it to three short paragraphs",
@@ -9152,7 +9152,7 @@ function OutreachAdvice({
           </div>
         ) : (
           <p className="mt-2 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-xs leading-relaxed text-body/70">
-            Live patterns show up here once the community has made enough decisions —
+            Live patterns show up here once the community has made enough decisions, 
             real numbers only, so nothing appears until the data can back it up.
           </p>
         )}
@@ -9210,7 +9210,7 @@ function CompareRow({
   lowerBetter?: boolean;
 }) {
   const f = (v: number | null) =>
-    v == null ? "—" : fmt === "pct" ? `${Math.round(v * 100)}%` : `${Math.round(v)}`;
+    v == null ? "-" : fmt === "pct" ? `${Math.round(v * 100)}%` : `${Math.round(v)}`;
   const ahead =
     you != null && them != null
       ? lowerBetter
@@ -9277,8 +9277,8 @@ function StatTile({
 }
 
 /* ---------------- Meeting prep ----------------
- * Once a find's status is "sent" or later — meaning the user has actually
- * reached out — Scout offers to prep them for a meeting/interview by
+ * Once a find's status is "sent" or later, meaning the user has actually
+ * reached out, Scout offers to prep them for a meeting/interview by
  * pulling fresh facts about the contact + outlet. Statuses "new" and
  * "drafted" don't show the button; that's the deliberate incentive to
  * keep statuses current. Denied hides it too. */
@@ -9357,7 +9357,7 @@ function MeetingPrepBlock({
 /* ---------------- Contact channels picker ----------------
  * A dropdown on the search form: pick which contact channels this search
  * should try to come back with (email, phone, LinkedIn, website). Saved onto
- * the selected category, so re-opening that search remembers the choice —
+ * the selected category, so re-opening that search remembers the choice, 
  * "Companies" can mean "get me a phone + email + website" every time. */
 function ContactChannelsPicker({
   selected,
@@ -9422,7 +9422,7 @@ function ContactChannelsPicker({
           <p className="mt-1.5 border-t border-warm-border px-2 pt-2 text-[10px] leading-relaxed text-body/60">
             {selected.length
               ? "Scout favors results with all of these."
-              : "Nothing selected — Scout returns whatever it finds."}
+              : "Nothing selected, Scout returns whatever it finds."}
             {saved ? " Saved to this search." : " Save this search to remember your pick."}
           </p>
         </div>
@@ -9500,7 +9500,7 @@ function SchedulePicker({
               onClick={() => {
                 const d = fromLocalDatetime(value);
                 if (!d || d.getTime() < Date.now() + 60_000) {
-                  // datetime-local can round the past — bounce anything within
+                  // datetime-local can round the past, bounce anything within
                   // the next minute so the cron doesn't grab a "stale" queue
                   // item on its first pass.
                   return;
@@ -9548,7 +9548,7 @@ function suggestBusinessHour(tz?: string): Date {
     const day = parts.find((p) => p.type === "weekday")?.value || "";
     const inBiz = hour >= 9 && hour < 18 && !/sat|sun/i.test(day);
     if (inBiz) {
-      // Already business hours there — schedule 15 min out (still respects the
+      // Already business hours there, schedule 15 min out (still respects the
       // window, gives the user a beat to change their mind).
       return new Date(now.getTime() + 15 * 60 * 1000);
     }
@@ -10412,7 +10412,7 @@ function FindPeek({
                 )}
                 {tab === 2 && (
                   <p className="text-sm text-faint">
-                    {f.sentAt ? "Reached out — waiting on a reply." : "No activity yet. Draft and send to start the thread."}
+                    {f.sentAt ? "Reached out, waiting on a reply." : "No activity yet. Draft and send to start the thread."}
                   </p>
                 )}
               </div>
@@ -10459,7 +10459,7 @@ function BillingTab({
     if (err) {
       setRedeemMsg({ ok: false, text: err });
     } else {
-      setRedeemMsg({ ok: true, text: "You're all set — unlimited access unlocked." });
+      setRedeemMsg({ ok: true, text: "You're all set, unlimited access unlocked." });
       setCode("");
     }
   }
@@ -10534,7 +10534,7 @@ function BillingTab({
         {comp ? (
           <div className="mt-5 flex items-center gap-2 text-sm text-body">
             <span className="text-lg">∞</span>
-            <span>Unlimited searches — no monthly cap on this account.</span>
+            <span>Unlimited searches, no monthly cap on this account.</span>
           </div>
         ) : (
           <div className="mt-5">
@@ -10549,21 +10549,21 @@ function BillingTab({
             </div>
             {!paid && (
               <p className="mt-2 text-xs text-muted">
-                You&rsquo;re on the free plan — {limit} searches a month.
+                You&rsquo;re on the free plan, {limit} searches a month.
               </p>
             )}
           </div>
         )}
       </section>
 
-      {/* Access code — redeem for free-forever (comp) access. */}
+      {/* Access code, redeem for free-forever (comp) access. */}
       {!comp && (
         <section className="mt-4 rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
           <div className="text-xs font-semibold uppercase tracking-wider text-muted">
             Have an access code?
           </div>
           <p className="mt-1 text-sm text-body">
-            Redeem a code for unlimited access — no card required.
+            Redeem a code for unlimited access, no card required.
           </p>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <input
@@ -10653,7 +10653,7 @@ function BillingTab({
 
       {!comp && (
         <p className="mt-4 text-center text-xs text-muted">
-          Secure checkout by Stripe. Cancel anytime &mdash; you keep your searches until the
+          Secure checkout by Stripe. Cancel anytime, you keep your searches until the
           period ends.
         </p>
       )}
@@ -10688,7 +10688,7 @@ function SettingsTab({
     setRedeeming(false);
     if (err) setRedeemMsg({ ok: false, text: err });
     else {
-      setRedeemMsg({ ok: true, text: "You're all set — unlimited access unlocked." });
+      setRedeemMsg({ ok: true, text: "You're all set, unlimited access unlocked." });
       setCode("");
     }
   }
@@ -10764,12 +10764,12 @@ function SettingsTab({
         {isComp ? (
           <p className="mt-1 flex items-center gap-2 text-sm leading-relaxed text-body">
             <span className="text-lg">∞</span>
-            You have unlimited access — no code needed.
+            You have unlimited access, no code needed.
           </p>
         ) : (
           <>
             <p className="mt-1 text-sm leading-relaxed text-body">
-              Have a code? Redeem it for free, unlimited access — no card required.
+              Have a code? Redeem it for free, unlimited access, no card required.
             </p>
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <input
@@ -11240,7 +11240,7 @@ function TemplatesTab({
         <h2 className="text-base font-extrabold tracking-tight text-ink">Email signatures</h2>
         <p className="mt-1 text-sm leading-relaxed text-body">
           Signed onto the end of every email Scout drafts (not DMs). Set a default,
-          then give any project its own — outreach for that project signs off with the
+          then give any project its own, outreach for that project signs off with the
           project&rsquo;s signature automatically.
         </p>
 
@@ -11741,13 +11741,13 @@ function ProfileTab({
   // Whether to show the job-applicant follow-ups (company size + competitive-
   // ness). Defaults to true when the user's use case looks job-shaped OR when
   // they've already set either field to a non-default value on a previous
-  // visit — so we don't hide answers they already picked.
+  // visit, so we don't hide answers they already picked.
   const [jobApplicant, setJobApplicant] = useState<boolean>(
     isJobUseCaseClient(useCase) ||
       (!!companySize && companySize !== "any") ||
       (!!competitiveness && competitiveness !== "any")
   );
-  // Individual vs company is chosen once at signup (accountType) — no in-profile
+  // Individual vs company is chosen once at signup (accountType), no in-profile
   // toggle. Company profiles fill from a website, individuals from a resume.
   const kind: "individual" | "company" = accountType === "company" ? "company" : "individual";
   const [website, setWebsite] = useState("");
@@ -12205,7 +12205,7 @@ function ProfileTab({
                   ))}
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                  First-time applicant? Pick <span className="font-semibold">Beginner</span> —
+                  First-time applicant? Pick <span className="font-semibold">Beginner</span>, 
                   Scout will skip the ultra-selective programs and surface ones you can
                   realistically land.
                 </p>

@@ -1,6 +1,6 @@
 // Static suggestion lists for the Profile combobox fields (Location, School).
 // Bundled on purpose: no external Places/Schools API to depend on or key. The
-// fields stay free-text — these only power the type-to-filter dropdown, so
+// fields stay free-text, these only power the type-to-filter dropdown, so
 // anything not listed can still be typed in.
 
 export const CITY_SUGGESTIONS: string[] = [
@@ -65,7 +65,7 @@ export const SCHOOL_SUGGESTIONS: string[] = [
   "Georgetown University","University of Michigan","University of Virginia",
   "University of North Carolina at Chapel Hill","Georgia Institute of Technology",
   "University of Texas at Austin","Texas A&M University","University of Florida",
-  "University of Washington","University of Wisconsin–Madison",
+  "University of Washington","University of Wisconsin, Madison",
   "University of Illinois Urbana-Champaign","Ohio State University","Pennsylvania State University",
   "Purdue University","Indiana University","Michigan State University","University of Minnesota",
   "University of Maryland","Rutgers University","University of Notre Dame","Vanderbilt University",

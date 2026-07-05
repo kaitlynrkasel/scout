@@ -123,7 +123,7 @@ export function PipelineBar({
   );
 }
 
-// A radial gauge for a single 0–100 percentage — a circular shape that gives the
+// A radial gauge for a single 0-100 percentage, a circular shape that gives the
 // dashboard something other than stacked rectangles. The number lives in real
 // HTML at the center so it inherits the page font (not SVG text).
 export function MatchGauge({
@@ -170,7 +170,7 @@ export function MatchGauge({
 }
 
 // A tiny trend line for a metric tile. Renders nothing without at least two real
-// points — we never fabricate a series to fill the slot.
+// points, we never fabricate a series to fill the slot.
 export function Sparkline({
   data,
   stroke = "#7c5837",

@@ -118,7 +118,7 @@ export default function AuthScreen({
         },
       });
       if (error) throw error;
-      // If the project confirms email (recommended), there's no session yet —
+      // If the project confirms email (recommended), there's no session yet, 
       // send the user to the code step. If confirmation is off, we're already in.
       if (!data.session) {
         setNotice(`We sent a 6-digit code to ${email}. Enter it below to finish.`);
@@ -143,7 +143,7 @@ export default function AuthScreen({
         type: "signup",
       });
       if (error) throw error;
-      // Success creates the session — the parent's auth listener takes over.
+      // Success creates the session, the parent's auth listener takes over.
     } catch (e: any) {
       setError(e?.message || "That code didn't work. Check it and try again.");
     } finally {

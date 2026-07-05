@@ -36,7 +36,7 @@ async function readCache(key: string): Promise<TavilyResult[] | null> {
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed?.results) ? parsed.results : null;
   } catch {
-    return null; // no fixture, unreadable, or corrupt — fall through to a live call
+    return null; // no fixture, unreadable, or corrupt, fall through to a live call
   }
 }
 
@@ -59,7 +59,7 @@ async function writeCache(
 
 export interface TavilyOpts {
   // "advanced" costs ~2x credits but returns more results and richer page
-  // content per result — worth it for creator roundup articles, where the
+  // content per result, worth it for creator roundup articles, where the
   // whole point is extracting MANY names from one long listicle.
   depth?: "basic" | "advanced";
 }
@@ -94,7 +94,7 @@ export async function tavilySearch(
       }),
     });
   } catch {
-    return []; // network blip — transient, just no results for this query
+    return []; // network blip, transient, just no results for this query
   }
 
   if (!res.ok) {
@@ -103,8 +103,8 @@ export async function tavilySearch(
       text = await res.text();
     } catch {}
     const credit = classifyApiError("Tavily", res.status, text);
-    if (credit) throw credit; // out of credits / bad key / limit — surface it
-    return []; // other non-200 — treat as no results
+    if (credit) throw credit; // out of credits / bad key / limit, surface it
+    return []; // other non-200, treat as no results
   }
 
   try {

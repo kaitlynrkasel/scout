@@ -258,7 +258,7 @@ export default function ImportOutreach({
     try {
       const finds = buildFinds();
       if (!finds.length) {
-        setError("No importable rows — every row was missing a name.");
+        setError("No importable rows, every row was missing a name.");
         return;
       }
       const added = onImport(finds);
@@ -298,7 +298,7 @@ export default function ImportOutreach({
         </div>
 
         <div className="flex-1 overflow-auto p-6">
-          {/* Step 1 — file drop */}
+          {/* Step 1, file drop */}
           {!rows.length && (
             <div
               onDragOver={(e) => e.preventDefault()}
@@ -337,7 +337,7 @@ export default function ImportOutreach({
             </div>
           )}
 
-          {/* Step 2 — column mapping + preview + config */}
+          {/* Step 2, column mapping + preview + config */}
           {rows.length > 0 && imported === null && (
             <div className="space-y-6">
               <div className="rounded-2xl border border-warm-border bg-white p-5">
@@ -355,7 +355,7 @@ export default function ImportOutreach({
                   Column mapping
                 </h3>
                 <p className="mt-1 text-xs text-body/70">
-                  Scout guessed what each column is. Fix anything wrong — the Name
+                  Scout guessed what each column is. Fix anything wrong, the Name
                   column is required.
                 </p>
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -369,7 +369,7 @@ export default function ImportOutreach({
                           {h}
                         </div>
                         <div className="mt-0.5 truncate text-[11px] text-body/60">
-                          e.g. {String(rows[0]?.[h] || "").slice(0, 40) || "—"}
+                          e.g. {String(rows[0]?.[h] || "").slice(0, 40) || "-"}
                         </div>
                       </div>
                       <select
@@ -379,7 +379,7 @@ export default function ImportOutreach({
                         }
                         className="scout-select shrink-0 rounded-lg border border-warm-border bg-white px-2.5 py-1.5 text-xs font-semibold text-ink outline-none"
                       >
-                        <option value="">— ignore —</option>
+                        <option value="">, ignore, </option>
                         {(Object.keys(FIELD_LABELS) as (keyof typeof FIELD_LABELS)[]).map((k) => (
                           <option
                             key={k}
@@ -419,7 +419,7 @@ export default function ImportOutreach({
                             return (
                               <td key={k} className="whitespace-nowrap px-3 py-2 text-ink">
                                 <span className="line-clamp-1 max-w-[180px] block">
-                                  {val || "—"}
+                                  {val || "-"}
                                 </span>
                               </td>
                             );
@@ -459,7 +459,7 @@ export default function ImportOutreach({
                   >
                     <option value="sent">Already reached out</option>
                     <option value="replied">Replied</option>
-                    <option value="denied">Not a fit — don't resurface</option>
+                    <option value="denied">Not a fit, don't resurface</option>
                     <option value="drafted">Drafted, not yet sent</option>
                     <option value="new">Add to Finds (unactioned)</option>
                   </select>
@@ -474,7 +474,7 @@ export default function ImportOutreach({
             </div>
           )}
 
-          {/* Step 3 — success */}
+          {/* Step 3, success */}
           {imported !== null && (
             <div className="rounded-2xl border border-sage/40 bg-sage/10 p-6 text-center">
               <p className="text-base font-extrabold text-ink">
