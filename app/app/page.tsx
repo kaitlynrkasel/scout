@@ -4185,7 +4185,12 @@ function ScoutTool({
       )}
 
       {tab === "settings" && (
-        <SettingsTab onStartTour={startTour} onExport={exportMyData} />
+        <SettingsTab
+          onStartTour={startTour}
+          onExport={exportMyData}
+          onRedeem={redeemCode}
+          isComp={!!billing?.comp}
+        />
       )}
 
       {tab === "billing" && (
@@ -10466,13 +10471,34 @@ function BillingTab({
 function SettingsTab({
   onStartTour,
   onExport,
+  onRedeem,
+  isComp,
 }: {
   onStartTour: () => void;
   onExport: () => void;
+  onRedeem: (code: string) => Promise<string>;
+  isComp: boolean;
 }) {
   // Theme mirrors the .dark class on <html>; persisted to scout_theme and
   // applied pre-paint by the inline script in layout.tsx.
   const [dark, setDark] = useState(false);
+  // Access-code redemption (also on the Billing tab; mirrored here so it's easy
+  // to find).
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function submitCode() {
+    if (!code.trim() || redeeming) return;
+    setRedeeming(true);
+    setRedeemMsg(null);
+    const err = await onRedeem(code.trim());
+    setRedeeming(false);
+    if (err) setRedeemMsg({ ok: false, text: err });
+    else {
+      setRedeemMsg({ ok: true, text: "You're all set — unlimited access unlocked." });
+      setCode("");
+    }
+  }
   // Auto-schedule after-hours sends for the recipient's next business hour.
   const [autoSchedule, setAutoSchedule] = useState(false);
   useEffect(() => {
@@ -10511,6 +10537,55 @@ function SettingsTab({
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Small preferences that shape how Scout shows up for you.
       </p>
+
+      {/* Access code */}
+      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Access code</h2>
+        {isComp ? (
+          <p className="mt-1 flex items-center gap-2 text-sm leading-relaxed text-body">
+            <span className="text-lg">∞</span>
+            You have unlimited access — no code needed.
+          </p>
+        ) : (
+          <>
+            <p className="mt-1 text-sm leading-relaxed text-body">
+              Have a code? Redeem it for free, unlimited access — no card required.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <input
+                value={code}
+                onChange={(e) => {
+                  setCode(e.target.value);
+                  setRedeemMsg(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitCode();
+                }}
+                placeholder="Enter code"
+                autoCapitalize="characters"
+                spellCheck={false}
+                className="w-56 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brown focus:ring-4 focus:ring-brown/10"
+              />
+              <button
+                onClick={submitCode}
+                disabled={!code.trim() || redeeming}
+                className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+              >
+                {redeeming ? "Redeeming…" : "Redeem"}
+              </button>
+            </div>
+            {redeemMsg && (
+              <p
+                className={`mt-2 text-xs font-medium ${
+                  redeemMsg.ok ? "text-emerald-700" : "text-attention"
+                }`}
+              >
+                {redeemMsg.text}
+              </p>
+            )}
+          </>
+        )}
+      </section>
 
       {/* Appearance */}
       <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
