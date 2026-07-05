@@ -15,6 +15,28 @@ const INPUT =
   "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
 const LABEL = "mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-body/60";
 
+// Turn a Supabase auth error into something a human can act on. gotrue builds
+// its message from the server's response body; when that body is empty it falls
+// back to JSON.stringify({}) === "{}", which is useless in the UI. Catch that
+// (and other empty/opaque cases), log the raw error for debugging, and return a
+// message that points at the real cause: the confirmation email failing to send
+// (SMTP misconfigured) or a database trigger rejecting the new user.
+function authErrorMessage(e: any, fallback: string): string {
+  // Always log the full error so the network status/name is visible in console.
+  console.error("Auth error:", e);
+  const raw = (e?.message || "").trim();
+  const status = e?.status;
+  // "{}" (empty body) or no message at all → the server errored without saying
+  // why. On sign-up that's almost always the email send or a DB trigger failing.
+  if (!raw || raw === "{}" || raw === "[object Object]") {
+    if (status === 500 || status === 422) {
+      return "The server couldn't finish creating your account. This is usually the confirmation email failing to send (check your SMTP settings in Supabase) or a database trigger error.";
+    }
+    return fallback;
+  }
+  return raw;
+}
+
 type Mode = "in" | "up" | "verify";
 
 export default function AuthScreen() {
@@ -64,7 +86,7 @@ export default function AuthScreen() {
         setMode("verify");
       }
     } catch (e: any) {
-      setError(e?.message || "Couldn't create your account. Please try again.");
+      setError(authErrorMessage(e, "Couldn't create your account. Please try again."));
     } finally {
       setBusy(false);
     }
@@ -84,7 +106,7 @@ export default function AuthScreen() {
       if (error) throw error;
       // Success creates the session — the parent's auth listener takes over.
     } catch (e: any) {
-      setError(e?.message || "That code didn't work. Check it and try again.");
+      setError(authErrorMessage(e, "That code didn't work. Check it and try again."));
     } finally {
       setBusy(false);
     }
@@ -99,7 +121,7 @@ export default function AuthScreen() {
       if (error) throw error;
       setNotice(`A new code is on its way to ${email}.`);
     } catch (e: any) {
-      setError(e?.message || "Couldn't resend the code. Please try again.");
+      setError(authErrorMessage(e, "Couldn't resend the code. Please try again."));
     } finally {
       setBusy(false);
     }
@@ -116,7 +138,7 @@ export default function AuthScreen() {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
     } catch (e: any) {
-      setError(e?.message || "Couldn't sign you in. Check your email and password.");
+      setError(authErrorMessage(e, "Couldn't sign you in. Check your email and password."));
     } finally {
       setBusy(false);
     }
