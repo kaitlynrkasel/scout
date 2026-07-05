@@ -5108,6 +5108,18 @@ function ContactValue({
 }
 
 /* ---------------- Deny reason picker (preset chips + free text) ---------------- */
+// Split a stored deny reason back into its preset + free-text elaboration, so
+// editing an existing reason repopulates both parts.
+function parseDenyReason(current?: string): { base: string | null; extra: string } {
+  const c = (current || "").trim();
+  if (!c) return { base: null, extra: "" };
+  for (const r of DENY_REASONS) {
+    if (c === r) return { base: r, extra: "" };
+    if (c.startsWith(r + " — ")) return { base: r, extra: c.slice((r + " — ").length) };
+  }
+  return { base: "", extra: c }; // fully custom ("Other") reason
+}
+
 function DenyReasons({
   current,
   onPick,
@@ -5115,45 +5127,186 @@ function DenyReasons({
   current?: string;
   onPick: (reason: string) => void;
 }) {
-  const [other, setOther] = useState("");
-  const [showOther, setShowOther] = useState(false);
-  const isPreset = !current || DENY_REASONS.includes(current);
-  return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {DENY_REASONS.map((r) => (
+  const parsed = parseDenyReason(current);
+  // "pick" = choosing a reason chip; "elaborate" = optional detail step that
+  // pops up after a chip is chosen. Start in elaborate when editing an existing
+  // reason so its detail is visible.
+  const [phase, setPhase] = useState<"pick" | "elaborate">(current ? "elaborate" : "pick");
+  const [base, setBase] = useState<string>(parsed.base ?? "");
+  const [extra, setExtra] = useState<string>(parsed.extra);
+
+  function choose(label: string) {
+    setBase(label);
+    setExtra("");
+    setPhase("elaborate");
+  }
+  function commit() {
+    const b = base.trim();
+    const e = extra.trim();
+    const final = b && e ? `${b} — ${e}` : b || e;
+    if (!final) return;
+    onPick(final);
+  }
+
+  if (phase === "pick") {
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {DENY_REASONS.map((r) => (
+          <button
+            key={r}
+            onClick={() => choose(r)}
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              current === r
+                ? "border-coral/50 bg-brand-gradient text-white"
+                : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+            }`}
+          >
+            {r}
+          </button>
+        ))}
         <button
-          key={r}
-          onClick={() => onPick(r)}
-          className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-            current === r
-              ? "border-coral/50 bg-brand-gradient text-white"
-              : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-          }`}
-        >
-          {r}
-        </button>
-      ))}
-      {showOther || (current && !isPreset) ? (
-        <input
-          autoFocus
-          value={other || (current && !isPreset ? current : "")}
-          onChange={(e) => setOther(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && other.trim()) onPick(other.trim());
-          }}
-          onBlur={() => other.trim() && onPick(other.trim())}
-          placeholder="Other reason…"
-          className="min-w-[140px] rounded-full border border-warm-border px-2.5 py-1 text-[11px] text-ink outline-none focus:border-coral"
-        />
-      ) : (
-        <button
-          onClick={() => setShowOther(true)}
+          onClick={() => choose("")}
           className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
         >
           Other…
         </button>
-      )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-md rounded-xl border border-warm-border bg-surface p-2.5 shadow-card">
+      <div className="mb-1.5 flex items-center gap-1.5">
+        {base ? (
+          <span className="rounded-full bg-brand-gradient px-2.5 py-1 text-[11px] font-semibold text-white">
+            {base}
+          </span>
+        ) : (
+          <span className="text-[11px] font-semibold text-body/70">Other reason</span>
+        )}
+        <button
+          onClick={() => setPhase("pick")}
+          className="text-[11px] font-semibold text-body/45 transition hover:text-accent"
+        >
+          change
+        </button>
+      </div>
+      <div className="relative">
+        <textarea
+          autoFocus
+          value={extra}
+          onChange={(e) => setExtra(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) commit();
+          }}
+          rows={2}
+          placeholder={
+            base ? "Add a detail (optional) — e.g. what made them wrong" : "Your reason…"
+          }
+          className="w-full resize-y rounded-lg border border-warm-border bg-warm-bg/30 px-2.5 py-2 pr-9 text-[12px] leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-2 focus:ring-coral/15"
+        />
+        <div className="absolute right-1.5 top-1.5">
+          <DictateButton onText={(t) => setExtra((v) => (v.trim() ? v.trim() + " " + t : t))} />
+        </div>
+      </div>
+      <div className="mt-1.5 flex items-start gap-1.5 rounded-lg bg-sage/10 px-2 py-1.5 text-[10.5px] leading-snug text-body/70">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="mt-px shrink-0 text-sage">
+          <path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2Z" />
+          <path d="M9 22h6" />
+        </svg>
+        <span>Elaborating teaches Scout what to skip next time — the more you say, the better it learns your taste.</span>
+      </div>
+      <div className="mt-2 flex items-center gap-2">
+        <button
+          onClick={commit}
+          disabled={!base && !extra.trim()}
+          className="rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-40"
+        >
+          {extra.trim() ? "Save reason" : base ? "Save reason" : "Save"}
+        </button>
+        <span className="text-[10px] text-body/40">Detail is optional · ⌘⏎ to save</span>
+      </div>
     </div>
+  );
+}
+
+// Mic button that dictates into a text field via the browser's Web Speech API.
+// Silently hides when the browser doesn't support it (e.g. Firefox). Each final
+// phrase is handed back via onText so the caller can append it.
+function DictateButton({ onText }: { onText: (t: string) => void }) {
+  const [listening, setListening] = useState(false);
+  const [supported, setSupported] = useState(false);
+  const recRef = useRef<any>(null);
+
+  useEffect(() => {
+    const SR =
+      (typeof window !== "undefined" &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+      null;
+    if (!SR) return;
+    setSupported(true);
+    const rec = new SR();
+    rec.lang = "en-US";
+    rec.continuous = true;
+    rec.interimResults = false;
+    rec.onresult = (e: any) => {
+      let finalText = "";
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      }
+      finalText = finalText.trim();
+      if (finalText) onText(finalText);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recRef.current = rec;
+    return () => {
+      try {
+        rec.stop();
+      } catch {
+        /* already stopped */
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function toggle() {
+    const rec = recRef.current;
+    if (!rec) return;
+    if (listening) {
+      try {
+        rec.stop();
+      } catch {}
+      setListening(false);
+    } else {
+      try {
+        rec.start();
+        setListening(true);
+      } catch {
+        /* start() throws if already running — ignore */
+      }
+    }
+  }
+
+  if (!supported) return null;
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      title={listening ? "Stop dictation" : "Dictate your reason"}
+      aria-label={listening ? "Stop dictation" : "Dictate your reason"}
+      className={`grid h-7 w-7 place-items-center rounded-lg border transition ${
+        listening
+          ? "animate-pulse border-coral bg-coral/10 text-coral"
+          : "border-warm-border bg-surface text-body/60 hover:bg-warm-bg hover:text-accent"
+      }`}
+    >
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round">
+        <rect x="9" y="2" width="6" height="12" rx="3" />
+        <path d="M5 10a7 7 0 0 0 14 0" />
+        <path d="M12 19v3" />
+      </svg>
+    </button>
   );
 }
 
