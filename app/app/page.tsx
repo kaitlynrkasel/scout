@@ -4448,22 +4448,27 @@ function SideNav({
   ];
 
   return (
-    <aside className="sticky top-0 flex h-screen w-[228px] shrink-0 flex-col gap-1 border-r border-warm-border bg-surface p-4">
+    <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col gap-0.5 border-r border-warm-border bg-surface-2 p-2.5">
       <a
         href="/"
         aria-label="Scout home"
         title="Back to homepage"
-        className="flex items-center gap-2.5 rounded-xl px-2 pb-4 pt-1 transition hover:opacity-80"
+        className="flex items-center gap-2.5 rounded-lg px-2 pb-3 pt-1.5 transition hover:opacity-80"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/scout-logo.png" alt="Scout" width={36} height={36} className="h-9 w-9" />
-        <span className="text-xl font-extrabold tracking-tight text-ink">Scout</span>
+        <img src="/scout-logo.png" alt="Scout" width={22} height={22} className="h-[22px] w-[22px]" />
+        <span className="text-[15px] font-semibold tracking-tight text-ink">Scout</span>
       </a>
 
-      <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
-        Menu
-      </div>
-      <nav className="flex flex-col gap-1">
+      <button
+        onClick={() => setTab("outreach")}
+        className="mb-1 flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[13.5px] text-muted transition hover:bg-warm-bg"
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-muted/80"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+        Search
+        <span className="ml-auto text-[11px] text-muted/70">⌘K</span>
+      </button>
+      <nav className="flex flex-col gap-0.5">
         {items.map((it) => {
           const active = tab === it.key;
           return (
@@ -4471,10 +4476,10 @@ function SideNav({
               key={it.key}
               data-tour={`nav-${it.key}`}
               onClick={() => setTab(it.key)}
-              className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+              className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[14px] transition ${
                 active
-                  ? "bg-brown text-white shadow-soft"
-                  : "text-body hover:bg-brown-tint hover:text-brown-deep"
+                  ? "bg-brown-tint font-medium text-brown-deep"
+                  : "font-normal text-body hover:bg-warm-bg"
               }`}
             >
               <svg
@@ -4532,10 +4537,10 @@ function SideNav({
         {hasAccount && (
           <button
             onClick={() => setTab("account")}
-            className={`mt-3 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            className={`mt-2 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[14px] transition ${
               tab === "account"
-                ? "bg-brown text-white shadow-soft"
-                : "text-body hover:bg-brown-tint hover:text-brown-deep"
+                ? "bg-brown-tint font-medium text-brown-deep"
+                : "font-normal text-body hover:bg-warm-bg"
             }`}
           >
             <svg
@@ -4558,10 +4563,10 @@ function SideNav({
         {hasAccount && (
           <button
             onClick={() => setTab("billing")}
-            className={`mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+            className={`mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[14px] transition ${
               tab === "billing"
-                ? "bg-brown text-white shadow-soft"
-                : "text-body hover:bg-brown-tint hover:text-brown-deep"
+                ? "bg-brown-tint font-medium text-brown-deep"
+                : "font-normal text-body hover:bg-warm-bg"
             }`}
           >
             <svg
@@ -4582,7 +4587,7 @@ function SideNav({
             {billingTier && billingTier !== "free" && (
               <span
                 className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                  tab === "billing" ? "bg-white/20 text-white" : "bg-brown-tint text-brown-deep"
+                  tab === "billing" ? "bg-brown text-white" : "bg-brown-tint text-brown-deep"
                 }`}
               >
                 {billingTier}
@@ -4592,10 +4597,10 @@ function SideNav({
         )}
         <button
           onClick={() => setTab("settings")}
-          className={`mt-2 flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+          className={`mt-0.5 flex w-full items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[14px] transition ${
             tab === "settings"
-              ? "bg-brown text-white shadow-soft"
-              : "text-body hover:bg-brown-tint hover:text-brown-deep"
+              ? "bg-brown-tint font-medium text-brown-deep"
+              : "font-normal text-body hover:bg-warm-bg"
           }`}
         >
           <svg
@@ -7291,6 +7296,24 @@ function DashboardTab({
 
       {dashTab === "you" && (
       <>
+      {/* -------- Ask Scout spotlight (signature) -------- */}
+      <button
+        onClick={goOutreach}
+        aria-label="Ask Scout — start a search"
+        className="mt-6 flex w-full items-center gap-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5 text-left shadow-float transition hover:border-clay"
+      >
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown">
+          <circle cx="11" cy="11" r="7" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <span className="flex-1 truncate text-[15px] text-muted">
+          Ask Scout to find playlist curators, recruiters, or press…
+        </span>
+        <span className="shrink-0 rounded-md border border-warm-border bg-cream px-2 py-1 text-[11px] text-muted">
+          ⌘K
+        </span>
+      </button>
+
       {/* -------- Follow-up reminder -------- */}
       {dueFollowUps > 0 && (
         <button
@@ -7451,22 +7474,24 @@ function DashboardTab({
         </section>
       )}
 
-      {/* -------- Activity metrics (tiles; sparkline only where the data is real) -------- */}
-      <section className="mt-4 grid grid-cols-2 gap-3.5 sm:grid-cols-4">
-        {metrics.map((m) => (
+      {/* -------- Activity metrics (airy, hairline-separated) -------- */}
+      <section className="mt-6 grid grid-cols-2 gap-y-6 border-t border-warm-border pt-6 sm:grid-cols-4">
+        {metrics.map((m, i) => (
           <div
             key={m.label}
-            className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
+            className={`px-5 ${i === 0 ? "pl-0" : ""} ${
+              i > 0 ? "sm:border-l sm:border-warm-border" : ""
+            }`}
           >
-            <div className="flex items-start justify-between gap-2">
-              <div className="text-xl font-semibold leading-none tabular-nums text-ink">
+            <div className="flex items-baseline gap-2">
+              <div className="text-2xl font-semibold leading-none tracking-tight tabular-nums text-ink">
                 {m.value}
               </div>
               {m.series && <Sparkline data={m.series} />}
             </div>
-            <div className="mt-1.5 text-xs text-muted">{m.label}</div>
+            <div className="mt-2 text-[12.5px] text-muted">{m.label}</div>
             {typeof m.delta === "number" && m.delta > 0 && (
-              <div className="mt-2 text-[11px] font-semibold text-success-deep">
+              <div className="mt-1.5 text-[11.5px] font-medium text-success-deep">
                 +{m.delta} this week
               </div>
             )}
