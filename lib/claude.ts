@@ -5,7 +5,11 @@ import { classifyApiError } from "./apiErrors";
 
 const MODEL = process.env.SCOUT_MODEL || "claude-sonnet-4-6";
 
-export async function claudeJson(system: string, user: string): Promise<string> {
+export async function claudeJson(
+  system: string,
+  user: string,
+  maxTokens = 1024
+): Promise<string> {
   const key = process.env.ANTHROPIC_API_KEY;
   if (!key) throw new Error("ANTHROPIC_API_KEY is not set");
   const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -17,7 +21,7 @@ export async function claudeJson(system: string, user: string): Promise<string> 
     },
     body: JSON.stringify({
       model: MODEL,
-      max_tokens: 1024,
+      max_tokens: maxTokens,
       system,
       messages: [{ role: "user", content: user }],
     }),

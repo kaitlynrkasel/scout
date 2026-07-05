@@ -200,6 +200,124 @@ function looksLikePodcastOrVideoClip(url: string): boolean {
   return false;
 }
 
+// ---- Goal Decomposition Engine (the Discovery Planner) ----
+// BEFORE any query is written, Scout reasons about the goal like an elite
+// recruiter + investigative journalist: what outcome the user really wants, who
+// achieves it, what MUST be true, what evidence would PROVE a match (never
+// search for people directly, search for evidence), when NOW is a good time to
+// reach out, and which angles to attack from. This structured plan becomes the
+// blueprint every downstream search and the fit-scorer read from.
+export interface RankingFactor {
+  factor: string;
+  weight: number;
+}
+export interface GoalPlan {
+  goal: string;
+  target_type: string;
+  required: string[];
+  preferred: string[];
+  hard_constraints: string[];
+  soft_constraints: string[];
+  negative_constraints: string[];
+  evidence_needed: string[];
+  opportunity_signals: string[];
+  search_dimensions: string[];
+  ranking_factors: RankingFactor[];
+  confidence_questions: string[];
+}
+
+const DECOMPOSE_SYS =
+  "You are Scout's Discovery Planner. Do NOT generate search queries. Deeply understand the user's real objective: " +
+  "what outcome they're trying to achieve, what kind of person or organization accomplishes that, what hidden " +
+  "constraints are implied, what would make someone likely to say yes, and what would make someone impossible to " +
+  "use. Infer intent, never rely only on the literal wording. Then decompose the goal into this EXACT JSON schema " +
+  "(populate every field): {\"goal\":\"\",\"target_type\":\"\",\"required\":[],\"preferred\":[],\"hard_constraints\":[]," +
+  "\"soft_constraints\":[],\"negative_constraints\":[],\"evidence_needed\":[],\"opportunity_signals\":[]," +
+  "\"search_dimensions\":[],\"ranking_factors\":[{\"factor\":\"\",\"weight\":0}],\"confidence_questions\":[]}\n" +
+  "Definitions: goal = the actual objective (e.g. 'find a guest speaker', not 'search Nashville artists'). " +
+  "target_type = the entity type (Person, Company, Artist, Founder, Journalist, Investor, Professor, Creator, " +
+  "Podcast Host, etc.). required = things that MUST be true; if one is false, reject the candidate. preferred = " +
+  "strong positives, not required. hard_constraints = concrete requirements (available in April, within 25 miles, " +
+  "in healthcare, under 500 employees). soft_constraints = nice-to-haves (independent, emerging, growing fast). " +
+  "negative_constraints = who to EXCLUDE (major celebrities, retired, no public contact, inactive, already " +
+  "contacted, out of budget). evidence_needed = THE MOST IMPORTANT field: never search for people directly, search " +
+  "for EVIDENCE that would PROVE someone matches (tour schedules, festival lineups, conference speaker lists, " +
+  "management/team pages, funding announcements, book launches, award winners, recent interviews, hiring posts, " +
+  "press releases, association directories, professional memberships, LinkedIn profiles, official sites, recent " +
+  "news). Generate MULTIPLE evidence sources. opportunity_signals = signals that NOW is a good time to reach out " +
+  "(new album, launching a company, recently funded, hiring, speaking at a conference, traveling nearby, podcast " +
+  "appearance, book release, award, media tour, new executive role, recent acquisition) — these dramatically raise " +
+  "reply probability. search_dimensions = different ways to attack the search (by geography, profession, event, " +
+  "employer, recent news, organization, conference, award, social presence, publication, community, alumni, " +
+  "association) — never rely on one. ranking_factors = weighted scoring like [{factor,weight}] where weights total " +
+  "1.0. confidence_questions = what information is missing that would sharpen the search (local only? does budget " +
+  "matter? seniority? timing? prefer independent?). Think in evidence and investigations, not keywords or Google " +
+  "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
+  "Return ONLY the JSON object.";
+
+export async function decomposeGoal(
+  goal: string,
+  about: string,
+  useCase: string,
+  personalOverride?: string
+): Promise<GoalPlan | null> {
+  const g = String(goal || "").trim();
+  if (!g) return null;
+  const user =
+    `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their field, sub-field, seniority, city are in here): ` +
+    `${String(about || "").slice(0, 1600)}` +
+    (personalOverride ? `\n\n${personalOverride}` : "");
+  try {
+    const raw = await claudeJson(DECOMPOSE_SYS, user, 2600); // big schema, needs room
+    const parsed: any = parseJsonLoose(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const arr = (v: any): string[] =>
+      Array.isArray(v) ? v.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 20) : [];
+    const factors: RankingFactor[] = Array.isArray(parsed.ranking_factors)
+      ? parsed.ranking_factors
+          .map((f: any) => ({ factor: String(f?.factor || "").trim(), weight: Number(f?.weight) || 0 }))
+          .filter((f: RankingFactor) => f.factor)
+          .slice(0, 8)
+      : [];
+    return {
+      goal: String(parsed.goal || g).trim(),
+      target_type: String(parsed.target_type || "").trim(),
+      required: arr(parsed.required),
+      preferred: arr(parsed.preferred),
+      hard_constraints: arr(parsed.hard_constraints),
+      soft_constraints: arr(parsed.soft_constraints),
+      negative_constraints: arr(parsed.negative_constraints),
+      evidence_needed: arr(parsed.evidence_needed),
+      opportunity_signals: arr(parsed.opportunity_signals),
+      search_dimensions: arr(parsed.search_dimensions),
+      ranking_factors: factors,
+      confidence_questions: arr(parsed.confidence_questions),
+    };
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    return null;
+  }
+}
+
+// A compact text rendering of the plan for injecting into the query planner and
+// the extractor's prompts.
+function planBlock(plan: GoalPlan | null | undefined): string {
+  if (!plan) return "";
+  const list = (label: string, items: string[]) =>
+    items.length ? `\n${label}: ${items.join("; ")}` : "";
+  return (
+    `\n\nGOAL DECOMPOSITION (your blueprint — reason from this):` +
+    `\nReal objective: ${plan.goal}` +
+    (plan.target_type ? `\nTarget type: ${plan.target_type}` : "") +
+    list("Must be true (reject if false)", [...plan.required, ...plan.hard_constraints]) +
+    list("Nice to have", [...plan.preferred, ...plan.soft_constraints]) +
+    list("EXCLUDE", plan.negative_constraints) +
+    list("EVIDENCE that would prove a match (search for THIS, not for people)", plan.evidence_needed) +
+    list("Opportunity signals (favor targets showing these, NOW is a good time)", plan.opportunity_signals) +
+    list("Search dimensions (attack from several of these)", plan.search_dimensions)
+  );
+}
+
 // Plan smart, industry-aligned search queries from the goal + the user's actual
 // profile (their field, sub-specialty, seniority, city are inferred from ABOUT).
 // This is what makes results match the user's industry instead of being generic.
@@ -212,14 +330,18 @@ async function planQueries(
   salt?: string,
   cohortHint?: string,
   personalOverride?: string,
-  // Broaden mode: a narrower first pass returned nothing, so widen the net, 
+  // Broaden mode: a narrower first pass returned nothing, so widen the net,
   // relax the niche/long-tail/geo/segment constraints and allow bigger, more
   // obvious targets so a very specific goal degrades to *some* results instead
   // of an empty screen.
-  broaden = false
+  broaden = false,
+  // The Discovery Planner's blueprint (decomposeGoal). When present, queries are
+  // written to surface the EVIDENCE it names, spread across its search
+  // dimensions, favoring its opportunity signals.
+  plan?: GoalPlan | null
 ): Promise<string[]> {
   const g = goal.trim();
-  if (!about.trim()) return buildQueries(goal, useCase);
+  if (!about.trim() && !plan) return buildQueries(goal, useCase);
 
   const jobs = isJobUseCase(useCase);
   const networking = isNetworkingUseCase(useCase);
@@ -333,11 +455,21 @@ async function planQueries(
       "company size, sub-genre, seniority and segment filters, and it is fine to include larger, well-known targets. Stay " +
       "on-topic for the GOAL, but prioritize surfacing real, reachable results over being specific. "
     : "";
+  // Evidence-first querying, driven by the Discovery Planner's blueprint.
+  const evidenceClause = plan
+    ? " EVIDENCE-FIRST: a GOAL DECOMPOSITION blueprint is provided below. Do NOT write queries that search for the target " +
+      "people or organizations by description directly. Instead, write queries that surface the EVIDENCE the blueprint " +
+      "names (rosters, lineups, speaker lists, funding announcements, team/management pages, award winners, directories, " +
+      "recent press) — the best candidates are found through indirect evidence. Spread your queries ACROSS the blueprint's " +
+      "search dimensions (don't cluster on one), weave in its opportunity signals so recently-active targets surface, and " +
+      "never target anyone on its EXCLUDE list. "
+    : "";
   const sys =
     anchor +
     guidance +
     longTail +
     broadenClause +
+    evidenceClause +
     (salt
       ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
         "two people with a similar goal get different, equally-relevant results instead of the same list. "
@@ -353,6 +485,7 @@ async function planQueries(
     (personalOverride ? `\n\n${personalOverride}` : "");
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
+    planBlock(plan) +
     feedbackBlock(feedback);
 
   try {
@@ -533,7 +666,8 @@ async function extract(
   about: string,
   useCase: string,
   feedback?: DiscoverFeedback,
-  personalOverride?: string
+  personalOverride?: string,
+  plan?: GoalPlan | null
 ): Promise<Partial<Opportunity> & { isRelevant?: boolean } | null> {
   // Fit is judged differently depending on what the user is doing:
   // - Prospecting (sales/leads/partners/investors) OR a goal that says "any
@@ -643,7 +777,27 @@ async function extract(
   // already use for drafting. Sourced fresh per request from THIS user's own
   // deny data (see buildPersonalOverride in lib/autotune.ts); never touches
   // shared code, unlike the universal auto-tune cron.
-  const sys = core + fitRules + (personalOverride ? `\n\n${personalOverride}` : "");
+  // The Discovery Planner's blueprint makes fit scoring principled: reject on a
+  // violated hard requirement or an excluded target, reward opportunity signals,
+  // and weight the score by the plan's ranking factors.
+  const planFit = plan
+    ? ` DISCOVERY BLUEPRINT for this goal — judge fit against it. ` +
+      (plan.required.length || plan.hard_constraints.length
+        ? `MUST be true (set is_relevant false if any is clearly violated): ${[...plan.required, ...plan.hard_constraints].join("; ")}. `
+        : "") +
+      (plan.negative_constraints.length
+        ? `EXCLUDE (is_relevant false if it matches): ${plan.negative_constraints.join("; ")}. `
+        : "") +
+      (plan.opportunity_signals.length
+        ? `Raise fit_score for targets showing these opportunity signals (a good time to reach out): ${plan.opportunity_signals.join("; ")}. `
+        : "") +
+      (plan.ranking_factors.length
+        ? `Weight fit_score by these factors: ${plan.ranking_factors
+            .map((f) => `${f.factor} (${Math.round(f.weight * 100)}%)`)
+            .join(", ")}. `
+        : "")
+    : "";
+  const sys = core + fitRules + planFit + (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
@@ -778,6 +932,7 @@ export interface DiscoverResult {
   skippedNotFit: number;
   skippedCapped: number; // dropped because too many other users already contacted them
   skipped: SkippedCandidate[]; // per-candidate log of what got dropped and why
+  plan?: GoalPlan | null; // the Discovery Planner's blueprint for this search
 }
 
 export async function discover(
@@ -799,7 +954,21 @@ export async function discover(
   opts?: { onOpp?: (o: Opportunity) => void; signal?: AbortSignal }
 ): Promise<DiscoverResult> {
   const aborted = () => !!opts?.signal?.aborted;
-  const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint, personalOverride);
+  // Step 1: decompose the goal into an evidence-first blueprint (best-effort;
+  // falls back to plain query planning if it fails). Step 2: plan queries from
+  // it. Step 3+: gather + extract, both reading the same plan.
+  const plan = await decomposeGoal(goal, about, useCase, personalOverride).catch(() => null);
+  const queries = await planQueries(
+    goal,
+    about,
+    useCase,
+    feedback,
+    salt,
+    cohortHint,
+    personalOverride,
+    false,
+    plan
+  );
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name, never resurface a rejected find.
   const deniedNames = new Set(
@@ -905,7 +1074,7 @@ export async function discover(
           const people = await extractMultiplePeople(c, goal, about, useCase);
           return { multi: true as const, people, cand: c };
         }
-        const rec = await extract(c, goal, about, useCase, feedback, personalOverride);
+        const rec = await extract(c, goal, about, useCase, feedback, personalOverride, plan);
         return { multi: false as const, rec, cand: c };
       })
     );
@@ -1116,7 +1285,8 @@ export async function discover(
       salt,
       cohortHint,
       personalOverride,
-      true
+      true,
+      plan
     );
     broadenedQueries = broadened.length;
     await gather(broadened);
@@ -1225,5 +1395,6 @@ export async function discover(
     skippedNotFit,
     skippedCapped,
     skipped,
+    plan,
   };
 }
