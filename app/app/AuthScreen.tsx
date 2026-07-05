@@ -15,7 +15,7 @@ const INPUT =
   "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
 const LABEL = "mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-body/60";
 
-type Mode = "in" | "up" | "verify" | "forgot" | "newpw";
+type Mode = "in" | "up" | "verify" | "forgot" | "reset-code" | "newpw";
 
 // `recovery` is set by the parent when the user arrives via a password-reset
 // email link (Supabase fires a PASSWORD_RECOVERY auth event); we jump straight
@@ -47,8 +47,9 @@ export default function AuthScreen({
     setCode("");
   };
 
-  // Send the "reset your password" email. The link returns the user to /app,
-  // where the parent detects the recovery event and shows the newpw form.
+  // Send the password-reset email, then collect a 6-digit code (same reliable
+  // path the signup flow already uses). We also pass redirectTo so a link in the
+  // email still works, but the code path doesn't depend on any redirect config.
   async function sendReset(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase) return;
@@ -60,17 +61,52 @@ export default function AuthScreen({
         typeof window !== "undefined" ? `${window.location.origin}/app` : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) throw error;
-      setNotice(
-        `If an account exists for ${email.trim()}, a reset link is on its way. Open it on this device to set a new password.`
-      );
+      setNotice(`We sent a 6-digit code to ${email.trim()}. Enter it below with your new password.`);
+      setMode("reset-code");
     } catch (e: any) {
-      setError(e?.message || "Couldn't send a reset link. Please try again.");
+      setError(e?.message || "Couldn't send the code. Please try again.");
     } finally {
       setBusy(false);
     }
   }
 
-  // Set the new password (the recovery session from the email link is active).
+  // Verify the emailed recovery code, which signs the user in, then set the new
+  // password. No link-click / redirect needed — this mirrors the signup verify.
+  async function resetWithCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    setError("");
+    setNotice("");
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPw) {
+      setError("Those passwords don't match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error: vErr } = await supabase.auth.verifyOtp({
+        email: email.trim(),
+        token: code.trim(),
+        type: "recovery",
+      });
+      if (vErr) throw vErr;
+      const { error: uErr } = await supabase.auth.updateUser({ password });
+      if (uErr) throw uErr;
+      setNotice("Your password is updated. Taking you in…");
+      // verifyOtp created a session; the parent's auth listener signs them in.
+    } catch (e: any) {
+      setError(e?.message || "That code didn't work. Check it and try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Set the new password when arriving via a clicked email LINK (the parent
+  // detects PASSWORD_RECOVERY and shows this form). Kept as a fallback for the
+  // link path; the code path above is the primary one.
   async function setNewPassword(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase) return;
@@ -201,6 +237,8 @@ export default function AuthScreen({
               ? "Create your account"
               : mode === "forgot"
               ? "Reset your password"
+              : mode === "reset-code"
+              ? "Enter your code"
               : mode === "newpw"
               ? "Set a new password"
               : "Check your email"}
@@ -211,7 +249,9 @@ export default function AuthScreen({
               : mode === "up"
               ? "Your Profile and searches, private to you."
               : mode === "forgot"
-              ? "Enter your email and we'll send you a link to set a new one."
+              ? "Enter your email and we'll send a code to reset it."
+              : mode === "reset-code"
+              ? `Enter the code we sent to ${email} and your new password.`
               : mode === "newpw"
               ? "Choose a new password for your account."
               : `Enter the 6-digit code we sent to ${email}.`}
@@ -281,10 +321,67 @@ export default function AuthScreen({
                 />
               </div>
               <Feedback error={error} notice={notice} />
-              <Submit busy={busy}>Send reset link</Submit>
+              <Submit busy={busy}>Send reset code</Submit>
               <div className="pt-1 text-center text-xs text-body/70">
                 <button type="button" onClick={() => reset("in")} className="hover:text-ink">
                   &larr; Back to sign in
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ---------- Reset with emailed code + new password ---------- */}
+          {mode === "reset-code" && (
+            <form onSubmit={resetWithCode} className="mt-5 space-y-3">
+              <div>
+                <label className={LABEL}>Reset code</label>
+                <input
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  required
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  className={`${INPUT} text-center text-lg font-semibold tracking-[0.4em]`}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>New password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className={INPUT}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Confirm new password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  autoComplete="new-password"
+                  className={INPUT}
+                />
+              </div>
+              <Feedback error={error} notice={notice} />
+              <Submit busy={busy}>Update password</Submit>
+              <div className="flex items-center justify-between pt-1 text-xs text-body/70">
+                <button type="button" onClick={() => reset("forgot")} className="hover:text-ink">
+                  &larr; Back
+                </button>
+                <button
+                  type="button"
+                  onClick={() => sendReset({ preventDefault() {} } as React.FormEvent)}
+                  disabled={busy}
+                  className="font-semibold text-brown hover:text-brown-deep disabled:opacity-50"
+                >
+                  Resend code
                 </button>
               </div>
             </form>
