@@ -36,9 +36,14 @@ create table if not exists public.workspace_members (
   user_id uuid not null,
   email text not null,
   role text not null default 'member', -- 'owner' | 'member'
+  weight int not null default 1,        -- how much this member's decisions count in team learning (owner-set)
   created_at timestamptz not null default now(),
   primary key (workspace_id, user_id)
 );
+
+-- Team-learning weight per member (default 1 = equal). Added via ALTER so
+-- re-running upgrades an existing workspace_members table.
+alter table public.workspace_members add column if not exists weight int not null default 1;
 
 create table if not exists public.workspace_invites (
   id uuid primary key default gen_random_uuid(),

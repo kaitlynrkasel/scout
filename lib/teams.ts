@@ -109,6 +109,27 @@ export async function listJoinableWorkspaces(uid: string, email: string) {
     );
 }
 
+// Set how much a member's decisions count in team learning (owner only, 1-5).
+// Default is 1 for everyone (equal); an admin can raise/lower a member.
+export async function setMemberWeight(
+  uid: string,
+  workspaceId: string,
+  targetUserId: string,
+  weight: number
+) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (role !== "owner")
+    throw new TeamError("Only the company owner can set member weights.", 403);
+  const w = Math.max(1, Math.min(5, Math.round(Number(weight) || 1)));
+  const { error } = await db()
+    .from("workspace_members")
+    .update({ weight: w })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", targetUserId);
+  if (error) throw new TeamError(error.message, 500);
+  return { weight: w };
+}
+
 // Join an existing company directly (onboarding "select from a dropdown"). Open
 // join by design, a new hire picks their company and is added as a member.
 export async function joinWorkspace(uid: string, email: string, workspaceId: string) {
@@ -144,7 +165,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
       .in("id", wsIds);
     const { data: memberRows } = await db()
       .from("workspace_members")
-      .select("workspace_id, user_id, email, role")
+      .select("workspace_id, user_id, email, role, weight")
       .in("workspace_id", wsIds);
     workspaces = (wsRows || []).map((w: any) => ({
       ...w,

@@ -9865,6 +9865,17 @@ function TeamTab({
       await loadCtx();
     });
 
+  // Owner-only: set how much a teammate's decisions count in team learning (1-5).
+  const setWeight = (targetUserId: string, weight: number) =>
+    run("weight-" + targetUserId, async () => {
+      await authFetch("/api/team/member-weight", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: workspace.id, targetUserId, weight }),
+      });
+      await loadCtx();
+    });
+  const isOwner = workspace?.role === "owner";
+
   // Share a local project (with its current finds) into the workspace.
   const shareProject = () =>
     run("share", async () => {
@@ -10035,6 +10046,47 @@ function TeamTab({
                 </span>
               ))}
             </div>
+
+            {/* Owner-only: weight how much each member's decisions count in team
+                learning. Default is 1 for everyone (equal). */}
+            {isOwner && (workspace.members || []).length > 1 && (
+              <div className="mt-4 border-t border-warm-border pt-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-body/50">
+                  Team-learning weight
+                </div>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/70">
+                  Everyone counts equally (1) by default. As the owner, you can weigh a
+                  member&apos;s keeps and passes more or less in what the team learns.
+                </p>
+                <div className="mt-3 space-y-1.5">
+                  {(workspace.members || []).map((m: any) => (
+                    <div key={m.user_id} className="flex items-center gap-3 text-sm">
+                      <span className="min-w-0 flex-1 truncate text-ink">
+                        {m.email === accountEmail ? "You" : m.email}
+                        {m.role === "owner" && (
+                          <span className="ml-1.5 text-[9px] font-bold uppercase text-body/40">
+                            owner
+                          </span>
+                        )}
+                      </span>
+                      <select
+                        value={String(Math.max(1, Math.min(5, Number(m.weight) || 1)))}
+                        onChange={(e) => setWeight(m.user_id, Number(e.target.value))}
+                        disabled={busy === "weight-" + m.user_id}
+                        className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none transition focus:border-coral focus:ring-2 focus:ring-coral/15 disabled:opacity-50"
+                      >
+                        {[1, 2, 3, 4, 5].map((w) => (
+                          <option key={w} value={w}>
+                            {w}x
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
               <input
                 value={inviteEmail}
@@ -11881,12 +11933,16 @@ function ProfileTab({
   // Read some source text (a resume, a LinkedIn PDF/About section, a bio) and let
   // Scout fill in name + use case from it. keepBio=false when the text is already
   // in the bio box (the "read this" button), so we don't stomp the user's edits.
-  async function readAndFill(text: string, keepBio = true) {
+  // silent = the background auto-read that runs as the user edits the bio: it
+  // stays quiet unless it actually fills a new field, so it never nags.
+  async function readAndFill(text: string, keepBio = true, silent = false) {
     const t = (text || "").trim();
     if (!t) return;
     if (keepBio) onBio(t);
-    setNote("");
-    setAutofilled(false);
+    if (!silent) {
+      setNote("");
+      setAutofilled(false);
+    }
     setParsing(true);
     try {
       const res = await fetch("/api/parse-profile", {
@@ -11915,17 +11971,37 @@ function ProfileTab({
         });
         setAutofilled(true);
         setNote("Scout filled these in for you. Edit anything that's off.");
-      } else if (res.ok) {
+      } else if (!silent && res.ok) {
         setNote("Saved it below. Add your name and use case to finish.");
-      } else {
+      } else if (!silent) {
         setNote(data?.error || "Couldn't read that. Add your details below.");
       }
     } catch {
-      setNote("Saved it below. Add your name and use case to finish.");
+      if (!silent) setNote("Saved it below. Add your name and use case to finish.");
     } finally {
       setParsing(false);
     }
   }
+
+  // Auto-read the bio as it's edited: whenever the field changes and settles,
+  // Scout parses it in the background and fills any new info it finds (empty
+  // fields only). No button to press. lastParsed guards against re-parsing the
+  // bio loaded on mount and against re-running on an unchanged value.
+  const lastParsed = useRef<string>("__init__");
+  useEffect(() => {
+    if (lastParsed.current === "__init__") {
+      lastParsed.current = bio; // don't parse the value already loaded on mount
+      return;
+    }
+    const t = bio.trim();
+    if (t.length < 40 || bio === lastParsed.current) return;
+    const timer = setTimeout(() => {
+      lastParsed.current = bio;
+      readAndFill(bio, false, true);
+    }, 1200);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bio]);
 
   // Fetch a company website and fill the profile from it.
   async function readWebsite() {
@@ -12169,46 +12245,48 @@ function ProfileTab({
           </div>
         </div>
 
-        {/* -------- About you: personalization Scout weaves into search + drafts -------- */}
+        {/* -------- About you: personalization Scout weaves into search + drafts.
+             For company accounts this is the PERSONAL side (the company side is
+             the "Your company role" section above), so a company admin has both
+             and can run personal projects from the same account. -------- */}
         <div className="mt-7 rounded-2xl border border-warm-border bg-warm-bg/40 p-5">
           <div className="mb-3">
-            <h3 className="text-sm font-extrabold tracking-tight text-ink">About you</h3>
+            <h3 className="text-sm font-extrabold tracking-tight text-ink">
+              {kind === "company" ? "About you (personal side)" : "About you"}
+            </h3>
             <p className="mt-0.5 text-xs leading-relaxed text-body/70">
-              Optional. Scout uses these to match you with the right opportunities
-              and to sound like you in outreach.
+              {kind === "company"
+                ? "Optional. Your personal details, separate from the company above. Scout uses these when you run personal projects from this account."
+                : "Optional. Scout uses these to match you with the right opportunities and to sound like you in outreach."}
             </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            {kind !== "company" && (
-              <div>
-                <Label>Age</Label>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={13}
-                  max={100}
-                  value={age ?? ""}
-                  onChange={(e) => {
-                    const v = e.target.value.trim();
-                    onAge(v === "" ? undefined : Number(v));
-                  }}
-                  placeholder="e.g. 20"
-                  className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                />
-              </div>
-            )}
-            {kind !== "company" && (
-              <div>
-                <Label>School or education</Label>
-                <ComboInput
-                  value={college}
-                  onChange={onCollege}
-                  options={SCHOOL_SUGGESTIONS}
-                  placeholder="e.g. USC junior, MFA 2022, self-taught"
-                />
-              </div>
-            )}
+            <div>
+              <Label>Age</Label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={13}
+                max={100}
+                value={age ?? ""}
+                onChange={(e) => {
+                  const v = e.target.value.trim();
+                  onAge(v === "" ? undefined : Number(v));
+                }}
+                placeholder="e.g. 20"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>School or education</Label>
+              <ComboInput
+                value={college}
+                onChange={onCollege}
+                options={SCHOOL_SUGGESTIONS}
+                placeholder="e.g. USC junior, MFA 2022, self-taught"
+              />
+            </div>
             <div>
               <Label>Location</Label>
               <ComboInput
@@ -12220,8 +12298,7 @@ function ProfileTab({
             </div>
           </div>
 
-          {kind !== "company" && (
-            <div className="mt-5">
+          <div className="mt-5">
               <Label>Where are you in school?</Label>
               <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
                 {(
@@ -12249,8 +12326,7 @@ function ProfileTab({
                 Helps Scout pitch you at the right stage, a high schooler and a grad aren&apos;t
                 reaching out the same way.
               </p>
-            </div>
-          )}
+          </div>
 
           <div className="mt-5">
             <Label>Are you applying to jobs or internships?</Label>
@@ -12345,33 +12421,19 @@ function ProfileTab({
             <Label className="mb-0">Resume, LinkedIn, or bio</Label>
             <div className="flex items-center gap-1.5">
               <MicButton onAppend={(t) => onBio(joinSpoken(bio, t))} />
-              <button
-                onClick={() => readAndFill(bio, false)}
-                disabled={!bio.trim() || parsing}
-                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
-              >
-                {parsing ? "Reading…" : "Read this & fill in my profile"}
-              </button>
+              {parsing && (
+                <span className="flex items-center gap-1.5 text-xs font-semibold text-accent">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-coral" />
+                  Reading…
+                </span>
+              )}
             </div>
           </div>
           <textarea
             value={bio}
             onChange={(e) => onBio(e.target.value)}
-            onPaste={(e) => {
-              // Pasting a resume / bio / About section auto-fills your name and
-              // use case, no button needed. Only for a substantial paste, so a
-              // stray word or URL doesn't kick off a parse.
-              const pasted = (e.clipboardData?.getData("text") || "")
-                .replace(/\s+/g, " ")
-                .trim();
-              if (parsing || pasted.length < 120) return;
-              const el = e.currentTarget;
-              // Let the paste land in the box (onChange updates bio), then parse
-              // the full contents without re-setting the bio we just updated.
-              setTimeout(() => readAndFill(el.value, false), 0);
-            }}
             rows={11}
-            placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
+            placeholder="Paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Scout reads it as you type and fills in your name, use case, and details automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>

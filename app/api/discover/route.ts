@@ -97,17 +97,30 @@ export async function POST(req: NextRequest) {
         if (mine) {
           const { data: members } = await supabaseAdmin!
             .from("workspace_members")
-            .select("user_id")
+            .select("user_id, weight")
             .eq("workspace_id", wsId);
-          const memberIds = (members || []).map((m: any) => m.user_id).slice(0, 50);
+          const memberList = (members || []).slice(0, 50);
+          const memberIds = memberList.map((m: any) => m.user_id);
+          // Owner-set weight (default 1 = equal). Replicating a member's finds by
+          // their weight makes their decisions count that many times more.
+          const weightOf = new Map<string, number>(
+            memberList.map((m: any) => [
+              m.user_id,
+              Math.max(1, Math.min(5, Number(m.weight) || 1)),
+            ])
+          );
           if (memberIds.length) {
             const { data: states } = await supabaseAdmin!
               .from("user_state")
-              .select("data")
+              .select("user_id, data")
               .in("user_id", memberIds);
-            const teamFinds = (states || []).flatMap((s: any) =>
-              Array.isArray(s?.data?.finds) ? s.data.finds : []
-            );
+            const teamFinds = (states || []).flatMap((s: any) => {
+              const finds = Array.isArray(s?.data?.finds) ? s.data.finds : [];
+              const w = weightOf.get(s.user_id) || 1;
+              const out: any[] = [];
+              for (let i = 0; i < w; i++) out.push(...finds);
+              return out;
+            });
             teamOverride = buildTeamOverride(computeTuningSignal(teamFinds));
           }
         }
