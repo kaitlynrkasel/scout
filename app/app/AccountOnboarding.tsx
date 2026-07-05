@@ -56,6 +56,43 @@ export default function AccountOnboarding({
   const [companyAbout, setCompanyAbout] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyIndustry, setCompanyIndustry] = useState("");
+  // Reading the company website to auto-fill the questions (optional — plenty of
+  // companies have no site, so this is a shortcut, never a requirement).
+  const [scanning, setScanning] = useState(false);
+  const [scanNote, setScanNote] = useState("");
+
+  async function scanWebsite() {
+    const url = companyWebsite.trim();
+    if (!url || scanning) return;
+    setScanning(true);
+    setScanNote("");
+    setError("");
+    try {
+      const res = await fetch("/api/read-company", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setScanNote(data?.error || "Couldn't read that site. Fill it in by hand below.");
+        return;
+      }
+      // Fill only what came back; never clobber something the user already typed.
+      if (data.name && !companyName.trim()) setCompanyName(data.name);
+      if (data.about && !companyAbout.trim()) setCompanyAbout(data.about);
+      if (data.industry && !companyIndustry.trim()) setCompanyIndustry(data.industry);
+      setScanNote(
+        data.name || data.about || data.industry
+          ? "Filled in what Scout could find. Review and edit anything below."
+          : "Scout couldn't pull much from that site. Fill it in by hand below."
+      );
+    } catch {
+      setScanNote("Couldn't read that site. Fill it in by hand below.");
+    } finally {
+      setScanning(false);
+    }
+  }
 
   // Join-a-company state.
   const [companies, setCompanies] = useState<Company[] | null>(null);
@@ -250,6 +287,40 @@ export default function AccountOnboarding({
             </p>
 
             <div className="mt-6 space-y-4">
+              {/* Shortcut: paste the website and let Scout fill the rest. */}
+              <div className="rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
+                <label className={labelCls}>Have a website? Let Scout fill this in</label>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    value={companyWebsite}
+                    onChange={(e) => {
+                      setCompanyWebsite(e.target.value);
+                      setScanNote("");
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        scanWebsite();
+                      }
+                    }}
+                    placeholder="e.g. cedarco.com"
+                    className={`${inputCls} flex-1`}
+                  />
+                  <button
+                    type="button"
+                    onClick={scanWebsite}
+                    disabled={!companyWebsite.trim() || scanning}
+                    className="shrink-0 rounded-xl bg-brown px-4 py-3 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-40"
+                  >
+                    {scanning ? "Reading…" : "Read my site"}
+                  </button>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                  {scanNote ||
+                    "Scout reads your site to learn what your company does, then fills the questions below. No website? Just fill them in yourself, it's not required."}
+                </p>
+              </div>
+
               <div>
                 <label className={labelCls}>Company name</label>
                 <input
@@ -269,25 +340,14 @@ export default function AccountOnboarding({
                   className={`${inputCls} resize-y leading-relaxed`}
                 />
               </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className={labelCls}>Industry (optional)</label>
-                  <input
-                    value={companyIndustry}
-                    onChange={(e) => setCompanyIndustry(e.target.value)}
-                    placeholder="e.g. Music"
-                    className={inputCls}
-                  />
-                </div>
-                <div>
-                  <label className={labelCls}>Website (optional)</label>
-                  <input
-                    value={companyWebsite}
-                    onChange={(e) => setCompanyWebsite(e.target.value)}
-                    placeholder="e.g. cedarco.com"
-                    className={inputCls}
-                  />
-                </div>
+              <div>
+                <label className={labelCls}>Industry (optional)</label>
+                <input
+                  value={companyIndustry}
+                  onChange={(e) => setCompanyIndustry(e.target.value)}
+                  placeholder="e.g. Music"
+                  className={inputCls}
+                />
               </div>
 
               <div className="border-t border-warm-border pt-4">

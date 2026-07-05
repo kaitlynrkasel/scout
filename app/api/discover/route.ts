@@ -77,27 +77,75 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const result = await discover(
-      String(goal),
-      String(about || ""),
-      String(useCase || template || "networking"),
-      10,
-      feedback && typeof feedback === "object" ? feedback : undefined,
-      salt ? String(salt).slice(0, 64) : undefined,
-      cohortHint ? String(cohortHint).slice(0, 400) : undefined,
-      personalOverride || undefined
-    );
+    // Stream results as NDJSON so the client can show finds as they're scouted
+    // and — if the user cancels mid-run — keep what was already found. Each line
+    // is one JSON object: {type:"opp",opp} per find, then {type:"done",result}
+    // (or {type:"error",...}). Cancellation aborts req.signal, which stops
+    // discover() early so no further Tavily/Claude calls are spent, and we skip
+    // metering (an abandoned search shouldn't cost the user a credit).
+    const enc = new TextEncoder();
+    const send = (ctrl: ReadableStreamDefaultController, obj: unknown) =>
+      ctrl.enqueue(enc.encode(JSON.stringify(obj) + "\n"));
 
-    // Count this successful search against the user's monthly allowance.
-    if (metered && uid) {
-      try {
-        await consumeSearch(uid);
-      } catch (e: any) {
-        console.warn("consumeSearch failed (search already returned):", e?.message);
-      }
-    }
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          const result = await discover(
+            String(goal),
+            String(about || ""),
+            String(useCase || template || "networking"),
+            10,
+            feedback && typeof feedback === "object" ? feedback : undefined,
+            salt ? String(salt).slice(0, 64) : undefined,
+            cohortHint ? String(cohortHint).slice(0, 400) : undefined,
+            personalOverride || undefined,
+            {
+              signal: req.signal,
+              onOpp: (o) => {
+                try {
+                  send(controller, { type: "opp", opp: o });
+                } catch {
+                  /* controller may be closed if the client left */
+                }
+              },
+            }
+          );
+          if (req.signal.aborted) return; // client cancelled; don't meter
+          send(controller, { type: "done", result });
+          if (metered && uid) {
+            try {
+              await consumeSearch(uid);
+            } catch (e: any) {
+              console.warn("consumeSearch failed (search already returned):", e?.message);
+            }
+          }
+        } catch (e: any) {
+          if (req.signal.aborted) return;
+          const payload =
+            e instanceof ApiCreditError
+              ? { type: "error", error: e.userMessage(), credit: true, provider: e.provider, reason: e.reason }
+              : { type: "error", error: e?.message || "Discovery failed." };
+          try {
+            send(controller, payload);
+          } catch {
+            /* ignore */
+          }
+        } finally {
+          try {
+            controller.close();
+          } catch {
+            /* already closed */
+          }
+        }
+      },
+    });
 
-    return NextResponse.json(result);
+    return new Response(stream, {
+      headers: {
+        "content-type": "application/x-ndjson; charset=utf-8",
+        "cache-control": "no-store",
+      },
+    });
   } catch (e: any) {
     if (e instanceof ApiCreditError) {
       return NextResponse.json(

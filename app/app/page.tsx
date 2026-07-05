@@ -853,6 +853,10 @@ function ScoutTool({
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
+  // Live count of finds streamed in so far this search (for the "Stop" button).
+  const [liveCount, setLiveCount] = useState(0);
+  // Lets the user cancel an in-flight search but keep what was already scouted.
+  const discoverAbort = useRef<AbortController | null>(null);
   // When discovery started (ms epoch), so the progress bar can resume at the
   // right % after tab switches, SearchProgress is scoped to the Outreach tab
   // and remounts when the user comes back.
@@ -3032,6 +3036,9 @@ function ScoutTool({
         ? `${goal}\n\n${extras.join(" ")}`
         : goal;
       const token = getToken ? await getToken() : null;
+      const controller = new AbortController();
+      discoverAbort.current = controller;
+      setLiveCount(0);
       const res = await fetch("/api/discover", {
         method: "POST",
         headers: {
@@ -3046,33 +3053,93 @@ function ScoutTool({
           salt: outreachSalt(accountEmail),
           cohortHint: cohortHintFrom(community),
         }),
+        signal: controller.signal,
       });
-      const data = await parseApiResponse(res);
-      // Out of searches on the plan, show the upgrade prompt (a billing 402
-      // carries a `code`; the API-credit 402 does not, so it still errors below).
-      if (res.status === 402 && data?.code) {
-        setUpgradePrompt({ code: data.code, tier: data.tier || "free" });
-        return;
-      }
-      if (!res.ok || data?.error) {
+      // Errors (quota, credits) come back as a normal JSON response, not a stream.
+      const ct = res.headers.get("content-type") || "";
+      if (!res.ok || !ct.includes("ndjson")) {
+        const data = await parseApiResponse(res);
+        if (res.status === 402 && data?.code) {
+          setUpgradePrompt({ code: data.code, tier: data.tier || "free" });
+          return;
+        }
         reportError(data);
         return;
       }
-      setOpps(data.opportunities || []);
+
+      // Stream: accumulate finds as they arrive so a cancel keeps what's scouted.
+      const live: Opportunity[] = [];
+      let done: any = null;
+      const reader = res.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let stopped = false;
+      try {
+        while (true) {
+          const { value, done: streamDone } = await reader.read();
+          if (streamDone) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl: number;
+          while ((nl = buf.indexOf("\n")) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let msg: any;
+            try {
+              msg = JSON.parse(line);
+            } catch {
+              continue;
+            }
+            if (msg.type === "opp" && msg.opp) {
+              live.push(msg.opp);
+              setOpps([...live]);
+              setLiveCount(live.length);
+            } else if (msg.type === "done") {
+              done = msg.result;
+            } else if (msg.type === "error") {
+              reportError(msg);
+              return;
+            }
+          }
+        }
+      } catch (streamErr: any) {
+        // AbortError = the user hit Stop; keep the finds already streamed in.
+        if (streamErr?.name === "AbortError") stopped = true;
+        else throw streamErr;
+      }
+
+      // Normal finish: use the fully processed set (sorted, capped, enriched).
+      // Cancelled finish: keep the raw finds already streamed in.
+      const finalOpps: Opportunity[] = done?.opportunities || live;
+      setOpps(finalOpps);
       setSelected({}); // nothing pre-approved, you approve who you want to reach
-      setSkipped(Array.isArray(data.skipped) ? data.skipped : []);
-      setStats(
-        `${data.opportunities.length} found · ${data.searched} searches · ${data.candidates} pages read · skipped ${data.skippedDupes} duplicates, ${data.skippedNotFit} not a fit`
-      );
-      const added = mergeFinds(data.opportunities || [], runCatId);
-      bumpActivity({ searches: 1, found: (data.opportunities || []).length });
+      setSkipped(done && Array.isArray(done.skipped) ? done.skipped : []);
+      if (done) {
+        setStats(
+          `${finalOpps.length} found · ${done.searched} searches · ${done.candidates} pages read · skipped ${done.skippedDupes} duplicates, ${done.skippedNotFit} not a fit`
+        );
+      } else {
+        setStats(`Stopped early · kept the ${finalOpps.length} ${finalOpps.length === 1 ? "find" : "finds"} scouted so far`);
+      }
+      const added = mergeFinds(finalOpps, runCatId);
+      // Only count a search against usage when it ran to completion.
+      if (done) bumpActivity({ searches: 1, found: finalOpps.length });
       if (added) setStats((s) => `${s} · ${added} new saved to Finds`);
     } catch (e: any) {
+      if (e?.name === "AbortError") return; // cancelled before any stream read
       setError(e.message);
     } finally {
+      discoverAbort.current = null;
       setDiscovering(false);
       setDiscoverStartedAt(null);
+      setLiveCount(0);
     }
+  }
+
+  // Cancel an in-flight search but keep the finds already scouted (runDiscover
+  // catches the abort and finalizes with whatever streamed in).
+  function stopDiscover() {
+    discoverAbort.current?.abort();
   }
 
   // ---- Billing helpers ----
@@ -3704,6 +3771,16 @@ function ScoutTool({
                 >
                   {discovering ? "Scouting…" : "Scout"}
                 </button>
+                {discovering && (
+                  <button
+                    onClick={stopDiscover}
+                    className="rounded-xl border border-warm-border px-4 py-3 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                  >
+                    {liveCount > 0
+                      ? `Stop & keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
+                      : "Stop"}
+                  </button>
+                )}
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
                 {skipped.length > 0 && (
                   <button

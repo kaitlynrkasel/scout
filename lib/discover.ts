@@ -791,8 +791,14 @@ export async function discover(
   // This user's own calibration text (see buildPersonalOverride in
   // lib/autotune.ts), takes priority over the universal baseline by being
   // appended last to both the query planner and the extractor's prompts.
-  personalOverride?: string
+  personalOverride?: string,
+  // Streaming + cancellation: onOpp fires as each find is confirmed (so the
+  // route can stream partial results), and signal lets the caller stop the
+  // search early — the user cancels mid-run but keeps what was already scouted,
+  // and no further Tavily/Claude calls are spent.
+  opts?: { onOpp?: (o: Opportunity) => void; signal?: AbortSignal }
 ): Promise<DiscoverResult> {
+  const aborted = () => !!opts?.signal?.aborted;
   const queries = await planQueries(goal, about, useCase, feedback, salt, cohortHint, personalOverride);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name, never resurface a rejected find.
@@ -832,6 +838,7 @@ export async function discover(
     // industry angle — lands near the front and makes it into the results.
     const buckets: TavilyResult[][] = [];
     for (const q of passQueries) {
+      if (aborted()) break; // user cancelled — stop spending searches
       const bucket: TavilyResult[] = [];
       const results = await tavilySearch(q, perQuery, { depth });
       for (const r of results) {
@@ -890,6 +897,7 @@ export async function discover(
   const batchSize = 4;
   async function extractFrom(start: number) {
   for (let i = start; i < candidates.length && opps.length < maxItems; i += batchSize) {
+    if (aborted()) break; // user cancelled — keep what's extracted so far
     const batch = candidates.slice(i, i + batchSize);
     const rawResults = await Promise.all(
       batch.map(async (c) => {
@@ -1083,6 +1091,7 @@ export async function discover(
           },
         ],
       });
+      opts?.onOpp?.(opps[opps.length - 1]); // stream this find to the caller live
     }
   }
   }
@@ -1155,7 +1164,7 @@ export async function discover(
   // to openings that don't already list a real person. Enrich the top few in
   // parallel (bounded so we stay within the serverless time budget).
   let enrichSearches = 0;
-  if (isJobUseCase(useCase)) {
+  if (isJobUseCase(useCase) && !aborted()) {
     const needContact = opps.filter((o) => !hasPersonalEmail(o)).slice(0, 6);
     enrichSearches = needContact.length * 2;
     const found = await Promise.all(
@@ -1183,7 +1192,7 @@ export async function discover(
   // cap on those, everyone can and should apply to the same opening.
   let kept = opps;
   let skippedCapped = 0;
-  if (!isJobUseCase(useCase)) {
+  if (!isJobUseCase(useCase) && !aborted()) {
     try {
       const capped = await cappedKeys(opps.map((o) => targetKey(o)));
       if (capped.size) {
