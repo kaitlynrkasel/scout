@@ -141,6 +141,7 @@ export interface AppState {
     companyName?: string;
     companyRole?: string;
     companyContribution?: string;
+    companyWorkspaceId?: string;
     age?: number;
     eduStatus?: string;
     college?: string;

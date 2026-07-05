@@ -24,6 +24,13 @@ create table if not exists public.workspaces (
   created_at timestamptz not null default now()
 );
 
+-- Company details captured at onboarding when someone creates a new company
+-- ("what is this company?"). Added via ALTER so re-running upgrades an existing
+-- workspaces table that predates these columns.
+alter table public.workspaces add column if not exists about text;
+alter table public.workspaces add column if not exists website text;
+alter table public.workspaces add column if not exists industry text;
+
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null,

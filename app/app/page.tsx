@@ -297,6 +297,7 @@ interface Profile {
   companyName?: string;
   companyRole?: string; // your specific role/title at the company
   companyContribution?: string; // how you serve / what you do on the company's projects
+  companyWorkspaceId?: string; // the Teams workspace this company maps to (created or joined)
   // Optional personalization. Stored locally only for now (the Supabase
   // `profiles` row keeps its original columns; these ride along in the browser's
   // scout_profile blob and flow into aboutText so the LLM can use them).
@@ -660,6 +661,8 @@ function AuthedShell() {
           if (typeof parsed.companyRole === "string") localExtras.companyRole = parsed.companyRole;
           if (typeof parsed.companyContribution === "string")
             localExtras.companyContribution = parsed.companyContribution;
+          if (typeof parsed.companyWorkspaceId === "string")
+            localExtras.companyWorkspaceId = parsed.companyWorkspaceId;
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
           if (typeof parsed.eduStatus === "string") localExtras.eduStatus = parsed.eduStatus;
           if (typeof parsed.college === "string") localExtras.college = parsed.college;
@@ -690,6 +693,8 @@ function AuthedShell() {
       if (typeof raw.companyRole === "string") mergedExtras.companyRole = raw.companyRole;
       if (typeof raw.companyContribution === "string")
         mergedExtras.companyContribution = raw.companyContribution;
+      if (typeof raw.companyWorkspaceId === "string")
+        mergedExtras.companyWorkspaceId = raw.companyWorkspaceId;
       if (typeof raw.age === "number") mergedExtras.age = raw.age;
       if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
         mergedExtras.eduStatus = raw.eduStatus as EducationStatus;
@@ -1130,6 +1135,7 @@ function ScoutTool({
         companyName: profile.companyName,
         companyRole: profile.companyRole,
         companyContribution: profile.companyContribution,
+        companyWorkspaceId: profile.companyWorkspaceId,
         age: profile.age,
         eduStatus: profile.eduStatus,
         college: profile.college,
@@ -1139,7 +1145,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -3126,6 +3132,67 @@ function ScoutTool({
     }
   }
 
+  // ---- Company onboarding (Teams) helpers ----
+  // The directory of existing companies a new user can join.
+  async function listCompanies(): Promise<
+    { id: string; name: string; about: string; industry: string; memberCount: number; domainMatch: boolean; alreadyMember: boolean }[]
+  > {
+    if (!getToken) return [];
+    const token = await getToken();
+    if (!token) return [];
+    try {
+      const res = await fetch("/api/team/companies", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return [];
+      const j = await res.json();
+      return j.companies || [];
+    } catch {
+      return [];
+    }
+  }
+  // Create a new company (workspace). Returns its id, or an error string.
+  async function createCompany(info: {
+    name: string;
+    about?: string;
+    website?: string;
+    industry?: string;
+  }): Promise<{ id?: string; error?: string }> {
+    if (!getToken) return { error: "Please sign in first." };
+    const token = await getToken();
+    if (!token) return { error: "Please sign in first." };
+    try {
+      const res = await fetch("/api/team/workspace", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify(info),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j?.workspace?.id) return { id: j.workspace.id };
+      return { error: j?.error || "Could not create the company." };
+    } catch (e: any) {
+      return { error: e?.message || "Could not create the company." };
+    }
+  }
+  // Join an existing company by id. Returns its name, or an error string.
+  async function joinCompany(workspaceId: string): Promise<{ name?: string; error?: string }> {
+    if (!getToken) return { error: "Please sign in first." };
+    const token = await getToken();
+    if (!token) return { error: "Please sign in first." };
+    try {
+      const res = await fetch("/api/team/companies", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ workspaceId }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j?.workspace) return { name: j.workspace.name };
+      return { error: j?.error || "Could not join that company." };
+    } catch (e: any) {
+      return { error: e?.message || "Could not join that company." };
+    }
+  }
+
   // Load plan/usage on mount. If we're returning from Checkout (?billing=success),
   // Stripe's webhook may land a beat later, so re-check shortly after and clean the URL.
   useEffect(() => {
@@ -3323,6 +3390,9 @@ function ScoutTool({
         <AccountOnboarding
           name={profile.name.trim().split(/\s+/)[0] || ""}
           onComplete={(patch) => patchProfile(patch)}
+          listCompanies={listCompanies}
+          createCompany={createCompany}
+          joinCompany={joinCompany}
         />
       )}
       <SideNav

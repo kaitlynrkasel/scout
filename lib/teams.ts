@@ -42,18 +42,88 @@ async function assertProjectMember(uid: string, sharedProjectId: string) {
 
 // ---- Workspaces ----
 
-export async function createWorkspace(uid: string, email: string, name: string) {
+export async function createWorkspace(
+  uid: string,
+  email: string,
+  name: string,
+  details: { about?: string; website?: string; industry?: string } = {}
+) {
   const nm = String(name || "").trim();
-  if (!nm) throw new TeamError("Give your workspace a name.");
+  if (!nm) throw new TeamError("Give your company a name.");
   const { data: ws, error } = await db()
     .from("workspaces")
-    .insert({ name: nm, created_by: uid })
-    .select("id, name, created_by, created_at")
+    .insert({
+      name: nm,
+      created_by: uid,
+      about: (details.about || "").trim() || null,
+      website: (details.website || "").trim() || null,
+      industry: (details.industry || "").trim() || null,
+    })
+    .select("id, name, about, website, industry, created_by, created_at")
     .single();
   if (error || !ws) throw new TeamError(error?.message || "Could not create workspace.", 500);
   await db()
     .from("workspace_members")
     .insert({ workspace_id: ws.id, user_id: uid, email, role: "owner" });
+  return ws;
+}
+
+// A directory of every company (workspace) a new user could join, so onboarding
+// can offer "join an existing company" from a dropdown. Companies whose members
+// share the caller's email domain are surfaced first (likely their real
+// employer). `alreadyMember` lets the UI skip ones they're already in.
+export async function listJoinableWorkspaces(uid: string, email: string) {
+  const domain = (email.split("@")[1] || "").toLowerCase();
+  const { data: wsRows } = await db()
+    .from("workspaces")
+    .select("id, name, about, industry")
+    .order("name");
+  if (!wsRows?.length) return [];
+  const { data: memberRows } = await db()
+    .from("workspace_members")
+    .select("workspace_id, user_id, email");
+  const byWs = new Map<string, any[]>();
+  for (const m of memberRows || []) {
+    const arr = byWs.get(m.workspace_id) || [];
+    arr.push(m);
+    byWs.set(m.workspace_id, arr);
+  }
+  return (wsRows || [])
+    .map((w: any) => {
+      const members = byWs.get(w.id) || [];
+      const domainMatch =
+        !!domain &&
+        members.some((m: any) => (m.email.split("@")[1] || "").toLowerCase() === domain);
+      return {
+        id: w.id,
+        name: w.name,
+        about: w.about || "",
+        industry: w.industry || "",
+        memberCount: members.length,
+        domainMatch,
+        alreadyMember: members.some((m: any) => m.user_id === uid),
+      };
+    })
+    .sort(
+      (a, b) => Number(b.domainMatch) - Number(a.domainMatch) || a.name.localeCompare(b.name)
+    );
+}
+
+// Join an existing company directly (onboarding "select from a dropdown"). Open
+// join by design — a new hire picks their company and is added as a member.
+export async function joinWorkspace(uid: string, email: string, workspaceId: string) {
+  const { data: ws } = await db()
+    .from("workspaces")
+    .select("id, name")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (!ws) throw new TeamError("That company no longer exists.", 404);
+  await db()
+    .from("workspace_members")
+    .upsert(
+      { workspace_id: workspaceId, user_id: uid, email, role: "member" },
+      { onConflict: "workspace_id,user_id" }
+    );
   return ws;
 }
 

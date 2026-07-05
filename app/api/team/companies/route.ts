@@ -1,31 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { userFromReq } from "@/lib/supabaseAdmin";
-import { createWorkspace, getWorkspaceContext, TeamError } from "@/lib/teams";
+import { listJoinableWorkspaces, joinWorkspace, TeamError } from "@/lib/teams";
 
 export const runtime = "nodejs";
 
-// The caller's workspaces (with members) + pending invites addressed to them.
+// The directory of existing companies a new user can join (onboarding dropdown).
 export async function GET(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    return NextResponse.json(await getWorkspaceContext(u.id, u.email));
+    const companies = await listJoinableWorkspaces(u.id, u.email);
+    return NextResponse.json({ companies });
   } catch (e: any) {
-    return NextResponse.json({ error: e?.message || "Failed." }, { status: e?.status || 500 });
+    const status = e instanceof TeamError ? e.status : 500;
+    return NextResponse.json({ error: e?.message || "Failed." }, { status });
   }
 }
 
-// Create a workspace (the caller becomes its owner).
+// Join an existing company by id (onboarding "select from a dropdown").
 export async function POST(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    const { name, about, website, industry } = await req.json();
-    const ws = await createWorkspace(u.id, u.email, String(name || ""), {
-      about: about ? String(about) : "",
-      website: website ? String(website) : "",
-      industry: industry ? String(industry) : "",
-    });
+    const { workspaceId } = await req.json();
+    const ws = await joinWorkspace(u.id, u.email, String(workspaceId || ""));
     return NextResponse.json({ workspace: ws });
   } catch (e: any) {
     const status = e instanceof TeamError ? e.status : 500;
