@@ -80,6 +80,7 @@ export interface AppState {
   // in the JSON blob so a redeploy or new device doesn't wipe them out.
   profileExtras?: {
     age?: number;
+    eduStatus?: string;
     college?: string;
     location?: string;
     companySize?: string;

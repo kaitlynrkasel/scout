@@ -269,6 +269,13 @@ const ZERO_ACTIVITY: Activity = { searches: 0, found: 0, drafts: 0, copies: 0 };
 // applicant is pointed at accessible programs, not moonshot ones.
 type Competitiveness = "any" | "beginner" | "intermediate" | "competitive";
 type CompanySize = "any" | "small" | "big";
+// "" = not specified. Drives how outreach frames the sender's stage.
+type EducationStatus = "" | "highschool" | "college" | "graduated";
+const EDU_STATUS_LABEL: Record<Exclude<EducationStatus, "">, string> = {
+  highschool: "In high school",
+  college: "In college",
+  graduated: "Graduated",
+};
 
 interface Profile {
   name: string;
@@ -279,6 +286,7 @@ interface Profile {
   // `profiles` row keeps its original columns; these ride along in the browser's
   // scout_profile blob and flow into aboutText so the LLM can use them).
   age?: number;
+  eduStatus?: EducationStatus; // high school / college / graduated
   college?: string;
   location?: string;
   companySize?: CompanySize;
@@ -628,6 +636,7 @@ function AuthedShell() {
         if (raw) {
           const parsed = JSON.parse(raw);
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
+          if (typeof parsed.eduStatus === "string") localExtras.eduStatus = parsed.eduStatus;
           if (typeof parsed.college === "string") localExtras.college = parsed.college;
           if (typeof parsed.location === "string") localExtras.location = parsed.location;
           if (typeof parsed.companySize === "string") localExtras.companySize = parsed.companySize;
@@ -647,8 +656,11 @@ function AuthedShell() {
         "intermediate",
         "competitive",
       ]);
+      const allowedEdu = new Set<EducationStatus>(["highschool", "college", "graduated"]);
       const mergedExtras: Partial<Profile> = {};
       if (typeof raw.age === "number") mergedExtras.age = raw.age;
+      if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
+        mergedExtras.eduStatus = raw.eduStatus as EducationStatus;
       if (typeof raw.college === "string") mergedExtras.college = raw.college;
       if (typeof raw.location === "string") mergedExtras.location = raw.location;
       if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
@@ -1014,6 +1026,7 @@ function ScoutTool({
       // fresh hydrate.
       profileExtras: {
         age: profile.age,
+        eduStatus: profile.eduStatus,
         college: profile.college,
         location: profile.location,
         companySize: profile.companySize,
@@ -1021,7 +1034,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.age, profile.college, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -1996,6 +2009,7 @@ function ScoutTool({
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
     profile.age ? `Age: ${profile.age}` : "",
+    profile.eduStatus ? `Education stage: ${EDU_STATUS_LABEL[profile.eduStatus]}` : "",
     profile.college ? `Education: ${profile.college}` : "",
     profile.location ? `Location: ${profile.location}` : "",
     profile.companySize && profile.companySize !== "any"
@@ -3848,6 +3862,7 @@ function ScoutTool({
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
           age={profile.age}
+          eduStatus={profile.eduStatus || ""}
           college={profile.college || ""}
           location={profile.location || ""}
           companySize={profile.companySize || "any"}
@@ -3856,6 +3871,7 @@ function ScoutTool({
           onBio={(v) => patchProfile({ bio: v })}
           onLinkedin={(v) => patchProfile({ linkedin: v })}
           onAge={(v) => patchProfile({ age: v })}
+          onEduStatus={(v) => patchProfile({ eduStatus: v })}
           onCollege={(v) => patchProfile({ college: v })}
           onLocation={(v) => patchProfile({ location: v })}
           onCompanySize={(v) => patchProfile({ companySize: v })}
@@ -10367,6 +10383,7 @@ function ProfileTab({
   linkedin,
   useCase,
   age,
+  eduStatus,
   college,
   location,
   companySize,
@@ -10375,6 +10392,7 @@ function ProfileTab({
   onBio,
   onLinkedin,
   onAge,
+  onEduStatus,
   onCollege,
   onLocation,
   onCompanySize,
@@ -10416,6 +10434,7 @@ function ProfileTab({
   linkedin: string;
   useCase: string;
   age?: number;
+  eduStatus: EducationStatus;
   college: string;
   location: string;
   companySize: CompanySize;
@@ -10424,6 +10443,7 @@ function ProfileTab({
   onBio: (v: string) => void;
   onLinkedin: (v: string) => void;
   onAge: (v: number | undefined) => void;
+  onEduStatus: (v: EducationStatus) => void;
   onCollege: (v: string) => void;
   onLocation: (v: string) => void;
   onCompanySize: (v: CompanySize) => void;
@@ -10830,6 +10850,36 @@ function ProfileTab({
                 className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
+          </div>
+
+          <div className="mt-5">
+            <Label>Where are you in school?</Label>
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
+              {(
+                [
+                  ["", "Prefer not to say"],
+                  ["highschool", "High schooler"],
+                  ["college", "In college"],
+                  ["graduated", "Graduated"],
+                ] as const
+              ).map(([val, label]) => (
+                <button
+                  key={val || "unset"}
+                  onClick={() => onEduStatus(val)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    eduStatus === val
+                      ? "bg-brown text-white shadow-soft"
+                      : "text-body/70 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <p className="mt-1.5 text-xs text-body/70">
+              Helps Scout pitch you at the right stage, a high schooler and a grad aren&apos;t
+              reaching out the same way.
+            </p>
           </div>
 
           <div className="mt-5">
