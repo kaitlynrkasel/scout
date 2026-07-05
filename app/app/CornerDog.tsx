@@ -46,9 +46,24 @@ export default function CornerDog() {
     );
     io.observe(el);
 
+    // Wag on demand: the Scout button fires a "scout:wag" event as the cursor
+    // moves toward it (see page.tsx). Each event keeps the tail going for a
+    // beat; moving away lets it settle. Honors reduced-motion.
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    let stopBurst: ReturnType<typeof setTimeout> | undefined;
+    const onWag = () => {
+      if (reduce) return;
+      setWagging(true);
+      if (stopBurst) clearTimeout(stopBurst);
+      stopBurst = setTimeout(() => setWagging(false), 1200);
+    };
+    window.addEventListener("scout:wag", onWag);
+
     return () => {
       io.disconnect();
       timers.current.forEach(clearTimeout);
+      window.removeEventListener("scout:wag", onWag);
+      if (stopBurst) clearTimeout(stopBurst);
     };
   }, []);
 

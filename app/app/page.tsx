@@ -818,6 +818,40 @@ function ScoutTool({
   const [stats, setStats] = useState("");
   const [expanded, setExpanded] = useState(false);
 
+  // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
+  // to wag. Proximity, not hover — it starts as you head that way. Throttled
+  // to one signal per ~350ms while near, and skipped under reduced-motion.
+  const scoutBtnRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const RADIUS = 180; // px from the button's edge that counts as "heading over"
+    let raf = 0;
+    let lastSignal = 0;
+    const onMove = (e: MouseEvent) => {
+      if (raf) return; // coalesce to one check per frame
+      raf = requestAnimationFrame(() => {
+        raf = 0;
+        const btn = scoutBtnRef.current;
+        if (!btn || btn.offsetParent === null) return; // not mounted / hidden tab
+        const r = btn.getBoundingClientRect();
+        const dx = Math.max(r.left - e.clientX, 0, e.clientX - r.right);
+        const dy = Math.max(r.top - e.clientY, 0, e.clientY - r.bottom);
+        if (Math.hypot(dx, dy) <= RADIUS) {
+          const now = Date.now();
+          if (now - lastSignal > 350) {
+            lastSignal = now;
+            window.dispatchEvent(new Event("scout:wag"));
+          }
+        }
+      });
+    };
+    window.addEventListener("mousemove", onMove, { passive: true });
+    return () => {
+      window.removeEventListener("mousemove", onMove);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
   // ---- Persisted state ----
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
@@ -3455,6 +3489,7 @@ function ScoutTool({
 
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
+                  ref={scoutBtnRef}
                   onClick={runDiscover}
                   disabled={discovering || !goal.trim()}
                   className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
