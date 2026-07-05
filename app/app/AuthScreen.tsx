@@ -15,14 +15,25 @@ const INPUT =
   "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
 const LABEL = "mb-1.5 block text-[11px] font-bold uppercase tracking-wider text-body/60";
 
-type Mode = "in" | "up" | "verify";
+type Mode = "in" | "up" | "verify" | "forgot" | "newpw";
 
-export default function AuthScreen() {
-  const [mode, setMode] = useState<Mode>("in");
+// `recovery` is set by the parent when the user arrives via a password-reset
+// email link (Supabase fires a PASSWORD_RECOVERY auth event); we jump straight
+// to the "set a new password" form. onRecoveryDone lets the parent leave the
+// recovery screen once the new password is saved.
+export default function AuthScreen({
+  recovery = false,
+  onRecoveryDone,
+}: {
+  recovery?: boolean;
+  onRecoveryDone?: () => void;
+} = {}) {
+  const [mode, setMode] = useState<Mode>(recovery ? "newpw" : "in");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
   const [remember, setRemember] = useState(true);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
@@ -35,6 +46,56 @@ export default function AuthScreen() {
     setNotice("");
     setCode("");
   };
+
+  // Send the "reset your password" email. The link returns the user to /app,
+  // where the parent detects the recovery event and shows the newpw form.
+  async function sendReset(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    setError("");
+    setNotice("");
+    setBusy(true);
+    try {
+      const redirectTo =
+        typeof window !== "undefined" ? `${window.location.origin}/app` : undefined;
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
+      if (error) throw error;
+      setNotice(
+        `If an account exists for ${email.trim()}, a reset link is on its way. Open it on this device to set a new password.`
+      );
+    } catch (e: any) {
+      setError(e?.message || "Couldn't send a reset link. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Set the new password (the recovery session from the email link is active).
+  async function setNewPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!supabase) return;
+    setError("");
+    setNotice("");
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters.");
+      return;
+    }
+    if (password !== confirmPw) {
+      setError("Those passwords don't match.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw error;
+      setNotice("Your password is updated. Taking you in…");
+      setTimeout(() => onRecoveryDone?.(), 900);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't update your password. Please try again.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function signUp(e: React.FormEvent) {
     e.preventDefault();
@@ -138,6 +199,10 @@ export default function AuthScreen() {
               ? "Welcome back"
               : mode === "up"
               ? "Create your account"
+              : mode === "forgot"
+              ? "Reset your password"
+              : mode === "newpw"
+              ? "Set a new password"
               : "Check your email"}
           </h1>
           <p className="mt-1 text-sm text-body">
@@ -145,6 +210,10 @@ export default function AuthScreen() {
               ? "Sign in to reach your people."
               : mode === "up"
               ? "Your Profile and searches, private to you."
+              : mode === "forgot"
+              ? "Enter your email and we'll send you a link to set a new one."
+              : mode === "newpw"
+              ? "Choose a new password for your account."
               : `Enter the 6-digit code we sent to ${email}.`}
           </p>
 
@@ -174,17 +243,82 @@ export default function AuthScreen() {
                   className={INPUT}
                 />
               </div>
-              <label className="flex cursor-pointer items-center gap-2.5 pt-0.5 text-sm text-body">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                />
-                Remember me on this device
-              </label>
+              <div className="flex items-center justify-between pt-0.5">
+                <label className="flex cursor-pointer items-center gap-2.5 text-sm text-body">
+                  <input
+                    type="checkbox"
+                    checked={remember}
+                    onChange={(e) => setRemember(e.target.checked)}
+                    className="h-4 w-4 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                  />
+                  Remember me
+                </label>
+                <button
+                  type="button"
+                  onClick={() => reset("forgot")}
+                  className="text-sm font-semibold text-brown hover:underline"
+                >
+                  Forgot password?
+                </button>
+              </div>
               <Feedback error={error} notice={notice} />
               <Submit busy={busy}>Sign in</Submit>
+            </form>
+          )}
+
+          {/* ---------- Forgot password ---------- */}
+          {mode === "forgot" && (
+            <form onSubmit={sendReset} className="mt-5 space-y-3">
+              <div>
+                <label className={LABEL}>Email</label>
+                <input
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  autoComplete="email"
+                  className={INPUT}
+                />
+              </div>
+              <Feedback error={error} notice={notice} />
+              <Submit busy={busy}>Send reset link</Submit>
+              <div className="pt-1 text-center text-xs text-body/70">
+                <button type="button" onClick={() => reset("in")} className="hover:text-ink">
+                  &larr; Back to sign in
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* ---------- Set a new password (recovery link) ---------- */}
+          {mode === "newpw" && (
+            <form onSubmit={setNewPassword} className="mt-5 space-y-3">
+              <div>
+                <label className={LABEL}>New password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="new-password"
+                  className={INPUT}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Confirm new password</label>
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  value={confirmPw}
+                  onChange={(e) => setConfirmPw(e.target.value)}
+                  autoComplete="new-password"
+                  className={INPUT}
+                />
+              </div>
+              <Feedback error={error} notice={notice} />
+              <Submit busy={busy}>Update password</Submit>
             </form>
           )}
 
@@ -274,7 +408,7 @@ export default function AuthScreen() {
             </form>
           )}
 
-          {mode !== "verify" && (
+          {(mode === "in" || mode === "up") && (
             <div className="mt-5 text-center text-sm text-body">
               {mode === "in" ? "New to Scout?" : "Already have an account?"}{" "}
               <button

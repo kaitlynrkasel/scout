@@ -577,6 +577,9 @@ function LocalShell() {
 function AuthedShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
+  // Set when the user arrives via a password-reset email link — shows the
+  // "set a new password" screen even though a (recovery) session now exists.
+  const [recovery, setRecovery] = useState(false);
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "Networking" });
   const [initialState, setInitialState] = useState<AppState | null>(null);
@@ -631,10 +634,13 @@ function AuthedShell() {
       setSession(data.session);
       setChecked(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
       setSession(s);
       setChecked(true);
       if (!s) setProfileLoaded(false);
+      // Arriving from a reset-password email link: force the set-new-password
+      // screen regardless of the session the link established.
+      if (event === "PASSWORD_RECOVERY") setRecovery(true);
     });
     return () => sub.subscription.unsubscribe();
   }, []);
@@ -731,6 +737,8 @@ function AuthedShell() {
   }, [uid]);
 
   if (!checked) return <Loading />;
+  if (recovery)
+    return <AuthScreen recovery onRecoveryDone={() => setRecovery(false)} />;
   if (!session) return <AuthScreen />;
   if (!profileLoaded) return <Loading />;
   return (
@@ -10652,6 +10660,33 @@ function SettingsTab({
       setCode("");
     }
   }
+  // Change password (signed-in user; no email round-trip needed).
+  const [newPw, setNewPw] = useState("");
+  const [confirmPw, setConfirmPw] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function changePassword() {
+    if (pwBusy || !supabase) return;
+    setPwMsg(null);
+    if (newPw.length < 6) {
+      setPwMsg({ ok: false, text: "Password must be at least 6 characters." });
+      return;
+    }
+    if (newPw !== confirmPw) {
+      setPwMsg({ ok: false, text: "Those passwords don't match." });
+      return;
+    }
+    setPwBusy(true);
+    const { error } = await supabase.auth.updateUser({ password: newPw });
+    setPwBusy(false);
+    if (error) {
+      setPwMsg({ ok: false, text: error.message || "Couldn't update your password." });
+    } else {
+      setPwMsg({ ok: true, text: "Password updated." });
+      setNewPw("");
+      setConfirmPw("");
+    }
+  }
   // Auto-schedule after-hours sends for the recipient's next business hour.
   const [autoSchedule, setAutoSchedule] = useState(false);
   useEffect(() => {
@@ -10738,6 +10773,59 @@ function SettingsTab({
             )}
           </>
         )}
+      </section>
+
+      {/* Password */}
+      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Password</h2>
+        <p className="mt-1 text-sm leading-relaxed text-body">
+          Change the password you use to sign in.
+        </p>
+        <div className="mt-4 grid max-w-sm gap-3">
+          <input
+            type="password"
+            value={newPw}
+            onChange={(e) => {
+              setNewPw(e.target.value);
+              setPwMsg(null);
+            }}
+            placeholder="New password"
+            autoComplete="new-password"
+            className="w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brown focus:ring-4 focus:ring-brown/10"
+          />
+          <input
+            type="password"
+            value={confirmPw}
+            onChange={(e) => {
+              setConfirmPw(e.target.value);
+              setPwMsg(null);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") changePassword();
+            }}
+            placeholder="Confirm new password"
+            autoComplete="new-password"
+            className="w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brown focus:ring-4 focus:ring-brown/10"
+          />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={changePassword}
+              disabled={pwBusy || !newPw || !confirmPw}
+              className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+            >
+              {pwBusy ? "Updating…" : "Update password"}
+            </button>
+            {pwMsg && (
+              <span
+                className={`text-xs font-medium ${
+                  pwMsg.ok ? "text-emerald-700" : "text-attention"
+                }`}
+              >
+                {pwMsg.text}
+              </span>
+            )}
+          </div>
+        </div>
       </section>
 
       {/* Appearance */}
