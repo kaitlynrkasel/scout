@@ -239,11 +239,16 @@ async function planQueries(
       "for SaaS startups) to cast a wide net. NEVER use 'how to', 'tips', 'guide', or 'advice'.";
   } else if (jobs) {
     guidance =
-      "Target REAL job/internship openings IN THE USER'S INDUSTRY. Every query should pair the role/field with " +
-      "the user's specific industry and sub-field (e.g. for a marketing junior wanting a brand internship: " +
-      "'brand marketing internship summer 2026 apply', 'growth marketing intern DTC careers', " +
-      "'New York consumer brand marketing internship'). Include apply/careers/internship/2026, vary company types " +
-      "(agencies, startups, established brands in that field) and add the user's city or a hub city for that industry.";
+      "Find places the user could work IN THEIR INDUSTRY — and do NOT limit yourself to posted openings. Split the query " +
+      "set roughly in half: (1) REAL open job/internship listings, and (2) GOOD-FIT COMPANIES that likely hire people like " +
+      "the user even if no listing is public, so they can send a proactive 'please consider me' email. For (1) pair the " +
+      "role/field with the user's sub-field and an apply signal (e.g. 'brand marketing internship summer 2026 apply', " +
+      "'growth marketing intern DTC careers'). For (2) surface actual COMPANIES and their contact/careers/about pages " +
+      "(e.g. 'small brand marketing agencies New York', 'boutique DTC studios careers email', 'independent {industry} firms " +
+      "contact'), business directories, and local roundups. STRONGLY prefer SMALL companies, startups, studios, boutiques, " +
+      "and local firms — they are far more responsive to a cold note than big brands. If the profile signals a beginner or " +
+      "small-company preference, lean almost entirely on small/local/early-stage employers and AVOID the famous, ultra-" +
+      "competitive names. Add the user's city or a hub city for their industry. Never use 'how to', 'tips', or 'guide'.";
   } else if (networking) {
     guidance =
       "Target findable, REAL INDIVIDUAL PEOPLE to network with in the user's exact field, people with names and titles " +
@@ -511,6 +516,10 @@ async function extract(
   // - Everything else (networking/jobs/PR): the target IS in the user's field,
   //   so aligning to the user's industry/location is correct.
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
+  // Job/internship hunts accept COMPANIES as targets (for a proactive "please
+  // consider me" email), not just postings with a named person — so they get
+  // their own fit rules below rather than the person-centric networking ones.
+  const jobs = !prospecting && isJobUseCase(useCase);
   // The template's targetNoun (e.g. "outlet" for music PR) primes the extractor
   // toward that world. In prospecting mode the target is whatever the GOAL says,
   // so use a neutral noun instead of the user's-field noun.
@@ -548,6 +557,23 @@ async function extract(
     `set is_relevant false. `;
 
   // Fit / alignment section — this is the part that differs by mode.
+  const jobsRules =
+    `JOB / INTERNSHIP SEARCH — BOTH openings AND fittable employers count. A specific open posting is valid, and so is a ` +
+    `real COMPANY in the user's field even with NO public listing: the user will send a proactive note asking to be ` +
+    `considered, so target_type "organization" is fully valid — do NOT set is_relevant false just because there's no posted ` +
+    `role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the user's ` +
+    `industry. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms — ` +
+    `they are realistic to hear back from. If the GOAL text says to favor beginner-friendly / small / less-selective ` +
+    `employers, give ultra-selective, famous, big-name targets a LOW fit_score even when they're on-industry. WHY_IT_FITS: a ` +
+    `specific true detail about the COMPANY (what they do, their size/stage, why they'd be a good place for someone at the ` +
+    `user's level) or about the specific role — never phrased in terms of the sender's own resume. REACHABILITY: favor ` +
+    `results that expose a contact route (careers/contact page, an email, a named recruiter or team member). ` +
+    `PREFER THE ACTUAL EMPLOYER over a job-board aggregator: a specific company's own site is much better than a ` +
+    `ZipRecruiter / Indeed / LinkedIn-Jobs / Glassdoor / BuiltIn search or aggregate listing page (which is a list of many ` +
+    `jobs, not one reachable employer) — give those aggregate list pages a low fit_score. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
+    `fit_score: 0.7+ for an on-industry, accessible employer with a contact route; lower it for big/ultra-competitive names ` +
+    `when the user wants accessible ones, for aggregator list pages, and for results missing any contact route; below 0.3 ` +
+    `only when clearly off-industry.`;
   const fitRules = prospecting
     ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting — finding external ${noun || "target"}s to ` +
       `pitch, sell to, partner with, or raise from. Do NOT reject a result for being in a different industry than the user. ` +
@@ -576,6 +602,8 @@ async function extract(
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
       `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
+    : jobs
+    ? jobsRules
     : `${TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE} ` +
       `WHY_IT_FITS DISCIPLINE: a specific true detail about THE PERSON'S OWN work, career, or interests tied to the user's ` +
       `field — not about their employer or program. If you can only describe the program they work at, set is_relevant false. ` +

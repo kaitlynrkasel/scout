@@ -2987,7 +2987,17 @@ function ScoutTool({
       const compLevel: Competitiveness = jobish
         ? (searchComp || profile.competitiveness || "any")
         : "any";
-      const sizePref: CompanySize = jobish ? profile.companySize || "any" : "any";
+      // Beginners get pointed at small companies by default (more responsive,
+      // less competitive, and the right audience for a "please consider me"
+      // cold email) — unless they've explicitly chosen a company size.
+      const explicitSize = profile.companySize && profile.companySize !== "any";
+      const sizePref: CompanySize = jobish
+        ? explicitSize
+          ? (profile.companySize as CompanySize)
+          : compLevel === "beginner"
+            ? "small"
+            : "any"
+        : "any";
       const extras: string[] = [];
       if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
       if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);

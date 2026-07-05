@@ -144,8 +144,32 @@ export async function draftFor(
   const requirements = opts.requirements || (opp as any).requirements || "";
   const signature = String(opts.signature || "").trim();
   const t = resolveTemplate(useCase);
-  const draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
+  let draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
   const { channelType, to, kindLabel } = routeForKind(opp, opts.kind);
+
+  // Job/internship hunts can surface a company with NO specific opening (see the
+  // discovery jobsRules). For those, the message is a proactive "please consider
+  // me" note with the resume attached — not a reply to a listing. Detect it here
+  // so the prompt frames it correctly instead of referencing a posting that
+  // doesn't exist.
+  const jobLike =
+    t?.key === "jobs" ||
+    /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application|candidate|position|role)\b/i.test(
+      `${useCase} ${draftStyle}`
+    );
+  const isPosting =
+    opp.channel === "Company Portal" ||
+    /(greenhouse\.io|lever\.co|myworkdayjobs|workday|ashbyhq|smartrecruiters|icims|taleo|bamboohr|breezy\.hr|workable|jobvite|recruitee|\/jobs|\/careers|\/apply)/i.test(
+      opp.url || ""
+    );
+  if (jobLike && !isPosting) {
+    draftStyle +=
+      " NOTE: there is no posted opening for this recipient — it's a good-fit company the sender is approaching proactively. " +
+      "Write a warm, brief, humble note: introduce the sender in a line, say specifically why this company caught their eye " +
+      "(use the recipient note if present), express genuine interest in being CONSIDERED for a role or internship there even " +
+      "if nothing is currently posted, name ONE concrete relevant strength, and mention their resume is attached for " +
+      "consideration. Do NOT reference 'your posting', 'the role you listed', or a specific job listing. Keep it low-pressure.";
+  }
 
   const sys =
     `You write outreach for someone whose use case is "${useCase}". ` +
