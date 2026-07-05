@@ -6,12 +6,16 @@
   color-scheme: light;
   /* Palette as space-separated RGB triplets so Tailwind's rgb(var / a) works.
      Light theme. */
-  --c-ink: 32 29 24;
-  --c-body: 87 83 76;
-  --c-muted: 124 119 109;
-  --c-brown: 124 88 55;
+  /* Refined Notion × Apple system: a near-white canvas, a warm-gray sidebar
+     layer, a whisper of warmth in the neutrals, and one restrained espresso
+     accent. Elevation comes from hairlines; depth is reserved for floating
+     surfaces (command bar, palette, peek). */
+  --c-ink: 33 31 27; /* warm near-black */
+  --c-body: 91 86 78;
+  --c-muted: 108 103 94;
+  --c-brown: 124 88 55; /* espresso accent */
   --c-brown-deep: 93 64 38;
-  --c-brown-tint: 242 236 225;
+  --c-brown-tint: 239 231 217;
   --c-clay: 200 184 153;
   --c-coffee: 38 34 28;
   --c-success: 63 122 82;
@@ -20,11 +24,11 @@
   --c-danger: 176 85 63;
   --c-sage: 140 154 118;
   --c-sage-deep: 95 106 71;
-  --c-cream: 243 242 239;
+  --c-cream: 251 250 248; /* page canvas — near-white, whisper warm */
   --c-surface: 255 255 255;
-  --c-surface-2: 251 251 249;
-  --c-warm-bg: 244 242 238;
-  --c-warm-border: 232 230 224;
+  --c-surface-2: 245 243 239; /* sidebar / inset layer — warm gray */
+  --c-warm-bg: 239 236 228; /* hover fill */
+  --c-warm-border: 236 232 224; /* hairline */
   --brand-a: #7c5837;
   --brand-b: #5d4026;
 }
