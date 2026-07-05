@@ -775,6 +775,7 @@ interface BillingStatus {
   billingEnabled: boolean;
   tier: "free" | "starter" | "pro";
   status: string;
+  comp?: boolean; // free-forever access via a redeemed code
   searchLimit: number;
   searchesUsed: number;
   freeLimit: number;
@@ -3102,6 +3103,29 @@ function ScoutTool({
     }
   }
 
+  // Redeem an access code for free-forever (comp) access. Returns an error
+  // string on failure (shown inline in the Billing tab), or "" on success.
+  async function redeemCode(code: string): Promise<string> {
+    if (!getToken) return "Please sign in first.";
+    const token = await getToken();
+    if (!token) return "Please sign in first.";
+    try {
+      const res = await fetch("/api/billing/redeem", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ code }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j?.ok) {
+        await loadBilling();
+        return "";
+      }
+      return j?.error || "Could not redeem that code.";
+    } catch (e: any) {
+      return e?.message || "Could not redeem that code.";
+    }
+  }
+
   // Load plan/usage on mount. If we're returning from Checkout (?billing=success),
   // Stripe's webhook may land a beat later, so re-check shortly after and clean the URL.
   useEffect(() => {
@@ -3915,6 +3939,8 @@ function ScoutTool({
           repliesBusy={repliesBusy}
           repliesNote={repliesNote}
           goOutreach={() => setTab("outreach")}
+          senderName={profile.name || ""}
+          senderEmail={accountEmail || activeMailbox.email || ""}
         />
       )}
 
@@ -4099,6 +4125,7 @@ function ScoutTool({
           onSubscribe={startCheckout}
           onManage={openBillingPortal}
           onRefresh={loadBilling}
+          onRedeem={redeemCode}
         />
       )}
 
@@ -5103,6 +5130,8 @@ function FindDetailModal({
   onMoveProject,
   currentSignature,
   onEditSignature,
+  senderName,
+  senderEmail,
 }: {
   find: Find;
   onClose: () => void;
@@ -5135,10 +5164,57 @@ function FindDetailModal({
   onMoveProject: (projectId: string) => void;
   currentSignature: string;
   onEditSignature: (sig: string) => void;
+  senderName: string;
+  senderEmail: string;
 }) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  // Whether the previewed page has a fillable form (reported by the autofill
+  // bridge injected into the proxied HTML), and the last fill result.
+  const [formDetected, setFormDetected] = useState(false);
+  const [fillNote, setFillNote] = useState("");
+  // Listen for the bridge's messages (same-origin proxied iframe → this window).
+  useEffect(() => {
+    function onMsg(ev: MessageEvent) {
+      const d = ev.data;
+      if (!d || typeof d !== "object") return;
+      if (d.type === "scout-form-detected") setFormDetected(!!d.hasForm);
+      if (d.type === "scout-autofill-done") {
+        setFillNote(
+          d.filled
+            ? "Filled what Scout could match. Review it, then submit on the site."
+            : "Couldn't match this form's fields — use Open ↗ to fill it directly."
+        );
+      }
+    }
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  // Reset per-find as the preview reloads.
+  useEffect(() => {
+    setFormDetected(false);
+    setFillNote("");
+  }, [o.url]);
+  // Pre-fill the previewed contact form with the sender's details + drafted
+  // message. Never submits — the bridge only populates fields.
+  function fillForm() {
+    const win = frameRef.current?.contentWindow;
+    if (!win) return;
+    const parts = (senderName || "").trim().split(/\s+/);
+    const first = parts[0] || "";
+    const last = parts.length > 1 ? parts.slice(1).join(" ") : "";
+    const message = (find.draft?.body || "").trim();
+    win.postMessage(
+      {
+        type: "scout-autofill",
+        payload: { name: senderName.trim(), first, last, email: senderEmail.trim(), message },
+      },
+      "*"
+    );
+    setFillNote("Filling…");
+  }
   const recipientTz = o.timezone || guessTimezone(o.location);
   const isApplication =
     !!find.application || looksLikeApplication(o.url) || o.channel === "Company Portal";
@@ -5428,6 +5504,15 @@ function FindDetailModal({
               {host && <span className="truncate text-xs text-body/50">{host}</span>}
               {o.url && (
                 <div className="ml-auto flex items-center gap-1.5">
+                  {formDetected && (
+                    <button
+                      onClick={fillForm}
+                      title="Pre-fill this contact form with your details and drafted message. Scout never submits it."
+                      className="rounded-lg bg-brown px-2.5 py-1 text-[11px] font-semibold text-white shadow-soft transition hover:bg-brown-deep"
+                    >
+                      Fill this form
+                    </button>
+                  )}
                   <button
                     onClick={() => setTall((v) => !v)}
                     className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
@@ -5456,6 +5541,7 @@ function FindDetailModal({
                   </div>
                 )}
                 <iframe
+                  ref={frameRef}
                   // Routed through our own origin (see app/api/site-preview) so
                   // X-Frame-Options / CSP frame-ancestors on the target site
                   // can't refuse the embed — those headers apply to a direct
@@ -5472,6 +5558,11 @@ function FindDetailModal({
               <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-warm-border text-sm text-body/40">
                 No website on file for this find.
               </div>
+            )}
+            {fillNote && (
+              <p className="mt-2 text-[11px] font-medium leading-relaxed text-brown-deep">
+                {fillNote}
+              </p>
             )}
             {o.url && (
               <p className="mt-2 text-[11px] leading-relaxed text-body/50">
@@ -5541,6 +5632,8 @@ function FindsTab({
   repliesBusy,
   repliesNote,
   goOutreach,
+  senderName,
+  senderEmail,
 }: {
   finds: Find[];
   categories: Category[];
@@ -5586,6 +5679,8 @@ function FindsTab({
   repliesBusy: boolean;
   repliesNote: string;
   goOutreach: () => void;
+  senderName: string;
+  senderEmail: string;
 }) {
   // Pinned finds live in their own tab and are excluded from the status/all
   // lists — so status counts count only the un-pinned ones.
@@ -5809,6 +5904,8 @@ function FindsTab({
           onMoveProject={(pid) => onMoveProject(detailFind, pid)}
           currentSignature={getSignatureFor(detailFind.projectId)}
           onEditSignature={(sig) => onEditSignature(detailFind.projectId, sig)}
+          senderName={senderName}
+          senderEmail={senderEmail}
         />
       )}
     </main>
@@ -10066,18 +10163,40 @@ function BillingTab({
   onSubscribe,
   onManage,
   onRefresh,
+  onRedeem,
 }: {
   billing: BillingStatus | null;
   busy: boolean;
   onSubscribe: (tier: "starter" | "pro") => void;
   onManage: () => void;
   onRefresh: () => void;
+  onRedeem: (code: string) => Promise<string>;
 }) {
   // Refresh once when the tab opens (getToken reads the live session each call).
   useEffect(() => {
     onRefresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Access-code redemption (free-forever comp access).
+  const [code, setCode] = useState("");
+  const [redeeming, setRedeeming] = useState(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  async function submitCode() {
+    if (!code.trim() || redeeming) return;
+    setRedeeming(true);
+    setRedeemMsg(null);
+    const err = await onRedeem(code.trim());
+    setRedeeming(false);
+    if (err) {
+      setRedeemMsg({ ok: false, text: err });
+    } else {
+      setRedeemMsg({ ok: true, text: "You're all set — unlimited access unlocked." });
+      setCode("");
+    }
+  }
+
+  const comp = !!billing?.comp;
 
   const fmt = (iso: string | null) =>
     iso
@@ -10119,16 +10238,21 @@ function BillingTab({
             </div>
             <div className="mt-1 flex items-center gap-2">
               <span className="text-xl font-semibold text-ink">
-                {paid ? (tier === "pro" ? "Pro" : "Starter") : "Free"}
+                {comp ? "Unlimited" : paid ? (tier === "pro" ? "Pro" : "Starter") : "Free"}
               </span>
-              {paid && billing?.status && (
+              {comp && (
+                <span className="rounded-full bg-brown px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                  Comp
+                </span>
+              )}
+              {!comp && paid && billing?.status && (
                 <span className="rounded-full bg-brown-tint px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-brown-deep">
                   {billing.status}
                 </span>
               )}
             </div>
           </div>
-          {paid && (
+          {!comp && paid && (
             <button
               onClick={onManage}
               disabled={busy}
@@ -10139,25 +10263,77 @@ function BillingTab({
           )}
         </div>
 
-        <div className="mt-5">
-          <div className="flex items-baseline justify-between text-sm">
-            <span className="font-medium tabular-nums text-ink">
-              {used} / {limit} searches
-            </span>
-            {resets && <span className="text-xs text-muted">Resets {fmt(resets)}</span>}
+        {comp ? (
+          <div className="mt-5 flex items-center gap-2 text-sm text-body">
+            <span className="text-lg">∞</span>
+            <span>Unlimited searches — no monthly cap on this account.</span>
           </div>
-          <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-warm-bg">
-            <div className="h-full rounded-full bg-brown" style={{ width: `${pct}%` }} />
+        ) : (
+          <div className="mt-5">
+            <div className="flex items-baseline justify-between text-sm">
+              <span className="font-medium tabular-nums text-ink">
+                {used} / {limit} searches
+              </span>
+              {resets && <span className="text-xs text-muted">Resets {fmt(resets)}</span>}
+            </div>
+            <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-warm-bg">
+              <div className="h-full rounded-full bg-brown" style={{ width: `${pct}%` }} />
+            </div>
+            {!paid && (
+              <p className="mt-2 text-xs text-muted">
+                You&rsquo;re on the free plan — {limit} searches a month.
+              </p>
+            )}
           </div>
-          {!paid && (
-            <p className="mt-2 text-xs text-muted">
-              You&rsquo;re on the free plan — {limit} searches a month.
-            </p>
-          )}
-        </div>
+        )}
       </section>
 
+      {/* Access code — redeem for free-forever (comp) access. */}
+      {!comp && (
+        <section className="mt-4 rounded-2xl border border-warm-border bg-surface p-6 shadow-card">
+          <div className="text-xs font-semibold uppercase tracking-wider text-muted">
+            Have an access code?
+          </div>
+          <p className="mt-1 text-sm text-body">
+            Redeem a code for unlimited access — no card required.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <input
+              value={code}
+              onChange={(e) => {
+                setCode(e.target.value);
+                setRedeemMsg(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitCode();
+              }}
+              placeholder="Enter code"
+              autoCapitalize="characters"
+              spellCheck={false}
+              className="w-56 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brown focus:ring-4 focus:ring-brown/10"
+            />
+            <button
+              onClick={submitCode}
+              disabled={!code.trim() || redeeming}
+              className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+            >
+              {redeeming ? "Redeeming…" : "Redeem"}
+            </button>
+          </div>
+          {redeemMsg && (
+            <p
+              className={`mt-2 text-xs font-medium ${
+                redeemMsg.ok ? "text-emerald-700" : "text-attention"
+              }`}
+            >
+              {redeemMsg.text}
+            </p>
+          )}
+        </section>
+      )}
+
       {/* Plans */}
+      {!comp && (
       <section className="mt-4 grid gap-4 sm:grid-cols-2">
         {PLANS.map((p) => {
           const current = tier === p.key;
@@ -10205,11 +10381,14 @@ function BillingTab({
           );
         })}
       </section>
+      )}
 
-      <p className="mt-4 text-center text-xs text-muted">
-        Secure checkout by Stripe. Cancel anytime &mdash; you keep your searches until the
-        period ends.
-      </p>
+      {!comp && (
+        <p className="mt-4 text-center text-xs text-muted">
+          Secure checkout by Stripe. Cancel anytime &mdash; you keep your searches until the
+          period ends.
+        </p>
+      )}
     </main>
   );
 }

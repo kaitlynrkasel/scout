@@ -4,13 +4,22 @@
 // Postgres function so concurrent searches can't overrun a limit.
 
 import { supabaseAdmin } from "./supabaseAdmin";
-import { stripe, FREE_LIMIT, limitForTier, type Tier } from "./stripe";
+import {
+  stripe,
+  FREE_LIMIT,
+  limitForTier,
+  isCompSubscription,
+  COMP_TAG,
+  COMP_LIMIT,
+  type Tier,
+} from "./stripe";
 
 export { FREE_LIMIT };
 
 export interface Entitlement {
   tier: Tier;
   status: string;
+  comp: boolean; // free-forever access via a redeemed code (unlimited searches)
   searchLimit: number; // paid monthly allowance (0 for free)
   searchesUsed: number; // consumed this billing period
   freeLimit: number; // free monthly allowance
@@ -29,6 +38,7 @@ function nextMonthStartISO(): string {
 const FREE_ENTITLEMENT = (customerId: string | null = null): Entitlement => ({
   tier: "free",
   status: "inactive",
+  comp: false,
   searchLimit: 0,
   searchesUsed: 0,
   freeLimit: FREE_LIMIT,
@@ -45,16 +55,18 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
   const { data } = await supabaseAdmin
     .from("subscriptions")
     .select(
-      "tier, status, search_limit, searches_used, free_searches_used, period_end, stripe_customer_id"
+      "tier, status, search_limit, searches_used, free_searches_used, period_end, stripe_customer_id, stripe_subscription_id"
     )
     .eq("user_id", uid)
     .maybeSingle();
   if (!data) return FREE_ENTITLEMENT();
+  const comp = isCompSubscription(data.stripe_subscription_id);
   const tier = (data.tier || "free") as Tier;
   const isPaid = (tier === "starter" || tier === "pro") && data.status === "active";
   return {
     tier,
     status: data.status || "inactive",
+    comp,
     searchLimit: isPaid ? data.search_limit || limitForTier(tier) : 0,
     searchesUsed: data.searches_used || 0,
     freeLimit: FREE_LIMIT,
@@ -63,6 +75,31 @@ export async function getEntitlement(uid: string): Promise<Entitlement> {
     freeResetsAt: isPaid ? null : nextMonthStartISO(),
     stripeCustomerId: data.stripe_customer_id || null,
   };
+}
+
+// Grant free-forever (comp) access: store a 'pro'/'active' subscription tagged
+// so it's unlimited and distinguishable from a real Stripe subscription. No
+// migration needed — reuses existing columns. Idempotent per user.
+export async function redeemComp(uid: string, code: string): Promise<string | null> {
+  if (!supabaseAdmin) return "Accounts aren't configured yet.";
+  const { error } = await supabaseAdmin.from("subscriptions").upsert(
+    {
+      user_id: uid,
+      tier: "pro",
+      status: "active",
+      search_limit: COMP_LIMIT,
+      searches_used: 0,
+      stripe_subscription_id: `${COMP_TAG}${code.trim()}`,
+      period_end: null,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "user_id" }
+  );
+  if (error) {
+    console.error("redeemComp failed:", error.message);
+    return error.message;
+  }
+  return null;
 }
 
 export interface ConsumeResult {

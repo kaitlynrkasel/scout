@@ -66,8 +66,85 @@ export async function GET(req: NextRequest) {
     ? html.replace(/<head[^>]*>/i, (m) => `${m}${base}`)
     : `${base}${html}`;
 
+  // Inject the autofill bridge (see AUTOFILL_SCRIPT). It lets the Scout panel
+  // pre-fill a contact form the user is looking at — it never submits.
+  html = /<\/body>/i.test(html)
+    ? html.replace(/<\/body>/i, `${AUTOFILL_SCRIPT}</body>`)
+    : `${html}${AUTOFILL_SCRIPT}`;
+
   return htmlResponse(html);
 }
+
+// Runs inside the proxied page (same origin as the app, so postMessage is
+// trusted). Two jobs:
+//   1. On load, report whether the page has a fillable contact form, so the
+//      panel only offers "Fill this form" when there's something to fill.
+//   2. On a 'scout-autofill' message, heuristically map the sender's details +
+//      drafted message onto the form's fields and highlight them. It stops
+//      short of submitting — the user reviews and sends themselves.
+const AUTOFILL_SCRIPT = `<script>(function(){
+  function sig(el){
+    var bits=[el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.type];
+    try{
+      var lbl=el.labels&&el.labels[0]?el.labels[0].textContent:'';
+      if(!lbl&&el.id){var l=document.querySelector('label[for="'+el.id+'"]');lbl=l?l.textContent:'';}
+      if(!lbl){var p=el.closest('label');lbl=p?p.textContent:'';}
+      bits.push(lbl);
+    }catch(e){}
+    return bits.join(' ').toLowerCase();
+  }
+  function fields(){
+    var out=[];
+    var els=document.querySelectorAll('input,textarea');
+    for(var i=0;i<els.length;i++){
+      var el=els[i];
+      if(el.type==='hidden'||el.type==='submit'||el.type==='button'||el.type==='checkbox'||el.type==='radio'||el.type==='file'||el.disabled||el.readOnly)continue;
+      if(el.offsetParent===null&&el.type!=='hidden')continue;
+      out.push(el);
+    }
+    return out;
+  }
+  function setVal(el,val){
+    try{
+      var proto=el.tagName==='TEXTAREA'?window.HTMLTextAreaElement.prototype:window.HTMLInputElement.prototype;
+      var setter=Object.getOwnPropertyDescriptor(proto,'value');
+      if(setter&&setter.set){setter.set.call(el,val);}else{el.value=val;}
+      el.dispatchEvent(new Event('input',{bubbles:true}));
+      el.dispatchEvent(new Event('change',{bubbles:true}));
+      el.style.outline='2px solid #7c5837';
+      el.style.outlineOffset='1px';
+    }catch(e){el.value=val;}
+  }
+  function hasForm(){
+    var f=fields();
+    for(var i=0;i<f.length;i++){
+      var s=sig(f[i]);
+      if(f[i].tagName==='TEXTAREA'||f[i].type==='email'||/email|message|name|comment|inquir/.test(s))return true;
+    }
+    return false;
+  }
+  function fill(d){
+    var f=fields(),firstDone=false,lastDone=false,nameDone=false,emailDone=false,msgDone=false,firstEl=null;
+    for(var i=0;i<f.length;i++){
+      var el=f[i],s=sig(el);
+      if(/compan|organi|business/.test(s))continue;
+      if(!emailDone&&(el.type==='email'||/e-?mail/.test(s))){if(d.email){setVal(el,d.email);emailDone=true;firstEl=firstEl||el;}continue;}
+      if(!firstDone&&/first|given/.test(s)&&/name/.test(s)){if(d.first){setVal(el,d.first);firstDone=true;firstEl=firstEl||el;}continue;}
+      if(!lastDone&&/last|surname|family/.test(s)&&/name|surname|family/.test(s)){if(d.last){setVal(el,d.last);lastDone=true;firstEl=firstEl||el;}continue;}
+      if(!msgDone&&(el.tagName==='TEXTAREA'||/message|comment|project|tell us|inquir|note|detail|help/.test(s))){if(d.message){setVal(el,d.message);msgDone=true;firstEl=firstEl||el;}continue;}
+      if(!nameDone&&!firstDone&&/name/.test(s)){if(d.name){setVal(el,d.name);nameDone=true;firstEl=firstEl||el;}continue;}
+    }
+    if(firstEl){try{firstEl.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}}
+    return emailDone||firstDone||nameDone||msgDone;
+  }
+  window.addEventListener('message',function(ev){
+    var d=ev&&ev.data;if(!d||d.type!=='scout-autofill')return;
+    var ok=fill(d.payload||{});
+    try{parent.postMessage({type:'scout-autofill-done',filled:ok},'*');}catch(e){}
+  });
+  function announce(){try{parent.postMessage({type:'scout-form-detected',hasForm:hasForm()},'*');}catch(e){}}
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',announce);}else{announce();}
+})();</script>`;
 
 function htmlResponse(html: string): NextResponse {
   return new NextResponse(html, {

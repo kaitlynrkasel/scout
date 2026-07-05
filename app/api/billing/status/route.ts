@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
     billingEnabled: stripeEnabled,
     tier: ent.tier,
     status: ent.status,
+    comp: ent.comp,
     searchLimit: ent.searchLimit,
     searchesUsed: ent.searchesUsed,
     freeLimit: ent.freeLimit,
