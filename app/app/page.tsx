@@ -3605,36 +3605,6 @@ function ScoutTool({
               </div>
             )}
 
-            {/* ---------------- How it works ---------------- */}
-            {profileComplete && !opps.length && !discovering && (
-              <section className="mt-12">
-                <div className="grid gap-5 sm:grid-cols-3">
-                  <Step
-                    n="1"
-                    title="Tell us who to reach"
-                    body="Pick a category and describe the people you want to connect with, in plain language."
-                    icon={
-                      <path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11Z M12 11.5a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3Z" />
-                    }
-                  />
-                  <Step
-                    n="2"
-                    title="We find them for you"
-                    body="Scout searches the public web and pulls real names and emails. Never invented."
-                    icon={<path d="M21 21l-4.3-4.3 M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14Z" />}
-                  />
-                  <Step
-                    n="3"
-                    title="Say hello, your way"
-                    body="Warm, personal drafts for each channel, matched to your Templates. Review, tweak, send."
-                    icon={
-                      <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />
-                    }
-                  />
-                </div>
-              </section>
-            )}
-
             {/* ---------------- Results as a chat bubble ---------------- */}
             {visibleOpps.length > 0 && (
               <section className="mt-10">
@@ -11943,44 +11913,6 @@ function TabButton({
         <span className="absolute inset-x-0 -bottom-px h-[3px] rounded-full bg-brand-gradient" />
       )}
     </button>
-  );
-}
-
-function Step({
-  n,
-  title,
-  body,
-  icon,
-}: {
-  n: string;
-  title: string;
-  body: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
-      <div className="flex items-center gap-3">
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-gradient text-white">
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            {icon}
-          </svg>
-        </span>
-        <span className="text-xs font-bold uppercase tracking-wider text-accent">
-          Step {n}
-        </span>
-      </div>
-      <h3 className="mt-3 text-[15px] font-bold text-ink">{title}</h3>
-      <p className="mt-1.5 text-[13px] leading-relaxed text-body">{body}</p>
-    </div>
   );
 }
 
