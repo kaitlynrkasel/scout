@@ -801,17 +801,16 @@ function ScoutTool({
   const [draftKind, setDraftKind] = useState<Record<string, string>>({});
   // opportunityId currently being re-drafted after a kind change.
   const [redraftBusyId, setRedraftBusyId] = useState("");
-  // The "chat with Scout" panel above Messages: a back-and-forth thread where
-  // each message you send is a free-text instruction applied to every draft
-  // shown ("make these shorter", "more casual", "mention I'm a recent grad"),
-  // and Scout replies with a short confirmation.
+  // The refine box above Messages: you type an instruction ("make these
+  // shorter", "more casual", "mention I'm a recent grad") and it rewrites every
+  // draft shown. Scout does NOT chat back — it just applies the change.
+  // redraftChat is only a log of the instructions you've sent, so you can see
+  // what you've already asked for.
   const [redraftInstruction, setRedraftInstruction] = useState("");
   const [revisingBatch, setRevisingBatch] = useState(false);
-  const [redraftChat, setRedraftChat] = useState<
-    { role: "user" | "scout"; text: string }[]
-  >([]);
+  const [redraftChat, setRedraftChat] = useState<{ text: string }[]>([]);
   const redraftScrollRef = useRef<HTMLDivElement | null>(null);
-  // Keep the transcript pinned to the latest message.
+  // Keep the request log pinned to the latest entry.
   useEffect(() => {
     const el = redraftScrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
@@ -3087,8 +3086,9 @@ function ScoutTool({
     const instruction = redraftInstruction.trim();
     if (!instruction || !drafts.length || revisingBatch) return;
     setError("");
-    // Post the user's message to the thread immediately and clear the input.
-    setRedraftChat((c) => [...c, { role: "user", text: instruction }]);
+    // Log the request (so you can see what you've already asked for) and clear
+    // the input. Scout never replies here — it just applies the change.
+    setRedraftChat((c) => [...c, { text: instruction }]);
     setRedraftInstruction("");
     setRevisingBatch(true);
     try {
@@ -3099,11 +3099,7 @@ function ScoutTool({
       });
       const data = await parseApiResponse(res);
       if (!res.ok || data?.error) {
-        reportError(data); // keep credit/quota banners working
-        setRedraftChat((c) => [
-          ...c,
-          { role: "scout", text: `I couldn't apply that: ${data?.error || "something went wrong."}` },
-        ]);
+        reportError(data);
         return;
       }
       const revised: Draft[] = data.drafts || [];
@@ -3116,19 +3112,8 @@ function ScoutTool({
             : f
         )
       );
-      const n = revised.length;
-      setRedraftChat((c) => [
-        ...c,
-        {
-          role: "scout",
-          text: `Done, updated ${n} message${n === 1 ? "" : "s"} below. Want another change?`,
-        },
-      ]);
     } catch (e: any) {
-      setRedraftChat((c) => [
-        ...c,
-        { role: "scout", text: `Something went wrong: ${e.message}` },
-      ]);
+      setError(e.message);
     } finally {
       setRevisingBatch(false);
     }
@@ -3643,49 +3628,31 @@ function ScoutTool({
             {/* ---------------- Drafts ---------------- */}
             {drafts.length > 0 && (
               <section className="mt-12">
-                {/* Chat with Scout: a back-and-forth thread that rewrites every
-                    draft below however you ask — "make these shorter", "more
-                    casual", "mention I'm a recent grad", one message at a time. */}
+                {/* Refine box: type an instruction, it rewrites every draft
+                    below. No back-and-forth — it just applies the change and
+                    keeps a short log of what you've asked for. */}
                 <div className="mb-5 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-soft">
-                  <div className="flex items-center gap-2.5 border-b border-warm-border px-4 py-3">
-                    <Avatar />
-                    <div>
-                      <div className="text-sm font-bold text-ink">Refine with Scout</div>
-                      <div className="text-xs text-body/70">
-                        Tell Scout how to rewrite all {drafts.length} message
-                        {drafts.length === 1 ? "" : "s"} below.
-                      </div>
+                  <div className="border-b border-warm-border px-4 py-3">
+                    <div className="text-sm font-bold text-ink">Refine your messages</div>
+                    <div className="text-xs text-body/70">
+                      Tell Scout how to rewrite all {drafts.length} message
+                      {drafts.length === 1 ? "" : "s"} below.
                     </div>
                   </div>
 
-                  {(redraftChat.length > 0 || revisingBatch) && (
+                  {redraftChat.length > 0 && (
                     <div
                       ref={redraftScrollRef}
-                      className="max-h-64 space-y-2.5 overflow-y-auto px-4 py-3.5"
+                      className="max-h-40 space-y-1.5 overflow-y-auto px-4 py-3"
                     >
                       {redraftChat.map((m, i) => (
-                        <div
-                          key={i}
-                          className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
-                        >
-                          <div
-                            className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
-                              m.role === "user"
-                                ? "rounded-br-md bg-brand-gradient text-white"
-                                : "rounded-bl-md border border-warm-border bg-warm-bg/60 text-body"
-                            }`}
-                          >
-                            {m.text}
-                          </div>
+                        <div key={i} className="flex items-start gap-2 text-sm text-body">
+                          <span className="mt-0.5 shrink-0 text-body/40" aria-hidden>
+                            ✓
+                          </span>
+                          <span>{m.text}</span>
                         </div>
                       ))}
-                      {revisingBatch && (
-                        <div className="flex justify-start">
-                          <div className="rounded-2xl rounded-bl-md border border-warm-border bg-warm-bg/60 px-3.5 py-2 text-sm text-body/60">
-                            Rewriting…
-                          </div>
-                        </div>
-                      )}
                     </div>
                   )}
 
@@ -3702,7 +3669,7 @@ function ScoutTool({
                       rows={1}
                       placeholder={
                         redraftChat.length
-                          ? "Ask for another change…"
+                          ? "Another change…"
                           : "e.g. make these shorter and more casual, and mention I'm a recent grad"
                       }
                       className="min-h-[42px] max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
@@ -3713,10 +3680,9 @@ function ScoutTool({
                     <button
                       onClick={reviseAllDrafts}
                       disabled={revisingBatch || !redraftInstruction.trim()}
-                      aria-label="Send"
-                      className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
+                      className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
                     >
-                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
+                      {revisingBatch ? "Applying…" : "Apply"}
                     </button>
                   </div>
                 </div>
