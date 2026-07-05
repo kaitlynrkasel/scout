@@ -4116,6 +4116,7 @@ function ScoutTool({
           onSignature={saveSignature}
           onBuildSignature={buildSignatureFromBio}
           setProjectSignature={setProjectSignature}
+          activeProjectId={activeId}
         />
       )}
 
@@ -10995,6 +10996,7 @@ function TemplatesTab({
   onSignature,
   onBuildSignature,
   setProjectSignature,
+  activeProjectId,
 }: {
   kinds: string[];
   channel: string;
@@ -11018,10 +11020,14 @@ function TemplatesTab({
   onSignature: (v: string) => void;
   onBuildSignature: () => Promise<string>;
   setProjectSignature: (projectId: string, sig: string) => void;
+  activeProjectId: string;
 }) {
   // Email-signature editor state: which project (if any) the per-project
   // signature editor is pointed at, and whether a "build from resume" is running.
-  const [sigProjectId, setSigProjectId] = useState("");
+  // Defaults to the project you're currently working in so it opens ready to edit.
+  const [sigProjectId, setSigProjectId] = useState(
+    projects.some((p) => p.id === activeProjectId) ? activeProjectId : ""
+  );
   const [buildingSig, setBuildingSig] = useState(false);
   const sigProject = projects.find((p) => p.id === sigProjectId);
   async function buildDefaultSig() {
