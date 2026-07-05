@@ -483,7 +483,12 @@ interface CommunityStats {
   } | null;
 }
 
-const FIND_STATUSES: { key: FindStatus | "all"; label: string }[] = [
+// "pinned" is a cross-cutting bucket, not a status: pinning a find moves it
+// into the Pinned tab and pulls it out of its status/all lists (a working
+// shortlist), rather than just floating it to the top of its current tab.
+type FindFilter = FindStatus | "all" | "pinned";
+const FIND_STATUSES: { key: FindFilter; label: string }[] = [
+  { key: "pinned", label: "Pinned" },
   { key: "new", label: "New" },
   { key: "drafted", label: "Drafted" },
   { key: "sent", label: "Sent" },
@@ -864,7 +869,7 @@ function ScoutTool({
   const [activeId, setActiveId] = useState<string>("");
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
   const [finds, setFinds] = useState<Find[]>([]);
-  const [findFilter, setFindFilter] = useState<FindStatus | "all">("new");
+  const [findFilter, setFindFilter] = useState<FindFilter>("new");
   const [findDraftingId, setFindDraftingId] = useState(""); // find being drafted
   // Coaching directives the user approved (applied to every draft) + the
   // before/after voice deltas learned from drafts they hand-edited.
@@ -5462,8 +5467,8 @@ function FindsTab({
   voiceRefreshAvailable: boolean;
   refreshingVoice: boolean;
   onRefreshDrafts: () => void;
-  filter: FindStatus | "all";
-  setFilter: (f: FindStatus | "all") => void;
+  filter: FindFilter;
+  setFilter: (f: FindFilter) => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   draftingId: string;
   gmailBusyId: string;
@@ -5498,9 +5503,14 @@ function FindsTab({
   repliesNote: string;
   goOutreach: () => void;
 }) {
-  const counts: Record<string, number> = { all: finds.length };
+  // Pinned finds live in their own tab and are excluded from the status/all
+  // lists — so status counts count only the un-pinned ones.
+  const counts: Record<string, number> = {
+    pinned: finds.filter((f) => f.pinned).length,
+    all: finds.filter((f) => !f.pinned).length,
+  };
   for (const s of ["new", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
-    counts[s] = finds.filter((f) => f.status === s).length;
+    counts[s] = finds.filter((f) => f.status === s && !f.pinned).length;
   }
   const trackable = finds.some(
     (f) =>
@@ -5508,14 +5518,16 @@ function FindsTab({
       f.status !== "replied" &&
       f.status !== "denied"
   );
-  const shown = (filter === "all" ? finds : finds.filter((f) => f.status === filter))
+  const shown = finds
+    .filter((f) =>
+      filter === "pinned"
+        ? f.pinned
+        : filter === "all"
+          ? !f.pinned
+          : f.status === filter && !f.pinned
+    )
     .slice()
-    // Pinned finds first, then best-fit.
-    .sort(
-      (a, b) =>
-        (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) ||
-        (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
-    );
+    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
@@ -5627,6 +5639,8 @@ function FindsTab({
               </button>{" "}
               tab and everyone Scout finds lands here.
             </>
+          ) : filter === "pinned" ? (
+            "No pinned finds yet. Pin a find to move it here as your working shortlist."
           ) : (
             "Nothing in this list."
           )}
@@ -6001,8 +6015,8 @@ function FindCard({
         </button>
         <button
           onClick={onTogglePin}
-          title={find.pinned ? "Unpin" : "Pin to top"}
-          aria-label={find.pinned ? "Unpin find" : "Pin find to top"}
+          title={find.pinned ? "Unpin, return to its status list" : "Pin, moves it to the Pinned tab"}
+          aria-label={find.pinned ? "Unpin find" : "Pin find to the Pinned tab"}
           aria-pressed={!!find.pinned}
           className={`shrink-0 rounded-lg border p-1 transition ${
             find.pinned
