@@ -22,19 +22,9 @@ export async function GET(req: NextRequest) {
 
   let html: string;
   try {
-    const r = await fetch(u.toString(), {
-      headers: {
-        "user-agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-        accept: "text/html,application/xhtml+xml",
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(10000),
-    });
+    const r = await fetchPage(u.toString());
     if (!r.ok) {
-      return htmlResponse(
-        errorPage(`This site returned an error (${r.status}) when Scout tried to preview it.`, u.toString())
-      );
+      return htmlResponse(blockedPage(r.status, u.toString()));
     }
     const ct = r.headers.get("content-type") || "";
     if (!ct.includes("html")) {
@@ -73,6 +63,54 @@ export async function GET(req: NextRequest) {
     : `${html}${AUTOFILL_SCRIPT}`;
 
   return htmlResponse(html);
+}
+
+// A modern desktop-Chrome header set. Many sites 403 a bare fetch that's missing
+// the Sec-Fetch-*/Accept-Language/UA-brand headers a real browser always sends,
+// so we mimic them to get past soft bot checks.
+const BROWSER_HEADERS: Record<string, string> = {
+  "user-agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+  "accept-language": "en-US,en;q=0.9",
+  "sec-ch-ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+  "sec-ch-ua-mobile": "?0",
+  "sec-ch-ua-platform": '"macOS"',
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "sec-fetch-user": "?1",
+  "upgrade-insecure-requests": "1",
+};
+
+// Fetch the page like a browser; if the site blocks us (403/401/429/451),
+// retry once announcing ourselves as Googlebot, which many sites allow-list for
+// crawlability even when they refuse anonymous browser traffic.
+async function fetchPage(url: string): Promise<Response> {
+  const r = await fetch(url, {
+    headers: BROWSER_HEADERS,
+    redirect: "follow",
+    signal: AbortSignal.timeout(10000),
+  });
+  if (r.ok || ![401, 403, 429, 451].includes(r.status)) return r;
+  try {
+    const bot = await fetch(url, {
+      headers: {
+        "user-agent":
+          "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)",
+        accept: BROWSER_HEADERS.accept,
+        "accept-language": "en-US,en;q=0.9",
+        from: "googlebot(at)googlebot.com",
+      },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10000),
+    });
+    // Prefer whichever attempt actually got through.
+    return bot.ok ? bot : r;
+  } catch {
+    return r;
+  }
 }
 
 // Runs inside the proxied page (same origin as the app, so postMessage is
@@ -162,4 +200,35 @@ function errorPage(message: string, realUrl?: string): string {
     `<p>${message}${realUrl ? ` <br><a href="${realUrl}" target="_blank" rel="noreferrer">Open it directly ↗</a>` : ""}</p>` +
     `</body></html>`
   );
+}
+
+// A site that refused the automated preview (403/401/429/451). This is the site
+// blocking bots, not a broken link — so lead with opening it in a real tab,
+// where the user's own browser session sails through.
+function blockedPage(status: number, realUrl: string): string {
+  const why =
+    status === 429
+      ? "This site is rate-limiting automated requests right now."
+      : "This site blocks automated previews (common with strong anti-bot protection).";
+  return (
+    `<!doctype html><html><head><meta charset="utf-8"><style>` +
+    `body{margin:0;display:flex;align-items:center;justify-content:center;height:100vh;` +
+    `font-family:-apple-system,system-ui,sans-serif;background:#f4f2ee;color:#57534c;text-align:center;padding:24px}` +
+    `.w{max-width:340px}p{line-height:1.5;font-size:14px;margin:0 0 16px}` +
+    `a{display:inline-block;background:#7c5837;color:#fff;text-decoration:none;font-weight:700;` +
+    `font-size:13px;padding:10px 18px;border-radius:12px}small{display:block;margin-top:14px;color:#8a857c;font-size:12px}` +
+    `</style></head><body><div class="w">` +
+    `<p>${why} It usually opens fine in your own browser.</p>` +
+    `<a href="${realUrl}" target="_blank" rel="noreferrer">Open ${escapeHost(realUrl)} ↗</a>` +
+    `<small>Scout can still draft outreach and scan for contacts — the preview is just the site&rsquo;s own block.</small>` +
+    `</div></body></html>`
+  );
+}
+
+function escapeHost(u: string): string {
+  try {
+    return new URL(u).hostname.replace(/^www\./, "");
+  } catch {
+    return "the site";
+  }
 }
