@@ -76,7 +76,10 @@ export function authUrl(origin: string, state: string): string {
     response_type: "code",
     scope: SCOPES.join(" "),
     response_mode: "query",
-    prompt: "consent", // ensure a refresh token + fresh consent
+    // No forced `prompt`: Microsoft shows the permission ("grant access") screen
+    // only the first time these scopes are granted, then relies on SSO for later
+    // connects instead of re-requesting access every time. The refresh token is
+    // guaranteed by the `offline_access` scope, not by prompting for consent.
     state,
   });
   return `${MS_AUTH}?${p.toString()}`;

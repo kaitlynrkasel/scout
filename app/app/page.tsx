@@ -4017,7 +4017,7 @@ function ScoutTool({
       {tab === "account" && accountEmail && (
         <main className="mx-auto max-w-3xl px-6 py-12">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            Your <span className="brand-text">account</span>
+            Your <span className="text-brown">account</span>
           </h1>
           <p className="mt-2 text-[15px] leading-relaxed text-body">
             Your login and everything Scout saves for you live here.
@@ -4078,7 +4078,7 @@ function ScoutTool({
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
           <span className="font-semibold text-ink">
-            <span className="brand-text">Scout</span>
+            <span className="text-brown">Scout</span>
           </span>
           <span className="ml-auto">
             Discover, draft, and connect, in your own voice.
@@ -5591,7 +5591,7 @@ function FindsTab({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            Your <span className="brand-text">finds</span>
+            Your <span className="text-brown">finds</span>
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Label className="mb-0">Project</Label>
@@ -7372,7 +7372,7 @@ function DashboardTab({
               : "How Scout is doing across everyone using it."}
           </p>
         </div>
-        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-surface p-1 shadow-card">
+        <div className="inline-flex shrink-0 rounded-xl border border-warm-border bg-warm-bg p-1">
           {(
             [
               ["you", "You"],
@@ -7382,10 +7382,10 @@ function DashboardTab({
             <button
               key={val}
               onClick={() => setDashTab(val)}
-              className={`rounded-lg px-4 py-1.5 text-sm font-bold transition ${
+              className={`rounded-lg px-4 py-1.5 text-sm font-medium transition ${
                 dashTab === val
-                  ? "bg-brown text-white shadow-soft"
-                  : "text-body/70 hover:text-ink"
+                  ? "bg-surface text-ink shadow-card"
+                  : "text-muted hover:text-ink"
               }`}
             >
               {label}
@@ -9410,7 +9410,7 @@ function TeamTab({
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
-        Your <span className="brand-text">team</span>
+        Your <span className="text-brown">team</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Share a project with teammates so you all see the same finds and who is
@@ -10225,7 +10225,7 @@ function SettingsTab({
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
-        <span className="brand-text">Settings</span>
+        <span className="text-brown">Settings</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Small preferences that shape how Scout shows up for you.
@@ -10251,7 +10251,7 @@ function SettingsTab({
                 onClick={() => setTheme(val === "dark")}
                 className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
                   active
-                    ? "bg-brown text-white shadow-soft"
+                    ? "bg-surface text-ink shadow-card"
                     : "text-body/70 hover:text-ink"
                 }`}
               >
@@ -10425,7 +10425,7 @@ function TemplatesTab({
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
-        Your <span className="brand-text">templates</span>
+        Your <span className="text-brown">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Set up how each kind of message should sound. When Scout drafts outreach,
@@ -11104,7 +11104,7 @@ function ProfileTab({
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
-        Your <span className="brand-text">profile</span>
+        Your <span className="text-brown">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
         Drop in your resume, LinkedIn, or company website and Scout fills the rest
@@ -11342,7 +11342,7 @@ function ProfileTab({
 
           <div className="mt-5">
             <Label>Where are you in school?</Label>
-            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
               {(
                 [
                   ["", "Prefer not to say"],
@@ -11356,7 +11356,7 @@ function ProfileTab({
                   onClick={() => onEduStatus(val)}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                     eduStatus === val
-                      ? "bg-brown text-white shadow-soft"
+                      ? "bg-surface text-ink shadow-card"
                       : "text-body/70 hover:text-ink"
                   }`}
                 >
@@ -11372,7 +11372,7 @@ function ProfileTab({
 
           <div className="mt-5">
             <Label>Are you applying to jobs or internships?</Label>
-            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
+            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
               {(
                 [
                   ["yes", "Yes"],
@@ -11384,7 +11384,7 @@ function ProfileTab({
                   onClick={() => setJobApplicant(val === "yes")}
                   className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                     jobApplicant === (val === "yes")
-                      ? "bg-brown text-white shadow-soft"
+                      ? "bg-surface text-ink shadow-card"
                       : "text-body/70 hover:text-ink"
                   }`}
                 >
@@ -11402,7 +11402,7 @@ function ProfileTab({
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div>
                 <Label>Company size you want</Label>
-                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
                   {(
                     [
                       ["any", "Any"],
@@ -11415,7 +11415,7 @@ function ProfileTab({
                       onClick={() => onCompanySize(val)}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         companySize === val
-                          ? "bg-brown text-white shadow-soft"
+                          ? "bg-surface text-ink shadow-card"
                           : "text-body/70 hover:text-ink"
                       }`}
                     >
@@ -11426,7 +11426,7 @@ function ProfileTab({
               </div>
               <div>
                 <Label>Competitiveness</Label>
-                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-surface p-1">
+                <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
                   {(
                     [
                       ["any", "Any"],
@@ -11440,7 +11440,7 @@ function ProfileTab({
                       onClick={() => onCompetitiveness(val)}
                       className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                         competitiveness === val
-                          ? "bg-brown text-white shadow-soft"
+                          ? "bg-surface text-ink shadow-card"
                           : "text-body/70 hover:text-ink"
                       }`}
                     >
@@ -11855,7 +11855,7 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
         </svg>
       </div>
       <h2 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">
-        First, tell <span className="brand-text">Scout</span> who you are
+        First, tell <span className="text-brown">Scout</span> who you are
       </h2>
       <p className="mx-auto mt-2.5 max-w-md text-[15px] leading-relaxed text-body">
         Just your name is enough to start. Adding a resume, LinkedIn, or website is
