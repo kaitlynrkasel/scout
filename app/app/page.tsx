@@ -12586,18 +12586,6 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
       >
         Set up your Profile
       </button>
-      <div className="mx-auto mt-7 flex max-w-md flex-wrap justify-center gap-2">
-        {["Add your name", "Resume or website (optional)", "Start scouting"].map(
-          (s, i) => (
-            <span
-              key={s}
-              className="rounded-full border border-warm-border bg-warm-bg/60 px-3 py-1 text-xs font-medium text-body"
-            >
-              {i + 1}. {s}
-            </span>
-          )
-        )}
-      </div>
     </section>
   );
 }
