@@ -3,7 +3,7 @@
 // spike. Same shape: queries from goal+template, web search, structured
 // extraction, a known-index dedupe so the same target never repeats.
 
-import { claudeJson, parseJsonLoose } from "./claude";
+import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { tavilySearch, TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
@@ -75,11 +75,34 @@ function isNetworkingUseCase(useCase: string): boolean {
 // the goal says this, we drop industry + location filtering no matter the use
 // case, because the user is telling us the net is intentionally wide.
 function goalWantsAnyIndustry(goal: string): boolean {
-  // Loose enough to catch "any other industry", "any type of industry", "any
-  // kind of business", etc, not just the exact phrase "any industry", a
-  // fixed two-word match was silently missing common real-world phrasings.
-  return /\b(any (other |type of |kind of |given )*(industry|field|sector|vertical|niche|business)|all (industries|sectors|fields|businesses)|every (industry|sector|business)|industry.?agnostic|no (specific )?industry|regardless of (the )?industry|(not|isn'?t) industry.?specific|across industries|open to (any|all) industr(y|ies)|doesn'?t matter (the |what )?industry)\b/i.test(
-    goal || ""
+  // Two intents both mean "don't anchor to my field": (1) ANY industry is fine,
+  // and (2) I want a VARIETY across many industries. The second phrasing
+  // ("a variety of industries", "different industries", "multiple sectors") was
+  // silently missing before, so those searches ran anchored to the user's own
+  // field and collapsed to one industry — the exact bug the user hit.
+  const g = goal || "";
+  const noun = "(industr(?:y|ies)|sectors?|fields?|verticals?|niches?|businesses)";
+  return (
+    // "any industry is fine" family
+    new RegExp(
+      `\\b(any (other |type of |kind of |given )*${noun}|all (industries|sectors|fields|businesses)|every (industry|sector|business)|across ${noun}|(cross|multi)[- ]?industr(y|ies)|industry.?agnostic|no (specific )?industry|regardless of (the )?industry|(not|isn'?t) industry.?specific|open to (any|all) industr(y|ies)|doesn'?t matter (the |what )?industry)\\b`,
+      "i"
+    ).test(g) ||
+    // "a variety / range / mix / spread of industries" family
+    new RegExp(
+      `\\b(a |an )?(wide |broad |diverse )?(variety|range|mix|mixture|assortment|spread|diversity|bunch|number|selection) of (different |various |diverse )?${noun}`,
+      "i"
+    ).test(g) ||
+    // "different / multiple / various / several / diverse … industries" family
+    new RegExp(
+      `\\b(different|differing|multiple|various|several|diverse|many|numerous|assorted|mixed|varied|a bunch of|lots of|all kinds of|all sorts of|all types of) (kinds of |sorts of |types of )?${noun}`,
+      "i"
+    ).test(g) ||
+    // "across / spanning / from many industries"
+    new RegExp(
+      `\\b(across|spanning|from|in|over|throughout) (a )?(wide |broad |many |several |multiple |various |different |diverse |all )+(range of )?${noun}`,
+      "i"
+    ).test(g)
   );
 }
 function goalWantsAnywhere(goal: string): boolean {
@@ -290,9 +313,12 @@ async function planQueries(
   // profile (type/size/stage/place), not the user's sub-field/genre.
   const longTail = prospecting
     ? (anyIndustry
-        ? " CRITICAL: the user asked for ANY industry, so span MANY different industries across the query set (e.g. one " +
-          "for local retailers, one for professional-services firms, one for trades, one for hospitality, one for SaaS) " +
-          "instead of clustering in one. "
+        ? " CRITICAL: the user wants a VARIETY of industries, so every query must target a DIFFERENT industry — cover at " +
+          "least 6 distinct ones across the set (e.g. local retailers, professional-services firms, trades, hospitality, " +
+          "healthcare, SaaS, manufacturing, nonprofits, real estate), and NEVER put two queries in the same industry. " +
+          "IMPORTANT: the user's past kept or denied finds (in the feedback below) reflect only the narrow slice Scout has " +
+          "surfaced so far, NOT an industry preference — do NOT let them pull queries toward that one industry. Deliberately " +
+          "reach into industries NOT represented in that feedback so the results keep widening, not narrowing. "
         : " CRITICAL: keep queries specific to the GOAL's target profile (type, size, stage, location). ") +
       "Favor NICHE, smaller, more-responsive targets over the handful of biggest names everyone already contacts. " +
       "Make each query hyper-specific to the target profile (segment, company size, city) rather than broad. "
@@ -630,7 +656,13 @@ async function extract(
     `why_it_fits (one specific, true detail used to personalize outreach, follow the WHY_IT_FITS rule above exactly for what it should describe; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
-  const learned = feedbackBlock(feedback);
+  const learned =
+    feedbackBlock(feedback) +
+    (anyIndustry && feedback
+      ? "\n\nNOTE: the user wants results spanning MANY industries. Treat the kept/denied examples above as signals about " +
+        "outreach FIT and quality only, NOT about industry. Do NOT lower fit_score or set is_relevant false just because a " +
+        "result's industry differs from those examples — a different industry is exactly what the user wants here."
+      : "");
   const user =
     `${ctx}\n${fields}${learned}\n\nSEARCH RESULT:\nTitle: ${cand.title || ""}\nURL: ${cand.url || ""}\nContent: ${String(cand.content || "").slice(0, 2800)}`;
   try {
@@ -791,8 +823,16 @@ export async function discover(
   const candidates: TavilyResult[] = [];
   const seenLinks = new Set<string>();
   async function gather(passQueries: string[]) {
+    // Collect each query's surviving results into its own bucket, then INTERLEAVE
+    // them round-robin into `candidates`. Extraction reads candidates in order and
+    // stops at maxItems, so a sequential fill let the first query (the raw goal,
+    // which for an "any industry" search returns whatever Tavily ranks top — one
+    // industry) dominate the front and the later, deliberately-diverse industry
+    // queries never got reached. Round-robin guarantees every query — and so every
+    // industry angle — lands near the front and makes it into the results.
+    const buckets: TavilyResult[][] = [];
     for (const q of passQueries) {
-      if (candidates.length >= maxItems * 4) break;
+      const bucket: TavilyResult[] = [];
       const results = await tavilySearch(q, perQuery, { depth });
       for (const r of results) {
         if (looksLikeAdvice(r.title, useCase, goal)) {
@@ -812,8 +852,19 @@ export async function discover(
           logSkip(r.title, r.url, "duplicate link");
           continue;
         }
-        seenLinks.add(k);
-        candidates.push(r);
+        seenLinks.add(k); // global dedupe as we collect
+        bucket.push(r);
+      }
+      buckets.push(bucket);
+    }
+    const cap = maxItems * 4;
+    const depthMax = Math.max(0, ...buckets.map((b) => b.length));
+    for (let col = 0; col < depthMax && candidates.length < cap; col++) {
+      for (const b of buckets) {
+        if (col < b.length) {
+          candidates.push(b[col]);
+          if (candidates.length >= cap) break;
+        }
       }
     }
   }
@@ -1021,7 +1072,7 @@ export async function discover(
         location: r.location || "",
         timezone: r.timezone || "",
         fitScore: fit,
-        whyItFits: r.why_it_fits || "",
+        whyItFits: noDash(r.why_it_fits || ""), // no em dashes in rendered LLM copy
         sourceTitle: cand.title || "",
         sourceSnippet: String(cand.content || "").slice(0, 220),
         sources: [
