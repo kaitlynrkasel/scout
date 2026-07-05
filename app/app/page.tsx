@@ -5,6 +5,7 @@ import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
 import type { Draft, Opportunity, OutreachTemplate, SourceRef } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
+import AccountOnboarding from "./AccountOnboarding";
 import CornerDog from "./CornerDog";
 import { Reveal, CountUp, FadeIn } from "./motion";
 import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
@@ -277,11 +278,23 @@ const EDU_STATUS_LABEL: Record<Exclude<EducationStatus, "">, string> = {
   graduated: "Graduated",
 };
 
+// Chosen once at first sign-in (blocking) and never toggled afterward — it
+// decides which onboarding + profile shape the user gets. "" = not chosen yet,
+// which is what gates the app behind the account-type modal.
+type AccountType = "" | "individual" | "company";
+
 interface Profile {
   name: string;
   bio: string;
   useCase: string; // free text; matched to a preset when it can be, else read as-is
   linkedin?: string;
+  // Individual vs company, set at signup. Company profiles ask about the role
+  // you serve and how you contribute to the company's projects, and skip the
+  // resume/education-heavy individual fields.
+  accountType?: AccountType;
+  companyName?: string;
+  companyRole?: string; // your specific role/title at the company
+  companyContribution?: string; // how you serve / what you do on the company's projects
   // Optional personalization. Stored locally only for now (the Supabase
   // `profiles` row keeps its original columns; these ride along in the browser's
   // scout_profile blob and flow into aboutText so the LLM can use them).
@@ -640,6 +653,11 @@ function AuthedShell() {
         const raw = localStorage.getItem(PROFILE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
+          if (typeof parsed.accountType === "string") localExtras.accountType = parsed.accountType;
+          if (typeof parsed.companyName === "string") localExtras.companyName = parsed.companyName;
+          if (typeof parsed.companyRole === "string") localExtras.companyRole = parsed.companyRole;
+          if (typeof parsed.companyContribution === "string")
+            localExtras.companyContribution = parsed.companyContribution;
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
           if (typeof parsed.eduStatus === "string") localExtras.eduStatus = parsed.eduStatus;
           if (typeof parsed.college === "string") localExtras.college = parsed.college;
@@ -662,7 +680,14 @@ function AuthedShell() {
         "competitive",
       ]);
       const allowedEdu = new Set<EducationStatus>(["highschool", "college", "graduated"]);
+      const allowedAcct = new Set<AccountType>(["individual", "company"]);
       const mergedExtras: Partial<Profile> = {};
+      if (raw.accountType && allowedAcct.has(raw.accountType as AccountType))
+        mergedExtras.accountType = raw.accountType as AccountType;
+      if (typeof raw.companyName === "string") mergedExtras.companyName = raw.companyName;
+      if (typeof raw.companyRole === "string") mergedExtras.companyRole = raw.companyRole;
+      if (typeof raw.companyContribution === "string")
+        mergedExtras.companyContribution = raw.companyContribution;
       if (typeof raw.age === "number") mergedExtras.age = raw.age;
       if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
         mergedExtras.eduStatus = raw.eduStatus as EducationStatus;
@@ -1091,6 +1116,10 @@ function ScoutTool({
       // lived in localStorage before this — which meant it evaporated on any
       // fresh hydrate.
       profileExtras: {
+        accountType: profile.accountType,
+        companyName: profile.companyName,
+        companyRole: profile.companyRole,
+        companyContribution: profile.companyContribution,
         age: profile.age,
         eduStatus: profile.eduStatus,
         college: profile.college,
@@ -1100,7 +1129,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -2075,6 +2104,13 @@ function ScoutTool({
     profile.name,
     profile.bio,
     profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
+    profile.accountType === "company" && profile.companyName
+      ? `Reaching out on behalf of ${profile.companyName}` +
+        (profile.companyRole ? ` as ${profile.companyRole}` : "")
+      : "",
+    profile.accountType === "company" && profile.companyContribution
+      ? `Their role / how they serve the company's work: ${profile.companyContribution}`
+      : "",
     profile.age ? `Age: ${profile.age}` : "",
     profile.eduStatus ? `Education stage: ${EDU_STATUS_LABEL[profile.eduStatus]}` : "",
     profile.college ? `Education: ${profile.college}` : "",
@@ -3246,6 +3282,16 @@ function ScoutTool({
 
   return (
     <div className="flex min-h-screen">
+      {/* Blocking first-run gate: you can't reach Scout until you pick
+          individual vs company (and answer the company questions if company).
+          profileLoaded gates ScoutTool, so profile.accountType is already
+          authoritative here — no flash for returning users. */}
+      {!profile.accountType && (
+        <AccountOnboarding
+          name={profile.name.trim().split(/\s+/)[0] || ""}
+          onComplete={(patch) => patchProfile(patch)}
+        />
+      )}
       <SideNav
         tab={tab}
         setTab={setTab}
@@ -3965,6 +4011,13 @@ function ScoutTool({
           bio={profile.bio}
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
+          accountType={profile.accountType || ""}
+          companyName={profile.companyName || ""}
+          companyRole={profile.companyRole || ""}
+          companyContribution={profile.companyContribution || ""}
+          onCompanyName={(v) => patchProfile({ companyName: v })}
+          onCompanyRole={(v) => patchProfile({ companyRole: v })}
+          onCompanyContribution={(v) => patchProfile({ companyContribution: v })}
           age={profile.age}
           eduStatus={profile.eduStatus || ""}
           college={profile.college || ""}
@@ -10870,6 +10923,13 @@ function ProfileTab({
   bio,
   linkedin,
   useCase,
+  accountType,
+  companyName,
+  companyRole,
+  companyContribution,
+  onCompanyName,
+  onCompanyRole,
+  onCompanyContribution,
   age,
   eduStatus,
   college,
@@ -10921,6 +10981,13 @@ function ProfileTab({
   bio: string;
   linkedin: string;
   useCase: string;
+  accountType: AccountType;
+  companyName: string;
+  companyRole: string;
+  companyContribution: string;
+  onCompanyName: (v: string) => void;
+  onCompanyRole: (v: string) => void;
+  onCompanyContribution: (v: string) => void;
   age?: number;
   eduStatus: EducationStatus;
   college: string;
@@ -11010,21 +11077,10 @@ function ProfileTab({
       setBuildingSig(false);
     }
   }
-  // Individual vs company changes how you fill your profile (resume vs website).
-  const [kind, setKind] = useState<"individual" | "company">("individual");
+  // Individual vs company is chosen once at signup (accountType) — no in-profile
+  // toggle. Company profiles fill from a website, individuals from a resume.
+  const kind: "individual" | "company" = accountType === "company" ? "company" : "individual";
   const [website, setWebsite] = useState("");
-  useEffect(() => {
-    try {
-      const k = localStorage.getItem(KIND_KEY);
-      if (k === "company" || k === "individual") setKind(k);
-    } catch {}
-  }, []);
-  function chooseKind(k: "individual" | "company") {
-    setKind(k);
-    try {
-      localStorage.setItem(KIND_KEY, k);
-    } catch {}
-  }
 
   // Read some source text (a resume, a LinkedIn PDF/About section, a bio) and let
   // Scout fill in name + use case from it. keepBio=false when the text is already
@@ -11146,24 +11202,48 @@ function ProfileTab({
         </>
       )}
 
-      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        {/* -------- Individual vs company: resume drop or website -------- */}
-        <div className="mb-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
-          {(["individual", "company"] as const).map((k) => (
-            <button
-              key={k}
-              onClick={() => chooseKind(k)}
-              className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
-                kind === k
-                  ? "bg-surface text-ink shadow-card"
-                  : "text-body/60 hover:text-ink"
-              }`}
-            >
-              {k === "individual" ? "I'm an individual" : "I'm a company"}
-            </button>
-          ))}
-        </div>
+      {/* Company accounts: role + how you serve the company's work (set at
+          signup, editable here). Individuals never see this. */}
+      {kind === "company" && (
+        <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+          <h2 className="text-base font-extrabold tracking-tight text-ink">Your company role</h2>
+          <p className="mt-1 text-sm leading-relaxed text-body">
+            Scout writes on behalf of the company, so this matters more than a personal resume.
+          </p>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label>Company name</Label>
+              <input
+                value={companyName}
+                onChange={(e) => onCompanyName(e.target.value)}
+                placeholder="e.g. Cedar & Co. Studio"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>Your role at the company</Label>
+              <input
+                value={companyRole}
+                onChange={(e) => onCompanyRole(e.target.value)}
+                placeholder="e.g. Head of Partnerships"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+          </div>
+          <div className="mt-4">
+            <Label>How you serve the company&apos;s work</Label>
+            <textarea
+              value={companyContribution}
+              onChange={(e) => onCompanyContribution(e.target.value)}
+              rows={3}
+              placeholder="What you own and drive on the company's projects."
+              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+          </div>
+        </FadeIn>
+      )}
 
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <Label>
           {kind === "company"
             ? "Start with your website"
@@ -11304,31 +11384,35 @@ function ProfileTab({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <Label>Age</Label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={13}
-                max={100}
-                value={age ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.trim();
-                  onAge(v === "" ? undefined : Number(v));
-                }}
-                placeholder="e.g. 20"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
-            </div>
-            <div>
-              <Label>School or education</Label>
-              <input
-                value={college}
-                onChange={(e) => onCollege(e.target.value)}
-                placeholder="e.g. USC junior, MFA 2022, self-taught"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
-            </div>
+            {kind !== "company" && (
+              <div>
+                <Label>Age</Label>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={13}
+                  max={100}
+                  value={age ?? ""}
+                  onChange={(e) => {
+                    const v = e.target.value.trim();
+                    onAge(v === "" ? undefined : Number(v));
+                  }}
+                  placeholder="e.g. 20"
+                  className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+              </div>
+            )}
+            {kind !== "company" && (
+              <div>
+                <Label>School or education</Label>
+                <input
+                  value={college}
+                  onChange={(e) => onCollege(e.target.value)}
+                  placeholder="e.g. USC junior, MFA 2022, self-taught"
+                  className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+              </div>
+            )}
             <div>
               <Label>Location</Label>
               <input
@@ -11340,35 +11424,37 @@ function ProfileTab({
             </div>
           </div>
 
-          <div className="mt-5">
-            <Label>Where are you in school?</Label>
-            <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
-              {(
-                [
-                  ["", "Prefer not to say"],
-                  ["highschool", "High schooler"],
-                  ["college", "In college"],
-                  ["graduated", "Graduated"],
-                ] as const
-              ).map(([val, label]) => (
-                <button
-                  key={val || "unset"}
-                  onClick={() => onEduStatus(val)}
-                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
-                    eduStatus === val
-                      ? "bg-surface text-ink shadow-card"
-                      : "text-body/70 hover:text-ink"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          {kind !== "company" && (
+            <div className="mt-5">
+              <Label>Where are you in school?</Label>
+              <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+                {(
+                  [
+                    ["", "Prefer not to say"],
+                    ["highschool", "High schooler"],
+                    ["college", "In college"],
+                    ["graduated", "Graduated"],
+                  ] as const
+                ).map(([val, label]) => (
+                  <button
+                    key={val || "unset"}
+                    onClick={() => onEduStatus(val)}
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                      eduStatus === val
+                        ? "bg-surface text-ink shadow-card"
+                        : "text-body/70 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs text-body/70">
+                Helps Scout pitch you at the right stage, a high schooler and a grad aren&apos;t
+                reaching out the same way.
+              </p>
             </div>
-            <p className="mt-1.5 text-xs text-body/70">
-              Helps Scout pitch you at the right stage, a high schooler and a grad aren&apos;t
-              reaching out the same way.
-            </p>
-          </div>
+          )}
 
           <div className="mt-5">
             <Label>Are you applying to jobs or internships?</Label>

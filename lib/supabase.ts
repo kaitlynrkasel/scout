@@ -79,6 +79,10 @@ export interface AppState {
   // education, location, company-size preference, competitiveness). Ride along
   // in the JSON blob so a redeploy or new device doesn't wipe them out.
   profileExtras?: {
+    accountType?: string;
+    companyName?: string;
+    companyRole?: string;
+    companyContribution?: string;
     age?: number;
     eduStatus?: string;
     college?: string;
