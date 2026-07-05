@@ -674,16 +674,23 @@ function AuthedShell() {
         mergedExtras.companySize = raw.companySize as CompanySize;
       if (raw.competitiveness && allowedComp.has(raw.competitiveness as Competitiveness))
         mergedExtras.competitiveness = raw.competitiveness as Competitiveness;
+      // Seed the display name from the sign-up metadata (first/last name) when
+      // there's no saved profile name yet, so new accounts feel personal at once.
+      const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
+      const metaName = (
+        meta.full_name ||
+        [meta.first_name, meta.last_name].filter(Boolean).join(" ")
+      ).trim();
       setInitial(
         p
           ? {
-              name: p.name,
+              name: p.name || metaName,
               bio: p.bio,
               useCase: p.useCase || "Networking",
               linkedin: p.linkedin || "",
               ...mergedExtras,
             }
-          : { name: "", bio: "", useCase: "Networking", linkedin: "", ...mergedExtras }
+          : { name: metaName, bio: "", useCase: "Networking", linkedin: "", ...mergedExtras }
       );
       setInitialState(s);
       setProfileLoaded(true);
