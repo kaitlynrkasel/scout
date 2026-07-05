@@ -154,7 +154,19 @@ export default function AuthScreen({
         },
       });
       if (error) throw error;
-      // If the project confirms email (recommended), there's no session yet, 
+      // Anti-enumeration: signing up with an email that already has an account
+      // returns a user with an empty `identities` array and no session, and
+      // Supabase sends NO email. Without this check we'd strand the person on
+      // the verify screen waiting for a code that never arrives. Send them to
+      // sign in instead.
+      const alreadyRegistered =
+        !!data.user && Array.isArray(data.user.identities) && data.user.identities.length === 0;
+      if (alreadyRegistered) {
+        setMode("in");
+        setError("That email already has an account. Try signing in, or reset your password.");
+        return;
+      }
+      // If the project confirms email (recommended), there's no session yet,
       // send the user to the code step. If confirmation is off, we're already in.
       if (!data.session) {
         setNotice(`We sent a 6-digit code to ${email}. Enter it below to finish.`);
