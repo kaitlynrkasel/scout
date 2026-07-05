@@ -801,11 +801,21 @@ function ScoutTool({
   const [draftKind, setDraftKind] = useState<Record<string, string>>({});
   // opportunityId currently being re-drafted after a kind change.
   const [redraftBusyId, setRedraftBusyId] = useState("");
-  // The "direct the AI" chat box above Messages: one free-text instruction
-  // applied to every draft currently shown ("make these shorter", "more
-  // casual", "mention I'm a recent grad").
+  // The "chat with Scout" panel above Messages: a back-and-forth thread where
+  // each message you send is a free-text instruction applied to every draft
+  // shown ("make these shorter", "more casual", "mention I'm a recent grad"),
+  // and Scout replies with a short confirmation.
   const [redraftInstruction, setRedraftInstruction] = useState("");
   const [revisingBatch, setRevisingBatch] = useState(false);
+  const [redraftChat, setRedraftChat] = useState<
+    { role: "user" | "scout"; text: string }[]
+  >([]);
+  const redraftScrollRef = useRef<HTMLDivElement | null>(null);
+  // Keep the transcript pinned to the latest message.
+  useEffect(() => {
+    const el = redraftScrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [redraftChat, revisingBatch]);
   const [stats, setStats] = useState("");
   const [expanded, setExpanded] = useState(false);
 
@@ -1599,6 +1609,7 @@ function ScoutTool({
     setOpps([]);
     setSelected({});
     setDrafts([]);
+    setRedraftChat([]);
     setStats("");
     setError("");
     setApiReason(null);
@@ -3039,6 +3050,7 @@ function ScoutTool({
       }
       const newDrafts: Draft[] = data.drafts || [];
       setDrafts(newDrafts);
+      setRedraftChat([]); // fresh batch, start the refine thread clean
       bumpActivity({ drafts: newDrafts.length });
       // Persist drafts onto the matching pipeline finds so approved → drafted
       // shows up in the Finds tab.
@@ -3073,8 +3085,11 @@ function ScoutTool({
   // finds so the revision survives navigating away.
   async function reviseAllDrafts() {
     const instruction = redraftInstruction.trim();
-    if (!instruction || !drafts.length) return;
+    if (!instruction || !drafts.length || revisingBatch) return;
     setError("");
+    // Post the user's message to the thread immediately and clear the input.
+    setRedraftChat((c) => [...c, { role: "user", text: instruction }]);
+    setRedraftInstruction("");
     setRevisingBatch(true);
     try {
       const res = await fetch("/api/redraft-batch", {
@@ -3084,7 +3099,11 @@ function ScoutTool({
       });
       const data = await parseApiResponse(res);
       if (!res.ok || data?.error) {
-        reportError(data);
+        reportError(data); // keep credit/quota banners working
+        setRedraftChat((c) => [
+          ...c,
+          { role: "scout", text: `I couldn't apply that: ${data?.error || "something went wrong."}` },
+        ]);
         return;
       }
       const revised: Draft[] = data.drafts || [];
@@ -3097,9 +3116,19 @@ function ScoutTool({
             : f
         )
       );
-      setRedraftInstruction("");
+      const n = revised.length;
+      setRedraftChat((c) => [
+        ...c,
+        {
+          role: "scout",
+          text: `Done, updated ${n} message${n === 1 ? "" : "s"} below. Want another change?`,
+        },
+      ]);
     } catch (e: any) {
-      setError(e.message);
+      setRedraftChat((c) => [
+        ...c,
+        { role: "scout", text: `Something went wrong: ${e.message}` },
+      ]);
     } finally {
       setRevisingBatch(false);
     }
@@ -3614,32 +3643,80 @@ function ScoutTool({
             {/* ---------------- Drafts ---------------- */}
             {drafts.length > 0 && (
               <section className="mt-12">
-                {/* Direct the AI: one instruction, applied to every draft below
-                    in a single pass — "make these shorter", "more casual",
-                    "mention I'm a recent grad", whatever you'd like. */}
-                <div className="mb-5 rounded-2xl border border-warm-border bg-surface p-4 shadow-soft">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <Label className="mb-0">Tell Scout how to write these better</Label>
-                    <MicButton
-                      onAppend={(t) => setRedraftInstruction((g) => joinSpoken(g, t))}
-                    />
+                {/* Chat with Scout: a back-and-forth thread that rewrites every
+                    draft below however you ask — "make these shorter", "more
+                    casual", "mention I'm a recent grad", one message at a time. */}
+                <div className="mb-5 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-soft">
+                  <div className="flex items-center gap-2.5 border-b border-warm-border px-4 py-3">
+                    <Avatar />
+                    <div>
+                      <div className="text-sm font-bold text-ink">Refine with Scout</div>
+                      <div className="text-xs text-body/70">
+                        Tell Scout how to rewrite all {drafts.length} message
+                        {drafts.length === 1 ? "" : "s"} below.
+                      </div>
+                    </div>
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <input
+
+                  {(redraftChat.length > 0 || revisingBatch) && (
+                    <div
+                      ref={redraftScrollRef}
+                      className="max-h-64 space-y-2.5 overflow-y-auto px-4 py-3.5"
+                    >
+                      {redraftChat.map((m, i) => (
+                        <div
+                          key={i}
+                          className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}
+                        >
+                          <div
+                            className={`max-w-[80%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed ${
+                              m.role === "user"
+                                ? "rounded-br-md bg-brand-gradient text-white"
+                                : "rounded-bl-md border border-warm-border bg-warm-bg/60 text-body"
+                            }`}
+                          >
+                            {m.text}
+                          </div>
+                        </div>
+                      ))}
+                      {revisingBatch && (
+                        <div className="flex justify-start">
+                          <div className="rounded-2xl rounded-bl-md border border-warm-border bg-warm-bg/60 px-3.5 py-2 text-sm text-body/60">
+                            Rewriting…
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-end gap-2 border-t border-warm-border px-3 py-3">
+                    <textarea
                       value={redraftInstruction}
                       onChange={(e) => setRedraftInstruction(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter" && !revisingBatch) reviseAllDrafts();
+                        if (e.key === "Enter" && !e.shiftKey) {
+                          e.preventDefault();
+                          reviseAllDrafts();
+                        }
                       }}
-                      placeholder="e.g. make these shorter and more casual, mention I'm a recent grad"
-                      className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      rows={1}
+                      placeholder={
+                        redraftChat.length
+                          ? "Ask for another change…"
+                          : "e.g. make these shorter and more casual, and mention I'm a recent grad"
+                      }
+                      className="min-h-[42px] max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    />
+                    <MicButton
+                      onAppend={(t) => setRedraftInstruction((g) => joinSpoken(g, t))}
                     />
                     <button
                       onClick={reviseAllDrafts}
                       disabled={revisingBatch || !redraftInstruction.trim()}
-                      className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                      aria-label="Send"
+                      className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-xl bg-brand-gradient text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
                     >
-                      {revisingBatch ? "Rewriting…" : `Rewrite all ${drafts.length}`}
+                      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2 11 13" /><path d="M22 2 15 22l-4-9-9-4 20-7Z" /></svg>
                     </button>
                   </div>
                 </div>
