@@ -6,10 +6,41 @@
 // value of one of the TUNABLE_*_CLAUSE constants below, never arbitrary code,
 // and every edit is validated for structural sanity before it's committed.
 
-// Confidence gate, tune these three numbers to change how reckless this is.
+// Confidence gate at full platform scale (the conservative ceiling).
 export const MIN_DECIDED = 20; // sample size floor before any auto-tune can fire
 export const MIN_BUCKET_SHARE = 0.3; // a deny-reason bucket must be this share of denials
 export const COOLDOWN_DAYS = 7; // minimum time between auto-tunes
+
+export interface TuningThresholds {
+  minDecided: number;
+  minBucketShare: number;
+  cooldownDays: number;
+}
+const DEFAULT_THRESHOLDS: TuningThresholds = {
+  minDecided: MIN_DECIDED,
+  minBucketShare: MIN_BUCKET_SHARE,
+  cooldownDays: COOLDOWN_DAYS,
+};
+
+// Sensitivity scales with how many people the platform has. While it's small,
+// there is little data, so learn from LESS of it and improve faster; as users
+// grow, tighten automatically toward the conservative ceiling so one noisy
+// account can't move shared code once many people depend on it. The universal
+// auto-tune cron passes the live user count here each run.
+export function tuningThresholds(totalUsers: number): TuningThresholds {
+  if (totalUsers <= 15) return { minDecided: 8, minBucketShare: 0.25, cooldownDays: 2 };
+  if (totalUsers <= 75) return { minDecided: 14, minBucketShare: 0.28, cooldownDays: 4 };
+  return DEFAULT_THRESHOLDS;
+}
+
+// Personal calibration is per-user and never ships shared code, so it can be
+// more sensitive than the universal gate: kick in on a user's own history
+// sooner. Fixed low floor (no cooldown, it's rebuilt fresh each search).
+const PERSONAL_THRESHOLDS: TuningThresholds = {
+  minDecided: 8,
+  minBucketShare: 0.25,
+  cooldownDays: 0,
+};
 
 // The only two edit sites this system is allowed to touch. Each name must
 // match an `export const NAME = \`...\`;` statement in lib/discover.ts, 
@@ -103,12 +134,16 @@ export function computeTuningSignal(finds: MinimalFind[]): TuningSignal {
   };
 }
 
-// Does this signal clear the bar to fire an auto-tune at all?
-export function meetsThreshold(signal: TuningSignal): boolean {
+// Does this signal clear the bar to fire an auto-tune at all? Thresholds default
+// to the conservative ceiling; the cron passes user-count-scaled ones instead.
+export function meetsThreshold(
+  signal: TuningSignal,
+  th: TuningThresholds = DEFAULT_THRESHOLDS
+): boolean {
   return (
-    signal.decided >= MIN_DECIDED &&
+    signal.decided >= th.minDecided &&
     !!signal.topBucket &&
-    signal.topBucket.share >= MIN_BUCKET_SHARE
+    signal.topBucket.share >= th.minBucketShare
   );
 }
 
@@ -132,7 +167,7 @@ export function slotForSignal(signal: TuningSignal): TunableSlot | null {
 // moment the request finishes. Reuses the SAME threshold as a floor so it
 // never fires on a handful of noisy decisions.
 export function buildPersonalOverride(signal: TuningSignal): string {
-  if (!meetsThreshold(signal)) return "";
+  if (!meetsThreshold(signal, PERSONAL_THRESHOLDS)) return "";
   const b = signal.topBucket!;
   const fitNote =
     signal.keptFit != null && signal.deniedFit != null

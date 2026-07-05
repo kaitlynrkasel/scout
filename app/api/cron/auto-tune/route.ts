@@ -11,7 +11,8 @@ import {
   extractSlotValue,
   replaceSlotValue,
   sanityCheck,
-  COOLDOWN_DAYS,
+  tuningThresholds,
+  type TuningThresholds,
 } from "@/lib/autotune";
 
 export const runtime = "nodejs";
@@ -25,8 +26,10 @@ const DISCOVER_PATH = "lib/discover.ts";
 // clears that gate and the cooldown has elapsed, edits ONE named tunable
 // clause in lib/discover.ts and commits it to main, no human review. Vercel's
 // existing git integration deploys it from there. See the chat that requested
-// this ("fully autonomous, no review") for the reasoning and chosen
-// thresholds (MIN_DECIDED=20, MIN_BUCKET_SHARE=0.3, COOLDOWN_DAYS=7).
+// this ("fully autonomous, no review") for the reasoning. The confidence gate
+// SCALES with platform size (tuningThresholds): more sensitive while there are
+// few users (as low as 8 decided / 25% bucket / 2-day cooldown), tightening to
+// the conservative ceiling (20 / 0.3 / 7d) as the user base grows.
 //
 // Every applied edit is (a) logged to the auto_tune_log table, the
 // before/after clause text, the data that triggered it, and the GitHub commit
@@ -68,18 +71,24 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ skipped: true, reason: "No owner account found." });
   }
 
+  // Sensitivity scales with platform size: fewer users -> lower bar so
+  // improvements actually happen while data is scarce. (perPage caps at 200; a
+  // full page is treated as "large", which just means the conservative ceiling.)
+  const totalUsers = userList?.users?.length || 0;
+  const thresholds = tuningThresholds(totalUsers);
+
   const results: any[] = [];
   for (const u of owners) {
     try {
-      results.push(await runForUser(u.id, u.email || ""));
+      results.push(await runForUser(u.id, u.email || "", thresholds));
     } catch (e: any) {
       results.push({ userId: u.id, error: e?.message || "unknown error" });
     }
   }
-  return NextResponse.json({ results });
+  return NextResponse.json({ totalUsers, thresholds, results });
 }
 
-async function runForUser(userId: string, ownerEmail: string) {
+async function runForUser(userId: string, ownerEmail: string, thresholds: TuningThresholds) {
   // Cooldown lives in the audit log itself (most recent row's timestamp), 
   // single source of truth, no separate state field that could drift from it.
   const { data: lastEntry } = await supabaseAdmin!
@@ -89,7 +98,7 @@ async function runForUser(userId: string, ownerEmail: string) {
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
-  const cooldownMs = COOLDOWN_DAYS * 86400000;
+  const cooldownMs = thresholds.cooldownDays * 86400000;
   if (lastEntry?.created_at) {
     const elapsed = Date.now() - new Date(lastEntry.created_at).getTime();
     if (elapsed < cooldownMs) {
@@ -109,7 +118,7 @@ async function runForUser(userId: string, ownerEmail: string) {
   const finds = Array.isArray(row?.data?.finds) ? row!.data.finds : [];
 
   const signal = computeTuningSignal(finds);
-  if (!meetsThreshold(signal)) {
+  if (!meetsThreshold(signal, thresholds)) {
     return {
       userId,
       applied: false,
