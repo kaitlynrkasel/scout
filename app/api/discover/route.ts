@@ -3,7 +3,7 @@ import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
-import { computeTuningSignal, buildPersonalOverride } from "@/lib/autotune";
+import { computeTuningSignal, buildPersonalOverride, buildTeamOverride } from "@/lib/autotune";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
@@ -44,7 +44,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { goal, about, useCase, template, feedback, salt, cohortHint } = await req.json();
+    const { goal, about, useCase, template, feedback, salt, cohortHint, teamWorkspaceId } =
+      await req.json();
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
     }
@@ -77,6 +78,47 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Team calibration: for a user in a company workspace, aggregate the deny/keep
+    // signal across EVERYONE on the team and steer with it. Highest priority
+    // (team > personal > scout-wide). Best-effort: verifies membership, caps the
+    // member fan-out, and silently skips if Teams isn't set up.
+    let teamOverride = "";
+    if (metered && uid && teamWorkspaceId) {
+      try {
+        const wsId = String(teamWorkspaceId);
+        const { data: mine } = await supabaseAdmin!
+          .from("workspace_members")
+          .select("user_id")
+          .eq("workspace_id", wsId)
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (mine) {
+          const { data: members } = await supabaseAdmin!
+            .from("workspace_members")
+            .select("user_id")
+            .eq("workspace_id", wsId);
+          const memberIds = (members || []).map((m: any) => m.user_id).slice(0, 50);
+          if (memberIds.length) {
+            const { data: states } = await supabaseAdmin!
+              .from("user_state")
+              .select("data")
+              .in("user_id", memberIds);
+            const teamFinds = (states || []).flatMap((s: any) =>
+              Array.isArray(s?.data?.finds) ? s.data.finds : []
+            );
+            teamOverride = buildTeamOverride(computeTuningSignal(teamFinds));
+          }
+        }
+      } catch (e) {
+        console.warn("team calibration lookup failed (search proceeds without it):", e);
+      }
+    }
+
+    // Compose the override block: team first (highest priority), then personal.
+    // discover() appends this after the scout-wide baseline, and each tier's text
+    // states its own precedence, so the model resolves team > personal > scout-wide.
+    const combinedOverride = [teamOverride, personalOverride].filter(Boolean).join("\n\n");
+
     // Stream results as NDJSON so the client can show finds as they're scouted
     // and — if the user cancels mid-run — keep what was already found. Each line
     // is one JSON object: {type:"opp",opp} per find, then {type:"done",result}
@@ -98,7 +140,7 @@ export async function POST(req: NextRequest) {
             feedback && typeof feedback === "object" ? feedback : undefined,
             salt ? String(salt).slice(0, 64) : undefined,
             cohortHint ? String(cohortHint).slice(0, 400) : undefined,
-            personalOverride || undefined,
+            combinedOverride || undefined,
             {
               signal: req.signal,
               onOpp: (o) => {

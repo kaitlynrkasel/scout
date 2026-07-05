@@ -175,9 +175,32 @@ export function buildPersonalOverride(signal: TuningSignal): string {
       : "";
   return (
     `PERSONAL CALIBRATION for this specific user (their own decision history, this takes priority over the general ` +
-    `rules above when they conflict): of their last ${signal.decided} decided finds, "${b.label}" is the reason ` +
-    `${Math.round(b.share * 100)}% of the time they pass (${b.count} instances). Weigh this failure mode more heavily ` +
-    `for this search than the general instruction above.${fitNote}`
+    `rules above, but YIELDS to any TEAM CALIBRATION): of their last ${signal.decided} decided finds, "${b.label}" is the ` +
+    `reason ${Math.round(b.share * 100)}% of the time they pass (${b.count} instances). Weigh this failure mode more ` +
+    `heavily for this search than the general instruction above.${fitNote}`
+  );
+}
+
+// ---- Team calibration (company workspaces) ----
+// The third and HIGHEST-priority tier, for users in a company. It aggregates
+// the deny/keep signal across EVERYONE on the team: teammates pursue the same
+// kinds of targets, so their collective decisions are the strongest steer.
+// Precedence is team > personal > scout-wide (see discover.ts, where these are
+// appended so the LLM reads team first and is told it overrides the rest).
+export function buildTeamOverride(signal: TuningSignal): string {
+  if (!meetsThreshold(signal, PERSONAL_THRESHOLDS)) return "";
+  const b = signal.topBucket!;
+  const fitNote =
+    signal.keptFit != null && signal.deniedFit != null
+      ? ` The team's kept/denied avg fit is ${Math.round(signal.keptFit * 100)}%/${Math.round(signal.deniedFit * 100)}%.`
+      : "";
+  return (
+    `TEAM CALIBRATION for this user's company (aggregated across EVERYONE on the team, from what they collectively keep ` +
+    `and pass on). This is the HIGHEST priority: it OVERRIDES the personal calibration and the general rules whenever they ` +
+    `conflict. Across the team's last ${signal.decided} decided finds, "${b.label}" is the reason ${Math.round(
+      b.share * 100
+    )}% of the time they pass (${b.count} instances). The whole team is chasing the same kinds of targets, so weigh this ` +
+    `shared failure mode most heavily of all.${fitNote}`
   );
 }
 

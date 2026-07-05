@@ -1118,7 +1118,9 @@ function ScoutTool({
       setWantedChannels(mine[0].wantedChannels || []);
     } else {
       setCatId("");
-      setGoal(ucInfo(proj.useCase).exampleGoal);
+      // Leave the goal empty so the example shows as greyed placeholder advice
+      // (goalPlaceholder), not real text the user has to delete before typing.
+      setGoal("");
       setWantedChannels([]);
     }
   }, []);
@@ -1822,7 +1824,8 @@ function ScoutTool({
       setWantedChannels(mine[0].wantedChannels || []);
     } else {
       setCatId("");
-      setGoal(proj ? ucInfo(proj.useCase).exampleGoal : "");
+      // Empty goal -> the greyed placeholder advice shows instead of real text.
+      setGoal("");
       setWantedChannels([]);
     }
     resetResults();
@@ -3052,6 +3055,9 @@ function ScoutTool({
           feedback,
           salt: outreachSalt(accountEmail),
           cohortHint: cohortHintFrom(community),
+          // Company accounts learn team-wide (highest priority); individuals omit this.
+          teamWorkspaceId:
+            profile.accountType === "company" ? profile.companyWorkspaceId || "" : "",
         }),
         signal: controller.signal,
       });
