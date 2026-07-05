@@ -9,8 +9,66 @@ const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
 export const authEnabled = !!(url && anon);
 
+// "Remember me" is implemented with a hybrid storage adapter. When the user
+// checks it (the default), the session lives in localStorage and survives a
+// browser restart. When they uncheck it, the session lives in sessionStorage and
+// is dropped when the tab/window closes. Reads check both stores, so this is
+// backward-compatible with existing localStorage sessions.
+const REMEMBER_KEY = "scout_remember";
+
+export function setRememberMe(remember: boolean) {
+  try {
+    localStorage.setItem(REMEMBER_KEY, remember ? "1" : "0");
+  } catch {
+    /* storage unavailable — default (remember) applies */
+  }
+}
+
+function primaryStore(): Storage {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) === "0" ? sessionStorage : localStorage;
+  } catch {
+    return localStorage;
+  }
+}
+
+const hybridStorage = {
+  getItem(key: string): string | null {
+    try {
+      return localStorage.getItem(key) ?? sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  setItem(key: string, value: string): void {
+    try {
+      const store = primaryStore();
+      store.setItem(key, value);
+      // Keep the token in only one place so the remember choice is authoritative.
+      (store === localStorage ? sessionStorage : localStorage).removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+  removeItem(key: string): void {
+    try {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    } catch {
+      /* ignore */
+    }
+  },
+};
+
 export const supabase: SupabaseClient | null = authEnabled
-  ? createClient(url as string, anon as string)
+  ? createClient(url as string, anon as string, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storage: typeof window !== "undefined" ? hybridStorage : undefined,
+      },
+    })
   : null;
 
 export interface DbProfile {
