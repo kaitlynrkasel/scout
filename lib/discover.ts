@@ -99,6 +99,35 @@ function isInfluencerUseCase(useCase: string): boolean {
   );
 }
 
+// Same intent, read from the GOAL text rather than the use-case label. Without
+// this, "find TikTok creators posting folk covers" typed under a "Music PR"
+// use case never triggered the creator pipeline — the single most common way
+// social searches quietly under-performed. Kept a touch stricter than the
+// use-case check so a normal search that merely mentions a platform (e.g.
+// "companies that have an Instagram") doesn't get pulled into creator mode:
+// require an explicit creator noun, OR a platform paired with creator context.
+function goalWantsSocialCreators(goal: string): boolean {
+  const g = String(goal || "");
+  if (
+    /\b(influencers?|content creators?|creators?|tiktokers?|youtubers?|instagrammers?|streamers?|ugc creators?|micro-?influencers?|nano-?influencers?)\b/i.test(
+      g
+    )
+  )
+    return true;
+  return (
+    /\b(tiktok|instagram|youtube|twitch|\breels?\b|shorts)\b/i.test(g) &&
+    /\b(creator|influencer|account|channel|page|follow|handle|dm)\b/i.test(g)
+  );
+}
+
+// The engine treats a search as social-creator discovery when EITHER the use
+// case or the goal says so. Drives query strategy (roundup articles), the
+// multi-person listicle extractor, deeper Tavily crawling, and the advice
+// filter's leniency toward "top 10 creators" style titles.
+function isSocialCreatorSearch(useCase: string, goal: string): boolean {
+  return isInfluencerUseCase(useCase) || goalWantsSocialCreators(goal);
+}
+
 // Pages structured as ranked / listed roundups — the primary source for
 // finding creators when we can't crawl the social platforms themselves.
 // "Top 10 beauty TikTokers", "Best Nashville influencers to follow", etc.
@@ -116,16 +145,16 @@ export function looksLikeListicle(title: string): boolean {
 // cases, listicle-style roundups DO count as source material (that's how you
 // find creators when their content lives inside login-walled apps), so those
 // bypass this filter. Standard how-to / tips content still gets dropped.
-function looksLikeAdvice(title: string, useCase = ""): boolean {
+function looksLikeAdvice(title: string, useCase = "", goal = ""): boolean {
   const t = String(title || "");
   const generic = /\b(how to|how i|tips?|a guide|guide to|ways to|steps to|best practices|advice|templates?|what to say|do'?s and don'?ts|ultimate guide|complete guide)\b/i.test(
     t
   );
   if (!generic) return false;
-  // For influencer discovery, "10 tips for growing on TikTok" is still noise,
+  // For creator discovery, "10 tips for growing on TikTok" is still noise,
   // but "10 beauty creators to follow" isn't; the listicle check above catches
   // the second. If BOTH signals match, prefer the listicle read (keep it).
-  if (isInfluencerUseCase(useCase) && looksLikeListicle(t)) return false;
+  if (isSocialCreatorSearch(useCase, goal) && looksLikeListicle(t)) return false;
   return true;
 }
 
@@ -166,7 +195,7 @@ async function planQueries(
 
   const jobs = isJobUseCase(useCase);
   const networking = isNetworkingUseCase(useCase);
-  const influencer = isInfluencerUseCase(useCase);
+  const influencer = isSocialCreatorSearch(useCase, goal);
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
   // The industry anchor below stops queries from clustering in the user's own
   // field. Location needs the exact same guard: ABOUT is the only place a
@@ -177,7 +206,22 @@ async function planQueries(
   const anywhere = goalWantsAnywhere(goal);
 
   let guidance = "";
-  if (prospecting) {
+  // Creator/social intent is checked FIRST: a creator search that also says
+  // "any industry" should still use the roundup strategy, not the company-
+  // directory one, so it must win over the prospecting branch below.
+  if (influencer) {
+    guidance =
+      "Target curated ROUNDUP articles and listicles that NAME real social creators — that's where we find them, " +
+      "since Instagram / TikTok / X / YouTube block deep search. Combine the specific niche + platform + geography + a " +
+      "roundup signal. Good query patterns: 'top 10 {niche} {platform} {city}', 'best {niche} creators to follow', " +
+      "'{niche} {platform} accounts to know', '{niche} micro-influencer roundup', '{niche} {platform} directory', " +
+      "'{niche} creators linktree {city}'. If the GOAL names a specific platform, prioritize it; otherwise spread queries " +
+      "across the majors (TikTok, Instagram, YouTube, and where it fits Twitch or X) so coverage isn't stuck on one app. " +
+      "Prefer queries that will surface: local magazine / press features (Voyager, Time Out, city guides), brand blog " +
+      "roundups, agency directories, aggregator sites (Later, Modash public pages, HypeAuditor blog, Klear, Collabstr, " +
+      "SocialBlade). Include '{platform}.com' in some queries so pages that mention creator @handles surface. NEVER use " +
+      "'how to' or 'tips' — those are advice, not creator lists.";
+  } else if (prospecting) {
     guidance =
       "The user is PROSPECTING — finding external companies / people to pitch, sell to, partner with, or raise from. The " +
       "targets live in DIFFERENT industries than the user, so do NOT bias queries toward the user's own field. Build queries " +
@@ -188,16 +232,6 @@ async function planQueries(
       "directories, chamber-of-commerce and association member lists, and curated roundups of companies. If the goal says ANY " +
       "industry, vary the industries across queries (e.g. one for local retailers, one for professional-services firms, one " +
       "for SaaS startups) to cast a wide net. NEVER use 'how to', 'tips', 'guide', or 'advice'.";
-  } else if (influencer) {
-    guidance =
-      "Target curated ROUNDUP articles and listicles that NAME real social creators — that's where we find them, " +
-      "since Instagram / TikTok / X block deep search. Combine the specific niche + platform + geography + a " +
-      "roundup signal. Good query patterns: 'top 10 {niche} {platform} {city}', 'best {niche} creators to follow', " +
-      "'{niche} {platform} accounts to know', '{niche} micro-influencer roundup', '{niche} {platform} directory', " +
-      "'linktree {niche} {city}'. Prefer queries that will surface: local magazine / press features (Voyager, " +
-      "Time Out, city guides), brand blog roundups, agency directories, aggregator sites (Later, Modash public " +
-      "pages, HypeAuditor blog, Klear). Include '{platform}.com' handles in queries so pages that mention creator " +
-      "@handles surface. NEVER use 'how to' or 'tips' — those are advice, not creator lists.";
   } else if (jobs) {
     guidance =
       "Target REAL job/internship openings IN THE USER'S INDUSTRY. Every query should pair the role/field with " +
@@ -702,14 +736,23 @@ export async function discover(
     if (skipped.length < 60) skipped.push({ title: title || "", url: url || "", reason });
   };
 
+  // Creator/social searches lean entirely on roundup articles, so pull more
+  // candidates per query and crawl each page deeper — advanced depth returns
+  // richer content, which is exactly what the multi-person listicle extractor
+  // reads to pull many creators out of one article. Everything else stays on
+  // the cheaper basic depth.
+  const creatorSearch = isSocialCreatorSearch(useCase, goal);
+  const perQuery = creatorSearch ? 10 : 8;
+  const depth: "basic" | "advanced" = creatorSearch ? "advanced" : "basic";
+
   // 1+2: gather + dedupe candidate pages.
   const candidates: TavilyResult[] = [];
   const seenLinks = new Set<string>();
   for (const q of queries) {
     if (candidates.length >= maxItems * 4) break;
-    const results = await tavilySearch(q, 8);
+    const results = await tavilySearch(q, perQuery, { depth });
     for (const r of results) {
-      if (looksLikeAdvice(r.title, useCase)) {
+      if (looksLikeAdvice(r.title, useCase, goal)) {
         logSkip(r.title, r.url, "title looks like advice / how-to");
         continue;
       }
@@ -738,11 +781,12 @@ export async function discover(
   let skippedDupes = 0;
   let skippedNotFit = 0;
 
-  // Influencer roundup articles list MULTIPLE creators; those get a different
+  // Creator roundup articles list MULTIPLE creators; those get a different
   // extractor that returns an array of people, all sharing the same source
-  // URL. Everything else runs single-extract as before.
-  const influencer = isInfluencerUseCase(useCase);
-  const isListicle = (c: TavilyResult) => influencer && looksLikeListicle(c.title);
+  // URL. Everything else runs single-extract as before. Reuses the goal-aware
+  // creatorSearch flag so a "find TikTok creators" goal counts even when the
+  // use-case label doesn't say so.
+  const isListicle = (c: TavilyResult) => creatorSearch && looksLikeListicle(c.title);
 
   // Extract in small parallel batches so the spike is reasonably fast.
   const batchSize = 4;

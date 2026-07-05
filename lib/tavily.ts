@@ -23,9 +23,9 @@ const CACHE_ENABLED =
   CACHE_MODE === "on" || (CACHE_MODE !== "off" && process.env.NODE_ENV !== "production");
 const CACHE_DIR = path.join(process.cwd(), ".scout-cache", "tavily");
 
-function cacheKey(query: string, maxResults: number): string {
+function cacheKey(query: string, maxResults: number, depth: string): string {
   return createHash("sha1")
-    .update(`${query}::${maxResults}`)
+    .update(`${query}::${maxResults}::${depth}`)
     .digest("hex")
     .slice(0, 16);
 }
@@ -57,15 +57,24 @@ async function writeCache(
   }
 }
 
+export interface TavilyOpts {
+  // "advanced" costs ~2x credits but returns more results and richer page
+  // content per result — worth it for creator roundup articles, where the
+  // whole point is extracting MANY names from one long listicle.
+  depth?: "basic" | "advanced";
+}
+
 export async function tavilySearch(
   query: string,
-  maxResults = 8
+  maxResults = 8,
+  opts: TavilyOpts = {}
 ): Promise<TavilyResult[]> {
   const key = process.env.TAVILY_API_KEY;
   if (!key) throw new Error("TAVILY_API_KEY is not set");
+  const depth = opts.depth === "advanced" ? "advanced" : "basic";
 
   if (CACHE_ENABLED) {
-    const cached = await readCache(cacheKey(query, maxResults));
+    const cached = await readCache(cacheKey(query, maxResults, depth));
     if (cached) return cached;
   }
 
@@ -81,7 +90,7 @@ export async function tavilySearch(
         api_key: key, // kept for back-compat with older Tavily API
         query,
         max_results: maxResults,
-        search_depth: "basic",
+        search_depth: depth,
       }),
     });
   } catch {
@@ -102,7 +111,7 @@ export async function tavilySearch(
     const data = await res.json();
     const results = (data?.results || []) as TavilyResult[];
     if (CACHE_ENABLED && results.length) {
-      await writeCache(cacheKey(query, maxResults), query, results);
+      await writeCache(cacheKey(query, maxResults, depth), query, results);
     }
     return results;
   } catch {
