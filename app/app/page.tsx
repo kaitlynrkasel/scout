@@ -10,6 +10,8 @@ import { Reveal, CountUp, FadeIn } from "./motion";
 import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import ImportOutreach from "./ImportOutreach";
+import ComboInput from "./ComboInput";
+import { CITY_SUGGESTIONS, SCHOOL_SUGGESTIONS } from "./suggest";
 import { fileToText } from "@/lib/fileText";
 import {
   guessTimezone,
@@ -11322,20 +11324,20 @@ function ProfileTab({
             </div>
             <div>
               <Label>School or education</Label>
-              <input
+              <ComboInput
                 value={college}
-                onChange={(e) => onCollege(e.target.value)}
+                onChange={onCollege}
+                options={SCHOOL_SUGGESTIONS}
                 placeholder="e.g. USC junior, MFA 2022, self-taught"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
             <div>
               <Label>Location</Label>
-              <input
+              <ComboInput
                 value={location}
-                onChange={(e) => onLocation(e.target.value)}
+                onChange={onLocation}
+                options={CITY_SUGGESTIONS}
                 placeholder="e.g. Los Angeles, CA"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
           </div>
