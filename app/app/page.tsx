@@ -12096,11 +12096,11 @@ function ProfileTab({
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           <div>
-            <Label>Your name or company</Label>
+            <Label>{kind === "company" ? "Your company name" : "Your name"}</Label>
             <input
               value={name}
               onChange={(e) => onName(e.target.value)}
-              placeholder="e.g. Alex Rivera, or Acme Studio"
+              placeholder={kind === "company" ? "e.g. Acme Studio" : "e.g. Alex Rivera"}
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
           </div>
