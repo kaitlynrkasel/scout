@@ -3737,7 +3737,7 @@ function ScoutTool({
 
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <Label className="mb-0">Who this outreach is for (optional)</Label>
+                    <Label className="mb-0">What is this project for?</Label>
                     <MicButton
                       onAppend={(t) =>
                         setProjectContext(activeId, joinSpoken(activeProject?.context || "", t))
@@ -4327,6 +4327,12 @@ function ScoutTool({
           goOutreach={() => setTab("outreach")}
           senderName={profile.name || ""}
           senderEmail={accountEmail || activeMailbox.email || ""}
+          senderExtra={{
+            location: profile.location || "",
+            linkedin: profile.linkedin || "",
+            company: profile.accountType === "company" ? profile.companyName || "" : "",
+            role: profile.companyRole || "",
+          }}
         />
       )}
 
@@ -4537,9 +4543,7 @@ function ScoutTool({
           <span className="font-semibold text-ink">
             <span className="text-brown">Scout</span>
           </span>
-          <span className="ml-auto">
-            Discover, draft, and connect, in your own voice.
-          </span>
+          <span className="ml-auto font-semibold text-body">Find Your People</span>
         </div>
       </footer>
 
@@ -5683,6 +5687,7 @@ function FindDetailModal({
   onEditSignature,
   senderName,
   senderEmail,
+  senderExtra,
 }: {
   find: Find;
   onClose: () => void;
@@ -5717,6 +5722,14 @@ function FindDetailModal({
   onEditSignature: (sig: string) => void;
   senderName: string;
   senderEmail: string;
+  senderExtra?: {
+    phone?: string;
+    company?: string;
+    role?: string;
+    location?: string;
+    linkedin?: string;
+    website?: string;
+  };
 }) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
@@ -5725,17 +5738,22 @@ function FindDetailModal({
   // Whether the previewed page has a fillable form (reported by the autofill
   // bridge injected into the proxied HTML), and the last fill result.
   const [formDetected, setFormDetected] = useState(false);
+  const [formQuestions, setFormQuestions] = useState<string[]>([]);
+  const [showQuestions, setShowQuestions] = useState(false);
   const [fillNote, setFillNote] = useState("");
   // Listen for the bridge's messages (same-origin proxied iframe → this window).
   useEffect(() => {
     function onMsg(ev: MessageEvent) {
       const d = ev.data;
       if (!d || typeof d !== "object") return;
-      if (d.type === "scout-form-detected") setFormDetected(!!d.hasForm);
+      if (d.type === "scout-form-detected") {
+        setFormDetected(!!d.hasForm);
+        setFormQuestions(Array.isArray(d.questions) ? d.questions : []);
+      }
       if (d.type === "scout-autofill-done") {
         setFillNote(
           d.filled
-            ? "Filled what Scout could match. Review it, then submit on the site."
+            ? "Filled every field Scout could. Review it, then submit on the site."
             : "Couldn't match this form's fields, use Open ↗ to fill it directly."
         );
       }
@@ -5746,10 +5764,12 @@ function FindDetailModal({
   // Reset per-find as the preview reloads.
   useEffect(() => {
     setFormDetected(false);
+    setFormQuestions([]);
+    setShowQuestions(false);
     setFillNote("");
   }, [o.url]);
-  // Pre-fill the previewed contact form with the sender's details + drafted
-  // message. Never submits, the bridge only populates fields.
+  // Pre-fill the previewed contact/application form with everything Scout knows
+  // about the sender + the drafted message. Never submits, only populates.
   function fillForm() {
     const win = frameRef.current?.contentWindow;
     if (!win) return;
@@ -5760,7 +5780,19 @@ function FindDetailModal({
     win.postMessage(
       {
         type: "scout-autofill",
-        payload: { name: senderName.trim(), first, last, email: senderEmail.trim(), message },
+        payload: {
+          name: senderName.trim(),
+          first,
+          last,
+          email: senderEmail.trim(),
+          message,
+          phone: senderExtra?.phone || "",
+          company: senderExtra?.company || "",
+          role: senderExtra?.role || "",
+          location: senderExtra?.location || "",
+          linkedin: senderExtra?.linkedin || "",
+          website: senderExtra?.website || "",
+        },
       },
       "*"
     );
@@ -6055,13 +6087,22 @@ function FindDetailModal({
               {host && <span className="truncate text-xs text-body/50">{host}</span>}
               {o.url && (
                 <div className="ml-auto flex items-center gap-1.5">
+                  {formDetected && formQuestions.length > 0 && (
+                    <button
+                      onClick={() => setShowQuestions((v) => !v)}
+                      title="See the exact questions this form asks so you can prepare"
+                      className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                    >
+                      {showQuestions ? "Hide" : "See"} questions ({formQuestions.length})
+                    </button>
+                  )}
                   {formDetected && (
                     <button
                       onClick={fillForm}
-                      title="Pre-fill this contact form with your details and drafted message. Scout never submits it."
+                      title="Type your details and drafted message into every field Scout can. It never submits."
                       className="rounded-lg bg-brown px-2.5 py-1 text-[11px] font-semibold text-white shadow-soft transition hover:bg-brown-deep"
                     >
-                      Fill this form
+                      Autofill
                     </button>
                   )}
                   <button
@@ -6081,6 +6122,20 @@ function FindDetailModal({
                 </div>
               )}
             </div>
+
+            {/* What this form/application will ask — so the user can prepare. */}
+            {showQuestions && formQuestions.length > 0 && (
+              <div className="mb-2 rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+                <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  {isApplication ? "This application asks you" : "This form asks you"}
+                </div>
+                <ol className="list-decimal space-y-1 pl-5 text-xs leading-relaxed text-body">
+                  {formQuestions.map((q, i) => (
+                    <li key={i}>{q}</li>
+                  ))}
+                </ol>
+              </div>
+            )}
             {o.url ? (
               <div
                 className="relative w-full min-h-0 flex-1 overflow-hidden rounded-xl border border-warm-border bg-white"
@@ -6185,6 +6240,7 @@ function FindsTab({
   goOutreach,
   senderName,
   senderEmail,
+  senderExtra,
 }: {
   finds: Find[];
   categories: Category[];
@@ -6232,6 +6288,14 @@ function FindsTab({
   goOutreach: () => void;
   senderName: string;
   senderEmail: string;
+  senderExtra?: {
+    phone?: string;
+    company?: string;
+    role?: string;
+    location?: string;
+    linkedin?: string;
+    website?: string;
+  };
 }) {
   // Pinned finds live in their own tab and are excluded from the status/all
   // lists, so status counts count only the un-pinned ones.
@@ -6457,6 +6521,7 @@ function FindsTab({
           onEditSignature={(sig) => onEditSignature(detailFind.projectId, sig)}
           senderName={senderName}
           senderEmail={senderEmail}
+          senderExtra={senderExtra}
         />
       )}
     </main>

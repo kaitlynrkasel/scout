@@ -121,23 +121,25 @@ async function fetchPage(url: string): Promise<Response> {
 //      drafted message onto the form's fields and highlight them. It stops
 //      short of submitting, the user reviews and sends themselves.
 const AUTOFILL_SCRIPT = `<script>(function(){
-  function sig(el){
-    var bits=[el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.type];
+  function labelText(el){
     try{
       var lbl=el.labels&&el.labels[0]?el.labels[0].textContent:'';
-      if(!lbl&&el.id){var l=document.querySelector('label[for="'+el.id+'"]');lbl=l?l.textContent:'';}
+      if(!lbl&&el.id){var l=document.querySelector('label[for="'+CSS.escape(el.id)+'"]');lbl=l?l.textContent:'';}
       if(!lbl){var p=el.closest('label');lbl=p?p.textContent:'';}
-      bits.push(lbl);
-    }catch(e){}
-    return bits.join(' ').toLowerCase();
+      if(!lbl)lbl=el.getAttribute('aria-label')||el.placeholder||el.name||'';
+      return (lbl||'').replace(/\\s+/g,' ').replace(/\\*/g,'').trim();
+    }catch(e){return el.placeholder||el.name||'';}
+  }
+  function sig(el){
+    return [el.name,el.id,el.placeholder,el.getAttribute('aria-label'),el.type,labelText(el)].join(' ').toLowerCase();
   }
   function fields(){
     var out=[];
     var els=document.querySelectorAll('input,textarea');
     for(var i=0;i<els.length;i++){
-      var el=els[i];
-      if(el.type==='hidden'||el.type==='submit'||el.type==='button'||el.type==='checkbox'||el.type==='radio'||el.type==='file'||el.disabled||el.readOnly)continue;
-      if(el.offsetParent===null&&el.type!=='hidden')continue;
+      var el=els[i],t=(el.type||'').toLowerCase();
+      if(t==='hidden'||t==='submit'||t==='button'||t==='checkbox'||t==='radio'||t==='file'||t==='password'||el.disabled||el.readOnly)continue;
+      if(el.offsetParent===null)continue;
       out.push(el);
     }
     return out;
@@ -149,39 +151,51 @@ const AUTOFILL_SCRIPT = `<script>(function(){
       if(setter&&setter.set){setter.set.call(el,val);}else{el.value=val;}
       el.dispatchEvent(new Event('input',{bubbles:true}));
       el.dispatchEvent(new Event('change',{bubbles:true}));
-      el.style.outline='2px solid #7c5837';
-      el.style.outlineOffset='1px';
+      el.style.outline='2px solid #7c5837';el.style.outlineOffset='1px';
     }catch(e){el.value=val;}
+  }
+  function questions(){
+    var f=fields(),out=[],seen={};
+    for(var i=0;i<f.length;i++){var L=labelText(f[i]);if(L&&L.length<160&&!seen[L]){seen[L]=1;out.push(L);}}
+    return out.slice(0,25);
   }
   function hasForm(){
     var f=fields();
-    for(var i=0;i<f.length;i++){
-      var s=sig(f[i]);
-      if(f[i].tagName==='TEXTAREA'||f[i].type==='email'||/email|message|name|comment|inquir/.test(s))return true;
-    }
+    for(var i=0;i<f.length;i++){var s=sig(f[i]);if(f[i].tagName==='TEXTAREA'||f[i].type==='email'||/email|message|name|comment|inquir|phone|resume|cover/.test(s))return true;}
     return false;
   }
+  // Best value for a field from the user's data, or null when we can't map it.
+  function pick(s,d){
+    if(d.email&&(/e-?mail/.test(s)))return d.email;
+    if(d.phone&&(/phone|tel|mobile|cell/.test(s)))return d.phone;
+    if(d.linkedin&&/linkedin/.test(s))return d.linkedin;
+    if(d.website&&/(website|portfolio|url|link)/.test(s)&&!/linkedin/.test(s))return d.website;
+    if(d.first&&/(first|given).*name|name.*first/.test(s))return d.first;
+    if(d.last&&/(last|sur|family).*name|name.*(last|sur)/.test(s))return d.last;
+    if(d.company&&/(company|organi|employer|business|firm|studio)/.test(s))return d.company;
+    if(d.role&&/(job ?title|position|role|title|occupation)/.test(s))return d.role;
+    if(d.location&&/(city|town|location|address|where.*based|region|state|country)/.test(s))return d.location;
+    if(d.name&&/name/.test(s))return d.name;
+    return null;
+  }
   function fill(d){
-    var f=fields(),firstDone=false,lastDone=false,nameDone=false,emailDone=false,msgDone=false,firstEl=null;
+    var f=fields(),any=false,firstEl=null;
     for(var i=0;i<f.length;i++){
-      var el=f[i],s=sig(el);
-      if(/compan|organi|business/.test(s))continue;
-      if(!emailDone&&(el.type==='email'||/e-?mail/.test(s))){if(d.email){setVal(el,d.email);emailDone=true;firstEl=firstEl||el;}continue;}
-      if(!firstDone&&/first|given/.test(s)&&/name/.test(s)){if(d.first){setVal(el,d.first);firstDone=true;firstEl=firstEl||el;}continue;}
-      if(!lastDone&&/last|surname|family/.test(s)&&/name|surname|family/.test(s)){if(d.last){setVal(el,d.last);lastDone=true;firstEl=firstEl||el;}continue;}
-      if(!msgDone&&(el.tagName==='TEXTAREA'||/message|comment|project|tell us|inquir|note|detail|help/.test(s))){if(d.message){setVal(el,d.message);msgDone=true;firstEl=firstEl||el;}continue;}
-      if(!nameDone&&!firstDone&&/name/.test(s)){if(d.name){setVal(el,d.name);nameDone=true;firstEl=firstEl||el;}continue;}
+      var el=f[i],s=sig(el),v=pick(s,d);
+      // Any free-text box (textarea or a message-like input) gets the drafted note.
+      if(!v&&d.message&&(el.tagName==='TEXTAREA'||/message|comment|about|why|cover|tell us|note|detail|question|anything|introduc|pitch|bio|summary/.test(s)))v=d.message;
+      if(v){setVal(el,String(v));any=true;firstEl=firstEl||el;}
     }
     if(firstEl){try{firstEl.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}}
-    return emailDone||firstDone||nameDone||msgDone;
+    return any;
   }
   window.addEventListener('message',function(ev){
     var d=ev&&ev.data;if(!d||d.type!=='scout-autofill')return;
     var ok=fill(d.payload||{});
     try{parent.postMessage({type:'scout-autofill-done',filled:ok},'*');}catch(e){}
   });
-  function announce(){try{parent.postMessage({type:'scout-form-detected',hasForm:hasForm()},'*');}catch(e){}}
-  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',announce);}else{announce();}
+  function announce(){try{parent.postMessage({type:'scout-form-detected',hasForm:hasForm(),questions:questions()},'*');}catch(e){}}
+  if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',announce);}else{setTimeout(announce,300);}
 })();</script>`;
 
 function htmlResponse(html: string): NextResponse {
