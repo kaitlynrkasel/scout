@@ -4408,6 +4408,8 @@ function ScoutTool({
           linkedin={profile.linkedin || ""}
           useCase={profile.useCase}
           accountType={profile.accountType || ""}
+          companyWorkspaceId={profile.companyWorkspaceId || ""}
+          getToken={getToken}
           companyName={profile.companyName || ""}
           companyRole={profile.companyRole || ""}
           companyContribution={profile.companyContribution || ""}
@@ -11940,6 +11942,178 @@ function MailboxCard({
   );
 }
 
+// Edit the company's onboarding answers (name / what it does / industry /
+// website) from Profile. The company owner (admin) can edit them — they're the
+// shared company record on the workspace; other members see them read-only. When
+// there's no workspace yet, it falls back to editing just the profile's company
+// name so the field is never missing.
+function CompanyDetailsEditor({
+  getToken,
+  workspaceId,
+  companyName,
+  onCompanyName,
+}: {
+  getToken?: () => Promise<string | null>;
+  workspaceId: string;
+  companyName: string;
+  onCompanyName: (v: string) => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [found, setFound] = useState(false); // did we load a real workspace record?
+  const [role, setRole] = useState("");
+  const [name, setName] = useState(companyName);
+  const [about, setAbout] = useState("");
+  const [website, setWebsite] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!workspaceId || !getToken) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const token = await getToken();
+        const res = await fetch("/api/team/workspace", {
+          headers: token ? { authorization: `Bearer ${token}` } : {},
+        });
+        const data = await res.json().catch(() => ({}));
+        const ws = (data.workspaces || []).find((w: any) => w.id === workspaceId);
+        if (alive && ws) {
+          setFound(true);
+          setRole(ws.role || "member");
+          setName(ws.name || companyName || "");
+          setAbout(ws.about || "");
+          setWebsite(ws.website || "");
+          setIndustry(ws.industry || "");
+        }
+      } catch {
+        /* teams may not be set up; fall back to the profile name */
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspaceId]);
+
+  const isOwner = role === "owner";
+  const inputCls =
+    "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
+
+  async function save() {
+    if (saving || !getToken) return;
+    if (!name.trim()) {
+      setNote({ ok: false, text: "Your company needs a name." });
+      return;
+    }
+    setSaving(true);
+    setNote(null);
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/team/workspace", {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ workspaceId, name, about, website, industry }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onCompanyName(name.trim()); // keep the profile in sync
+        setNote({ ok: true, text: "Saved. Your whole team sees these updates." });
+      } else {
+        setNote({ ok: false, text: data?.error || "Couldn't save." });
+      }
+    } catch {
+      setNote({ ok: false, text: "Couldn't save." });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // No workspace, or it couldn't be loaded (teams not set up): a simple
+  // profile-only company-name field so it's always editable.
+  if (!workspaceId || (!loading && !found)) {
+    return (
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Your company</h2>
+        <div className="mt-4">
+          <Label>Company name</Label>
+          <input
+            value={companyName}
+            onChange={(e) => onCompanyName(e.target.value)}
+            placeholder="e.g. Cedar & Co. Studio"
+            className={inputCls}
+          />
+        </div>
+      </FadeIn>
+    );
+  }
+
+  return (
+    <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Your company</h2>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+          {isOwner ? "You're the admin" : "Shared, admin-managed"}
+        </span>
+      </div>
+      <p className="mt-1 text-sm leading-relaxed text-body">
+        {isOwner
+          ? "Your answers from setup. Change them anytime, your whole team sees the updates."
+          : "Your company's details, managed by the admin."}
+      </p>
+      {loading ? (
+        <div className="mt-4 h-5 w-40 animate-pulse rounded bg-warm-bg" />
+      ) : (
+        <>
+          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+            <div>
+              <Label>Company name</Label>
+              <input value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwner} placeholder="e.g. Cedar & Co. Studio" className={`${inputCls} disabled:opacity-70`} />
+            </div>
+            <div>
+              <Label>Industry</Label>
+              <input value={industry} onChange={(e) => setIndustry(e.target.value)} disabled={!isOwner} placeholder="e.g. Music" className={`${inputCls} disabled:opacity-70`} />
+            </div>
+          </div>
+          <div className="mt-4">
+            <Label>What does the company do?</Label>
+            <textarea value={about} onChange={(e) => setAbout(e.target.value)} disabled={!isOwner} rows={2} placeholder="What the company does, who it serves." className={`${inputCls} resize-y leading-relaxed disabled:opacity-70`} />
+          </div>
+          <div className="mt-4">
+            <Label>Website</Label>
+            <input value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!isOwner} placeholder="e.g. cedarco.com" className={`${inputCls} disabled:opacity-70`} />
+          </div>
+          {isOwner && (
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <button
+                onClick={save}
+                disabled={saving}
+                className="rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save company details"}
+              </button>
+              {note && (
+                <span className={`text-xs font-medium ${note.ok ? "text-emerald-700" : "text-attention"}`}>
+                  {note.text}
+                </span>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </FadeIn>
+  );
+}
+
 /* ---------------- Profile tab ---------------- */
 function ProfileTab({
   name,
@@ -11947,6 +12121,8 @@ function ProfileTab({
   linkedin,
   useCase,
   accountType,
+  companyWorkspaceId,
+  getToken,
   companyName,
   companyRole,
   companyContribution,
@@ -12005,6 +12181,8 @@ function ProfileTab({
   linkedin: string;
   useCase: string;
   accountType: AccountType;
+  companyWorkspaceId: string;
+  getToken?: () => Promise<string | null>;
   companyName: string;
   companyRole: string;
   companyContribution: string;
@@ -12232,22 +12410,23 @@ function ProfileTab({
       {/* Company accounts: role + how you serve the company's work (set at
           signup, editable here). Individuals never see this. */}
       {kind === "company" && (
-        <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-          <h2 className="text-base font-extrabold tracking-tight text-ink">Your company role</h2>
-          <p className="mt-1 text-sm leading-relaxed text-body">
-            Scout writes on behalf of the company, so this matters more than a personal resume.
-          </p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <div>
-              <Label>Company name</Label>
-              <input
-                value={companyName}
-                onChange={(e) => onCompanyName(e.target.value)}
-                placeholder="e.g. Cedar & Co. Studio"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
-            </div>
-            <div>
+        <>
+          {/* The company's onboarding answers, editable from Profile. Admin edits
+              the shared record; members see it read-only. */}
+          <CompanyDetailsEditor
+            getToken={getToken}
+            workspaceId={companyWorkspaceId}
+            companyName={companyName}
+            onCompanyName={onCompanyName}
+          />
+
+          {/* This person's role on the company (personal, drives their drafts). */}
+          <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+            <h2 className="text-base font-extrabold tracking-tight text-ink">Your role</h2>
+            <p className="mt-1 text-sm leading-relaxed text-body">
+              Scout writes on behalf of the company, so this matters more than a personal resume.
+            </p>
+            <div className="mt-4">
               <Label>Your role at the company</Label>
               <input
                 value={companyRole}
@@ -12256,18 +12435,18 @@ function ProfileTab({
                 className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
-          </div>
-          <div className="mt-4">
-            <Label>How you serve the company&apos;s work</Label>
-            <textarea
-              value={companyContribution}
-              onChange={(e) => onCompanyContribution(e.target.value)}
-              rows={3}
-              placeholder="What you own and drive on the company's projects."
-              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
-          </div>
-        </FadeIn>
+            <div className="mt-4">
+              <Label>How you serve the company&apos;s work</Label>
+              <textarea
+                value={companyContribution}
+                onChange={(e) => onCompanyContribution(e.target.value)}
+                rows={3}
+                placeholder="What you own and drive on the company's projects."
+                className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+          </FadeIn>
+        </>
       )}
 
       <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">

@@ -109,6 +109,37 @@ export async function listJoinableWorkspaces(uid: string, email: string) {
     );
 }
 
+// Edit the company's onboarding answers (name / what it does / industry /
+// website). Owner only — these are the shared company record. Returns the
+// updated workspace.
+export async function updateWorkspaceDetails(
+  uid: string,
+  workspaceId: string,
+  patch: { name?: string; about?: string; website?: string; industry?: string }
+) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (role !== "owner")
+    throw new TeamError("Only the company owner can edit the company details.", 403);
+  const update: Record<string, any> = {};
+  if (typeof patch.name === "string") {
+    const nm = patch.name.trim();
+    if (!nm) throw new TeamError("The company needs a name.");
+    update.name = nm;
+  }
+  if (typeof patch.about === "string") update.about = patch.about.trim() || null;
+  if (typeof patch.website === "string") update.website = patch.website.trim() || null;
+  if (typeof patch.industry === "string") update.industry = patch.industry.trim() || null;
+  if (!Object.keys(update).length) throw new TeamError("Nothing to update.");
+  const { data, error } = await db()
+    .from("workspaces")
+    .update(update)
+    .eq("id", workspaceId)
+    .select("id, name, about, website, industry")
+    .single();
+  if (error) throw new TeamError(error.message, 500);
+  return data;
+}
+
 // Set how much a member's decisions count in team learning (owner only, 1-5).
 // Default is 1 for everyone (equal); an admin can raise/lower a member.
 export async function setMemberWeight(
@@ -161,7 +192,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
   if (wsIds.length) {
     const { data: wsRows } = await db()
       .from("workspaces")
-      .select("id, name, created_by, created_at")
+      .select("id, name, about, website, industry, created_by, created_at")
       .in("id", wsIds);
     const { data: memberRows } = await db()
       .from("workspace_members")
