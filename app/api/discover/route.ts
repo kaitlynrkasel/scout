@@ -44,8 +44,18 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { goal, about, useCase, template, feedback, salt, cohortHint, teamWorkspaceId, useHistory } =
-      await req.json();
+    const {
+      goal,
+      about,
+      useCase,
+      template,
+      feedback,
+      salt,
+      cohortHint,
+      teamWorkspaceId,
+      useHistory,
+      plan: precomputedPlan,
+    } = await req.json();
     // Per-project "read my profile" off => don't apply any cross-search learning.
     const learn = useHistory !== false;
     if (!goal || !String(goal).trim()) {
@@ -158,6 +168,10 @@ export async function POST(req: NextRequest) {
             combinedOverride || undefined,
             {
               signal: req.signal,
+              plan:
+                precomputedPlan && typeof precomputedPlan === "object"
+                  ? precomputedPlan
+                  : undefined,
               onOpp: (o) => {
                 try {
                   send(controller, { type: "opp", opp: o });

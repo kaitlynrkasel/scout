@@ -864,6 +864,14 @@ function ScoutTool({
   const [discovering, setDiscovering] = useState(false);
   // Live count of finds streamed in so far this search (for the "Stop" button).
   const [liveCount, setLiveCount] = useState(0);
+  // Pre-search "understanding" gate: when Scout has real gaps, this holds the
+  // % understood + confidence questions + the plan, and the popup under the
+  // category card offers to answer them or run anyway. Null = no popup.
+  const [planGate, setPlanGate] = useState<
+    { understanding: number; questions: string[]; plan: any } | null
+  >(null);
+  const [gating, setGating] = useState(false); // the understanding pass is running
+  const [clarify, setClarify] = useState(""); // the user's answers to the questions
   // Lets the user cancel an in-flight search but keep what was already scouted.
   const discoverAbort = useRef<AbortController | null>(null);
   // When discovery started (ms epoch), so the progress bar can resume at the
@@ -2994,11 +3002,12 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, activeMailbox.connected]);
 
-  async function runDiscover() {
+  async function runDiscover(precomputedPlan: any = null, clarifyText = "") {
     if (!profileComplete) {
       setTab("profile");
       return;
     }
+    setPlanGate(null); // close the confidence popup if it was open
     const runCatId = autoSaveCustomSearch();
     resetResults();
     setDiscoverStartedAt(Date.now());
@@ -3048,9 +3057,13 @@ function ScoutTool({
           `The user specifically wants these contact channels back for every result: ${hints.join(", ")}.`
         );
       }
-      const goalForApi = extras.length
-        ? `${goal}\n\n${extras.join(" ")}`
-        : goal;
+      // Answers the user gave to Scout's confidence questions ride along with
+      // the goal so the search understands more.
+      const clarifyBlock = clarifyText.trim()
+        ? `\n\nMore detail from me: ${clarifyText.trim()}`
+        : "";
+      const goalForApi =
+        (extras.length ? `${goal}\n\n${extras.join(" ")}` : goal) + clarifyBlock;
       // Per-project "read my profile" setting (default on). When OFF, the search
       // ignores your Profile and your cross-project history, using only who this
       // project is for — so representing someone outside your world doesn't bias
@@ -3075,6 +3088,9 @@ function ScoutTool({
           about: aboutForApi,
           useCase: activeUseCase,
           feedback,
+          // Reuse the plan from the understanding step (skips a 2nd decompose)
+          // unless the user added detail, which warrants a fresh plan.
+          plan: clarifyText.trim() ? undefined : precomputedPlan || undefined,
           salt: outreachSalt(accountEmail),
           cohortHint: cohortHintFrom(community),
           // When profile-reading is off, don't learn from cross-project/team history either.
@@ -3172,6 +3188,75 @@ function ScoutTool({
   // catches the abort and finalizes with whatever streamed in).
   function stopDiscover() {
     discoverAbort.current?.abort();
+  }
+
+  // Ask Scout to decompose the goal (no searching). Returns understanding %,
+  // questions, and the plan. Best-effort; on any hiccup, acts as fully understood.
+  async function fetchUnderstanding(clarifyText = "") {
+    const usesProfile = activeProject?.usesProfile !== false;
+    const aboutForApi = usesProfile
+      ? aboutText
+      : activeProject?.context
+        ? "This outreach is on behalf of / for: " + activeProject.context
+        : "";
+    const g = clarifyText.trim() ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}` : goal;
+    const token = getToken ? await getToken() : null;
+    try {
+      const res = await fetch("/api/plan", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ goal: g, about: aboutForApi, useCase: activeUseCase }),
+      });
+      const d = await res.json().catch(() => ({}));
+      return {
+        understanding: typeof d.understanding === "number" ? d.understanding : 100,
+        questions: Array.isArray(d.questions) ? d.questions : [],
+        plan: d.plan ?? null,
+      };
+    } catch {
+      return { understanding: 100, questions: [] as string[], plan: null };
+    }
+  }
+
+  // The Scout button: first check how well Scout understands the goal. If there
+  // are real gaps, pop the confidence card under the category and let the user
+  // answer or run anyway. If it already understands well, just search.
+  const UNDERSTAND_GATE = 75;
+  async function startScout() {
+    if (!profileComplete) {
+      setTab("profile");
+      return;
+    }
+    if (!goal.trim() || discovering || gating) return;
+    setPlanGate(null);
+    setClarify("");
+    setGating(true);
+    try {
+      const u = await fetchUnderstanding();
+      if (u.understanding >= UNDERSTAND_GATE || u.questions.length === 0) {
+        await runDiscover(u.plan);
+      } else {
+        setPlanGate(u);
+      }
+    } finally {
+      setGating(false);
+    }
+  }
+
+  // "Sharpen": re-run the understanding pass with the user's answers folded in,
+  // so the % climbs as they add detail (the rewarding part).
+  async function sharpenPlan() {
+    if (gating) return;
+    setGating(true);
+    try {
+      const u = await fetchUnderstanding(clarify);
+      setPlanGate(u);
+    } finally {
+      setGating(false);
+    }
   }
 
   // ---- Billing helpers ----
@@ -3814,11 +3899,11 @@ function ScoutTool({
               <div className="mt-6 flex flex-wrap items-center gap-3">
                 <button
                   ref={scoutBtnRef}
-                  onClick={runDiscover}
-                  disabled={discovering || !goal.trim()}
+                  onClick={startScout}
+                  disabled={discovering || gating || !goal.trim()}
                   className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                 >
-                  {discovering ? "Scouting…" : "Scout"}
+                  {discovering ? "Scouting…" : gating ? "Understanding…" : "Scout"}
                 </button>
                 {discovering && (
                   <button
@@ -3840,6 +3925,76 @@ function ScoutTool({
                   </button>
                 )}
               </div>
+
+              {/* Confidence gate: Scout has gaps, so ask before running. */}
+              {planGate && (
+                <div className="mt-5 overflow-hidden rounded-2xl border border-coral/30 bg-warm-bg/50 shadow-card">
+                  <div className="flex flex-wrap items-center gap-3 border-b border-warm-border bg-surface px-5 py-4">
+                    <div className="relative h-11 w-11 shrink-0">
+                      <svg viewBox="0 0 36 36" className="h-11 w-11 -rotate-90">
+                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" className="text-warm-border" />
+                        <circle
+                          cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
+                          className="text-coral transition-all"
+                          strokeDasharray={`${(planGate.understanding / 100) * 97.4} 97.4`}
+                        />
+                      </svg>
+                      <span className="absolute inset-0 grid place-items-center text-[11px] font-extrabold text-ink">
+                        {planGate.understanding}%
+                      </span>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-extrabold tracking-tight text-ink">
+                        Scout understands {planGate.understanding}% of your inquiry
+                      </div>
+                      <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                        A few details would sharpen the search. Answer what you can, or run
+                        Scout anyway.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="px-5 py-4">
+                    <ul className="space-y-1.5">
+                      {planGate.questions.map((q, i) => (
+                        <li key={i} className="flex gap-2 text-xs leading-relaxed text-body">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-coral/60" />
+                          {q}
+                        </li>
+                      ))}
+                    </ul>
+                    <textarea
+                      value={clarify}
+                      onChange={(e) => setClarify(e.target.value)}
+                      rows={2}
+                      placeholder="Answer any of these in a sentence or two…"
+                      className="mt-3 w-full resize-y rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    />
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <button
+                        onClick={sharpenPlan}
+                        disabled={!clarify.trim() || gating}
+                        className="rounded-xl bg-brown px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-40"
+                      >
+                        {gating ? "Sharpening…" : "Sharpen understanding"}
+                      </button>
+                      <button
+                        onClick={() => runDiscover(planGate.plan, clarify)}
+                        disabled={discovering}
+                        className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                      >
+                        Run Scout anyway
+                      </button>
+                      <button
+                        onClick={() => setPlanGate(null)}
+                        className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {showSkipped && skipped.length > 0 && (
                 <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-warm-border bg-warm-bg/40 p-4 text-xs">
                   <ul className="space-y-2">

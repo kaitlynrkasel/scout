@@ -214,6 +214,7 @@ export interface RankingFactor {
 export interface GoalPlan {
   goal: string;
   target_type: string;
+  understanding: number; // 0-100: how completely Scout understands what to search for
   required: string[];
   preferred: string[];
   hard_constraints: string[];
@@ -232,8 +233,11 @@ const DECOMPOSE_SYS =
   "constraints are implied, what would make someone likely to say yes, and what would make someone impossible to " +
   "use. Infer intent, never rely only on the literal wording. Then decompose the goal into this EXACT JSON schema " +
   "(populate every field): {\"goal\":\"\",\"target_type\":\"\",\"required\":[],\"preferred\":[],\"hard_constraints\":[]," +
-  "\"soft_constraints\":[],\"negative_constraints\":[],\"evidence_needed\":[],\"opportunity_signals\":[]," +
+  "\"understanding\":0,\"soft_constraints\":[],\"negative_constraints\":[],\"evidence_needed\":[],\"opportunity_signals\":[]," +
   "\"search_dimensions\":[],\"ranking_factors\":[{\"factor\":\"\",\"weight\":0}],\"confidence_questions\":[]}\n" +
+  "understanding = an integer 0-100 for how completely you understand what to search for given ONLY the info " +
+  "provided: 90+ when the goal is specific and self-contained, lower when key constraints (who exactly, where, " +
+  "when, budget, seniority, which niche) are genuinely unknown and would change the results. Be honest, not generous. " +
   "Definitions: goal = the actual objective (e.g. 'find a guest speaker', not 'search Nashville artists'). " +
   "target_type = the entity type (Person, Company, Artist, Founder, Journalist, Investor, Professor, Creator, " +
   "Podcast Host, etc.). required = things that MUST be true; if one is false, reject the candidate. preferred = " +
@@ -253,7 +257,8 @@ const DECOMPOSE_SYS =
   "1.0. confidence_questions = what information is missing that would sharpen the search (local only? does budget " +
   "matter? seniority? timing? prefer independent?). Think in evidence and investigations, not keywords or Google " +
   "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
-  "Return ONLY the JSON object.";
+  "Keep each array CONCISE: at most 10 items, each a short phrase (not a paragraph). Return ONLY the JSON object, " +
+  "nothing before or after it.";
 
 export async function decomposeGoal(
   goal: string,
@@ -268,7 +273,7 @@ export async function decomposeGoal(
     `${String(about || "").slice(0, 1600)}` +
     (personalOverride ? `\n\n${personalOverride}` : "");
   try {
-    const raw = await claudeJson(DECOMPOSE_SYS, user, 2600); // big schema, needs room
+    const raw = await claudeJson(DECOMPOSE_SYS, user, 3200); // big schema, needs room
     const parsed: any = parseJsonLoose(raw);
     if (!parsed || typeof parsed !== "object") return null;
     const arr = (v: any): string[] =>
@@ -279,9 +284,14 @@ export async function decomposeGoal(
           .filter((f: RankingFactor) => f.factor)
           .slice(0, 8)
       : [];
+    const understanding = Math.max(
+      0,
+      Math.min(100, Math.round(Number(parsed.understanding)) || 0)
+    );
     return {
       goal: String(parsed.goal || g).trim(),
       target_type: String(parsed.target_type || "").trim(),
+      understanding,
       required: arr(parsed.required),
       preferred: arr(parsed.preferred),
       hard_constraints: arr(parsed.hard_constraints),
@@ -951,13 +961,15 @@ export async function discover(
   // route can stream partial results), and signal lets the caller stop the
   // search early — the user cancels mid-run but keeps what was already scouted,
   // and no further Tavily/Claude calls are spent.
-  opts?: { onOpp?: (o: Opportunity) => void; signal?: AbortSignal }
+  opts?: { onOpp?: (o: Opportunity) => void; signal?: AbortSignal; plan?: GoalPlan | null }
 ): Promise<DiscoverResult> {
   const aborted = () => !!opts?.signal?.aborted;
   // Step 1: decompose the goal into an evidence-first blueprint (best-effort;
-  // falls back to plain query planning if it fails). Step 2: plan queries from
-  // it. Step 3+: gather + extract, both reading the same plan.
-  const plan = await decomposeGoal(goal, about, useCase, personalOverride).catch(() => null);
+  // falls back to plain query planning if it fails). Reuse a plan the caller
+  // already computed (the pre-search "understanding" step) so we don't pay for
+  // it twice. Step 2: plan queries from it. Step 3+: gather + extract.
+  const plan =
+    opts?.plan ?? (await decomposeGoal(goal, about, useCase, personalOverride).catch(() => null));
   const queries = await planQueries(
     goal,
     about,
