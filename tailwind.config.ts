@@ -55,7 +55,10 @@ const config: Config = {
       boxShadow: {
         soft: "0 1px 2px rgba(40, 32, 24, 0.05), 0 10px 24px -14px rgba(40, 32, 24, 0.12)",
         // Minimal, flat elevation — separation comes from hairline borders.
-        card: "0 1px 2px rgba(40, 32, 24, 0.05)",
+        card: "0 1px 2px rgba(40, 30, 18, 0.04)",
+        // Reserved for floating surfaces: the Ask Scout bar, command palette, peek.
+        float:
+          "0 14px 44px -16px rgba(40, 30, 18, 0.22), 0 2px 6px -2px rgba(40, 30, 18, 0.06)",
       },
       backgroundImage: {
         "brand-gradient": "linear-gradient(120deg, #7c5837 0%, #684a2d 100%)",
