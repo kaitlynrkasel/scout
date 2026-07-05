@@ -30,16 +30,36 @@ interface AdminInsights {
     useCase: string;
     addedAt: number;
   }[];
-  perUser: {
-    userId: string;
-    finds: number;
-    denied: number;
-    approved: number;
-    updatedAt: string;
-    hasFindsField: boolean;
-    useCase: string;
-  }[];
+  averages: {
+    activeUsers: number;
+    totalUsers: number;
+    meanSearches: number;
+    medianSearches: number;
+    meanFinds: number;
+    medianFinds: number;
+    meanDrafts: number;
+    meanSent: number;
+    meanReplied: number;
+  };
+  topUsers: UserRow[];
+  perUser: UserRow[];
   generatedAt: string;
+}
+
+interface UserRow {
+  userId: string;
+  label: string;
+  searches: number;
+  drafts: number;
+  copies: number;
+  finds: number;
+  denied: number;
+  approved: number;
+  sent: number;
+  replied: number;
+  updatedAt: string;
+  hasFindsField: boolean;
+  useCase: string;
 }
 
 export default function InsightsView({
@@ -172,6 +192,110 @@ export default function InsightsView({
                 </div>
               </div>
             ))}
+          </section>
+
+          {/* How much the average user actually uses the platform. Averaged
+              over ACTIVE users (ran at least one search or has a find) so
+              never-active signups don't flatten the mean. Median shown next to
+              mean since a few power users skew the average. */}
+          <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                Average usage per user
+              </h2>
+              <span className="text-xs text-body/70">
+                {data.averages.activeUsers} active of {data.averages.totalUsers} total
+              </span>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                ["Searches", data.averages.meanSearches, data.averages.medianSearches],
+                ["Finds", data.averages.meanFinds, data.averages.medianFinds],
+                ["Drafts", data.averages.meanDrafts, null],
+                ["Sent", data.averages.meanSent, null],
+                ["Replied", data.averages.meanReplied, null],
+              ].map(([label, mean, med]) => (
+                <div
+                  key={String(label)}
+                  className="rounded-2xl border border-warm-border bg-brown-tint/40 p-4"
+                >
+                  <div className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
+                    Avg {label}
+                  </div>
+                  <div className="mt-1 text-2xl font-extrabold text-ink tabular-nums">
+                    {mean}
+                  </div>
+                  {med !== null && (
+                    <div className="mt-0.5 text-[11px] text-body/60 tabular-nums">
+                      median {med as number}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Top users by engagement (searches run, then finds). Owner-only, so
+              real emails/names are shown to make them recognizable. */}
+          <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+              Top users
+            </h2>
+            <p className="mt-1 text-xs text-body/70">
+              Ranked by searches run, then finds saved.
+            </p>
+            <div className="mt-3 max-h-80 overflow-y-auto">
+              <table className="w-full text-xs">
+                <thead className="sticky top-0 bg-surface">
+                  <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
+                    <th className="py-1 pr-2">#</th>
+                    <th className="py-1 pr-2">User</th>
+                    <th className="py-1 pr-2 text-right">Searches</th>
+                    <th className="py-1 pr-2 text-right">Finds</th>
+                    <th className="py-1 pr-2 text-right">Drafts</th>
+                    <th className="py-1 pr-2 text-right">Sent</th>
+                    <th className="py-1 pr-2 text-right">Replied</th>
+                    <th className="py-1 pr-2">Use case</th>
+                    <th className="py-1">Last active</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.topUsers.map((u, i) => (
+                    <tr key={u.userId} className="border-t border-warm-border align-top">
+                      <td className="py-1.5 pr-2 tabular-nums text-body/50">{i + 1}</td>
+                      <td className="py-1.5 pr-2 font-semibold text-ink">
+                        <span className="block max-w-[220px] truncate" title={u.label}>
+                          {u.label}
+                        </span>
+                        {u.userId !== u.label && (
+                          <span className="font-mono text-[10px] text-body/45">{u.userId}</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right font-bold tabular-nums text-ink">
+                        {u.searches}
+                      </td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">{u.finds}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">{u.drafts}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums text-body">{u.sent}</td>
+                      <td className="py-1.5 pr-2 text-right tabular-nums font-semibold text-sage-deep">
+                        {u.replied}
+                      </td>
+                      <td className="py-1.5 pr-2 text-body/80">{u.useCase || "—"}</td>
+                      <td className="py-1.5 text-body/60">
+                        {u.updatedAt ? new Date(u.updatedAt).toLocaleDateString() : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                  {data.topUsers.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-3 text-sm text-body/60">
+                        No active users yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </section>
 
           {/* Per-user drill-down. If a tester's row is missing here entirely,

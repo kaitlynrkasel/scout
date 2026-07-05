@@ -22,10 +22,12 @@ export async function GET(req: Request) {
     );
   }
 
-  // Two queries, in parallel: state blobs + profile use_case per user.
-  const [statesRes, profilesRes] = await Promise.all([
+  // Three sources, in parallel: state blobs, profile use_case/name per user,
+  // and the auth directory (for email + who to actually recognize a top user by).
+  const [statesRes, profilesRes, authRes] = await Promise.all([
     supabaseAdmin.from("user_state").select("user_id, data, updated_at"),
-    supabaseAdmin.from("profiles").select("id, use_case"),
+    supabaseAdmin.from("profiles").select("id, use_case, name"),
+    supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
   ]);
 
   if (statesRes.error) {
@@ -35,8 +37,14 @@ export async function GET(req: Request) {
     );
   }
   const useCaseByUser = new Map<string, string>();
+  const nameByUser = new Map<string, string>();
   for (const p of profilesRes.data || []) {
     useCaseByUser.set((p as any).id, String((p as any).use_case || ""));
+    if ((p as any).name) nameByUser.set((p as any).id, String((p as any).name));
+  }
+  const emailByUser = new Map<string, string>();
+  for (const u of authRes?.data?.users || []) {
+    if (u.email) emailByUser.set(u.id, u.email);
   }
 
   const totals = {
@@ -51,12 +59,21 @@ export async function GET(req: Request) {
     replied: 0,
   };
   // Per-user drill-down so we can spot whose data isn't landing in the
-  // aggregate. Includes rows even if their finds array is missing/empty.
+  // aggregate AND rank the most active users. Includes rows even if their
+  // finds array is missing/empty. `searches`/`drafts`/`copies` come from the
+  // activity blob (the real engagement signal); finds/sent/replied are counted
+  // off the finds array below.
   const perUser: Array<{
     userId: string;
+    label: string; // email or name if known, else truncated id
+    searches: number;
+    drafts: number;
+    copies: number;
     finds: number;
     denied: number;
     approved: number;
+    sent: number;
+    replied: number;
     updatedAt: string;
     hasFindsField: boolean;
     useCase: string;
@@ -82,18 +99,29 @@ export async function GET(req: Request) {
     totals.users_with_state_rows++;
     const hasFindsField = Array.isArray(data?.finds);
     const finds: any[] = hasFindsField ? data.finds : [];
+    const activity = (data?.activity || {}) as any;
     let userDenied = 0;
     let userApproved = 0;
+    let userSent = 0;
+    let userReplied = 0;
     for (const f of finds) {
       const status = String(f?.status || "").toLowerCase();
       if (status === "denied") userDenied++;
       else if (status === "drafted" || status === "sent" || status === "replied") userApproved++;
+      if (status === "sent") userSent++;
+      else if (status === "replied") userReplied++;
     }
     perUser.push({
-      userId: uid.slice(0, 8) + "…", // truncate for privacy; still lets us tell rows apart
+      userId: uid.slice(0, 8) + "…",
+      label: emailByUser.get(uid) || nameByUser.get(uid) || uid.slice(0, 8) + "…",
+      searches: Number(activity?.searches || 0),
+      drafts: Number(activity?.drafts || 0),
+      copies: Number(activity?.copies || 0),
       finds: finds.length,
       denied: userDenied,
       approved: userApproved,
+      sent: userSent,
+      replied: userReplied,
       updatedAt,
       hasFindsField,
       useCase: uc,
@@ -171,8 +199,43 @@ export async function GET(req: Request) {
   denials.sort((a, b) => b.addedAt - a.addedAt);
   const denialsCapped = denials.slice(0, 200);
 
+  // "How much the average user uses the platform." Averaged over ACTIVE users
+  // (at least one search or one find) so people who signed up but never ran
+  // anything don't drag the mean to zero. Mean and median both, since a few
+  // power users skew the mean.
+  const active = perUser.filter((u) => u.searches > 0 || u.finds > 0);
+  const mean = (get: (u: (typeof perUser)[number]) => number) =>
+    active.length ? active.reduce((s, u) => s + get(u), 0) / active.length : 0;
+  const median = (get: (u: (typeof perUser)[number]) => number) => {
+    if (!active.length) return 0;
+    const arr = active.map(get).sort((a, b) => a - b);
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+  };
+  const round1 = (n: number) => Math.round(n * 10) / 10;
+  const averages = {
+    activeUsers: active.length,
+    totalUsers: totals.users_with_state_rows,
+    meanSearches: round1(mean((u) => u.searches)),
+    medianSearches: round1(median((u) => u.searches)),
+    meanFinds: round1(mean((u) => u.finds)),
+    medianFinds: round1(median((u) => u.finds)),
+    meanDrafts: round1(mean((u) => u.drafts)),
+    meanSent: round1(mean((u) => u.sent)),
+    meanReplied: round1(mean((u) => u.replied)),
+  };
+
+  // Top users by engagement: searches run is the truest intent signal, with
+  // finds as the tiebreak. Capped so the response stays lean.
+  const topUsers = perUser
+    .slice()
+    .sort((a, b) => b.searches - a.searches || b.finds - a.finds)
+    .slice(0, 25);
+
   return NextResponse.json({
     totals,
+    averages,
+    topUsers,
     denyReasons,
     denyByHost,
     denyRateByUseCase,
