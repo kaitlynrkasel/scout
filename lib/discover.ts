@@ -1068,16 +1068,18 @@ export async function discover(
       const chosenUrl = pickTrustedUrl(String(r.url || ""), cand.url || "", cand.content || "");
       opps.push({
         id: `${Date.now()}-${opps.length}`,
-        name: String(r.name).trim(),
-        outlet: r.outlet || "",
+        // noDash on every LLM-written text field so em/en dashes never show in a
+        // find's title, outlet, role, location, or description.
+        name: noDash(String(r.name).trim()),
+        outlet: noDash(r.outlet || ""),
         url: chosenUrl,
         channel: r.channel || "Unknown",
         contactEmail: r.contact_email || "",
-        contactName: r.contact_name || "",
-        contactRole: r.contact_role || "",
+        contactName: noDash(r.contact_name || ""),
+        contactRole: noDash(r.contact_role || ""),
         contactHandle: r.contact_handle || "",
         contactPhone: r.contact_phone || "",
-        location: r.location || "",
+        location: noDash(r.location || ""),
         timezone: r.timezone || "",
         fitScore: fit,
         whyItFits: noDash(r.why_it_fits || ""), // no em dashes in rendered LLM copy

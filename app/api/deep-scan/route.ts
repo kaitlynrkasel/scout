@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { claudeJson, parseJsonLoose } from "@/lib/claude";
+import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
 export const runtime = "nodejs";
@@ -145,12 +145,12 @@ export async function POST(req: NextRequest) {
     }
 
     const contact = {
-      name: String(parsed?.contact?.name || "").trim(),
-      role: String(parsed?.contact?.role || "").trim(),
+      name: noDash(String(parsed?.contact?.name || "").trim()),
+      role: noDash(String(parsed?.contact?.role || "").trim()),
       email: String(parsed?.contact?.email || "").trim(),
       handle: String(parsed?.contact?.handle || "").trim(),
     };
-    const requirements = String(parsed?.requirements || "").trim();
+    const requirements = noDash(String(parsed?.requirements || "").trim());
 
     return NextResponse.json({
       contact,

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { tavilySearch } from "@/lib/tavily";
-import { claudeJson, parseJsonLoose } from "@/lib/claude";
+import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
 export const runtime = "nodejs";
@@ -100,8 +100,8 @@ export async function POST(req: NextRequest) {
       if (Array.isArray(parsed?.facts)) {
         facts = parsed.facts
           .map((f: any) => ({
-            category: String(f?.category || "").trim().slice(0, 40),
-            fact: String(f?.fact || "").trim().slice(0, 400),
+            category: noDash(String(f?.category || "").trim().slice(0, 40)),
+            fact: noDash(String(f?.fact || "").trim().slice(0, 400)),
             sourceIdx:
               typeof f?.sourceIdx === "number" && f.sourceIdx >= 1
                 ? f.sourceIdx
