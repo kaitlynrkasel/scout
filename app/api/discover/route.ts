@@ -44,8 +44,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const { goal, about, useCase, template, feedback, salt, cohortHint, teamWorkspaceId } =
+    const { goal, about, useCase, template, feedback, salt, cohortHint, teamWorkspaceId, useHistory } =
       await req.json();
+    // Per-project "read my profile" off => don't apply any cross-search learning.
+    const learn = useHistory !== false;
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
     }
@@ -64,7 +66,7 @@ export async function POST(req: NextRequest) {
     // Best-effort: any failure here just means no personal override, never
     // blocks the search itself.
     let personalOverride = "";
-    if (metered && uid) {
+    if (metered && uid && learn) {
       try {
         const { data: row } = await supabaseAdmin!
           .from("user_state")
@@ -83,7 +85,7 @@ export async function POST(req: NextRequest) {
     // (team > personal > scout-wide). Best-effort: verifies membership, caps the
     // member fan-out, and silently skips if Teams isn't set up.
     let teamOverride = "";
-    if (metered && uid && teamWorkspaceId) {
+    if (metered && uid && teamWorkspaceId && learn) {
       try {
         const wsId = String(teamWorkspaceId);
         const { data: mine } = await supabaseAdmin!

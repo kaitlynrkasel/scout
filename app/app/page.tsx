@@ -47,31 +47,35 @@ const OUTREACH_KINDS = [
 // back to GENERIC_SUGGESTIONS.
 const SUGGESTED: Record<string, { name: string; goal: string }[]> = {
   networking: [
-    { name: "Coffee chats", goal: "professionals in my field open to a quick coffee or call" },
+    { name: "Coffee Chats", goal: "professionals in my field open to a quick coffee or call" },
     { name: "Mentors", goal: "experienced people in my field open to mentoring" },
-    { name: "Peers", goal: "people at a similar career stage in my field to connect with" },
-    { name: "Industry leaders", goal: "well-known, respected leaders in my industry" },
+    { name: "Job Opportunities", goal: "companies in my field hiring for roles I'd want" },
+    { name: "Sponsorship Opportunities", goal: "brands or companies that sponsor people or work like mine" },
+    { name: "Press & Media", goal: "journalists, blogs, and podcasts that cover work like mine" },
   ],
   jobs: [
+    { name: "Job Opportunities", goal: "companies in my field hiring for roles I'd want" },
     { name: "Internships", goal: "internships in my field accepting applications" },
     { name: "Recruiters", goal: "recruiters and hiring managers in my field" },
-    { name: "Coffee chats", goal: "people doing the job I want, for advice" },
-    { name: "Part-time roles", goal: "part-time jobs in my field hiring now" },
+    { name: "Coffee Chats", goal: "people doing the job I want, open to a quick chat for advice" },
   ],
   musicpr: [
-    { name: "Playlist curators", goal: "playlist curators accepting submissions" },
-    { name: "Press & blogs", goal: "music blogs and press that cover artists like me" },
-    { name: "Radio", goal: "radio shows and stations that play my kind of music" },
-    { name: "Cowriters", goal: "songwriters open to cowriting" },
+    { name: "Playlist Curators", goal: "playlist curators accepting submissions" },
+    { name: "Press & Blogs", goal: "music blogs and press that cover artists like me" },
+    { name: "Radio & Podcasts", goal: "radio shows and podcasts that play my kind of music" },
+    { name: "Sync & Licensing", goal: "music supervisors placing songs in TV, film, and ads" },
   ],
 };
 
-// Fallback categories for any free-text use case that isn't one of the presets.
+// Tangible fallback categories for any free-text use case that isn't a preset.
+// Concrete opportunity types, so a new user immediately sees real things to
+// scout for rather than abstract labels.
 const GENERIC_SUGGESTIONS: { name: string; goal: string }[] = [
-  { name: "Warm intros", goal: "people connected to my goal who could make a warm introduction" },
-  { name: "Decision makers", goal: "the people who decide about what I'm reaching out about" },
-  { name: "Peers", goal: "people doing similar work I can connect and share notes with" },
-  { name: "Partners", goal: "people or organizations who could partner with me" },
+  { name: "Coffee Chats", goal: "people connected to my goal open to a quick coffee or call" },
+  { name: "Job Opportunities", goal: "companies hiring for roles I'd want" },
+  { name: "Sponsorship Opportunities", goal: "brands or companies that sponsor people or projects like mine" },
+  { name: "Press & Media", goal: "journalists, blogs, and podcasts that cover work like mine" },
+  { name: "Partnerships", goal: "people or organizations who could partner with me" },
 ];
 
 // A stable per-user seed so discovery varies results between people (less overlap,
@@ -335,6 +339,11 @@ interface Project {
   // default (SIG_KEY/profile signature) when unset, different projects can
   // sign off as different people/brands without touching the global default.
   signature?: string;
+  // Whether searches in this project read your Profile and learn from your
+  // history in OTHER projects. Default true. Turn OFF when the project is
+  // disconnected from you (representing someone outside your industry) so the
+  // search doesn't bias toward you. Remembered per project.
+  usesProfile?: boolean;
 }
 interface Category {
   id: string;
@@ -1864,6 +1873,10 @@ function ScoutTool({
   function setProjectContext(id: string, context: string) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, context } : p)));
   }
+  // Toggle whether this project's searches read your Profile + cross-project history.
+  function setProjectUsesProfile(id: string, usesProfile: boolean) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, usesProfile } : p)));
+  }
 
   // Per-project email signature, falling back to the account-wide default
   // when a project hasn't set its own. Every draft-generating call site
@@ -3038,6 +3051,15 @@ function ScoutTool({
       const goalForApi = extras.length
         ? `${goal}\n\n${extras.join(" ")}`
         : goal;
+      // Per-project "read my profile" setting (default on). When OFF, the search
+      // ignores your Profile and your cross-project history, using only who this
+      // project is for — so representing someone outside your world doesn't bias
+      // results back toward you.
+      const usesProfile = activeProject?.usesProfile !== false;
+      const projectOnlyAbout = activeProject?.context
+        ? "This outreach is on behalf of / for: " + activeProject.context
+        : "";
+      const aboutForApi = usesProfile ? aboutText : projectOnlyAbout;
       const token = getToken ? await getToken() : null;
       const controller = new AbortController();
       discoverAbort.current = controller;
@@ -3050,14 +3072,18 @@ function ScoutTool({
         },
         body: JSON.stringify({
           goal: goalForApi,
-          about: aboutText,
+          about: aboutForApi,
           useCase: activeUseCase,
           feedback,
           salt: outreachSalt(accountEmail),
           cohortHint: cohortHintFrom(community),
+          // When profile-reading is off, don't learn from cross-project/team history either.
+          useHistory: usesProfile,
           // Company accounts learn team-wide (highest priority); individuals omit this.
           teamWorkspaceId:
-            profile.accountType === "company" ? profile.companyWorkspaceId || "" : "",
+            usesProfile && profile.accountType === "company"
+              ? profile.companyWorkspaceId || ""
+              : "",
         }),
         signal: controller.signal,
       });
@@ -3640,6 +3666,23 @@ function ScoutTool({
                     placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
+
+                  {/* Per-project: read my profile + learn from my other searches? */}
+                  <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={activeProject?.usesProfile !== false}
+                      onChange={(e) => setProjectUsesProfile(activeId, e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                    />
+                    <span className="text-xs leading-relaxed text-body/80">
+                      <span className="font-semibold text-ink">Use my Profile for this project</span>
+                      <br />
+                      On, searches match your industry and learn from your other projects. Turn
+                      it off when this project is disconnected from you (representing someone
+                      outside your field) so results don&apos;t bias toward you.
+                    </span>
+                  </label>
                 </div>
               </div>
 
