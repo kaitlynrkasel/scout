@@ -6003,6 +6003,9 @@ function FindCard({
         const showEmail = !!o.contactEmail && !wantedChannels.includes("email");
         const showHandle = !!o.contactHandle && !wantedChannels.includes("linkedin");
         const showPhone = !!o.contactPhone && !wantedChannels.includes("phone");
+        // Nothing left to show inline (e.g. a company search where every
+        // channel is in the requested-info row below) — skip the empty line.
+        if (!showEmail && !o.contactName && !showHandle && !showPhone) return null;
         return (
           <div className="mt-1 text-xs">
             {showEmail && (
@@ -6039,36 +6042,39 @@ function FindCard({
         <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
       )}
 
-      {/* A labeled section for EVERY contact channel this search asked for —
-          found or not — so it's obvious at a glance what's still missing. */}
+      {/* Every contact channel the search asked for, found or not, as one
+          compact line (label + value, missing shown as a muted dash) instead
+          of a grid of boxes that wrapped into two cluttered rows. */}
       {wantedChannels.length > 0 && (
-        <div className="mt-2.5 grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5 text-[11px]">
           {CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map((c) => {
             const val = channelValue(o, c.key);
             return (
-              <div
-                key={c.key}
-                className={`rounded-lg border px-2 py-1.5 text-[11px] ${
-                  val
-                    ? "border-sage/40 bg-sage/10 text-brown-deep"
-                    : "border-warm-border bg-warm-bg/40 text-body/40"
-                }`}
-              >
-                <div className="font-bold uppercase tracking-wide">{c.label}</div>
-                <div className="mt-0.5 truncate">
+              <span key={c.key} className="inline-flex min-w-0 items-baseline gap-1.5">
+                <span
+                  className={`font-bold uppercase tracking-wide ${
+                    val ? "text-sage-deep" : "text-body/40"
+                  }`}
+                >
+                  {c.label}
+                </span>
+                <span className="min-w-0 truncate">
                   {val ? (
                     c.key === "phone" ? (
-                      <a href={`tel:${val.replace(/[^\d+]/g, "")}`} className="hover:underline">
+                      <a
+                        href={`tel:${val.replace(/[^\d+]/g, "")}`}
+                        className="text-body hover:text-accent hover:underline"
+                      >
                         {val}
                       </a>
                     ) : (
-                      <ContactValue value={val} className="" />
+                      <ContactValue value={val} className="text-body" />
                     )
                   ) : (
-                    "Not found yet"
+                    <span className="text-body/35">—</span>
                   )}
-                </div>
-              </div>
+                </span>
+              </span>
             );
           })}
         </div>
