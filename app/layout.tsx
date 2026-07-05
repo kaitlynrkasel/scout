@@ -12,7 +12,8 @@ const sans = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Scout — AI Outreach Engine",
+  metadataBase: new URL("https://scout-source.com"),
+  title: "Scout | Find Your People",
   description:
     "Find the right people, get their contacts, and draft personalized outreach in your voice.",
 };

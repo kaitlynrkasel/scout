@@ -1,9 +1,26 @@
 import { Nav, Footer } from "./site";
 
+const LANDING_DESCRIPTION =
+  "Scout finds the people and opportunities that fit your goal, pulls their contact info, and drafts personalized outreach that sounds like you.";
+
 export const metadata = {
-  title: "Scout — Find the right people, reach out in your voice",
-  description:
-    "Scout finds the people and opportunities that fit your goal, pulls their contact info, and drafts personalized outreach that sounds like you.",
+  title: "Scout | Find Your People",
+  description: LANDING_DESCRIPTION,
+  // Explicit share-preview (iMessage, Slack, social) title/description so the
+  // card matches the page title instead of falling back to whatever a scraper
+  // guesses. URL/site name resolve against metadataBase in layout.tsx.
+  openGraph: {
+    title: "Scout | Find Your People",
+    description: LANDING_DESCRIPTION,
+    url: "https://scout-source.com",
+    siteName: "Scout",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Scout | Find Your People",
+    description: LANDING_DESCRIPTION,
+  },
 };
 
 export default function Landing() {
