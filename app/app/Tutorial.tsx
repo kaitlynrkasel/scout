@@ -39,6 +39,8 @@ export default function Tutorial({
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  const [cardH, setCardH] = useState(0);
+  const [reduceMotion, setReduceMotion] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
   const step = steps[i];
@@ -49,6 +51,22 @@ export default function Tutorial({
   useEffect(() => {
     if (open) setI(0);
   }, [open]);
+
+  // Honor the OS "reduce motion" preference (no glide, just place the card).
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const sync = () => setReduceMotion(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+
+  // Measure the card so we can center it (and keep it on-screen) precisely.
+  // useLayoutEffect runs before paint, so the correct position is used from the
+  // first frame and the glide never starts from a wrong spot.
+  useLayoutEffect(() => {
+    if (open && cardRef.current) setCardH(cardRef.current.offsetHeight);
+  }, [open, i, rect]);
 
   // Switch tab for the current step so the real screen shows behind the dim.
   useEffect(() => {
@@ -105,27 +123,41 @@ export default function Tutorial({
 
   const PAD = 8; // spotlight breathing room around the target
 
-  // Card placement: to the right of the spotlight when there's room (sidebar
-  // targets), otherwise centered. Falls back to centered when there's no target.
-  let cardStyle: React.CSSProperties;
+  // Card placement. Everything is expressed as a pixel offset from a fixed 0,0
+  // origin and applied via a GPU `translate`, so moving between the centered
+  // intro and a spotlighted target is one smooth glide instead of a snap (and
+  // it never triggers layout). Beside the target when there's room, else below,
+  // else dead-center. Clamped to stay fully on screen.
+  const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
+  const vh = typeof window !== "undefined" ? window.innerHeight : 800;
+  const cardW = Math.min(320, vw - 32);
+  let tx: number;
+  let ty: number;
   if (rect) {
-    const spaceRight =
-      typeof window !== "undefined" ? window.innerWidth - (rect.left + rect.width) : 0;
+    const spaceRight = vw - (rect.left + rect.width);
     if (spaceRight > 360) {
-      cardStyle = {
-        top: Math.max(16, rect.top - 8),
-        left: rect.left + rect.width + PAD + 14,
-      };
+      tx = rect.left + rect.width + PAD + 14;
+      ty = Math.max(16, rect.top - 8);
     } else {
-      // place below the target
-      cardStyle = {
-        top: rect.top + rect.height + PAD + 14,
-        left: Math.max(16, rect.left),
-      };
+      tx = Math.max(16, rect.left);
+      ty = rect.top + rect.height + PAD + 14;
     }
+    tx = Math.min(tx, Math.max(16, vw - cardW - 16));
+    ty = Math.min(ty, Math.max(16, vh - cardH - 16));
   } else {
-    cardStyle = { top: "50%", left: "50%", transform: "translate(-50%, -50%)" };
+    tx = (vw - cardW) / 2;
+    ty = Math.max(16, (vh - cardH) / 2);
   }
+  const cardStyle: React.CSSProperties = {
+    top: 0,
+    left: 0,
+    width: cardW,
+    transform: `translate3d(${Math.round(tx)}px, ${Math.round(ty)}px, 0)`,
+    transition: reduceMotion
+      ? undefined
+      : "transform 480ms cubic-bezier(0.22, 1, 0.36, 1)",
+    willChange: "transform",
+  };
 
   return (
     <div className="fixed inset-0 z-[100]" aria-modal="true" role="dialog">
@@ -133,7 +165,7 @@ export default function Tutorial({
           around it, so clicks on the rest of the page are blocked by this layer. */}
       {rect ? (
         <div
-          className="pointer-events-auto absolute rounded-xl transition-all duration-300"
+          className="pointer-events-auto absolute rounded-xl"
           style={{
             top: rect.top - PAD,
             left: rect.left - PAD,
@@ -142,6 +174,11 @@ export default function Tutorial({
             boxShadow: "0 0 0 9999px rgba(41, 30, 22, 0.62)",
             outline: "2px solid rgba(255,255,255,0.9)",
             outlineOffset: 2,
+            // Glide the spotlight with the same easing/timing as the card so the
+            // dim window and the coach-mark move together, not at different rates.
+            transition: reduceMotion
+              ? undefined
+              : "top 480ms cubic-bezier(0.22, 1, 0.36, 1), left 480ms cubic-bezier(0.22, 1, 0.36, 1), width 480ms cubic-bezier(0.22, 1, 0.36, 1), height 480ms cubic-bezier(0.22, 1, 0.36, 1)",
           }}
         />
       ) : (
@@ -154,7 +191,7 @@ export default function Tutorial({
       {/* Coach-mark card */}
       <div
         ref={cardRef}
-        className="pointer-events-auto absolute w-[320px] max-w-[calc(100vw-32px)] rounded-2xl border border-warm-border bg-white p-5 shadow-2xl"
+        className="pointer-events-auto absolute rounded-2xl border border-warm-border bg-white p-5 shadow-2xl"
         style={cardStyle}
       >
         <div className="mb-2 flex items-center gap-2">
