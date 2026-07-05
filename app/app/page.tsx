@@ -1324,6 +1324,23 @@ function ScoutTool({
       localStorage.setItem(SIG_KEY, n);
     } catch {}
   };
+  // Build an email signature from the user's bio/resume text (used by the
+  // Templates tab's "Build from resume" button). Returns "" on failure.
+  async function buildSignatureFromBio(): Promise<string> {
+    const t = (profile.bio || "").trim();
+    if (!t) return "";
+    try {
+      const res = await fetch("/api/parse-profile", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: t }),
+      });
+      const data = await res.json();
+      return res.ok && data.signature ? String(data.signature) : "";
+    } catch {
+      return "";
+    }
+  }
   // Keep an uploaded resume FILE (as a data URL) so it can be attached to emails.
   // Capped at ~5MB so we don't bloat account state; larger files are declined.
   async function storeResumeFile(file: File) {
@@ -4095,6 +4112,10 @@ function ScoutTool({
             setMtCategoryId(""); // switching project clears the category choice
           }}
           setScopeCategoryId={setMtCategoryId}
+          signature={signature}
+          onSignature={saveSignature}
+          onBuildSignature={buildSignatureFromBio}
+          setProjectSignature={setProjectSignature}
         />
       )}
 
@@ -10970,6 +10991,10 @@ function TemplatesTab({
   scopeCategoryId,
   setScopeProjectId,
   setScopeCategoryId,
+  signature,
+  onSignature,
+  onBuildSignature,
+  setProjectSignature,
 }: {
   kinds: string[];
   channel: string;
@@ -10989,7 +11014,26 @@ function TemplatesTab({
   scopeCategoryId: string;
   setScopeProjectId: (id: string) => void;
   setScopeCategoryId: (id: string) => void;
+  signature: string;
+  onSignature: (v: string) => void;
+  onBuildSignature: () => Promise<string>;
+  setProjectSignature: (projectId: string, sig: string) => void;
 }) {
+  // Email-signature editor state: which project (if any) the per-project
+  // signature editor is pointed at, and whether a "build from resume" is running.
+  const [sigProjectId, setSigProjectId] = useState("");
+  const [buildingSig, setBuildingSig] = useState(false);
+  const sigProject = projects.find((p) => p.id === sigProjectId);
+  async function buildDefaultSig() {
+    if (buildingSig) return;
+    setBuildingSig(true);
+    try {
+      const s = await onBuildSignature();
+      if (s) onSignature(s);
+    } finally {
+      setBuildingSig(false);
+    }
+  }
   // Which saved template (by id) is loaded into the form above for editing.
   // "" means the form is in add-a-new-template mode.
   const [editingId, setEditingId] = useState("");
@@ -11182,6 +11226,92 @@ function TemplatesTab({
               </div>
             ))}
           </Reveal>
+        )}
+      </section>
+
+      {/* -------- Email signatures -------- */}
+      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Email signatures</h2>
+        <p className="mt-1 text-sm leading-relaxed text-body">
+          Signed onto the end of every email Scout drafts (not DMs). Set a default,
+          then give any project its own — outreach for that project signs off with the
+          project&rsquo;s signature automatically.
+        </p>
+
+        {/* Account-wide default */}
+        <div className="mt-5">
+          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+            <Label className="mb-0">Default signature</Label>
+            <button
+              onClick={buildDefaultSig}
+              disabled={buildingSig}
+              title="Build a signature from your resume / bio (you can edit it after)"
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              {buildingSig ? "Building…" : signature.trim() ? "Rebuild from resume" : "Build from my resume"}
+            </button>
+          </div>
+          <textarea
+            value={signature}
+            onChange={(e) => onSignature(e.target.value)}
+            rows={4}
+            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@acmestudio.com · (555) 010-0142"}
+            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+          <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+            Used for any project that doesn&rsquo;t have its own signature. Leave blank to
+            let Scout sign off with just your name.
+          </p>
+        </div>
+
+        {/* Per-project override */}
+        {projects.length > 0 && (
+          <div className="mt-6 border-t border-warm-border pt-5">
+            <Label>Signature for a specific project</Label>
+            <select
+              value={sigProjectId}
+              onChange={(e) => setSigProjectId(e.target.value)}
+              className="scout-select mt-1 w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 sm:max-w-xs"
+            >
+              <option value="">Choose a project…</option>
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                  {p.signature && p.signature.trim() ? " • has its own" : " • uses default"}
+                </option>
+              ))}
+            </select>
+
+            {sigProject && (
+              <div className="mt-3">
+                <textarea
+                  value={sigProject.signature ?? ""}
+                  onChange={(e) => setProjectSignature(sigProject.id, e.target.value)}
+                  rows={4}
+                  placeholder={
+                    signature.trim()
+                      ? `Leave blank to use your default signature:\n\n${signature}`
+                      : "e.g.\nJordan Lee\nA&R, Cedar Records\njordan@cedar.co"
+                  }
+                  className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+                <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs leading-relaxed text-body/70">
+                    Every email drafted for <span className="font-semibold text-ink">{sigProject.name}</span>{" "}
+                    signs off with this. Blank falls back to your default.
+                  </p>
+                  {sigProject.signature && sigProject.signature.trim() && (
+                    <button
+                      onClick={() => setProjectSignature(sigProject.id, "")}
+                      className="shrink-0 text-xs font-semibold text-body/60 transition hover:text-accent"
+                    >
+                      Reset to default
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         )}
       </section>
     </main>
@@ -11602,7 +11732,6 @@ function ProfileTab({
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
-  const [buildingSig, setBuildingSig] = useState(false);
   // Whether to show the job-applicant follow-ups (company size + competitive-
   // ness). Defaults to true when the user's use case looks job-shaped OR when
   // they've already set either field to a non-default value on a previous
@@ -11612,25 +11741,6 @@ function ProfileTab({
       (!!companySize && companySize !== "any") ||
       (!!competitiveness && competitiveness !== "any")
   );
-  // Build an email signature from the resume/bio text (explicit, overwrites the
-  // current one; the user can edit after).
-  async function buildSignatureFromResume() {
-    const t = bio.trim();
-    if (!t || buildingSig) return;
-    setBuildingSig(true);
-    try {
-      const res = await fetch("/api/parse-profile", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ text: t }),
-      });
-      const data = await res.json();
-      if (res.ok && data.signature) onSignature(data.signature);
-    } catch {}
-    finally {
-      setBuildingSig(false);
-    }
-  }
   // Individual vs company is chosen once at signup (accountType) — no in-profile
   // toggle. Company profiles fill from a website, individuals from a resume.
   const kind: "individual" | "company" = accountType === "company" ? "company" : "individual";
@@ -12132,37 +12242,6 @@ function ProfileTab({
             placeholder="Your resume text appears here after you upload it, or paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Paste it and Scout fills your name and use case in automatically. The more you give, the more personal your outreach becomes."
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
-        </div>
-
-        {/* -------- Email signature -------- */}
-        <div className="mt-5">
-          <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-            <Label className="mb-0">Email signature</Label>
-            <button
-              onClick={buildSignatureFromResume}
-              disabled={!bio.trim() || buildingSig}
-              title="Build a signature from your resume / bio (you can edit it after)"
-              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-40"
-            >
-              {buildingSig
-                ? "Building…"
-                : signature.trim()
-                ? "Rebuild from resume"
-                : "Build from my resume"}
-            </button>
-          </div>
-          <textarea
-            value={signature}
-            onChange={(e) => onSignature(e.target.value)}
-            rows={4}
-            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@acmestudio.com · (555) 010-0142"}
-            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-          />
-          <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-            Added to the end of every email Scout drafts for you. Build it from your
-            resume above, then edit freely. Leave blank to let Scout sign off with just
-            your name. Only used on emails, not DMs.
-          </p>
         </div>
 
         <hr className="my-7 border-warm-border" />
