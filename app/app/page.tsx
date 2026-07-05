@@ -3208,6 +3208,27 @@ function ScoutTool({
             </p>
           </div>
 
+            {/* -------- Import your existing outreach (dedup + learn) -------- */}
+            <section className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-ink">
+                  Already reaching out somewhere else?
+                </div>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                  Drop in a CSV of how you&apos;ve been tracking your contacts. Scout won&apos;t
+                  resurface them and starts learning what a fit looks like for you.
+                </p>
+              </div>
+              <button
+                onClick={() => setImportOpen(true)}
+                className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+              >
+                Import a CSV
+              </button>
+            </section>
 
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
@@ -3870,7 +3891,6 @@ function ScoutTool({
           onClearResume={() => saveResumeFile(null)}
           signature={signature}
           onSignature={saveSignature}
-          onImport={() => setImportOpen(true)}
         />
       )}
 
@@ -10390,7 +10410,6 @@ function ProfileTab({
   onClearResume,
   signature,
   onSignature,
-  onImport,
 }: {
   name: string;
   bio: string;
@@ -10450,7 +10469,6 @@ function ProfileTab({
   onClearResume: () => void;
   signature: string;
   onSignature: (v: string) => void;
-  onImport: () => void;
 }) {
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
@@ -10585,28 +10603,6 @@ function ProfileTab({
         for you. Everything stays editable, and it shapes who we find and how your
         messages sound.
       </p>
-
-      {/* -------- Import your existing outreach (dedup + learn) -------- */}
-      <section className="mt-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
-        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-sm font-extrabold text-ink">
-            Already reaching out somewhere else?
-          </div>
-          <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-            Drop in a CSV of how you've been tracking your contacts. Scout won't
-            resurface them and starts learning what a fit looks like for you.
-          </p>
-        </div>
-        <button
-          onClick={onImport}
-          className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-        >
-          Import a CSV
-        </button>
-      </section>
 
       {mailboxAvailable && (
         <>
