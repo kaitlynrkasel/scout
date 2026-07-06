@@ -47,10 +47,25 @@ function templateBlock(
   );
   const use = (matched.length ? matched : templates).slice(0, 4);
   if (!use.length) return "";
+  const single = use.length === 1;
+  const header = single
+    ? "\n\nTEMPLATE the sender wrote for this outreach. FOLLOW IT CLOSELY: keep its structure, " +
+      "sections, opening line, and sign-off; keep its voice, warmth, and rough length; keep the " +
+      "framing and any signature phrases about what the sender does. This is a skeleton to reuse, " +
+      "NOT loose inspiration, do not invent a different structure. Only swap in details specific " +
+      "to THIS recipient. FILL EVERY PLACEHOLDER with concrete, on-point content: bracketed slots " +
+      "like [company name] / [website] use the real values; example slots (a/b/c, bullet lists, " +
+      "'here are some ways...') MUST be replaced with 2-3 SPECIFIC, tailored examples of how THIS " +
+      "recipient could use what the sender offers, drawn from the recipient note and the sender's " +
+      "offering. These use-case examples are allowed to be concrete suggestions (clearly framed as " +
+      "ideas), even though factual claims ABOUT the recipient must stay grounded in the note. Never " +
+      "leave a literal 'a)', 'b)', '[insert ...]', or an empty list in the final message:\n"
+    : "\n\nTEMPLATES the sender set up for their outreach. Match the FORMAT and VOICE of the " +
+      "one that fits this channel closely, its tone, warmth, structure, and rough length, and fill " +
+      "every placeholder / example slot with specifics for THIS recipient (never leave 'a) b) c)' " +
+      "or '[insert ...]'). Adapt every detail to THIS recipient:\n";
   return (
-    "\n\nTEMPLATES the sender set up for their outreach. Match the FORMAT and VOICE of the " +
-    "one that fits this channel closely, its tone, warmth, structure, and rough length. " +
-    "Do NOT copy the content, adapt every detail to THIS recipient:\n" +
+    header +
     use
       .map((s, i) => `${i + 1}. [${s.channel}] ${s.text.replace(/\s+/g, " ").trim()}`)
       .join("\n\n")
@@ -188,8 +203,11 @@ export async function draftFor(
     `Voice: warm, genuine, human, first person, never salesy. ` +
     `NEVER use em-dashes or en-dashes; use commas and periods like a normal typed email. ` +
     `Write SHORT paragraphs (1 to 3 sentences) separated by a blank line ("\\n\\n"). ` +
-    `Any personalized reference MUST be specific and TRUE, taken only from the provided note. ` +
-    `If no specific note is given, do not invent one. Never fabricate facts about the sender beyond what is provided. ` +
+    `Any factual CLAIM about the recipient MUST be specific and TRUE, taken only from the provided note; ` +
+    `if no specific note is given, do not invent facts about them. Never fabricate facts about the sender ` +
+    `beyond what is provided. EXCEPTION: when a template asks for examples of how the recipient could use ` +
+    `what the sender offers, you MAY write concrete, plausible use-case ideas tailored to the recipient's ` +
+    `business, framed clearly as suggestions ("you could...", "for example...") rather than claims of fact. ` +
     `Return ONLY JSON.`;
 
   const recipient =
