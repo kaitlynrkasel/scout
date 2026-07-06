@@ -21,7 +21,7 @@ export const TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE =
   `INDUSTRY ALIGNMENT: judge against the user's field (from ABOUT THE USER + USE CASE); if clearly outside their industry (e.g. sports for a music search, medicine for a marketing search), set is_relevant false and fit_score below 0.3. Never surface cross-industry hits unless the goal explicitly asks for that other industry.`;
 
 export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
-  `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly a different region / far city, penalize fit_score (below 0.4). Remote / global / same region = no penalty. Empty user location = no penalty.`;
+  `LOCATION ALIGNMENT: if the user's ABOUT includes a location and the result is clearly in a different region or non-proximate city, apply a strong fit_score penalty that brings the score to 0.30 or below — not merely below 0.4 — to ensure hard separation from viable matches; if the location mismatch is ambiguous but plausible (e.g., a neighboring metro or overlapping region), cap fit_score at 0.45; only treat a result as location-compatible if it is explicitly remote/global, falls within the same named region, or shares the same metro area as the user's stated location. Empty user location = no penalty.`;
 
 // What the user has taught Scout by denying / keeping past finds. Fed into query
 // planning and extraction so the search learns their taste over time.
