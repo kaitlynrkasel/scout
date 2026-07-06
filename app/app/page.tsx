@@ -2924,14 +2924,16 @@ function ScoutTool({
   }
 
   // Draft a message for a single find and store it on that find.
-  async function draftFind(find: Find) {
+  async function draftFind(find: Find, opts?: { force?: boolean }) {
     setError("");
     setFindDraftingId(find.id);
     try {
-      // Confirming a draft = learn more about this find first: scan its page once
-      // so the message uses real, current company detail (contacts + specifics).
+      // Confirming a draft = learn more about this find first: scan its page so
+      // the message uses real, current company detail (contacts + specifics).
+      // Regenerate (force) always re-scans for the newest info; first draft scans
+      // once, later drafts reuse it unless forced.
       let f = find;
-      if (!f.scanned && f.opp.url) {
+      if ((opts?.force || !f.scanned) && f.opp.url) {
         f = await scanFindData(f);
         if (f !== find) saveFinds(finds.map((x) => (x.id === find.id ? f : x)));
       }
@@ -6021,6 +6023,7 @@ function FindDetailModal({
   total,
   onPrev,
   onNext,
+  onRegenerate,
 }: {
   find: Find;
   onClose: () => void;
@@ -6028,6 +6031,7 @@ function FindDetailModal({
   total: number;
   onPrev: () => void;
   onNext: () => void;
+  onRegenerate: () => void;
   wantedChannels: string[];
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -6267,6 +6271,16 @@ function FindDetailModal({
               </span>
             </div>
           </div>
+          {find.draft && (
+            <button
+              onClick={onRegenerate}
+              disabled={drafting}
+              title="Re-scan the site for the latest info and write a fresh draft"
+              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+            >
+              {drafting ? "Regenerating…" : "Regenerate draft"}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -6662,7 +6676,7 @@ function FindsTab({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   draftingId: string;
   gmailBusyId: string;
-  onDraft: (f: Find) => void;
+  onDraft: (f: Find, opts?: { force?: boolean }) => void;
   onDeny: (f: Find, reason?: string) => void;
   onSetReason: (f: Find, reason: string) => void;
   onReopen: (f: Find) => void;
@@ -6906,6 +6920,7 @@ function FindsTab({
           drafting={draftingId === detailFind.id}
           gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
           onDraft={() => onDraft(detailFind)}
+          onRegenerate={() => onDraft(detailFind, { force: true })}
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
           onReopen={() => onReopen(detailFind)}
