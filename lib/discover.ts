@@ -1051,9 +1051,21 @@ export async function discover(
   // route can stream partial results), and signal lets the caller stop the
   // search early — the user cancels mid-run but keeps what was already scouted,
   // and no further Tavily/Claude calls are spent.
-  opts?: { onOpp?: (o: Opportunity) => void; signal?: AbortSignal; plan?: GoalPlan | null }
+  opts?: {
+    onOpp?: (o: Opportunity) => void;
+    onProgress?: (msg: string) => void;
+    signal?: AbortSignal;
+    plan?: GoalPlan | null;
+  }
 ): Promise<DiscoverResult> {
   const aborted = () => !!opts?.signal?.aborted;
+  const emit = (m: string) => {
+    try {
+      opts?.onProgress?.(m);
+    } catch {
+      /* progress is best-effort, never break the search */
+    }
+  };
   // Step 1: decompose the goal into an evidence-first blueprint (best-effort;
   // falls back to plain query planning if it fails). Reuse a plan the caller
   // already computed (the pre-search "understanding" step) so we don't pay for
@@ -1071,6 +1083,9 @@ export async function discover(
     false,
     plan
   );
+  if (plan?.target_type)
+    emit(`Read the goal: looking for ${plan.target_type.toLowerCase()}${plan.goal ? ` — ${plan.goal}` : ""}`);
+  emit(`Planned ${queries.length} search${queries.length === 1 ? "" : "es"} across the web`);
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user already denied by name, never resurface a rejected find.
   const deniedNames = new Set(
@@ -1083,6 +1098,10 @@ export async function discover(
   const logSkip = (title: string, url: string, reason: string) => {
     // Cap so a huge candidate pool doesn't balloon the response.
     if (skipped.length < 60) skipped.push({ title: title || "", url: url || "", reason });
+    // Stream the interesting rejections (fit calls) live, not the plumbing
+    // (duplicates, dead links, obvious advice pages).
+    if (!/duplicate|no usable URL|already on |advice \/ how-to|podcast episode|listicle/i.test(reason))
+      emit(`Skipped ${title || "a result"}: ${reason}`);
   };
 
   // Creator/social searches lean entirely on roundup articles, so pull more
@@ -1111,7 +1130,9 @@ export async function discover(
     for (const q of passQueries) {
       if (aborted()) break; // user cancelled — stop spending searches
       const bucket: TavilyResult[] = [];
+      emit(`Searching: "${q}"`);
       const results = await tavilySearch(q, perQuery, { depth });
+      emit(`Found ${results.length} result${results.length === 1 ? "" : "s"} for "${q}"`);
       for (const r of results) {
         if (looksLikeAdvice(r.title, useCase, goal)) {
           logSkip(r.title, r.url, "title looks like advice / how-to");
@@ -1371,7 +1392,11 @@ export async function discover(
           },
         ],
       });
-      opts?.onOpp?.(opps[opps.length - 1]); // stream this find to the caller live
+      const added = opps[opps.length - 1];
+      emit(
+        `Kept ${added.name}${added.fitScore != null ? ` — ${Math.round(added.fitScore * 100)}% fit` : ""}`
+      );
+      opts?.onOpp?.(added); // stream this find to the caller live
     }
   }
   }

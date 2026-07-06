@@ -179,6 +179,13 @@ export async function POST(req: NextRequest) {
                   /* controller may be closed if the client left */
                 }
               },
+              onProgress: (message) => {
+                try {
+                  send(controller, { type: "progress", message });
+                } catch {
+                  /* controller may be closed if the client left */
+                }
+              },
             }
           );
           if (req.signal.aborted) return; // client cancelled; don't meter

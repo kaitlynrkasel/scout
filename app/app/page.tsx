@@ -957,6 +957,7 @@ function ScoutTool({
   }, [redraftChat, revisingBatch]);
   const [stats, setStats] = useState("");
   const [searchNotice, setSearchNotice] = useState(""); // job-fallback disclosure
+  const [searchLog, setSearchLog] = useState<string[]>([]); // live "what Scout is doing"
   const [expanded, setExpanded] = useState(false);
 
   // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
@@ -1811,6 +1812,7 @@ function ScoutTool({
     setRedraftChat([]);
     setStats("");
     setSearchNotice("");
+    setSearchLog([]);
     setError("");
     setApiReason(null);
     setSkipped([]);
@@ -3214,6 +3216,8 @@ function ScoutTool({
               live.push(msg.opp);
               setOpps([...live]);
               setLiveCount(live.length);
+            } else if (msg.type === "progress" && typeof msg.message === "string") {
+              setSearchLog((prev) => [...prev, msg.message].slice(-50));
             } else if (msg.type === "done") {
               done = msg.result;
             } else if (msg.type === "error") {
@@ -4261,6 +4265,20 @@ function ScoutTool({
                 <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-surface px-4 py-3.5 shadow-card">
                   <Tail side="left" />
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} />
+                  {searchLog.length > 0 && (
+                    <div className="mt-3 max-h-40 overflow-y-auto border-t border-warm-border pt-2.5">
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-body/40">
+                        What Scout is doing
+                      </div>
+                      <ul className="space-y-1 font-mono text-[11px] leading-relaxed text-body/70">
+                        {searchLog.slice(-12).map((m, i) => (
+                          <li key={i} className="truncate" title={m}>
+                            {m}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
