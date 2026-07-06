@@ -841,11 +841,13 @@ async function extract(
       `fit even in an unrelated industry. REQUIRED CHANNELS: if the GOAL says it needs specific contact channels (e.g. "a phone ` +
       `number", "an email", "a website"), treat those as hard preferences, capture each one that appears (contact_phone, ` +
       `contact_email, url for the website) and give a clearly higher fit_score to results that expose ALL the requested ` +
-      `channels, a lower one to results missing some. WHY_IT_FITS: a specific true detail about the TARGET's OWN business ` +
-      `(size, recent growth, what they do, why they'd want this) that makes them a good prospect for what the user offers. ` +
-      `FORBIDDEN: never phrase why_it_fits in terms of the SENDER's background, employer, career, or industry, do not ` +
+      `channels, a lower one to results missing some. WHY_IT_FITS: explain why the SENDER's OFFERING (from ABOUT) is a fit for ` +
+      `THIS company and give 1-2 CONCRETE use cases, i.e. specific ways this particular company could use what the sender offers, ` +
+      `grounded in a true detail about the target's own business (what they do, size/stage, recent growth). Format like: ` +
+      `"[true detail about the company], so [the product] could [specific use case for them]". Keep it concrete and tailored, ` +
+      `not generic. FORBIDDEN: never phrase why_it_fits in terms of the SENDER's background, employer, career, or industry, do not ` +
       `write things like "a good fit given the sender's X experience" or reference the sender's field/employer at all; if ` +
-      `the target's own details don't stand on their own, describe the target's business instead, or leave why_it_fits empty. ` +
+      `the target's own details don't stand on their own, describe the target's business and a plausible use case instead, or leave why_it_fits empty. ` +
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
       `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
