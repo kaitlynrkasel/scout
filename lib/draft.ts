@@ -99,14 +99,17 @@ function editBlock(editPairs?: { before: string; after: string }[]): string {
   const p = (editPairs || []).filter((x) => x && x.after).slice(0, 4);
   if (!p.length) return "";
   return (
-    "\n\nMOST IMPORTANT, corrections the user made to earlier drafts. Learn ONLY the GENERALIZABLE STYLE from " +
-    "BEFORE (what the engine wrote) to AFTER (how the user rewrote it): tone, warmth, cuts, softening, length, " +
-    "sentence rhythm, openings/closings, formatting. Proactively make those same kinds of changes and match that " +
-    "voice here. CRITICAL: those earlier edits were written for a DIFFERENT recipient. Do NOT carry over anything " +
-    "recipient-specific from them, no company names, no facts about that other recipient, and NONE of the concrete " +
-    "examples or use-cases the user tailored to that recipient (e.g. specific ways THAT company could use the product). " +
-    "Regenerate any such specifics fresh for THIS recipient from the note above, or omit them. Copy the PATTERN and " +
-    "VOICE, never the recipient-specific content:\n" +
+    "\n\nMOST IMPORTANT, corrections the user made to earlier drafts. Match BOTH the user's VOICE and their exact " +
+    "FORMATTING from BEFORE (what the engine wrote) to AFTER (how the user rewrote it): tone, warmth, cuts, length, " +
+    "sentence rhythm, openings/closings, AND structure, paragraphing, line breaks, and especially LIST STYLE. If the " +
+    "user reformatted examples as a numbered list like '1) ... 2) ... 3) ...' (with their punctuation and any " +
+    "parentheticals), reproduce THAT EXACT list format here, do NOT turn it back into prose or bullets. If they added " +
+    "a recurring line (e.g. a closing line after the list, a personal touch), keep that too. CRITICAL distinction: keep " +
+    "the FORMAT and STRUCTURE exactly, but the earlier edit was for a DIFFERENT recipient, so do NOT reuse its " +
+    "recipient-specific CONTENT, no company names, no facts about that other recipient, and none of the specific example " +
+    "text tailored to them. Regenerate the CONTENT that fills each list item / example fresh for THIS recipient from the " +
+    "note above (or omit if nothing fits), while keeping the user's numbering and formatting identical. Copy the FORMAT " +
+    "and VOICE, swap only the recipient-specific content:\n" +
     p.map((x, i) => `${i + 1}. BEFORE: ${x.before.slice(0, 500)}\n   AFTER: ${x.after.slice(0, 500)}`).join("\n\n")
   );
 }
