@@ -308,6 +308,7 @@ interface Profile {
   age?: number;
   eduStatus?: EducationStatus; // high school / college / graduated
   college?: string;
+  major?: string; // major / field of study
   location?: string;
   companySize?: CompanySize;
   competitiveness?: Competitiveness;
@@ -681,6 +682,7 @@ function AuthedShell() {
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
           if (typeof parsed.eduStatus === "string") localExtras.eduStatus = parsed.eduStatus;
           if (typeof parsed.college === "string") localExtras.college = parsed.college;
+          if (typeof parsed.major === "string") localExtras.major = parsed.major;
           if (typeof parsed.location === "string") localExtras.location = parsed.location;
           if (typeof parsed.companySize === "string") localExtras.companySize = parsed.companySize;
           if (typeof parsed.competitiveness === "string")
@@ -714,6 +716,7 @@ function AuthedShell() {
       if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
         mergedExtras.eduStatus = raw.eduStatus as EducationStatus;
       if (typeof raw.college === "string") mergedExtras.college = raw.college;
+      if (typeof raw.major === "string") mergedExtras.major = raw.major;
       if (typeof raw.location === "string") mergedExtras.location = raw.location;
       if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
         mergedExtras.companySize = raw.companySize as CompanySize;
@@ -1177,13 +1180,14 @@ function ScoutTool({
         age: profile.age,
         eduStatus: profile.eduStatus,
         college: profile.college,
+        major: profile.major,
         location: profile.location,
         companySize: profile.companySize,
         competitiveness: profile.competitiveness,
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -2190,6 +2194,7 @@ function ScoutTool({
     profile.age ? `Age: ${profile.age}` : "",
     profile.eduStatus ? `Education stage: ${EDU_STATUS_LABEL[profile.eduStatus]}` : "",
     profile.college ? `Education: ${profile.college}` : "",
+    profile.major ? `Major / field of study: ${profile.major}` : "",
     profile.location ? `Location: ${profile.location}` : "",
     profile.companySize && profile.companySize !== "any"
       ? `Prefers ${profile.companySize === "small" ? "small companies / startups" : "large, established companies"}`
@@ -4535,6 +4540,7 @@ function ScoutTool({
           age={profile.age}
           eduStatus={profile.eduStatus || ""}
           college={profile.college || ""}
+          major={profile.major || ""}
           location={profile.location || ""}
           companySize={profile.companySize || "any"}
           competitiveness={profile.competitiveness || "any"}
@@ -4544,6 +4550,7 @@ function ScoutTool({
           onAge={(v) => patchProfile({ age: v })}
           onEduStatus={(v) => patchProfile({ eduStatus: v })}
           onCollege={(v) => patchProfile({ college: v })}
+          onMajor={(v) => patchProfile({ major: v })}
           onLocation={(v) => patchProfile({ location: v })}
           onCompanySize={(v) => patchProfile({ companySize: v })}
           onCompetitiveness={(v) => patchProfile({ competitiveness: v })}
@@ -12319,6 +12326,7 @@ function ProfileTab({
   age,
   eduStatus,
   college,
+  major,
   location,
   companySize,
   competitiveness,
@@ -12326,6 +12334,7 @@ function ProfileTab({
   onBio,
   onLinkedin,
   onAge,
+  onMajor,
   onEduStatus,
   onCollege,
   onLocation,
@@ -12381,6 +12390,7 @@ function ProfileTab({
   age?: number;
   eduStatus: EducationStatus;
   college: string;
+  major: string;
   location: string;
   companySize: CompanySize;
   competitiveness: Competitiveness;
@@ -12390,6 +12400,7 @@ function ProfileTab({
   onAge: (v: number | undefined) => void;
   onEduStatus: (v: EducationStatus) => void;
   onCollege: (v: string) => void;
+  onMajor: (v: string) => void;
   onLocation: (v: string) => void;
   onCompanySize: (v: CompanySize) => void;
   onCompetitiveness: (v: Competitiveness) => void;
@@ -12821,6 +12832,16 @@ function ProfileTab({
                 placeholder="e.g. Los Angeles, CA"
               />
             </div>
+          </div>
+
+          <div className="mt-4">
+            <Label>Major / field of study</Label>
+            <input
+              value={major}
+              onChange={(e) => onMajor(e.target.value)}
+              placeholder="e.g. Marketing, Computer Science, Film Production"
+              className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 sm:max-w-md"
+            />
           </div>
 
           <div className="mt-5">

@@ -145,6 +145,7 @@ export interface AppState {
     age?: number;
     eduStatus?: string;
     college?: string;
+    major?: string;
     location?: string;
     companySize?: string;
     competitiveness?: string;
