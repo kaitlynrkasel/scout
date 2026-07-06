@@ -875,7 +875,6 @@ function ScoutTool({
     } | null
   >(null);
   const [gating, setGating] = useState(false); // the understanding pass is running
-  const [clarify, setClarify] = useState(""); // answers accumulated across sharpen rounds
   // Multiple-choice picks for the current round, keyed by question index. The
   // value is the chosen option, or "__other__" when the write-in is active.
   const [picks, setPicks] = useState<Record<number, string>>({});
@@ -3260,7 +3259,6 @@ function ScoutTool({
     }
     if (!goal.trim() || discovering || gating) return;
     setPlanGate(null);
-    setClarify("");
     setPicks({});
     setOtherText({});
     setGating(true);
@@ -3276,10 +3274,11 @@ function ScoutTool({
     }
   }
 
-  // Turn this round's multiple-choice picks into a short answer string, e.g.
-  // "Within 25 miles? This city only. Budget? Up to $2k". Skips unanswered
-  // questions and empty "Other" write-ins.
-  function composeRoundAnswers(): string {
+  // Compose EVERY answered question (across all sharpen rounds) into one string,
+  // e.g. "Within 25 miles? This city only. Budget? Up to $2k". The picks map
+  // persists and is keyed by the question's index in the accumulated list, so
+  // the user can revise any earlier answer and this recomputes from the full set.
+  function composeAllAnswers(): string {
     if (!planGate) return "";
     return planGate.questions
       .map((q, i) => {
@@ -3292,7 +3291,8 @@ function ScoutTool({
       .join(". ");
   }
 
-  // How many questions the user has actually answered this round (gates Sharpen).
+  // How many questions the user has answered so far (gates Sharpen). Counts an
+  // "Other" pick only once it has text.
   const answeredCount = planGate
     ? planGate.questions.filter((_, i) => {
         const pick = picks[i];
@@ -3301,25 +3301,29 @@ function ScoutTool({
       }).length
     : 0;
 
-  // Merge this round's answers onto everything answered in prior rounds, so the
-  // detail accumulates as the user keeps sharpening (each round shows new questions).
-  function mergedAnswers(): string {
-    return [clarify, composeRoundAnswers()].filter((s) => s.trim()).join(". ");
-  }
-
-  // "Sharpen": re-run the understanding pass with the user's answers folded in,
-  // so the % climbs as they add detail (the rewarding part). New questions come
-  // back for the next round, so reset this round's picks.
+  // "Sharpen": re-run the understanding pass with ALL answers folded in, so the
+  // % climbs as detail accumulates. Keep every question already shown (and its
+  // answer) and only APPEND genuinely new questions — never reset picks — so the
+  // user can always go back and change an earlier answer.
   async function sharpenPlan() {
     if (gating || answeredCount === 0) return;
-    const merged = mergedAnswers();
+    const answers = composeAllAnswers();
     setGating(true);
     try {
-      const u = await fetchUnderstanding(merged);
-      setClarify(merged);
-      setPicks({});
-      setOtherText({});
-      setPlanGate(u);
+      const u = await fetchUnderstanding(answers);
+      setPlanGate((prev) => {
+        const existing = prev ? prev.questions : [];
+        const seen = new Set(existing.map((q) => q.question.trim().toLowerCase()));
+        const added = u.questions.filter(
+          (q: { question: string; options: string[] }) =>
+            !seen.has(q.question.trim().toLowerCase())
+        );
+        return {
+          understanding: u.understanding,
+          questions: [...existing, ...added],
+          plan: u.plan,
+        };
+      });
     } finally {
       setGating(false);
     }
@@ -4083,7 +4087,7 @@ function ScoutTool({
                         {gating ? "Sharpening…" : "Sharpen understanding"}
                       </button>
                       <button
-                        onClick={() => runDiscover(planGate.plan, mergedAnswers())}
+                        onClick={() => runDiscover(planGate.plan, composeAllAnswers())}
                         disabled={discovering}
                         className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
