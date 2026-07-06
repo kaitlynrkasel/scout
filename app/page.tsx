@@ -234,7 +234,7 @@ const PRICING_TIERS = [
     name: "Free",
     price: "$0",
     cadence: "",
-    searches: "5 searches a month",
+    searches: "3 searches a month",
     blurb: "Try Scout and reach a few of the right people.",
     cta: "Start free",
     href: "/app",

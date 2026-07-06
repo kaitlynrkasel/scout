@@ -24,7 +24,7 @@ export const TIERS: Record<
 };
 
 // Free (non-subscriber) monthly search allowance.
-export const FREE_LIMIT = 5;
+export const FREE_LIMIT = 3;
 
 // --- Comp (free-forever) access codes -------------------------------------
 // A redeemed code grants unlimited searches without going through Stripe. Used

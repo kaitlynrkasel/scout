@@ -4908,7 +4908,7 @@ function ScoutTool({
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-body">
               {upgradePrompt.code === "free_exhausted"
-                ? "You get 5 free searches a month. Pick a plan to keep scouting, it resets on the 1st either way."
+                ? "You get 3 free searches a month. Pick a plan to keep scouting, it resets on the 1st either way."
                 : upgradePrompt.tier === "starter"
                 ? "Starter includes 30 searches a month. Upgrade to Pro for 60, you keep going right away, and Stripe only charges the difference."
                 : "Pro includes 60 searches a month. Your allowance refreshes at the start of your next billing cycle."}
