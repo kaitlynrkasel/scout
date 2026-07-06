@@ -2256,8 +2256,11 @@ function ScoutTool({
             : "",
         ]
       : [];
-  const nameBio = [profile.name, profile.bio];
-  const restBits = [
+  // The PERSONAL identity (you): name, bio, and your own details. Kept separate
+  // from the company identity so a project can use either, both, or neither.
+  const personalBits = [
+    profile.name,
+    profile.bio,
     profile.age ? `Age: ${profile.age}` : "",
     profile.eduStatus ? `Education stage: ${EDU_STATUS_LABEL[profile.eduStatus]}` : "",
     profile.college ? `Education: ${profile.college}` : "",
@@ -2269,21 +2272,24 @@ function ScoutTool({
     profile.competitiveness && profile.competitiveness !== "any"
       ? `Self-rated as a ${profile.competitiveness} applicant`
       : "",
-    activeProject && activeProject.context
-      ? "This outreach is on behalf of / for: " + activeProject.context
-      : "",
   ];
+  const isCompanyAcct = profile.accountType === "company";
+  const contextLine = (p?: Project | null) =>
+    p?.context ? "This outreach is on behalf of / for: " + p.context : "";
   const joinBits = (bits: string[]) => bits.filter(Boolean).join(". ").trim();
-  const aboutText = joinBits([...nameBio, ...companyBits, ...restBits]);
-  // Same, minus the company identity — used when a project opts out of the company.
-  const aboutTextNoCompany = joinBits([...nameBio, ...restBits]);
+  // Full identity for non-project-specific uses (parse, community, meeting prep).
+  const aboutText = joinBits([...personalBits, ...companyBits, contextLine(activeProject)]);
 
-  // The right "about" for a project's searches + drafts: project-only when it
-  // ignores the Profile, personal-only when it drops the company, else full.
+  // The right "about" for a project's searches + drafts. Personal and company are
+  // now INDEPENDENT: a project can use your personal profile, your company, both,
+  // or neither (just its own context). Defaults: personal on; company on for
+  // company accounts.
   function aboutForProject(p?: Project | null): string {
-    if (p?.usesProfile === false)
-      return p?.context ? "This outreach is on behalf of / for: " + p.context : "";
-    return p?.usesCompany === false ? aboutTextNoCompany : aboutText;
+    const parts: string[] = [];
+    if (p?.usesProfile !== false) parts.push(...personalBits);
+    if (isCompanyAcct && p?.usesCompany !== false) parts.push(...companyBits);
+    parts.push(contextLine(p));
+    return joinBits(parts);
   }
   function aboutForProjectId(projectId?: string): string {
     return aboutForProject(projects.find((pp) => pp.id === projectId) || activeProject);
@@ -3940,18 +3946,16 @@ function ScoutTool({
                       className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
                     />
                     <span className="text-xs leading-relaxed text-body/80">
-                      <span className="font-semibold text-ink">Use my Profile for this project</span>
+                      <span className="font-semibold text-ink">Use my personal profile for this project</span>
                       <br />
-                      On, searches match your industry and learn from your other projects. Turn
-                      it off when this project is disconnected from you (representing someone
-                      outside your field) so results don&apos;t bias toward you.
+                      On, searches match your own field and learn from your other projects. Turn
+                      it off when this project isn&apos;t about you personally.
                     </span>
                   </label>
 
-                  {/* Company accounts: drop the company identity for this project
-                      (e.g. hunting internships for yourself, not pitching the company). */}
-                  {profile.accountType === "company" &&
-                    activeProject?.usesProfile !== false && (
+                  {/* Company accounts: independent of the personal profile, so you
+                      can use company-only, personal-only, both, or neither. */}
+                  {profile.accountType === "company" && (
                       <label className="mt-3 flex cursor-pointer items-start gap-2.5">
                         <input
                           type="checkbox"
@@ -3962,9 +3966,9 @@ function ScoutTool({
                         <span className="text-xs leading-relaxed text-body/80">
                           <span className="font-semibold text-ink">Use my company for this project</span>
                           <br />
-                          On, outreach represents {profile.companyName || "your company"}. Turn it
-                          off to search and write as yourself only (e.g. looking for a job or
-                          internship for you, not pitching on the company&apos;s behalf).
+                          On, outreach represents {profile.companyName || "your company"}. Independent
+                          of the personal toggle, turn one off and the other on to pitch as the
+                          company only, or search as just yourself (e.g. your own internship hunt).
                         </span>
                       </label>
                     )}
@@ -14187,14 +14191,13 @@ function ProjectsCategoriesEditor({
                     className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
                   />
                   <span className="text-xs leading-relaxed text-body/80">
-                    <span className="font-semibold text-ink">Use my Profile for this project</span>
+                    <span className="font-semibold text-ink">Use my personal profile for this project</span>
                     <br />
-                    On, searches match your industry and learn from your other projects. Turn
-                    it off when this project represents someone outside your field so results
-                    don&apos;t bias toward you.
+                    On, searches match your own field and learn from your other projects. Turn
+                    it off when this project isn&apos;t about you personally.
                   </span>
                 </label>
-                {isCompany && p.usesProfile !== false && (
+                {isCompany && (
                   <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
                     <input
                       type="checkbox"
@@ -14205,9 +14208,8 @@ function ProjectsCategoriesEditor({
                     <span className="text-xs leading-relaxed text-body/80">
                       <span className="font-semibold text-ink">Use my company for this project</span>
                       <br />
-                      On, outreach represents your company. Turn it off to search and write as
-                      yourself only (e.g. a job or internship for you, not a pitch on the
-                      company&apos;s behalf).
+                      On, outreach represents your company. Independent of the personal toggle,
+                      so you can pitch as the company only, as just yourself, both, or neither.
                     </span>
                   </label>
                 )}
