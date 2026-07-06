@@ -46,7 +46,7 @@ export async function createWorkspace(
   uid: string,
   email: string,
   name: string,
-  details: { about?: string; website?: string; industry?: string } = {}
+  details: { about?: string; website?: string; industry?: string; stage?: string } = {}
 ) {
   const nm = String(name || "").trim();
   if (!nm) throw new TeamError("Give your company a name.");
@@ -56,16 +56,17 @@ export async function createWorkspace(
     about: (details.about || "").trim() || null,
     website: (details.website || "").trim() || null,
     industry: (details.industry || "").trim() || null,
+    stage: (details.stage || "").trim() || null,
   };
   let { data: ws, error } = await db()
     .from("workspaces")
     .insert(full)
-    .select("id, name, about, website, industry, created_by, created_at")
+    .select("id, name, about, website, industry, stage, created_by, created_at")
     .single();
-  // If the DB predates the about/website/industry columns (teams.sql not fully
-  // applied), don't hard-fail, create the company with just its name so the user
-  // isn't blocked. Those details save once the migration is run.
-  if (error && /about|website|industry|schema cache|column/i.test(error.message || "")) {
+  // If the DB predates the about/website/industry/stage columns (teams.sql not
+  // fully applied), don't hard-fail, create the company with just its name so the
+  // user isn't blocked. Those details save once the migration is run.
+  if (error && /about|website|industry|stage|schema cache|column/i.test(error.message || "")) {
     ({ data: ws, error } = await db()
       .from("workspaces")
       .insert({ name: nm, created_by: uid })
@@ -126,7 +127,7 @@ export async function listJoinableWorkspaces(uid: string, email: string) {
 export async function updateWorkspaceDetails(
   uid: string,
   workspaceId: string,
-  patch: { name?: string; about?: string; website?: string; industry?: string }
+  patch: { name?: string; about?: string; website?: string; industry?: string; stage?: string }
 ) {
   const role = await assertWorkspaceMember(uid, workspaceId);
   if (role !== "owner")
@@ -140,12 +141,13 @@ export async function updateWorkspaceDetails(
   if (typeof patch.about === "string") update.about = patch.about.trim() || null;
   if (typeof patch.website === "string") update.website = patch.website.trim() || null;
   if (typeof patch.industry === "string") update.industry = patch.industry.trim() || null;
+  if (typeof patch.stage === "string") update.stage = patch.stage.trim() || null;
   if (!Object.keys(update).length) throw new TeamError("Nothing to update.");
   const { data, error } = await db()
     .from("workspaces")
     .update(update)
     .eq("id", workspaceId)
-    .select("id, name, about, website, industry")
+    .select("id, name, about, website, industry, stage")
     .single();
   if (error) throw new TeamError(error.message, 500);
   return data;
@@ -203,7 +205,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
   if (wsIds.length) {
     const { data: wsRows } = await db()
       .from("workspaces")
-      .select("id, name, about, website, industry, created_by, created_at")
+      .select("id, name, about, website, industry, stage, created_by, created_at")
       .in("id", wsIds);
     const { data: memberRows } = await db()
       .from("workspace_members")

@@ -3582,6 +3582,7 @@ function ScoutTool({
     about?: string;
     website?: string;
     industry?: string;
+    stage?: string;
   }): Promise<{ id?: string; error?: string }> {
     if (!getToken) return { error: "Please sign in first." };
     const token = await getToken();
@@ -12588,6 +12589,7 @@ function CompanyDetailsEditor({
   const [about, setAbout] = useState("");
   const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
+  const [stage, setStage] = useState("");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -12612,6 +12614,7 @@ function CompanyDetailsEditor({
           setAbout(ws.about || "");
           setWebsite(ws.website || "");
           setIndustry(ws.industry || "");
+          setStage(ws.stage || "");
         }
       } catch {
         /* teams may not be set up; fall back to the profile name */
@@ -12645,7 +12648,7 @@ function CompanyDetailsEditor({
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ workspaceId, name, about, website, industry }),
+        body: JSON.stringify({ workspaceId, name, about, website, industry, stage }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -12706,6 +12709,24 @@ function CompanyDetailsEditor({
               <Label>Industry</Label>
               <input value={industry} onChange={(e) => setIndustry(e.target.value)} disabled={!isOwner} placeholder="e.g. Music" className={`${inputCls} disabled:opacity-70`} />
             </div>
+          </div>
+          <div className="mt-4">
+            <Label>Company stage</Label>
+            <select
+              value={stage}
+              onChange={(e) => setStage(e.target.value)}
+              disabled={!isOwner}
+              className={`scout-select ${inputCls} disabled:opacity-70`}
+            >
+              <option value="">Select a stage…</option>
+              {["Pre-seed", "Startup", "Growth", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+                (s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                )
+              )}
+            </select>
           </div>
           <div className="mt-4">
             <Label>What does the company do?</Label>

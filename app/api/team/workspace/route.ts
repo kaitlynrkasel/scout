@@ -14,12 +14,13 @@ export async function PATCH(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    const { workspaceId, name, about, website, industry } = await req.json();
+    const { workspaceId, name, about, website, industry, stage } = await req.json();
     const ws = await updateWorkspaceDetails(u.id, String(workspaceId || ""), {
       name,
       about,
       website,
       industry,
+      stage,
     });
     return NextResponse.json({ workspace: ws });
   } catch (e: any) {
@@ -44,11 +45,12 @@ export async function POST(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    const { name, about, website, industry } = await req.json();
+    const { name, about, website, industry, stage } = await req.json();
     const ws = await createWorkspace(u.id, u.email, String(name || ""), {
       about: about ? String(about) : "",
       website: website ? String(website) : "",
       industry: industry ? String(industry) : "",
+      stage: stage ? String(stage) : "",
     });
     return NextResponse.json({ workspace: ws });
   } catch (e: any) {

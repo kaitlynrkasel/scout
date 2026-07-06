@@ -30,6 +30,7 @@ create table if not exists public.workspaces (
 alter table public.workspaces add column if not exists about text;
 alter table public.workspaces add column if not exists website text;
 alter table public.workspaces add column if not exists industry text;
+alter table public.workspaces add column if not exists stage text;
 
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,

@@ -40,6 +40,7 @@ export default function AccountOnboarding({
     about?: string;
     website?: string;
     industry?: string;
+    stage?: string;
   }) => Promise<{ id?: string; error?: string }>;
   joinCompany: (workspaceId: string) => Promise<{ name?: string; error?: string }>;
 }) {
@@ -56,6 +57,7 @@ export default function AccountOnboarding({
   const [companyAbout, setCompanyAbout] = useState("");
   const [companyWebsite, setCompanyWebsite] = useState("");
   const [companyIndustry, setCompanyIndustry] = useState("");
+  const [companyStage, setCompanyStage] = useState("");
   // Reading the company website to auto-fill the questions (optional — plenty of
   // companies have no site, so this is a shortcut, never a requirement).
   const [scanning, setScanning] = useState(false);
@@ -125,6 +127,7 @@ export default function AccountOnboarding({
       about: companyAbout.trim(),
       website: companyWebsite.trim(),
       industry: companyIndustry.trim(),
+      stage: companyStage.trim(),
     });
     setBusy(false);
     if (res.error || !res.id) {
@@ -348,6 +351,23 @@ export default function AccountOnboarding({
                   placeholder="e.g. Music"
                   className={inputCls}
                 />
+              </div>
+              <div>
+                <label className={labelCls}>Company stage</label>
+                <select
+                  value={companyStage}
+                  onChange={(e) => setCompanyStage(e.target.value)}
+                  className={`scout-select ${inputCls}`}
+                >
+                  <option value="">Select a stage…</option>
+                  {["Pre-seed", "Startup", "Growth", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+                    (s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    )
+                  )}
+                </select>
               </div>
 
               <div className="border-t border-warm-border pt-4">
