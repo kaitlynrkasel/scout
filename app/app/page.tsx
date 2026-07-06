@@ -277,12 +277,41 @@ const ZERO_ACTIVITY: Activity = { searches: 0, found: 0, drafts: 0, copies: 0 };
 type Competitiveness = "any" | "beginner" | "intermediate" | "competitive";
 type CompanySize = "any" | "small" | "big";
 // "" = not specified. Drives how outreach frames the sender's stage.
-type EducationStatus = "" | "highschool" | "college" | "graduated";
+type EducationStatus =
+  | ""
+  | "highschool"
+  | "college"
+  | "graduated"
+  | "middleschool"
+  | "gradschool"
+  | "phd"
+  | "bootcamp"
+  | "vocational"
+  | "selftaught"
+  | "working";
 const EDU_STATUS_LABEL: Record<Exclude<EducationStatus, "">, string> = {
   highschool: "In high school",
   college: "In college",
   graduated: "Graduated",
+  middleschool: "In middle school",
+  gradschool: "In grad school",
+  phd: "PhD / doctoral",
+  bootcamp: "Bootcamp / certificate",
+  vocational: "Trade / vocational school",
+  selftaught: "Self-taught",
+  working: "Working professional",
 };
+// The four shown as quick toggles; the rest live under the "Other" dropdown.
+const EDU_MAIN: EducationStatus[] = ["", "highschool", "college", "graduated"];
+const EDU_OTHER: Exclude<EducationStatus, "">[] = [
+  "middleschool",
+  "gradschool",
+  "phd",
+  "bootcamp",
+  "vocational",
+  "selftaught",
+  "working",
+];
 
 // Chosen once at first sign-in (blocking) and never toggled afterward, it
 // decides which onboarding + profile shape the user gets. "" = not chosen yet,
@@ -701,7 +730,12 @@ function AuthedShell() {
         "intermediate",
         "competitive",
       ]);
-      const allowedEdu = new Set<EducationStatus>(["highschool", "college", "graduated"]);
+      const allowedEdu = new Set<EducationStatus>([
+        "highschool",
+        "college",
+        "graduated",
+        ...EDU_OTHER,
+      ]);
       const allowedAcct = new Set<AccountType>(["individual", "company"]);
       const mergedExtras: Partial<Profile> = {};
       if (raw.accountType && allowedAcct.has(raw.accountType as AccountType))
@@ -2183,7 +2217,6 @@ function ScoutTool({
   const aboutText = [
     profile.name,
     profile.bio,
-    profile.linkedin ? "LinkedIn: " + profile.linkedin : "",
     profile.accountType === "company" && profile.companyName
       ? `Reaching out on behalf of ${profile.companyName}` +
         (profile.companyRole ? ` as ${profile.companyRole}` : "")
@@ -3697,6 +3730,7 @@ function ScoutTool({
         templatesCount={myTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
+        isCompany={profile.accountType === "company"}
         billingTier={billing?.tier}
         openCommand={() => setCmdOpen(true)}
         projects={projects}
@@ -4485,7 +4519,7 @@ function ScoutTool({
         />
       )}
 
-      {tab === "team" && (
+      {tab === "team" && profile.accountType === "company" && (
         <TeamTab
           getToken={getToken}
           accountEmail={accountEmail || ""}
@@ -5022,6 +5056,7 @@ function SideNav({
   templatesCount,
   profileHasBio,
   hasAccount,
+  isCompany,
   billingTier,
   openCommand,
   projects,
@@ -5036,6 +5071,7 @@ function SideNav({
   templatesCount: number;
   profileHasBio: boolean;
   hasAccount: boolean;
+  isCompany: boolean;
   billingTier?: "free" | "starter" | "pro";
   openCommand: () => void;
   projects: Project[];
@@ -5096,7 +5132,7 @@ function SideNav({
         </>
       ),
     },
-    ...(hasAccount
+    ...(hasAccount && isCompany
       ? [
           {
             key: "team",
@@ -12451,6 +12487,7 @@ function ProfileTab({
   const [parsing, setParsing] = useState(false);
   const [autofilled, setAutofilled] = useState(false);
   const [note, setNote] = useState("");
+  const [eduOtherOpen, setEduOtherOpen] = useState(false); // education "Other" dropdown
   // Whether to show the job-applicant follow-ups (company size + competitive-
   // ness). Defaults to true when the user's use case looks job-shaped OR when
   // they've already set either field to a non-default value on a previous
@@ -12755,8 +12792,8 @@ function ProfileTab({
           will figure out who to look for. Manage your categories in the editor below.
         </p>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2">
-          <div>
+        <div className="mt-6">
+          <div className="sm:max-w-md">
             <Label>{kind === "company" ? "Your company name" : "Your name"}</Label>
             <input
               value={name}
@@ -12764,20 +12801,6 @@ function ProfileTab({
               placeholder={kind === "company" ? "e.g. Acme Studio" : "e.g. Alex Rivera"}
               className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
-          </div>
-          <div>
-            <Label>Your LinkedIn (optional)</Label>
-            <input
-              value={linkedin}
-              onChange={(e) => onLinkedin(e.target.value)}
-              placeholder="linkedin.com/in/yourname"
-              className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
-            <p className="mt-1.5 text-xs leading-relaxed text-body/60">
-              Saved to your Profile and used to personalize outreach. To fill your
-              profile <span className="font-semibold">from</span> LinkedIn, upload your
-              LinkedIn PDF above or paste your About section below.
-            </p>
           </div>
         </div>
 
@@ -12845,7 +12868,7 @@ function ProfileTab({
           </div>
 
           <div className="mt-5">
-              <Label>Where are you in school?</Label>
+              <Label>Education status</Label>
               <div className="inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
                 {(
                   [
@@ -12857,7 +12880,10 @@ function ProfileTab({
                 ).map(([val, label]) => (
                   <button
                     key={val || "unset"}
-                    onClick={() => onEduStatus(val)}
+                    onClick={() => {
+                      onEduStatus(val);
+                      setEduOtherOpen(false);
+                    }}
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
                       eduStatus === val
                         ? "bg-surface text-ink shadow-card"
@@ -12867,7 +12893,31 @@ function ProfileTab({
                     {label}
                   </button>
                 ))}
+                <button
+                  onClick={() => setEduOtherOpen(true)}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                    (EDU_OTHER as string[]).includes(eduStatus)
+                      ? "bg-surface text-ink shadow-card"
+                      : "text-body/70 hover:text-ink"
+                  }`}
+                >
+                  Other…
+                </button>
               </div>
+              {(eduOtherOpen || (EDU_OTHER as string[]).includes(eduStatus)) && (
+                <select
+                  value={(EDU_OTHER as string[]).includes(eduStatus) ? eduStatus : ""}
+                  onChange={(e) => onEduStatus(e.target.value as EducationStatus)}
+                  className="scout-select mt-2 block w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 sm:max-w-xs"
+                >
+                  <option value="">Choose one…</option>
+                  {EDU_OTHER.map((val) => (
+                    <option key={val} value={val}>
+                      {EDU_STATUS_LABEL[val]}
+                    </option>
+                  ))}
+                </select>
+              )}
           </div>
 
           <div className="mt-5">
