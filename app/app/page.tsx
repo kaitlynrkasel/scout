@@ -5404,6 +5404,16 @@ function FindsList({
                     {Math.round(o.fitScore * 100)}% fit
                   </span>
                 )}
+                {o.targetType === "listing" && (
+                  <span className="rounded-full bg-sage px-2 py-0.5 text-[10px] font-bold text-white">
+                    Apply
+                  </span>
+                )}
+                {o.targetType === "company" && (
+                  <span className="rounded-full border border-warm-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-body/80">
+                    Cold email
+                  </span>
+                )}
                 <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
                   {o.channel}
                 </span>

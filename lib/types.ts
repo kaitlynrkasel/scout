@@ -45,6 +45,11 @@ export interface Opportunity {
   location: string;
   timezone?: string; // IANA tz inferred from location (e.g. America/Chicago), for send timing
   fitScore: number | null; // 0..1
+  // What kind of result this is, so the UI can show "Apply" on a real posting vs
+  // "cold email" on a company/person. "listing" = a specific open job/internship
+  // you can apply to (url is the application link); "company" = an employer to
+  // cold-email (often with a contact person attached); "person" = a named contact.
+  targetType?: "listing" | "company" | "person";
   whyItFits: string; // recent/specific note used to personalize
   sourceTitle: string;
   sourceSnippet: string;

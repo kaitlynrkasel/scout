@@ -395,8 +395,8 @@ async function planQueries(
   const g = goal.trim();
   if (!about.trim() && !plan) return buildQueries(goal, useCase);
 
-  const jobs = isJobUseCase(useCase);
-  const networking = isNetworkingUseCase(useCase);
+  const jobs = isJobSearch(useCase, goal);
+  const networking = !jobs && isNetworkingUseCase(useCase);
   const influencer = isSocialCreatorSearch(useCase, goal);
   const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
   // The industry anchor below stops queries from clustering in the user's own
@@ -436,9 +436,10 @@ async function planQueries(
       "for SaaS startups) to cast a wide net. NEVER use 'how to', 'tips', 'guide', or 'advice'.";
   } else if (jobs) {
     guidance =
-      "Find places the user could work IN THEIR INDUSTRY, and do NOT limit yourself to posted openings. Split the query " +
-      "set roughly in half: (1) REAL open job/internship listings, and (2) GOOD-FIT COMPANIES that likely hire people like " +
-      "the user even if no listing is public, so they can send a proactive 'please consider me' email. For (1) pair the " +
+      "Find things the user can APPLY TO in their industry. Weight the query set about TWO-THIRDS toward (1) and one-third " +
+      "toward (2): (1) REAL open job/internship listings the user can apply to right now, and (2) GOOD-FIT COMPANIES that " +
+      "likely hire people like the user even if no listing is public, so they can send a proactive 'please consider me' " +
+      "email. Openings are the priority — most queries should hunt actual postings. For (1) pair the " +
       "role/field with the user's sub-field and an apply signal (e.g. 'brand marketing internship summer 2026 apply', " +
       "'growth marketing intern DTC careers'). For (2) surface actual COMPANIES and their contact/careers/about pages " +
       "(e.g. 'small brand marketing agencies New York', 'boutique DTC studios careers email', 'independent {industry} firms " +
@@ -644,6 +645,23 @@ function isJobUseCase(useCase: string): boolean {
   );
 }
 
+// The GOAL text can declare a job/internship hunt even when the use-case label
+// doesn't — e.g. a "Networking" project where the user typed "find internships"
+// into the goal box. Without this, that search took the networking path and
+// returned only people, never real openings or employers to apply to.
+function goalWantsJobs(goal: string): boolean {
+  return /\b(internships?|jobs?|open roles?|open positions?|openings?|apprenticeships?|co-?ops?|new ?grad|entry[- ]?level|now hiring|places? to (work|apply)|companies? (to|i can) (work for|apply to))\b/i.test(
+    goal || ""
+  );
+}
+
+// A job/internship hunt if EITHER the use-case vertical OR the goal text says so.
+// This is the switch that turns on the whole job pipeline: half-listings queries,
+// employer + posting results, collapse-by-employer, and recruiter-contact attach.
+function isJobSearch(useCase: string, goal: string): boolean {
+  return isJobUseCase(useCase) || goalWantsJobs(goal);
+}
+
 // Generic inbox prefixes, not a specific person, so we still try to find one.
 const GENERIC_EMAIL =
   /^(careers?|jobs?|hr|recruit(ing|ment)?|talent|info|hello|contact|apply|applications?|resumes?|staffing|people|hiring|admin|support|team|noreply|no-reply)@/i;
@@ -731,7 +749,7 @@ async function extract(
   // Job/internship hunts accept COMPANIES as targets (for a proactive "please
   // consider me" email), not just postings with a named person, so they get
   // their own fit rules below rather than the person-centric networking ones.
-  const jobs = !prospecting && isJobUseCase(useCase);
+  const jobs = !prospecting && isJobSearch(useCase, goal);
   // The template's targetNoun (e.g. "outlet" for music PR) primes the extractor
   // toward that world. In prospecting mode the target is whatever the GOAL says,
   // so use a neutral noun instead of the user's-field noun.
@@ -770,10 +788,11 @@ async function extract(
 
   // Fit / alignment section, this is the part that differs by mode.
   const jobsRules =
-    `JOB / INTERNSHIP SEARCH, BOTH openings AND fittable employers count. A specific open posting is valid, and so is a ` +
-    `real COMPANY in the user's field even with NO public listing: the user will send a proactive note asking to be ` +
-    `considered, so target_type "organization" is fully valid, do NOT set is_relevant false just because there's no posted ` +
-    `role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the user's ` +
+    `JOB / INTERNSHIP SEARCH, BOTH openings AND fittable employers count. A SPECIFIC OPEN POSTING the user can apply to is ` +
+    `the BEST kind of result: set is_listing true, put the direct application / posting link in url, name it as the ROLE at ` +
+    `the COMPANY, and give it the HIGHEST fit_score. A real COMPANY in the user's field even with NO public listing is also ` +
+    `valid (is_listing false): the user will send a proactive note asking to be considered, so target_type "organization" is ` +
+    `fully valid, do NOT set is_relevant false just because there's no posted role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the user's ` +
     `industry. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms, ` +
     `they are realistic to hear back from. If the GOAL text says to favor beginner-friendly / small / less-selective ` +
     `employers, give ultra-selective, famous, big-name targets a LOW fit_score even when they're on-industry. WHY_IT_FITS: a ` +
@@ -860,6 +879,7 @@ async function extract(
     core + fitRules + planFit + industryOverride + (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
+    `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
@@ -1313,6 +1333,13 @@ export async function discover(
         location: noDash(r.location || ""),
         timezone: r.timezone || "",
         fitScore: fit,
+        // A specific open posting is a "listing" (apply); a named contact is a
+        // "person"; everything else reachable is a "company" to cold-email.
+        targetType: r.is_listing
+          ? "listing"
+          : String(r.target_type || "").toLowerCase() === "person"
+            ? "person"
+            : "company",
         whyItFits: noDash(r.why_it_fits || ""), // no em dashes in rendered LLM copy
         sourceTitle: cand.title || "",
         sourceSnippet: String(cand.content || "").slice(0, 220),
@@ -1360,7 +1387,7 @@ export async function discover(
   // Internship"), often from different pages/hosts. For job/internship hunts, where
   // you want one entry per employer, collapse by company (outlet), keeping the most
   // specific (a posting title beats the bare company name).
-  if (isJobUseCase(useCase)) {
+  if (isJobSearch(useCase, goal)) {
     const specificity = (o: Opportunity) => {
       const on = normName(o.outlet || "");
       const nn = normName(o.name || "");
@@ -1398,7 +1425,7 @@ export async function discover(
   // to openings that don't already list a real person. Enrich the top few in
   // parallel (bounded so we stay within the serverless time budget).
   let enrichSearches = 0;
-  if (isJobUseCase(useCase) && !aborted()) {
+  if (isJobSearch(useCase, goal) && !aborted()) {
     const needContact = opps.filter((o) => !hasPersonalEmail(o)).slice(0, 6);
     enrichSearches = needContact.length * 2;
     const found = await Promise.all(
@@ -1426,7 +1453,7 @@ export async function discover(
   // cap on those, everyone can and should apply to the same opening.
   let kept = opps;
   let skippedCapped = 0;
-  if (!isJobUseCase(useCase) && !aborted()) {
+  if (!isJobSearch(useCase, goal) && !aborted()) {
     try {
       const capped = await cappedKeys(opps.map((o) => targetKey(o)));
       if (capped.size) {
