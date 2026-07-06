@@ -4572,6 +4572,8 @@ function ScoutTool({
           onRemoveCategories={removeCategoriesBulk}
           onReorderCategories={reorderCategoriesInProject}
           onDeriveGoal={deriveCategoryGoal}
+          onSetProjectContext={setProjectContext}
+          onSetProjectUsesProfile={setProjectUsesProfile}
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
@@ -12354,6 +12356,8 @@ function ProfileTab({
   onRemoveCategories,
   onReorderCategories,
   onDeriveGoal,
+  onSetProjectContext,
+  onSetProjectUsesProfile,
   resumeFileName,
   onResumeFile,
   onClearResume,
@@ -12424,6 +12428,8 @@ function ProfileTab({
   onRemoveCategories: (ids: string[]) => void;
   onReorderCategories: (projectId: string, orderedIds: string[]) => void;
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+  onSetProjectContext: (id: string, context: string) => void;
+  onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
   resumeFileName: string;
   onResumeFile: (file: File) => void;
   onClearResume: () => void;
@@ -12971,6 +12977,8 @@ function ProfileTab({
           onRemoveCategories={onRemoveCategories}
           onReorderCategories={onReorderCategories}
           onDeriveGoal={onDeriveGoal}
+          onSetProjectContext={onSetProjectContext}
+          onSetProjectUsesProfile={onSetProjectUsesProfile}
         />
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
@@ -13624,6 +13632,8 @@ function ProjectsCategoriesEditor({
   onRemoveCategories,
   onReorderCategories,
   onDeriveGoal,
+  onSetProjectContext,
+  onSetProjectUsesProfile,
 }: {
   projects: Project[];
   categories: Category[];
@@ -13636,6 +13646,8 @@ function ProjectsCategoriesEditor({
   onRemoveCategories: (ids: string[]) => void;
   onReorderCategories: (projectId: string, orderedIds: string[]) => void;
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
+  onSetProjectContext: (id: string, context: string) => void;
+  onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
 }) {
   const [newProject, setNewProject] = useState("");
 
@@ -13643,9 +13655,10 @@ function ProjectsCategoriesEditor({
     <div>
       <Label>Your projects and categories</Label>
       <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
-        A project is usually one client, brand, or goal you're working on; its
-        categories are the kinds of people you search for. Drag to reorder,
-        click to select and delete, or add your own. Synced with the Outreach tab.
+        A project is usually one client, brand, or goal you're working on. Describe
+        what it's for, choose whether it uses your Profile, and manage its
+        categories, the kinds of people you search for. Drag to reorder, click to
+        select and delete, or add your own. Synced with the Outreach tab.
       </p>
 
       <div className="space-y-3">
@@ -13693,6 +13706,43 @@ function ProjectsCategoriesEditor({
                     <TrashIcon />
                   </button>
                 )}
+              </div>
+
+              <div className="mt-2.5 border-t border-warm-border pt-2.5">
+                <div className="mb-1 flex items-center justify-between gap-2">
+                  <Label className="mb-0">What is this project for?</Label>
+                  <MicButton
+                    onAppend={(t) =>
+                      onSetProjectContext(p.id, joinSpoken(p.context || "", t))
+                    }
+                  />
+                </div>
+                <textarea
+                  defaultValue={p.context || ""}
+                  key={p.context || ""}
+                  onBlur={(e) => {
+                    if (e.target.value !== (p.context || ""))
+                      onSetProjectContext(p.id, e.target.value);
+                  }}
+                  rows={2}
+                  placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
+                  className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+                <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={p.usesProfile !== false}
+                    onChange={(e) => onSetProjectUsesProfile(p.id, e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                  />
+                  <span className="text-xs leading-relaxed text-body/80">
+                    <span className="font-semibold text-ink">Use my Profile for this project</span>
+                    <br />
+                    On, searches match your industry and learn from your other projects. Turn
+                    it off when this project represents someone outside your field so results
+                    don&apos;t bias toward you.
+                  </span>
+                </label>
               </div>
 
               <div className="mt-2.5 border-t border-warm-border pt-2.5">
