@@ -6293,14 +6293,26 @@ function FindDetailModal({
           </button>
         </div>
 
-        {/* Body: info + website preview, fills the rest of the fullscreen modal */}
+        {/* Body: contact info | outreach/editor | website preview, as named grid
+            areas. When editing, the editor takes the preview's pane (contact stays
+            put) instead of going full-page, and nothing remounts. */}
         <div
-          className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
-            editingDraft ? "" : "lg:grid-cols-[minmax(280px,340px)_1fr]"
-          }`}
+          className="grid min-h-0 flex-1 gap-0"
+          style={{
+            gridTemplateColumns: "minmax(280px, 340px) 1fr",
+            gridTemplateRows: editingDraft
+              ? "minmax(0,1fr)"
+              : "minmax(0,0.9fr) minmax(0,1.1fr)",
+            gridTemplateAreas: editingDraft
+              ? "'info work'"
+              : "'info preview' 'work preview'",
+          }}
         >
-          {/* Left: neatly formatted info */}
-          <div className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
+          {/* Contact + why-it-fits */}
+          <div
+            style={{ gridArea: "info" }}
+            className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r"
+          >
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Contact
@@ -6413,10 +6425,15 @@ function FindDetailModal({
             )}
 
             {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
+          </div>
 
-            {/* The whole drafting-and-sending workflow, right here, draft, edit,
-                send/schedule, deny, follow up, without leaving this popup. */}
-            <div className="border-t border-warm-border pt-4">
+          {/* Outreach + draft editor. Sits under contact normally; slides into the
+              preview's pane while editing so the editor gets the room. */}
+          <div
+            style={{ gridArea: "work" }}
+            className="overflow-y-auto border-t border-warm-border p-5 lg:border-r"
+          >
+            <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Outreach
               </div>
@@ -6457,9 +6474,12 @@ function FindDetailModal({
             </div>
           </div>
 
-          {/* Right: live website preview, fills all remaining height. Hidden while
-              editing the draft, so the editor gets the full pane. */}
-          <div className={`${editingDraft ? "hidden" : "flex"} h-full min-h-0 flex-col p-5`}>
+          {/* Website preview. Occupies the right pane until you edit the draft,
+              which takes over this space. */}
+          <div
+            style={{ gridArea: "preview" }}
+            className={`${editingDraft ? "hidden" : "flex"} h-full min-h-0 flex-col p-5`}
+          >
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
                 {isApplication ? "Application preview" : "Website preview"}
