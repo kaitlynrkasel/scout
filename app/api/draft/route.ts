@@ -11,6 +11,7 @@ export async function POST(req: NextRequest) {
       opportunities,
       about,
       useCase,
+      goal,
       template,
       templates,
       coaching,
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
           requirements: (o as any).requirements || "",
           signature: sig,
           kind: kindStr,
+          goal: String(goal || ""),
         })
       )
     );

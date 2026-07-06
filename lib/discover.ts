@@ -74,7 +74,7 @@ function isNetworkingUseCase(useCase: string): boolean {
 // The user has explicitly widened the target to any industry / anywhere. When
 // the goal says this, we drop industry + location filtering no matter the use
 // case, because the user is telling us the net is intentionally wide.
-function goalWantsAnyIndustry(goal: string): boolean {
+export function goalWantsAnyIndustry(goal: string): boolean {
   // Two intents both mean "don't anchor to my field": (1) ANY industry is fine,
   // and (2) I want a VARIETY across many industries. The second phrasing
   // ("a variety of industries", "different industries", "multiple sectors") was
@@ -665,7 +665,7 @@ function isJobUseCase(useCase: string): boolean {
 // doesn't — e.g. a "Networking" project where the user typed "find internships"
 // into the goal box. Without this, that search took the networking path and
 // returned only people, never real openings or employers to apply to.
-function goalWantsJobs(goal: string): boolean {
+export function goalWantsJobs(goal: string): boolean {
   return /\b(internships?|jobs?|open roles?|open positions?|openings?|apprenticeships?|co-?ops?|new ?grad|entry[- ]?level|now hiring|places? to (work|apply)|companies? (to|i can) (work for|apply to))\b/i.test(
     goal || ""
   );

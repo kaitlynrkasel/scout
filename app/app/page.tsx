@@ -2553,6 +2553,7 @@ function ScoutTool({
             })),
             about: aboutText,
             useCase: activeUseCase,
+            goal, // so drafting knows if this is a product pitch vs a job hunt
             // Use each find's own template scope where possible; fall back to
             // the active project's templates for the batch.
             templates: templatesFor(activeId, catId),
@@ -2866,6 +2867,7 @@ function ScoutTool({
           opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
           about: aboutText,
           useCase: activeUseCase,
+          goal: categories.find((c) => c.id === find.categoryId)?.goal || goal,
           templates: templatesFor(find.projectId, find.categoryId),
           coaching,
           dismissedAdvice,

@@ -4,6 +4,7 @@
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
+import { goalWantsAnyIndustry, goalWantsJobs } from "./discover";
 import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate } from "./types";
 
@@ -138,8 +139,10 @@ export async function draftFor(
     requirements?: string;
     signature?: string;
     kind?: string; // one of OUTREACH_KINDS; overrides auto-picked channel
+    goal?: string; // the search goal these finds came from, so we frame intent right
   } = {}
 ): Promise<Draft> {
+  const goal = String(opts.goal || "");
   const templates = opts.templates || [];
   const requirements = opts.requirements || (opp as any).requirements || "";
   const signature = String(opts.signature || "").trim();
@@ -152,11 +155,20 @@ export async function draftFor(
   // me" note with the resume attached, not a reply to a listing. Detect it here
   // so the prompt frames it correctly instead of referencing a posting that
   // doesn't exist.
+  // Prospecting (selling/pitching a product, company, or project) is decided by
+  // the use case OR the search goal — a "find companies to use our product" goal
+  // is prospecting even under a non-prospecting use-case label. When prospecting,
+  // this is a product pitch, NEVER a job application, so we must not frame it as
+  // "please consider me for a role" (the bug that turned a company pitch into an
+  // internship ask). Goal-aware, mirroring the discovery engine.
+  const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal);
   const jobLike =
-    t?.key === "jobs" ||
-    /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application|candidate|position|role)\b/i.test(
-      `${useCase} ${draftStyle}`
-    );
+    !prospecting &&
+    (t?.key === "jobs" ||
+      goalWantsJobs(goal) ||
+      /\b(job|intern|hiring|hire|recruit|new ?grad|co-?op|career|apply|application|candidate|position|role)\b/i.test(
+        useCase
+      ));
   const isPosting =
     opp.channel === "Company Portal" ||
     /(greenhouse\.io|lever\.co|myworkdayjobs|workday|ashbyhq|smartrecruiters|icims|taleo|bamboohr|breezy\.hr|workable|jobvite|recruitee|\/jobs|\/careers|\/apply)/i.test(
@@ -192,7 +204,6 @@ export async function draftFor(
   // not the sender's individual accomplishments, those read as irrelevant
   // noise in a cold pitch to, say, a nail salon. Networking/job-search/PR are
   // the opposite: the sender's personal background IS the point.
-  const prospecting = isProspectingUseCase(useCase);
   const sender = prospecting
     ? `ABOUT THE SENDER: ${about}\n` +
       `This outreach represents a COMPANY, PRODUCT, or PROJECT, not the sender's personal career. Do NOT mention the ` +
