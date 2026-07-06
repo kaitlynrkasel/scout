@@ -6001,7 +6001,9 @@ function FindDetailModal({
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
   const [frameLoaded, setFrameLoaded] = useState(false);
+  const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
   const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const bridgeAliveRef = useRef(false); // our injected script phoned home = preview OK
   // Whether the previewed page has a fillable form (reported by the autofill
   // bridge injected into the proxied HTML), and the last fill result.
   const [formDetected, setFormDetected] = useState(false);
@@ -6013,6 +6015,11 @@ function FindDetailModal({
     function onMsg(ev: MessageEvent) {
       const d = ev.data;
       if (!d || typeof d !== "object") return;
+      if (typeof d.type === "string" && d.type.startsWith("scout-")) {
+        // Our injected bridge is running, so the real page proxied through fine.
+        bridgeAliveRef.current = true;
+        setPreviewFailed(false);
+      }
       if (d.type === "scout-form-detected") {
         setFormDetected(!!d.hasForm);
         setFormQuestions(Array.isArray(d.questions) ? d.questions : []);
@@ -6034,6 +6041,9 @@ function FindDetailModal({
     setFormQuestions([]);
     setShowQuestions(false);
     setFillNote("");
+    setPreviewFailed(false);
+    setFrameLoaded(false);
+    bridgeAliveRef.current = false;
   }, [o.url]);
   // Pre-fill the previewed contact/application form with everything Scout knows
   // about the sender + the drafted message. Never submits, only populates.
@@ -6421,11 +6431,40 @@ function FindDetailModal({
                   // cross-origin request, not to our own proxied response.
                   src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
                   title={`Preview of ${host || o.name}`}
-                  onLoad={() => setFrameLoaded(true)}
+                  onLoad={() => {
+                    setFrameLoaded(true);
+                    // If our injected bridge doesn't phone home shortly, the page
+                    // busted out of the frame / redirected to itself (native
+                    // "refused to connect"). Show a clean card instead.
+                    window.setTimeout(() => {
+                      if (!bridgeAliveRef.current) setPreviewFailed(true);
+                    }, 4500);
+                  }}
                   referrerPolicy="no-referrer"
                   sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
                   className="h-full w-full"
                 />
+                {previewFailed && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-warm-bg/95 p-6 text-center">
+                    <div className="max-w-xs">
+                      <div className="text-sm font-bold text-ink">
+                        This site can&apos;t be previewed here
+                      </div>
+                      <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                        {host || "The site"} blocks embedding. Open it in a new tab, everything
+                        else (draft, scan for contact) still works.
+                      </p>
+                      <a
+                        href={o.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-3 inline-block rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                      >
+                        Open in new tab ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-warm-border text-sm text-body/40">
