@@ -6645,7 +6645,12 @@ function FindsTab({
           : f.status === filter && !f.pinned
     )
     .slice()
-    .sort((a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0));
+    // Newest found first; fit only breaks ties within the same moment.
+    .sort(
+      (a, b) =>
+        (b.addedAt || 0) - (a.addedAt || 0) ||
+        (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
+    );
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
