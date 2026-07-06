@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
       const uid = await userIdFromReq(req);
       if (!uid) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
     }
-    const { goal, about, useCase } = await req.json();
+    const { goal, about, useCase, asked } = await req.json();
     if (!goal || !String(goal).trim()) {
       return NextResponse.json({ error: "Please enter a goal." }, { status: 400 });
     }
@@ -24,15 +24,22 @@ export async function POST(req: NextRequest) {
       // No key to reason with — let the search run without the gate.
       return NextResponse.json({ understanding: 100, questions: [], plan: null });
     }
+    // Questions already asked in earlier sharpen rounds, so the re-plan doesn't
+    // repeat them.
+    const askedList = Array.isArray(asked)
+      ? asked.map((q: any) => String(q || "").trim()).filter(Boolean)
+      : [];
     const plan = await decomposeGoal(
       String(goal),
       String(about || ""),
-      String(useCase || "networking")
+      String(useCase || "networking"),
+      undefined,
+      askedList
     );
     if (!plan) return NextResponse.json({ understanding: 100, questions: [], plan: null });
     return NextResponse.json({
       understanding: plan.understanding,
-      questions: plan.confidence_questions.slice(0, 5),
+      questions: plan.confidence_questions.slice(0, 4),
       objective: plan.goal,
       plan,
     });

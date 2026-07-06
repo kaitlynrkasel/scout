@@ -3199,7 +3199,7 @@ function ScoutTool({
 
   // Ask Scout to decompose the goal (no searching). Returns understanding %,
   // questions, and the plan. Best-effort; on any hiccup, acts as fully understood.
-  async function fetchUnderstanding(clarifyText = "") {
+  async function fetchUnderstanding(clarifyText = "", asked: string[] = []) {
     const usesProfile = activeProject?.usesProfile !== false;
     const aboutForApi = usesProfile
       ? aboutText
@@ -3215,7 +3215,7 @@ function ScoutTool({
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ goal: g, about: aboutForApi, useCase: activeUseCase }),
+        body: JSON.stringify({ goal: g, about: aboutForApi, useCase: activeUseCase, asked }),
       });
       const d = await res.json().catch(() => ({}));
       // Questions may arrive as {question,options} objects (new) or bare strings
@@ -3308,9 +3308,10 @@ function ScoutTool({
   async function sharpenPlan() {
     if (gating || answeredCount === 0) return;
     const answers = composeAllAnswers();
+    const alreadyAsked = planGate ? planGate.questions.map((q) => q.question) : [];
     setGating(true);
     try {
-      const u = await fetchUnderstanding(answers);
+      const u = await fetchUnderstanding(answers, alreadyAsked);
       setPlanGate((prev) => {
         const existing = prev ? prev.questions : [];
         const seen = new Set(existing.map((q) => q.question.trim().toLowerCase()));
@@ -4019,7 +4020,7 @@ function ScoutTool({
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-body/80">
                         A few details would sharpen the search. Answer what you can, or run
-                        Scout anyway.
+                        Scout now.
                       </p>
                     </div>
                   </div>
@@ -4091,7 +4092,7 @@ function ScoutTool({
                         disabled={discovering}
                         className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
-                        Run Scout anyway
+                        Run Scout
                       </button>
                       <button
                         onClick={() => setPlanGate(null)}

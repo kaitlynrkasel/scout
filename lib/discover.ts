@@ -243,9 +243,13 @@ const DECOMPOSE_SYS =
   "\"understanding\":0,\"soft_constraints\":[],\"negative_constraints\":[],\"evidence_needed\":[],\"opportunity_signals\":[]," +
   "\"search_dimensions\":[],\"ranking_factors\":[{\"factor\":\"\",\"weight\":0}]," +
   "\"confidence_questions\":[{\"question\":\"\",\"options\":[]}]}\n" +
-  "understanding = an integer 0-100 for how completely you understand what to search for given ONLY the info " +
-  "provided: 90+ when the goal is specific and self-contained, lower when key constraints (who exactly, where, " +
-  "when, budget, seniority, which niche) are genuinely unknown and would change the results. Be honest, not generous. " +
+  "understanding = an integer 0-100 for how well you grasp the OBJECTIVE and who to look for, given the goal PLUS the " +
+  "ABOUT / project context provided. Judge comprehension, NOT narrowness: a clear objective backed by real context is " +
+  "AT LEAST 55-70 even when targeting specifics (company size, location, seniority, niche) are still open — those are " +
+  "refinements that would sharpen results, not gaps in understanding — and an intentionally broad scope ('any industry', " +
+  "'all companies') is a deliberate choice, never a missing constraint. Go 85+ when the goal is specific and self-contained. " +
+  "Only go below 30 when the goal is genuinely vague AND almost no context is provided. NEVER return 0 when a real " +
+  "objective and any context are present; it does not start from zero. " +
   "Definitions: goal = the actual objective (e.g. 'find a guest speaker', not 'search Nashville artists'). " +
   "target_type = the entity type (Person, Company, Artist, Founder, Journalist, Investor, Professor, Creator, " +
   "Podcast Host, etc.). required = things that MUST be true; if one is false, reject the candidate. preferred = " +
@@ -267,7 +271,9 @@ const DECOMPOSE_SYS =
   "question; options is 2–5 concrete, mutually-exclusive answers the user can pick with one tap (real values like " +
   "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
   "Infer likely options from the goal and the user's field; keep each option under ~4 words. Do NOT add an " +
-  "'Other'/'Not sure' option — the UI supplies its own write-in. Think in evidence and investigations, not keywords or Google " +
+  "'Other'/'Not sure' option — the UI supplies its own write-in. Ask AT MOST 4 questions, each about a DISTINCT " +
+  "dimension — never two questions about the same attribute (e.g. don't ask both 'what company size' and 'what employee " +
+  "count'), and never ask about anything the goal or context already answers. Think in evidence and investigations, not keywords or Google " +
   "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
   "Keep each array CONCISE: at most 10 items, each a short phrase (not a paragraph). Return ONLY the JSON object, " +
   "nothing before or after it.";
@@ -276,7 +282,8 @@ export async function decomposeGoal(
   goal: string,
   about: string,
   useCase: string,
-  personalOverride?: string
+  personalOverride?: string,
+  askedQuestions: string[] = []
 ): Promise<GoalPlan | null> {
   const g = String(goal || "").trim();
   if (!g) return null;
@@ -293,10 +300,19 @@ export async function decomposeGoal(
         ? ` The user has explicitly said ANY / ALL industries are acceptable, so industry is NOT a constraint: required, hard_constraints, and negative_constraints must NOT reference any industry, sector, or field — limit them to the target's size, type, stage, reachability, or timing. Keep understanding HIGH: an open industry is a deliberate choice, not missing information, so do not lower understanding or ask a confidence_question about which industry to target.`
         : ``)
     : ``;
+  // On a re-plan (the user hit "Sharpen"), don't ask the same things again. The
+  // answers are already folded into the goal above; these were the questions.
+  const asked = (askedQuestions || []).map((q) => String(q || "").trim()).filter(Boolean);
+  const askedNote = asked.length
+    ? `\n\nALREADY ASKED (the user has these covered — do NOT repeat them or ask anything that overlaps in meaning; only surface genuinely NEW, still-unknown dimensions, and return an empty confidence_questions array if nothing new remains): ${asked
+        .map((q) => `"${q}"`)
+        .join("; ")}`
+    : ``;
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their field, sub-field, seniority, city are in here): ` +
     `${String(about || "").slice(0, 1600)}` +
     prospectingNote +
+    askedNote +
     (personalOverride ? `\n\n${personalOverride}` : "");
   try {
     const raw = await claudeJson(DECOMPOSE_SYS, user, 3200); // big schema, needs room
@@ -328,7 +344,7 @@ export async function decomposeGoal(
             };
           })
           .filter((q: ConfidenceQuestion) => q.question)
-          .slice(0, 6)
+          .slice(0, 4)
       : [];
     return {
       goal: String(parsed.goal || g).trim(),
