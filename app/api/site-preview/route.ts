@@ -194,6 +194,24 @@ const AUTOFILL_SCRIPT = `<script>(function(){
     var ok=fill(d.payload||{});
     try{parent.postMessage({type:'scout-autofill-done',filled:ok},'*');}catch(e){}
   });
+  // Keep in-frame navigation INSIDE the proxy: a plain link would send the iframe
+  // to the real cross-origin site, which then refuses to be framed. Reroute same-
+  // tab link clicks back through this proxy route so the next page also previews.
+  document.addEventListener('click',function(e){
+    try{
+      if(e.defaultPrevented||e.button!==0||e.metaKey||e.ctrlKey||e.shiftKey||e.altKey)return;
+      var a=e.target&&e.target.closest?e.target.closest('a'):null;
+      if(!a||!a.href)return;
+      if(a.target&&a.target!=='_self')return; // new-tab links open the real site, fine
+      if(a.href.indexOf('http')!==0)return;   // skip javascript:, mailto:, tel:, #
+      var here=location.href.split('?')[0];
+      var cur=location.href.replace(here+'?url=','');
+      var dest=encodeURIComponent(a.href);
+      if(dest===cur)return; // same page (anchor), let it be
+      e.preventDefault();
+      location.href=here+'?url='+dest;
+    }catch(err){}
+  },true);
   function announce(){try{parent.postMessage({type:'scout-form-detected',hasForm:hasForm(),questions:questions()},'*');}catch(e){}}
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',announce);}else{setTimeout(announce,300);}
 })();</script>`;
