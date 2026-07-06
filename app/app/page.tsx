@@ -2715,6 +2715,44 @@ function ScoutTool({
     }
   }
 
+  // Fetch a find's page and return an enriched COPY (contact gaps filled +
+  // requirements pulled). Returns the find unchanged on any failure. No state
+  // writes, so callers can use the result immediately (e.g. draft with it).
+  async function scanFindData(find: Find): Promise<Find> {
+    if (!find.opp.url) return find;
+    try {
+      const res = await fetch("/api/deep-scan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          url: find.opp.url,
+          name: find.opp.name,
+          outlet: find.opp.outlet,
+          goal,
+          useCase: activeUseCase,
+        }),
+      });
+      const j = await parseApiResponse(res);
+      if (!res.ok || j?.error) return find;
+      const c = j.contact || {};
+      const gotReqs = !!(j.requirements || "").trim();
+      const opp = { ...find.opp };
+      if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
+      if (c.name && !opp.contactName) opp.contactName = c.name;
+      if (c.role && !opp.contactRole) opp.contactRole = c.role;
+      if (c.handle && !opp.contactHandle) opp.contactHandle = c.handle;
+      if (c.email && (!opp.channel || /unknown/i.test(opp.channel))) opp.channel = "Email";
+      return {
+        ...find,
+        opp,
+        requirements: gotReqs ? j.requirements : find.requirements,
+        scanned: true,
+      };
+    } catch {
+      return find;
+    }
+  }
+
   async function deepScanFind(find: Find) {
     if (!find.opp.url) {
       setRepliesNote("This find has no page to scan.");
@@ -2890,19 +2928,26 @@ function ScoutTool({
     setError("");
     setFindDraftingId(find.id);
     try {
+      // Confirming a draft = learn more about this find first: scan its page once
+      // so the message uses real, current company detail (contacts + specifics).
+      let f = find;
+      if (!f.scanned && f.opp.url) {
+        f = await scanFindData(f);
+        if (f !== find) saveFinds(finds.map((x) => (x.id === find.id ? f : x)));
+      }
       const res = await fetch("/api/draft", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
-          about: aboutForProjectId(find.projectId),
+          opportunities: [{ ...f.opp, requirements: f.requirements || "" }],
+          about: aboutForProjectId(f.projectId),
           useCase: activeUseCase,
-          goal: categories.find((c) => c.id === find.categoryId)?.goal || goal,
-          templates: templatesFor(find.projectId, find.categoryId),
+          goal: categories.find((c) => c.id === f.categoryId)?.goal || goal,
+          templates: templatesFor(f.projectId, f.categoryId),
           coaching,
           dismissedAdvice,
           editPairs,
-          signature: signatureFor(find.projectId),
+          signature: signatureFor(f.projectId),
         }),
       });
       const data = await parseApiResponse(res);
@@ -2912,13 +2957,12 @@ function ScoutTool({
       }
       const draft: Draft | undefined = (data.drafts || [])[0];
       if (draft) {
+        // Keep the scan enrichment (f), not the stale entry, when saving the draft.
         saveFinds(
-          finds.map((f) =>
-            f.id === find.id ? { ...f, draft, status: "drafted" } : f
-          )
+          finds.map((x) => (x.id === find.id ? { ...f, draft, status: "drafted" } : x))
         );
         bumpActivity({ drafts: 1 });
-        recordExposure(find.opp); // pursuing this contact -> feed the shared ledger
+        recordExposure(f.opp); // pursuing this contact -> feed the shared ledger
       }
     } catch (e: any) {
       setError(e.message);
