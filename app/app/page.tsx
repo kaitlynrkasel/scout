@@ -8442,19 +8442,32 @@ function DashboardTab({
     replied: finds.filter((f) => f.status === "replied").length,
     denied: finds.filter((f) => f.status === "denied").length,
   };
-  // Real weekly series for the activity chart: people found vs messages sent,
-  // bucketed from each find's own timestamps. No fabricated data.
-  const WEEKS = 10;
+  // Real activity series for the chart: people found vs messages sent, bucketed
+  // from each find's own timestamps. Auto-scales to how long the user has actually
+  // been using Scout, days for a new account, weeks once there's more history, so a
+  // brand-new user never sees ten mostly-empty weeks.
   const wkNow = Date.now();
-  const WK = 7 * 86400000;
-  const weekly = Array.from({ length: WEEKS }, (_, i) => {
-    const end = wkNow - (WEEKS - 1 - i) * WK;
-    const start = end - WK;
-    const inWeek = (t?: number) => typeof t === "number" && t > start && t <= end;
+  const DAY = 86400000;
+  const WK = 7 * DAY;
+  const stamps = finds.flatMap((f) => [f.addedAt, f.sentAt].filter((t): t is number => !!t));
+  const firstT = stamps.length ? Math.min(...stamps) : wkNow;
+  const spanMs = Math.max(0, wkNow - firstT);
+  // Under ~3 weeks of history -> daily buckets; otherwise weekly.
+  const useDays = spanMs < 21 * DAY;
+  const unit = useDays ? DAY : WK;
+  const unitName = useDays ? "day" : "week";
+  const spanUnits = Math.ceil(spanMs / unit) + 1;
+  const bucketCount = useDays
+    ? Math.min(14, Math.max(5, spanUnits))
+    : Math.min(12, Math.max(4, spanUnits));
+  const weekly = Array.from({ length: bucketCount }, (_, i) => {
+    const end = wkNow - (bucketCount - 1 - i) * unit;
+    const start = end - unit;
+    const inBucket = (t?: number) => typeof t === "number" && t > start && t <= end;
     return {
       label: "",
-      added: finds.filter((f) => inWeek(f.addedAt)).length,
-      sent: finds.filter((f) => inWeek(f.sentAt)).length,
+      added: finds.filter((f) => inBucket(f.addedAt)).length,
+      sent: finds.filter((f) => inBucket(f.sentAt)).length,
     };
   });
   const hasActivity = weekly.some((w) => w.added > 0 || w.sent > 0);
@@ -8505,9 +8518,9 @@ function DashboardTab({
     delta?: number;
   }[] = [
     { label: "Searches", value: activity.searches },
-    { label: "People found", value: activity.found, series: withMovement(foundSeries), delta: weekly[WEEKS - 1].added },
+    { label: "People found", value: activity.found, series: withMovement(foundSeries), delta: weekly[weekly.length - 1].added },
     { label: "Drafts written", value: activity.drafts },
-    { label: "Taken to send", value: activity.copies, series: withMovement(sentSeries), delta: weekly[WEEKS - 1].sent },
+    { label: "Taken to send", value: activity.copies, series: withMovement(sentSeries), delta: weekly[weekly.length - 1].sent },
   ];
 
   const channels = new Set(templates.map((t) => t.channel)).size;
@@ -8688,7 +8701,7 @@ function DashboardTab({
           <div className="flex items-start justify-between gap-4">
             <div>
               <h2 className="text-sm font-semibold text-ink">Outreach activity</h2>
-              <p className="mt-0.5 text-xs text-muted">People found and messages sent, by week.</p>
+              <p className="mt-0.5 text-xs text-muted">People found and messages sent, by {unitName}.</p>
             </div>
             <div className="text-right">
               <div className="text-2xl font-semibold leading-none tabular-nums text-ink">{pipe.sent}</div>
@@ -8697,7 +8710,7 @@ function DashboardTab({
           </div>
           {hasActivity ? (
             <div className="mt-4">
-              <ActivityChart data={weekly} />
+              <ActivityChart data={weekly} unit={unitName} />
             </div>
           ) : (
             <div className="mt-4 flex h-[168px] flex-col items-center justify-center rounded-lg bg-warm-bg/60 px-4 text-center">

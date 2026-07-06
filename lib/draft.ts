@@ -99,9 +99,14 @@ function editBlock(editPairs?: { before: string; after: string }[]): string {
   const p = (editPairs || []).filter((x) => x && x.after).slice(0, 4);
   if (!p.length) return "";
   return (
-    "\n\nMOST IMPORTANT, corrections the user made to earlier drafts. Study what changed from BEFORE " +
-    "(what the engine wrote) to AFTER (how the user rewrote it): the tone, cuts, softening, length, openings/closings. " +
-    "Proactively make those same kinds of changes and match that tone here. Do NOT copy the content, copy the pattern:\n" +
+    "\n\nMOST IMPORTANT, corrections the user made to earlier drafts. Learn ONLY the GENERALIZABLE STYLE from " +
+    "BEFORE (what the engine wrote) to AFTER (how the user rewrote it): tone, warmth, cuts, softening, length, " +
+    "sentence rhythm, openings/closings, formatting. Proactively make those same kinds of changes and match that " +
+    "voice here. CRITICAL: those earlier edits were written for a DIFFERENT recipient. Do NOT carry over anything " +
+    "recipient-specific from them, no company names, no facts about that other recipient, and NONE of the concrete " +
+    "examples or use-cases the user tailored to that recipient (e.g. specific ways THAT company could use the product). " +
+    "Regenerate any such specifics fresh for THIS recipient from the note above, or omit them. Copy the PATTERN and " +
+    "VOICE, never the recipient-specific content:\n" +
     p.map((x, i) => `${i + 1}. BEFORE: ${x.before.slice(0, 500)}\n   AFTER: ${x.after.slice(0, 500)}`).join("\n\n")
   );
 }

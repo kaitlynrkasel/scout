@@ -14,9 +14,11 @@ type Pt = { label: string; sent: number; added: number };
 export function ActivityChart({
   data,
   height = 168,
+  unit = "week",
 }: {
   data: Pt[];
   height?: number;
+  unit?: string;
 }) {
   const W = 720;
   const H = height;
@@ -79,7 +81,7 @@ export function ActivityChart({
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-3 rounded-full bg-clay" aria-hidden />Found
         </span>
-        <span className="ml-auto tabular-nums">Last {n} weeks</span>
+        <span className="ml-auto tabular-nums">Last {n} {unit}{n === 1 ? "" : "s"}</span>
       </figcaption>
     </figure>
   );
