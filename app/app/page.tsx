@@ -4964,10 +4964,14 @@ function SideNav({
       key: "profile",
       label: "Profile",
       dot: profileHasBio,
+      // A profile/ID card (avatar + text lines), distinct from the Account
+      // person-silhouette below so the two nav items don't look identical.
       icon: (
         <>
-          <circle cx="12" cy="8" r="4" />
-          <path d="M4 21a8 8 0 0 1 16 0" />
+          <rect x="3" y="5" width="18" height="14" rx="2.5" />
+          <circle cx="8.5" cy="11" r="2.2" />
+          <path d="M5.5 16.2a3.2 3.2 0 0 1 6 0" />
+          <path d="M14 10h4M14 13.5h4" />
         </>
       ),
     },
