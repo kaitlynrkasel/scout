@@ -5973,9 +5973,17 @@ function FindDetailModal({
   senderName,
   senderEmail,
   senderExtra,
+  position,
+  total,
+  onPrev,
+  onNext,
 }: {
   find: Find;
   onClose: () => void;
+  position: number;
+  total: number;
+  onPrev: () => void;
+  onNext: () => void;
   wantedChannels: string[];
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -6108,10 +6116,17 @@ function FindDetailModal({
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
+      // Flip through finds with the arrow keys, unless typing in a field.
+      const el = e.target as HTMLElement | null;
+      const typing =
+        el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      if (typing) return;
+      if (e.key === "ArrowLeft") onPrev();
+      if (e.key === "ArrowRight") onNext();
     };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
-  }, [onClose]);
+  }, [onClose, onPrev, onNext]);
 
   // Neatly-formatted contact rows, only the ones we actually have.
   // Any channel the search explicitly requested gets its own labeled box
@@ -6511,6 +6526,29 @@ function FindDetailModal({
             )}
           </div>
         </div>
+
+        {/* Bottom nav: flip through finds without leaving the detail view. */}
+        {total > 1 && (
+          <div className="flex items-center justify-between gap-3 border-t border-warm-border bg-surface px-6 py-3">
+            <button
+              onClick={onPrev}
+              disabled={position <= 1}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              ← Previous
+            </button>
+            <span className="text-xs font-semibold text-body/60">
+              {position} of {total}
+            </span>
+            <button
+              onClick={onNext}
+              disabled={position >= total}
+              className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-40"
+            >
+              Next →
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -6851,6 +6889,16 @@ function FindsTab({
           senderName={senderName}
           senderEmail={senderEmail}
           senderExtra={senderExtra}
+          position={shown.findIndex((f) => f.id === detailId) + 1}
+          total={shown.length}
+          onPrev={() => {
+            const i = shown.findIndex((f) => f.id === detailId);
+            if (i > 0) setDetailId(shown[i - 1].id);
+          }}
+          onNext={() => {
+            const i = shown.findIndex((f) => f.id === detailId);
+            if (i >= 0 && i < shown.length - 1) setDetailId(shown[i + 1].id);
+          }}
         />
       )}
     </main>
