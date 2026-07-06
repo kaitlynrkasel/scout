@@ -12847,10 +12847,6 @@ function ProfileTab({
                   </button>
                 ))}
               </div>
-              <p className="mt-1.5 text-xs text-body/70">
-                Helps Scout pitch you at the right stage, a high schooler and a grad aren&apos;t
-                reaching out the same way.
-              </p>
           </div>
 
           <div className="mt-5">
@@ -12875,10 +12871,6 @@ function ProfileTab({
                 </button>
               ))}
             </div>
-            <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-              Answering Yes shows two extra questions Scout uses to tune what
-              opportunities to surface for you.
-            </p>
           </div>
 
           {jobApplicant && (
