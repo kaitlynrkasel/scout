@@ -208,6 +208,9 @@ export async function draftFor(
     `beyond what is provided. EXCEPTION: when a template asks for examples of how the recipient could use ` +
     `what the sender offers, you MAY write concrete, plausible use-case ideas tailored to the recipient's ` +
     `business, framed clearly as suggestions ("you could...", "for example...") rather than claims of fact. ` +
+    (signature && channelType === "email"
+      ? `Do NOT write any closing, sign-off, name, or signature/contact block at the end (no "Thanks, [name]", no phone/email/website line). End after your final real sentence. A signature is appended automatically. `
+      : "") +
     `Return ONLY JSON.`;
 
   const recipient =

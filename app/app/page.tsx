@@ -1956,6 +1956,15 @@ function ScoutTool({
     const proj = projects.find((p) => p.id === projectId);
     return (proj?.signature ?? signature) || "";
   }
+  // Distinct signatures the user has (default + any per-project ones), offered as
+  // switchable templates in the draft editor.
+  const signatureOptions = Array.from(
+    new Set(
+      [signature, ...projects.map((p) => p.signature || "")]
+        .map((s) => (s || "").trim())
+        .filter(Boolean)
+    )
+  );
   function setProjectSignature(id: string, sig: string) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, signature: sig } : p)));
   }
@@ -4575,6 +4584,7 @@ function ScoutTool({
           onTogglePin={togglePin}
           onMoveProject={(f, pid) => moveFindToProject(f.id, pid)}
           getSignatureFor={signatureFor}
+          signatureOptions={signatureOptions}
           onEditSignature={setProjectSignature}
           onCheckReplies={checkReplies}
           repliesBusy={repliesBusy}
@@ -6012,6 +6022,7 @@ function FindDetailModal({
   onPrev,
   onNext,
   onRegenerate,
+  signatureOptions,
 }: {
   find: Find;
   onClose: () => void;
@@ -6020,6 +6031,7 @@ function FindDetailModal({
   onPrev: () => void;
   onNext: () => void;
   onRegenerate: () => void;
+  signatureOptions: string[];
   wantedChannels: string[];
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -6403,6 +6415,7 @@ function FindDetailModal({
                 onDraft={onDraft}
                 onRegenerate={onRegenerate}
                 onEditingChange={setEditingDraft}
+                signatureOptions={signatureOptions}
                 onDeny={onDeny}
                 onSetReason={onSetReason}
                 onReopen={onReopen}
@@ -6639,6 +6652,7 @@ function FindsTab({
   onTogglePin,
   onMoveProject,
   getSignatureFor,
+  signatureOptions,
   onEditSignature,
   onCheckReplies,
   repliesBusy,
@@ -6687,6 +6701,7 @@ function FindsTab({
   onTogglePin: (id: string) => void;
   onMoveProject: (f: Find, projectId: string) => void;
   getSignatureFor: (projectId: string) => string;
+  signatureOptions: string[];
   onEditSignature: (projectId: string, sig: string) => void;
   onCheckReplies: () => void;
   repliesBusy: boolean;
@@ -6891,6 +6906,7 @@ function FindsTab({
               otherProjects={projects.filter((p) => p.id !== f.projectId)}
               onMoveProject={(pid) => onMoveProject(f, pid)}
               currentSignature={getSignatureFor(f.projectId)}
+              signatureOptions={signatureOptions}
               onEditSignature={(sig) => onEditSignature(f.projectId, sig)}
             />
           ))}
@@ -6932,6 +6948,7 @@ function FindsTab({
           otherProjects={projects.filter((p) => p.id !== detailFind.projectId)}
           onMoveProject={(pid) => onMoveProject(detailFind, pid)}
           currentSignature={getSignatureFor(detailFind.projectId)}
+          signatureOptions={signatureOptions}
           onEditSignature={(sig) => onEditSignature(detailFind.projectId, sig)}
           senderName={senderName}
           senderEmail={senderEmail}
@@ -7147,6 +7164,7 @@ function FindCard({
   currentSignature,
   onEditSignature,
   onEditingChange,
+  signatureOptions,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -7183,6 +7201,7 @@ function FindCard({
   currentSignature: string;
   onEditSignature: (sig: string) => void;
   onEditingChange?: (v: boolean) => void;
+  signatureOptions?: string[];
 }) {
   const o = find.opp;
   // Recipient timezone is also needed by FindWorkflow below, which recomputes
@@ -7375,6 +7394,7 @@ function FindCard({
         gmailBusy={gmailBusy}
         onDraft={onDraft}
         onRegenerate={onRegenerate}
+        signatureOptions={signatureOptions}
         onDeny={onDeny}
         onSetReason={onSetReason}
         onReopen={onReopen}
@@ -7441,6 +7461,7 @@ function FindWorkflow({
   currentSignature,
   onEditSignature,
   onEditingChange,
+  signatureOptions,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -7473,6 +7494,7 @@ function FindWorkflow({
   currentSignature: string;
   onEditSignature: (sig: string) => void;
   onEditingChange?: (v: boolean) => void;
+  signatureOptions?: string[];
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -7595,14 +7617,20 @@ function FindWorkflow({
               if (d.channelType === "email" && sig && body.endsWith(suffix)) {
                 setEditBody(body.slice(0, body.length - suffix.length));
                 setEditSignature(sig);
+              } else if (d.channelType === "email") {
+                // No clean split: still give email a dedicated signature box,
+                // seeded with the project signature, and keep the body as-is.
+                setEditBody(body);
+                setEditSignature(sig);
               } else {
                 setEditBody(body);
                 setEditSignature(null);
               }
               setEditing(true);
             }}
-            className="mt-2 text-[11px] font-semibold text-accent transition hover:underline"
+            className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-bold text-accent shadow-card transition hover:border-coral/40 hover:bg-warm-bg"
           >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
             Edit this draft
           </button>
         </div>
@@ -7625,8 +7653,28 @@ function FindWorkflow({
           />
           {hasSignatureSplit && (
             <div className="mt-2">
-              <div className="mb-1 text-[11px] font-semibold text-body/60">
-                Signature, editing this updates the default for every draft in this project
+              <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
+                <div className="text-[11px] font-semibold text-body/60">
+                  Signature (updates this project&apos;s default when saved)
+                </div>
+                {(signatureOptions || []).length > 1 && (
+                  <select
+                    value={
+                      (signatureOptions || []).includes((editSignature || "").trim())
+                        ? (editSignature || "").trim()
+                        : ""
+                    }
+                    onChange={(e) => e.target.value && setEditSignature(e.target.value)}
+                    className="scout-select rounded-lg border border-warm-border bg-surface px-2 py-1 text-[11px] font-semibold text-body outline-none focus:ring-2 focus:ring-sage/20"
+                  >
+                    <option value="">Switch signature…</option>
+                    {(signatureOptions || []).map((s, i) => (
+                      <option key={i} value={s}>
+                        {s.split("\n")[0].slice(0, 40) || `Signature ${i + 1}`}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
               <textarea
                 value={editSignature || ""}
@@ -7640,7 +7688,12 @@ function FindWorkflow({
             <button
               onClick={() => {
                 const sig = (editSignature || "").trim();
-                const body = hasSignatureSplit && sig ? `${editBody.trimEnd()}\n\n${sig}` : editBody;
+                const trimmedBody = editBody.trimEnd();
+                // Append the signature unless the body already ends with it.
+                const body =
+                  hasSignatureSplit && sig && !trimmedBody.endsWith(sig)
+                    ? `${trimmedBody}\n\n${sig}`
+                    : editBody;
                 onEditDraft(editSubject, body);
                 if (hasSignatureSplit && sig !== currentSignature.trim()) {
                   onEditSignature(sig);
