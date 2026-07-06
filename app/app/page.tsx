@@ -374,6 +374,10 @@ interface Project {
   // disconnected from you (representing someone outside your industry) so the
   // search doesn't bias toward you. Remembered per project.
   usesProfile?: boolean;
+  // Company accounts only. Default true. Turn OFF to drop the company identity
+  // from this project so you're represented as yourself (e.g. a co-founder
+  // searching internships for herself, not pitching on the company's behalf).
+  usesCompany?: boolean;
 }
 interface Category {
   id: string;
@@ -952,6 +956,7 @@ function ScoutTool({
     if (el) el.scrollTop = el.scrollHeight;
   }, [redraftChat, revisingBatch]);
   const [stats, setStats] = useState("");
+  const [searchNotice, setSearchNotice] = useState(""); // job-fallback disclosure
   const [expanded, setExpanded] = useState(false);
 
   // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
@@ -1805,6 +1810,7 @@ function ScoutTool({
     setDrafts([]);
     setRedraftChat([]);
     setStats("");
+    setSearchNotice("");
     setError("");
     setApiReason(null);
     setSkipped([]);
@@ -1929,6 +1935,9 @@ function ScoutTool({
   // Toggle whether this project's searches read your Profile + cross-project history.
   function setProjectUsesProfile(id: string, usesProfile: boolean) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, usesProfile } : p)));
+  }
+  function setProjectUsesCompany(id: string, usesCompany: boolean) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, usesCompany } : p)));
   }
 
   // Per-project email signature, falling back to the account-wide default
@@ -2214,16 +2223,23 @@ function ScoutTool({
   const myCats = activeProject
     ? categories.filter((c) => c.projectId === activeProject.id)
     : [];
-  const aboutText = [
-    profile.name,
-    profile.bio,
-    profile.accountType === "company" && profile.companyName
-      ? `Reaching out on behalf of ${profile.companyName}` +
-        (profile.companyRole ? ` as ${profile.companyRole}` : "")
-      : "",
-    profile.accountType === "company" && profile.companyContribution
-      ? `Their role / how they serve the company's work: ${profile.companyContribution}`
-      : "",
+  // The company identity (only present on company accounts). Split out so a
+  // project can turn it OFF and represent the person alone, e.g. a co-founder
+  // hunting internships for herself, not pitching on behalf of the company.
+  const companyBits =
+    profile.accountType === "company"
+      ? [
+          profile.companyName
+            ? `Reaching out on behalf of ${profile.companyName}` +
+              (profile.companyRole ? ` as ${profile.companyRole}` : "")
+            : "",
+          profile.companyContribution
+            ? `Their role / how they serve the company's work: ${profile.companyContribution}`
+            : "",
+        ]
+      : [];
+  const nameBio = [profile.name, profile.bio];
+  const restBits = [
     profile.age ? `Age: ${profile.age}` : "",
     profile.eduStatus ? `Education stage: ${EDU_STATUS_LABEL[profile.eduStatus]}` : "",
     profile.college ? `Education: ${profile.college}` : "",
@@ -2238,10 +2254,22 @@ function ScoutTool({
     activeProject && activeProject.context
       ? "This outreach is on behalf of / for: " + activeProject.context
       : "",
-  ]
-    .filter(Boolean)
-    .join(". ")
-    .trim();
+  ];
+  const joinBits = (bits: string[]) => bits.filter(Boolean).join(". ").trim();
+  const aboutText = joinBits([...nameBio, ...companyBits, ...restBits]);
+  // Same, minus the company identity — used when a project opts out of the company.
+  const aboutTextNoCompany = joinBits([...nameBio, ...restBits]);
+
+  // The right "about" for a project's searches + drafts: project-only when it
+  // ignores the Profile, personal-only when it drops the company, else full.
+  function aboutForProject(p?: Project | null): string {
+    if (p?.usesProfile === false)
+      return p?.context ? "This outreach is on behalf of / for: " + p.context : "";
+    return p?.usesCompany === false ? aboutTextNoCompany : aboutText;
+  }
+  function aboutForProjectId(projectId?: string): string {
+    return aboutForProject(projects.find((pp) => pp.id === projectId) || activeProject);
+  }
   // A light gate: a name OR a bio is enough to start. Resume and LinkedIn are
   // optional, they just make outreach more personal.
   const profileComplete = !!(profile.name.trim() || profile.bio.trim());
@@ -2551,7 +2579,7 @@ function ScoutTool({
               ...f.opp,
               requirements: f.requirements || "",
             })),
-            about: aboutText,
+            about: aboutForProject(activeProject),
             useCase: activeUseCase,
             goal, // so drafting knows if this is a product pitch vs a job hunt
             // Use each find's own template scope where possible; fall back to
@@ -2865,7 +2893,7 @@ function ScoutTool({
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           opportunities: [{ ...find.opp, requirements: find.requirements || "" }],
-          about: aboutText,
+          about: aboutForProjectId(find.projectId),
           useCase: activeUseCase,
           goal: categories.find((c) => c.id === find.categoryId)?.goal || goal,
           templates: templatesFor(find.projectId, find.categoryId),
@@ -3116,10 +3144,7 @@ function ScoutTool({
       // project is for — so representing someone outside your world doesn't bias
       // results back toward you.
       const usesProfile = activeProject?.usesProfile !== false;
-      const projectOnlyAbout = activeProject?.context
-        ? "This outreach is on behalf of / for: " + activeProject.context
-        : "";
-      const aboutForApi = usesProfile ? aboutText : projectOnlyAbout;
+      const aboutForApi = aboutForProject(activeProject);
       const token = getToken ? await getToken() : null;
       const controller = new AbortController();
       discoverAbort.current = controller;
@@ -3209,6 +3234,7 @@ function ScoutTool({
       setOpps(finalOpps);
       setSelected({}); // nothing pre-approved, you approve who you want to reach
       setSkipped(done && Array.isArray(done.skipped) ? done.skipped : []);
+      setSearchNotice(done?.notice || "");
       if (done) {
         setStats(
           `${finalOpps.length} found · ${done.searched} searches · ${done.candidates} pages read · skipped ${done.skippedDupes} duplicates, ${done.skippedNotFit} not a fit`
@@ -3240,12 +3266,7 @@ function ScoutTool({
   // Ask Scout to decompose the goal (no searching). Returns understanding %,
   // questions, and the plan. Best-effort; on any hiccup, acts as fully understood.
   async function fetchUnderstanding(clarifyText = "", asked: string[] = []) {
-    const usesProfile = activeProject?.usesProfile !== false;
-    const aboutForApi = usesProfile
-      ? aboutText
-      : activeProject?.context
-        ? "This outreach is on behalf of / for: " + activeProject.context
-        : "";
+    const aboutForApi = aboutForProject(activeProject);
     const g = clarifyText.trim() ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}` : goal;
     const token = getToken ? await getToken() : null;
     try {
@@ -3880,6 +3901,27 @@ function ScoutTool({
                       outside your field) so results don&apos;t bias toward you.
                     </span>
                   </label>
+
+                  {/* Company accounts: drop the company identity for this project
+                      (e.g. hunting internships for yourself, not pitching the company). */}
+                  {profile.accountType === "company" &&
+                    activeProject?.usesProfile !== false && (
+                      <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={activeProject?.usesCompany !== false}
+                          onChange={(e) => setProjectUsesCompany(activeId, e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                        />
+                        <span className="text-xs leading-relaxed text-body/80">
+                          <span className="font-semibold text-ink">Use my company for this project</span>
+                          <br />
+                          On, outreach represents {profile.companyName || "your company"}. Turn it
+                          off to search and write as yourself only (e.g. looking for a job or
+                          internship for you, not pitching on the company&apos;s behalf).
+                        </span>
+                      </label>
+                    )}
                 </div>
               </div>
 
@@ -4037,6 +4079,17 @@ function ScoutTool({
                   </button>
                 )}
               </div>
+
+              {/* Job/internship fallback disclosure: never pass companies off as
+                  confirmed openings. */}
+              {searchNotice && (
+                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sage/20 text-[11px] font-extrabold text-sage-deep">
+                    i
+                  </span>
+                  <p className="text-xs leading-relaxed text-body">{searchNotice}</p>
+                </div>
+              )}
 
               {/* Confidence gate: Scout has gaps, so ask before running. */}
               {planGate && (
@@ -4618,6 +4671,7 @@ function ScoutTool({
           onDeriveGoal={deriveCategoryGoal}
           onSetProjectContext={setProjectContext}
           onSetProjectUsesProfile={setProjectUsesProfile}
+          onSetProjectUsesCompany={setProjectUsesCompany}
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
@@ -12455,6 +12509,7 @@ function ProfileTab({
   onDeriveGoal,
   onSetProjectContext,
   onSetProjectUsesProfile,
+  onSetProjectUsesCompany,
   resumeFileName,
   onResumeFile,
   onClearResume,
@@ -12529,6 +12584,7 @@ function ProfileTab({
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
   onSetProjectContext: (id: string, context: string) => void;
   onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
+  onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
   resumeFileName: string;
   onResumeFile: (file: File) => void;
   onClearResume: () => void;
@@ -13062,6 +13118,8 @@ function ProfileTab({
           onDeriveGoal={onDeriveGoal}
           onSetProjectContext={onSetProjectContext}
           onSetProjectUsesProfile={onSetProjectUsesProfile}
+          onSetProjectUsesCompany={onSetProjectUsesCompany}
+          isCompany={accountType === "company"}
         />
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
@@ -13717,6 +13775,8 @@ function ProjectsCategoriesEditor({
   onDeriveGoal,
   onSetProjectContext,
   onSetProjectUsesProfile,
+  onSetProjectUsesCompany,
+  isCompany,
 }: {
   projects: Project[];
   categories: Category[];
@@ -13731,6 +13791,8 @@ function ProjectsCategoriesEditor({
   onDeriveGoal: (name: string, useCase: string) => Promise<string>;
   onSetProjectContext: (id: string, context: string) => void;
   onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
+  onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
+  isCompany: boolean;
 }) {
   const [newProject, setNewProject] = useState("");
 
@@ -13826,6 +13888,23 @@ function ProjectsCategoriesEditor({
                     don&apos;t bias toward you.
                   </span>
                 </label>
+                {isCompany && p.usesProfile !== false && (
+                  <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={p.usesCompany !== false}
+                      onChange={(e) => onSetProjectUsesCompany(p.id, e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                    />
+                    <span className="text-xs leading-relaxed text-body/80">
+                      <span className="font-semibold text-ink">Use my company for this project</span>
+                      <br />
+                      On, outreach represents your company. Turn it off to search and write as
+                      yourself only (e.g. a job or internship for you, not a pitch on the
+                      company&apos;s behalf).
+                    </span>
+                  </label>
+                )}
               </div>
 
               <div className="mt-2.5 border-t border-warm-border pt-2.5">

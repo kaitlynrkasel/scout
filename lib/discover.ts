@@ -1029,6 +1029,10 @@ export interface DiscoverResult {
   skippedCapped: number; // dropped because too many other users already contacted them
   skipped: SkippedCandidate[]; // per-candidate log of what got dropped and why
   plan?: GoalPlan | null; // the Discovery Planner's blueprint for this search
+  // Set for a job/internship search when real open postings were thin, so the
+  // results are mostly good-fit COMPANIES to approach proactively, not confirmed
+  // openings. The UI shows this so we never disguise cold outreach as live jobs.
+  notice?: string;
 }
 
 export async function discover(
@@ -1492,6 +1496,19 @@ export async function discover(
     }
   }
 
+  // Fallback disclosure: on a job/internship hunt, if actual open postings came
+  // back thin, say so plainly instead of passing companies off as live openings.
+  let notice: string | undefined;
+  if (isJobSearch(useCase, goal) && kept.length) {
+    const listings = kept.filter((o) => o.targetType === "listing").length;
+    if (listings < 3 && listings < kept.length) {
+      notice =
+        listings === 0
+          ? "Few active postings matched right now, so these are good-fit companies worth reaching out to directly, not confirmed openings."
+          : "Only a couple of active postings matched, so most of these are good-fit companies worth approaching proactively, not confirmed openings.";
+    }
+  }
+
   return {
     opportunities: kept,
     searched: queries.length + broadenedQueries + enrichSearches,
@@ -1501,5 +1518,6 @@ export async function discover(
     skippedCapped,
     skipped,
     plan,
+    notice,
   };
 }
