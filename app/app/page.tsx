@@ -10471,9 +10471,9 @@ function TeamTab({
                     {emailShort(m.email).charAt(0).toUpperCase()}
                   </span>
                   {m.email === accountEmail ? "You" : emailShort(m.email)}
-                  {m.role === "owner" && (
-                    <span className="text-[9px] font-bold uppercase text-body/50">owner</span>
-                  )}
+                  <span className="text-[9px] font-bold uppercase text-body/50">
+                    {m.role === "owner" ? "admin" : "team member"}
+                  </span>
                 </span>
               ))}
             </div>
@@ -10518,24 +10518,31 @@ function TeamTab({
               </div>
             )}
 
-            <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
-              <input
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && inviteEmail.trim()) invite();
-                }}
-                placeholder="Invite a teammate by email (inside or outside your company)"
-                className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
-              <button
-                onClick={invite}
-                disabled={!inviteEmail.trim() || !!busy}
-                className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
-              >
-                {busy === "invite" ? "Inviting…" : "Invite"}
-              </button>
-            </div>
+            {isOwner ? (
+              <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
+                <input
+                  value={inviteEmail}
+                  onChange={(e) => setInviteEmail(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && inviteEmail.trim()) invite();
+                  }}
+                  placeholder="Invite a teammate by email (inside or outside your company)"
+                  className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+                <button
+                  onClick={invite}
+                  disabled={!inviteEmail.trim() || !!busy}
+                  className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+                >
+                  {busy === "invite" ? "Inviting…" : "Invite"}
+                </button>
+              </div>
+            ) : (
+              <p className="mt-4 border-t border-warm-border pt-4 text-xs leading-relaxed text-body/60">
+                Only a company admin can invite or remove members. Ask your admin to add
+                someone.
+              </p>
+            )}
           </section>
 
           {/* -------- Shared projects -------- */}

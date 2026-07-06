@@ -227,7 +227,10 @@ export async function inviteToWorkspace(
   workspaceId: string,
   inviteEmail: string
 ) {
-  await assertWorkspaceMember(uid, workspaceId);
+  // Admins (workspace owners) only — team members can't grow the roster.
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (role !== "owner")
+    throw new TeamError("Only a company admin can invite people.", 403);
   const em = String(inviteEmail || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em))
     throw new TeamError("Enter a valid email address.");

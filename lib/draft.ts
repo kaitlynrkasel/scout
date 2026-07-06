@@ -317,12 +317,27 @@ export async function draftFor(
     subject: noDash(gen?.subject || ""),
     body,
     whyItFits: opp.whyItFits,
-    // Suggest attaching the resume by default when this is an email AND it reads
-    // like a job/internship application, or the recipient asks for a resume/CV.
+    // Attach the resume by default when this is an email AND either it reads like a
+    // job/internship application, the recipient asks for a resume/CV, OR the draft
+    // itself says a resume is attached — if the message claims it, it must be there.
     // The user can always toggle it; DMs/forms can't carry an attachment.
     attachResume:
-      channelType === "email" && suggestsResume(useCase, requirements, opp),
+      channelType === "email" &&
+      (suggestsResume(useCase, requirements, opp) || mentionsResumeAttached(body)),
   };
+}
+
+// The generated body claims a resume/CV is attached (e.g. "my resume is attached",
+// "I've attached my CV"), so the checkbox must default on to match.
+function mentionsResumeAttached(body: string): boolean {
+  // Stems (attach/attached/attaching, enclos-, includ-) and no \b around
+  // "résumé" — its accented é breaks ASCII word boundaries.
+  const doc = "(resume|résumé|\\bcv\\b)";
+  const act = "(attach|enclos|includ)";
+  return new RegExp(
+    `${doc}[^.!?\\n]{0,40}${act}|${act}[^.!?\\n]{0,40}${doc}`,
+    "i"
+  ).test(body || "");
 }
 
 // Does this outreach call for a resume? Job/internship use cases, or an explicit
