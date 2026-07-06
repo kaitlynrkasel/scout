@@ -217,7 +217,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     tab: "dashboard",
     title: "You're all set",
-    body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from “Take a tour” at the bottom of the sidebar.",
+    body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from Settings.",
   },
 ];
 
@@ -3845,28 +3845,6 @@ function ScoutTool({
             </p>
           </div>
 
-            {/* -------- Import your existing outreach (dedup + learn) -------- */}
-            <section className="mb-6 flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
-              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-              </span>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold text-ink">
-                  Already reaching out somewhere else?
-                </div>
-                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                  Drop in a CSV of how you&apos;ve been tracking your contacts. Scout won&apos;t
-                  resurface them and starts learning what a fit looks like for you.
-                </p>
-              </div>
-              <button
-                onClick={() => setImportOpen(true)}
-                className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-              >
-                Import a CSV
-              </button>
-            </section>
-
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
@@ -4736,6 +4714,7 @@ function ScoutTool({
           onSetProjectContext={setProjectContext}
           onSetProjectUsesProfile={setProjectUsesProfile}
           onSetProjectUsesCompany={setProjectUsesCompany}
+          onImportOutreach={() => setImportOpen(true)}
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
@@ -12683,6 +12662,7 @@ function ProfileTab({
   onSetProjectContext,
   onSetProjectUsesProfile,
   onSetProjectUsesCompany,
+  onImportOutreach,
   resumeFileName,
   onResumeFile,
   onClearResume,
@@ -12758,6 +12738,7 @@ function ProfileTab({
   onSetProjectContext: (id: string, context: string) => void;
   onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
   onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
+  onImportOutreach: () => void;
   resumeFileName: string;
   onResumeFile: (file: File) => void;
   onClearResume: () => void;
@@ -13276,6 +13257,30 @@ function ProfileTab({
 
         <hr className="my-7 border-warm-border" />
 
+        {/* -------- Import your existing outreach (dedup + learn) -------- */}
+        <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-extrabold text-ink">
+              Already reaching out somewhere else?
+            </div>
+            <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+              Drop in a CSV of how you&apos;ve been tracking your contacts. Scout won&apos;t
+              resurface them and starts learning what a fit looks like for you.
+            </p>
+          </div>
+          <button
+            onClick={onImportOutreach}
+            className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            Import a CSV
+          </button>
+        </section>
+
+        <hr className="my-7 border-warm-border" />
+
         {/* -------- Projects & categories, editable here as well as on Outreach -------- */}
         <ProjectsCategoriesEditor
           projects={projects}
@@ -13610,10 +13615,6 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
       <h2 className="mt-5 text-2xl font-extrabold tracking-tight text-ink">
         First, tell <span className="text-brown">Scout</span> who you are
       </h2>
-      <p className="mx-auto mt-2.5 max-w-md text-[15px] leading-relaxed text-body">
-        Just your name is enough to start. Adding a resume, LinkedIn, or website is
-        optional, it only makes your messages more personal.
-      </p>
       <button
         onClick={onSetup}
         className="mt-6 rounded-xl bg-brand-gradient px-7 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
