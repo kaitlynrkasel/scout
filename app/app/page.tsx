@@ -6064,6 +6064,7 @@ function FindDetailModal({
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
+  const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeAliveRef = useRef(false); // our injected script phoned home = preview OK
   // Whether the previewed page has a fillable form (reported by the autofill
@@ -6268,7 +6269,11 @@ function FindDetailModal({
         </div>
 
         {/* Body: info + website preview, fills the rest of the fullscreen modal */}
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(280px,340px)_1fr]">
+        <div
+          className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
+            editingDraft ? "" : "lg:grid-cols-[minmax(280px,340px)_1fr]"
+          }`}
+        >
           {/* Left: neatly formatted info */}
           <div className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r">
             <div>
@@ -6397,6 +6402,7 @@ function FindDetailModal({
                 gmailBusy={gmailBusy}
                 onDraft={onDraft}
                 onRegenerate={onRegenerate}
+                onEditingChange={setEditingDraft}
                 onDeny={onDeny}
                 onSetReason={onSetReason}
                 onReopen={onReopen}
@@ -6425,8 +6431,9 @@ function FindDetailModal({
             </div>
           </div>
 
-          {/* Right: live website preview, fills all remaining height */}
-          <div className="flex h-full min-h-0 flex-col p-5">
+          {/* Right: live website preview, fills all remaining height. Hidden while
+              editing the draft, so the editor gets the full pane. */}
+          <div className={`${editingDraft ? "hidden" : "flex"} h-full min-h-0 flex-col p-5`}>
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
                 {isApplication ? "Application preview" : "Website preview"}
@@ -7139,6 +7146,7 @@ function FindCard({
   onMoveProject,
   currentSignature,
   onEditSignature,
+  onEditingChange,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -7174,6 +7182,7 @@ function FindCard({
   onMoveProject: (projectId: string) => void;
   currentSignature: string;
   onEditSignature: (sig: string) => void;
+  onEditingChange?: (v: boolean) => void;
 }) {
   const o = find.opp;
   // Recipient timezone is also needed by FindWorkflow below, which recomputes
@@ -7431,6 +7440,7 @@ function FindWorkflow({
   onMoveProject,
   currentSignature,
   onEditSignature,
+  onEditingChange,
 }: {
   find: Find;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
@@ -7462,6 +7472,7 @@ function FindWorkflow({
   onMoveProject: (projectId: string) => void;
   currentSignature: string;
   onEditSignature: (sig: string) => void;
+  onEditingChange?: (v: boolean) => void;
 }) {
   const o = find.opp;
   const d = find.draft;
@@ -7474,6 +7485,11 @@ function FindWorkflow({
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
+  // give the editor the big pane and tuck the website preview away.
+  useEffect(() => {
+    onEditingChange?.(editing);
+  }, [editing, onEditingChange]);
   // When the draft's body cleanly ends with this project's current signature,
   // the editor splits it into its own field, editing just the sign-off and
   // saving updates THAT PROJECT's signature going forward, not just this one
