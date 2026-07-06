@@ -868,10 +868,18 @@ function ScoutTool({
   // % understood + confidence questions + the plan, and the popup under the
   // category card offers to answer them or run anyway. Null = no popup.
   const [planGate, setPlanGate] = useState<
-    { understanding: number; questions: string[]; plan: any } | null
+    {
+      understanding: number;
+      questions: { question: string; options: string[] }[];
+      plan: any;
+    } | null
   >(null);
   const [gating, setGating] = useState(false); // the understanding pass is running
-  const [clarify, setClarify] = useState(""); // the user's answers to the questions
+  const [clarify, setClarify] = useState(""); // answers accumulated across sharpen rounds
+  // Multiple-choice picks for the current round, keyed by question index. The
+  // value is the chosen option, or "__other__" when the write-in is active.
+  const [picks, setPicks] = useState<Record<number, string>>({});
+  const [otherText, setOtherText] = useState<Record<number, string>>({});
   // Lets the user cancel an in-flight search but keep what was already scouted.
   const discoverAbort = useRef<AbortController | null>(null);
   // When discovery started (ms epoch), so the progress bar can resume at the
@@ -3211,20 +3219,40 @@ function ScoutTool({
         body: JSON.stringify({ goal: g, about: aboutForApi, useCase: activeUseCase }),
       });
       const d = await res.json().catch(() => ({}));
+      // Questions may arrive as {question,options} objects (new) or bare strings
+      // (older server / fallback). Normalize to the object shape the card wants.
+      const questions = Array.isArray(d.questions)
+        ? d.questions
+            .map((q: any) =>
+              typeof q === "string"
+                ? { question: q, options: [] as string[] }
+                : {
+                    question: String(q?.question || "").trim(),
+                    options: Array.isArray(q?.options)
+                      ? q.options.map((o: any) => String(o || "").trim()).filter(Boolean)
+                      : [],
+                  }
+            )
+            .filter((q: { question: string }) => q.question)
+        : [];
       return {
         understanding: typeof d.understanding === "number" ? d.understanding : 100,
-        questions: Array.isArray(d.questions) ? d.questions : [],
+        questions,
         plan: d.plan ?? null,
       };
     } catch {
-      return { understanding: 100, questions: [] as string[], plan: null };
+      return {
+        understanding: 100,
+        questions: [] as { question: string; options: string[] }[],
+        plan: null,
+      };
     }
   }
 
   // The Scout button: first check how well Scout understands the goal. If there
   // are real gaps, pop the confidence card under the category and let the user
   // answer or run anyway. If it already understands well, just search.
-  const UNDERSTAND_GATE = 75;
+  const UNDERSTAND_GATE = 90;
   async function startScout() {
     if (!profileComplete) {
       setTab("profile");
@@ -3233,6 +3261,8 @@ function ScoutTool({
     if (!goal.trim() || discovering || gating) return;
     setPlanGate(null);
     setClarify("");
+    setPicks({});
+    setOtherText({});
     setGating(true);
     try {
       const u = await fetchUnderstanding();
@@ -3246,13 +3276,49 @@ function ScoutTool({
     }
   }
 
+  // Turn this round's multiple-choice picks into a short answer string, e.g.
+  // "Within 25 miles? This city only. Budget? Up to $2k". Skips unanswered
+  // questions and empty "Other" write-ins.
+  function composeRoundAnswers(): string {
+    if (!planGate) return "";
+    return planGate.questions
+      .map((q, i) => {
+        const pick = picks[i];
+        if (!pick) return "";
+        const ans = pick === "__other__" ? (otherText[i] || "").trim() : pick;
+        return ans ? `${q.question} ${ans}` : "";
+      })
+      .filter(Boolean)
+      .join(". ");
+  }
+
+  // How many questions the user has actually answered this round (gates Sharpen).
+  const answeredCount = planGate
+    ? planGate.questions.filter((_, i) => {
+        const pick = picks[i];
+        if (!pick) return false;
+        return pick === "__other__" ? (otherText[i] || "").trim().length > 0 : true;
+      }).length
+    : 0;
+
+  // Merge this round's answers onto everything answered in prior rounds, so the
+  // detail accumulates as the user keeps sharpening (each round shows new questions).
+  function mergedAnswers(): string {
+    return [clarify, composeRoundAnswers()].filter((s) => s.trim()).join(". ");
+  }
+
   // "Sharpen": re-run the understanding pass with the user's answers folded in,
-  // so the % climbs as they add detail (the rewarding part).
+  // so the % climbs as they add detail (the rewarding part). New questions come
+  // back for the next round, so reset this round's picks.
   async function sharpenPlan() {
-    if (gating) return;
+    if (gating || answeredCount === 0) return;
+    const merged = mergedAnswers();
     setGating(true);
     try {
-      const u = await fetchUnderstanding(clarify);
+      const u = await fetchUnderstanding(merged);
+      setClarify(merged);
+      setPicks({});
+      setOtherText({});
       setPlanGate(u);
     } finally {
       setGating(false);
@@ -3954,31 +4020,70 @@ function ScoutTool({
                     </div>
                   </div>
                   <div className="px-5 py-4">
-                    <ul className="space-y-1.5">
+                    <div className="space-y-4">
                       {planGate.questions.map((q, i) => (
-                        <li key={i} className="flex gap-2 text-xs leading-relaxed text-body">
-                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-coral/60" />
-                          {q}
-                        </li>
+                        <div key={i}>
+                          <div className="text-xs font-bold leading-relaxed text-ink">
+                            {q.question}
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {q.options.map((opt, j) => {
+                              const active = picks[i] === opt;
+                              return (
+                                <button
+                                  key={j}
+                                  onClick={() =>
+                                    setPicks((p) => ({ ...p, [i]: opt }))
+                                  }
+                                  className={
+                                    "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
+                                    (active
+                                      ? "border-coral bg-coral text-white"
+                                      : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
+                                  }
+                                >
+                                  {opt}
+                                </button>
+                              );
+                            })}
+                            <button
+                              onClick={() =>
+                                setPicks((p) => ({ ...p, [i]: "__other__" }))
+                              }
+                              className={
+                                "rounded-full border border-dashed px-3 py-1.5 text-xs font-semibold transition " +
+                                (picks[i] === "__other__"
+                                  ? "border-coral bg-coral text-white"
+                                  : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
+                              }
+                            >
+                              Other…
+                            </button>
+                          </div>
+                          {picks[i] === "__other__" && (
+                            <input
+                              value={otherText[i] || ""}
+                              onChange={(e) =>
+                                setOtherText((t) => ({ ...t, [i]: e.target.value }))
+                              }
+                              autoFocus
+                              placeholder="Type your answer…"
+                              className="mt-2 w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                            />
+                          )}
+                        </div>
                       ))}
-                    </ul>
-                    <textarea
-                      value={clarify}
-                      onChange={(e) => setClarify(e.target.value)}
-                      rows={2}
-                      placeholder="Answer any of these in a sentence or two…"
-                      className="mt-3 w-full resize-y rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                    />
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                    </div>
+                    <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
                         onClick={sharpenPlan}
-                        disabled={!clarify.trim() || gating}
+                        disabled={answeredCount === 0 || gating}
                         className="rounded-xl bg-brown px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-40"
                       >
                         {gating ? "Sharpening…" : "Sharpen understanding"}
                       </button>
                       <button
-                        onClick={() => runDiscover(planGate.plan, clarify)}
+                        onClick={() => runDiscover(planGate.plan, mergedAnswers())}
                         disabled={discovering}
                         className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >

@@ -211,6 +211,13 @@ export interface RankingFactor {
   factor: string;
   weight: number;
 }
+// A pre-search sharpening question surfaced in the confidence gate. options are
+// 2–5 concrete answers the user can pick with one tap; the UI always adds its
+// own "Other" write-in, so options should NOT include a generic other/none.
+export interface ConfidenceQuestion {
+  question: string;
+  options: string[];
+}
 export interface GoalPlan {
   goal: string;
   target_type: string;
@@ -224,7 +231,7 @@ export interface GoalPlan {
   opportunity_signals: string[];
   search_dimensions: string[];
   ranking_factors: RankingFactor[];
-  confidence_questions: string[];
+  confidence_questions: ConfidenceQuestion[];
 }
 
 const DECOMPOSE_SYS =
@@ -234,7 +241,8 @@ const DECOMPOSE_SYS =
   "use. Infer intent, never rely only on the literal wording. Then decompose the goal into this EXACT JSON schema " +
   "(populate every field): {\"goal\":\"\",\"target_type\":\"\",\"required\":[],\"preferred\":[],\"hard_constraints\":[]," +
   "\"understanding\":0,\"soft_constraints\":[],\"negative_constraints\":[],\"evidence_needed\":[],\"opportunity_signals\":[]," +
-  "\"search_dimensions\":[],\"ranking_factors\":[{\"factor\":\"\",\"weight\":0}],\"confidence_questions\":[]}\n" +
+  "\"search_dimensions\":[],\"ranking_factors\":[{\"factor\":\"\",\"weight\":0}]," +
+  "\"confidence_questions\":[{\"question\":\"\",\"options\":[]}]}\n" +
   "understanding = an integer 0-100 for how completely you understand what to search for given ONLY the info " +
   "provided: 90+ when the goal is specific and self-contained, lower when key constraints (who exactly, where, " +
   "when, budget, seniority, which niche) are genuinely unknown and would change the results. Be honest, not generous. " +
@@ -254,8 +262,12 @@ const DECOMPOSE_SYS =
   "reply probability. search_dimensions = different ways to attack the search (by geography, profession, event, " +
   "employer, recent news, organization, conference, award, social presence, publication, community, alumni, " +
   "association) — never rely on one. ranking_factors = weighted scoring like [{factor,weight}] where weights total " +
-  "1.0. confidence_questions = what information is missing that would sharpen the search (local only? does budget " +
-  "matter? seniority? timing? prefer independent?). Think in evidence and investigations, not keywords or Google " +
+  "1.0. confidence_questions = the missing information that would most sharpen the search (local only? does budget " +
+  "matter? seniority? timing? prefer independent?). Each is an OBJECT {question, options}: question is a short, plain " +
+  "question; options is 2–5 concrete, mutually-exclusive answers the user can pick with one tap (real values like " +
+  "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
+  "Infer likely options from the goal and the user's field; keep each option under ~4 words. Do NOT add an " +
+  "'Other'/'Not sure' option — the UI supplies its own write-in. Think in evidence and investigations, not keywords or Google " +
   "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
   "Keep each array CONCISE: at most 10 items, each a short phrase (not a paragraph). Return ONLY the JSON object, " +
   "nothing before or after it.";
@@ -268,9 +280,23 @@ export async function decomposeGoal(
 ): Promise<GoalPlan | null> {
   const g = String(goal || "").trim();
   if (!g) return null;
+  // When the user is prospecting (selling/pitching/partnering with EXTERNAL
+  // targets), the target's profile is set by the GOAL, not by the user's own
+  // field. Without this, the planner sees a music-tech company in ABOUT and
+  // bakes "music industry" into required/hard/negative constraints — which
+  // planFit then enforces, rejecting every off-field company as "not a fit".
+  const prospecting = isProspectingUseCase(useCase) || goalWantsAnyIndustry(g);
+  const anyIndustry = goalWantsAnyIndustry(g);
+  const prospectingNote = prospecting
+    ? `\n\nPROSPECTING MODE: The user is finding EXTERNAL targets to sell to, pitch, partner with, or raise from — ABOUT THE USER describes the SENDER and what they offer, NOT the target. Define the target from the GOAL alone; never treat the user's own industry or field as a target requirement.` +
+      (anyIndustry
+        ? ` The user has explicitly said ANY / ALL industries are acceptable, so industry is NOT a constraint: required, hard_constraints, and negative_constraints must NOT reference any industry, sector, or field — limit them to the target's size, type, stage, reachability, or timing. Keep understanding HIGH: an open industry is a deliberate choice, not missing information, so do not lower understanding or ask a confidence_question about which industry to target.`
+        : ``)
+    : ``;
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their field, sub-field, seniority, city are in here): ` +
     `${String(about || "").slice(0, 1600)}` +
+    prospectingNote +
     (personalOverride ? `\n\n${personalOverride}` : "");
   try {
     const raw = await claudeJson(DECOMPOSE_SYS, user, 3200); // big schema, needs room
@@ -288,6 +314,22 @@ export async function decomposeGoal(
       0,
       Math.min(100, Math.round(Number(parsed.understanding)) || 0)
     );
+    // Questions may come back as {question,options} objects (new) or bare
+    // strings (older prompts / fallback). Normalize both to the object shape.
+    const questions: ConfidenceQuestion[] = Array.isArray(parsed.confidence_questions)
+      ? parsed.confidence_questions
+          .map((q: any): ConfidenceQuestion => {
+            if (typeof q === "string") return { question: q.trim(), options: [] };
+            return {
+              question: String(q?.question || "").trim(),
+              options: Array.isArray(q?.options)
+                ? q.options.map((o: any) => String(o || "").trim()).filter(Boolean).slice(0, 5)
+                : [],
+            };
+          })
+          .filter((q: ConfidenceQuestion) => q.question)
+          .slice(0, 6)
+      : [];
     return {
       goal: String(parsed.goal || g).trim(),
       target_type: String(parsed.target_type || "").trim(),
@@ -301,7 +343,7 @@ export async function decomposeGoal(
       opportunity_signals: arr(parsed.opportunity_signals),
       search_dimensions: arr(parsed.search_dimensions),
       ranking_factors: factors,
-      confidence_questions: arr(parsed.confidence_questions),
+      confidence_questions: questions,
     };
   } catch (e) {
     if (e instanceof ApiCreditError) throw e;
@@ -807,7 +849,15 @@ async function extract(
             .join(", ")}. `
         : "")
     : "";
-  const sys = core + fitRules + planFit + (personalOverride ? `\n\n${personalOverride}` : "");
+  // Belt-and-suspenders: if the plan still carries any industry wording (a stale
+  // plan, or the planner disobeying), neutralize it when the user accepts any
+  // industry, so planFit can't reject an off-field target for its industry.
+  const industryOverride =
+    anyIndustry && plan
+      ? ` INDUSTRY OVERRIDE: the user accepts ANY industry. If any requirement, constraint, or exclusion above refers to an industry, sector, or field, IGNORE that part — never set is_relevant false or lower fit_score because the target's industry differs from the user's or from those terms. Judge only size, type, reachability, timing, and the goal's non-industry criteria.`
+      : "";
+  const sys =
+    core + fitRules + planFit + industryOverride + (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
     `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
