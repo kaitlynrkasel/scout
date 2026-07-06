@@ -50,17 +50,28 @@ export async function createWorkspace(
 ) {
   const nm = String(name || "").trim();
   if (!nm) throw new TeamError("Give your company a name.");
-  const { data: ws, error } = await db()
+  const full = {
+    name: nm,
+    created_by: uid,
+    about: (details.about || "").trim() || null,
+    website: (details.website || "").trim() || null,
+    industry: (details.industry || "").trim() || null,
+  };
+  let { data: ws, error } = await db()
     .from("workspaces")
-    .insert({
-      name: nm,
-      created_by: uid,
-      about: (details.about || "").trim() || null,
-      website: (details.website || "").trim() || null,
-      industry: (details.industry || "").trim() || null,
-    })
+    .insert(full)
     .select("id, name, about, website, industry, created_by, created_at")
     .single();
+  // If the DB predates the about/website/industry columns (teams.sql not fully
+  // applied), don't hard-fail, create the company with just its name so the user
+  // isn't blocked. Those details save once the migration is run.
+  if (error && /about|website|industry|schema cache|column/i.test(error.message || "")) {
+    ({ data: ws, error } = await db()
+      .from("workspaces")
+      .insert({ name: nm, created_by: uid })
+      .select("id, name, created_by, created_at")
+      .single());
+  }
   if (error || !ws) throw new TeamError(error?.message || "Could not create workspace.", 500);
   await db()
     .from("workspace_members")
