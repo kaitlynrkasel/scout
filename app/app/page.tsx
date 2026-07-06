@@ -170,7 +170,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     tab: "dashboard",
     title: "Welcome to Scout",
-    body: "Scout finds the right people and opportunities, then drafts warm, personalized outreach in your own voice. Here's a 60-second tour of how it works.",
+    body: "Scout finds the right people and opportunities, then drafts personalized outreach in your own voice. Here's a 60-second tour of how it works.",
   },
   {
     tab: "dashboard",
@@ -4640,6 +4640,48 @@ function ScoutTool({
             onDeleteAccount={deleteAccount}
             onLogout={onLogout}
           />
+
+          {/* Send from your email — connect the mailbox Scout sends outreach from. */}
+          {!!getToken && (
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+              <h2 className="text-base font-extrabold tracking-tight text-ink">
+                Send from your email
+              </h2>
+              <p className="mt-1.5 text-sm leading-relaxed text-body">
+                Connect Gmail or Outlook so Scout can draft and send outreach from your
+                own inbox in one click.
+              </p>
+              <div className="mt-4">
+                {!gmail.connected && !outlook.connected && (
+                  <ConnectEmailCard
+                    note={gmailNote || outlookNote}
+                    onConnectGmail={connectGmail}
+                    onConnectOutlook={connectOutlook}
+                  />
+                )}
+                {gmail.connected && (
+                  <MailboxCard
+                    provider="gmail"
+                    conn={gmail}
+                    note={gmailNote}
+                    onConnect={connectGmail}
+                    onDisconnect={disconnectGmail}
+                    onMode={setGmailMode}
+                  />
+                )}
+                {outlook.connected && (
+                  <MailboxCard
+                    provider="outlook"
+                    conn={outlook}
+                    note={outlookNote}
+                    onConnect={connectOutlook}
+                    onDisconnect={disconnectOutlook}
+                    onMode={setOutlookMode}
+                  />
+                )}
+              </div>
+            </section>
+          )}
 
           {isOwner && (
             <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
@@ -12612,39 +12654,7 @@ function ProfileTab({
         messages sound.
       </p>
 
-      {mailboxAvailable && (
-        <>
-          {/* Neither connected: one "Connect email" card that lets you choose. Once a
-              mailbox is connected, its own card shows (with send mode + disconnect). */}
-          {!gmail.connected && !outlook.connected && (
-            <ConnectEmailCard
-              note={gmailNote || outlookNote}
-              onConnectGmail={onConnectGmail}
-              onConnectOutlook={onConnectOutlook}
-            />
-          )}
-          {gmail.connected && (
-            <MailboxCard
-              provider="gmail"
-              conn={gmail}
-              note={gmailNote}
-              onConnect={onConnectGmail}
-              onDisconnect={onDisconnectGmail}
-              onMode={onGmailMode}
-            />
-          )}
-          {outlook.connected && (
-            <MailboxCard
-              provider="outlook"
-              conn={outlook}
-              note={outlookNote}
-              onConnect={onConnectOutlook}
-              onDisconnect={onDisconnectOutlook}
-              onMode={onOutlookMode}
-            />
-          )}
-        </>
-      )}
+      {/* Mailbox connection moved to the Account tab ("Send from your email"). */}
 
       {/* Company accounts: role + how you serve the company's work (set at
           signup, editable here). Individuals never see this. */}
