@@ -424,6 +424,7 @@ interface Find {
   denyReason?: string; // why the user passed on this find
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
+  draftedAt?: number; // when a draft was last written for this find (drives ordering)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
   pinned?: boolean; // pinned to the top of the finds list
@@ -512,6 +513,12 @@ function normHandleKey(h: string): string {
 // IDs don't break.
 function findKey(projectId: string, o: Opportunity): string {
   return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
+}
+
+// The most recent moment a find changed: found, drafted, or sent. Orders the
+// Outreach/Finds lists newest-activity-first so a fresh draft jumps to the top.
+function lastActivityAt(f: Find): number {
+  return Math.max(f.addedAt || 0, f.draftedAt || 0, f.sentAt || 0, f.lastFollowUpAt || 0);
 }
 
 // Aggregate community benchmarks + what's-working patterns from /api/community-stats.
@@ -2961,7 +2968,9 @@ function ScoutTool({
       if (draft) {
         // Keep the scan enrichment (f), not the stale entry, when saving the draft.
         saveFinds(
-          finds.map((x) => (x.id === find.id ? { ...f, draft, status: "drafted" } : x))
+          finds.map((x) =>
+            x.id === find.id ? { ...f, draft, status: "drafted", draftedAt: Date.now() } : x
+          )
         );
         bumpActivity({ drafts: 1 });
         recordExposure(f.opp); // pursuing this contact -> feed the shared ledger
@@ -3656,7 +3665,7 @@ function ScoutTool({
               (o) => findKey(activeId, o) === f.id
             );
             const dr = opp ? draftByOppId.get(opp.id) : undefined;
-            return dr ? { ...f, draft: dr, status: "drafted" } : f;
+            return dr ? { ...f, draft: dr, status: "drafted", draftedAt: Date.now() } : f;
           })
         );
         // Feed the shared ledger for each contact we just drafted for.
@@ -3755,7 +3764,7 @@ function ScoutTool({
       saveFinds(
         finds.map((f) =>
           f.draft?.opportunityId === opportunityId
-            ? { ...f, draft: newDraft, status: "drafted" }
+            ? { ...f, draft: newDraft, status: "drafted", draftedAt: Date.now() }
             : f
         )
       );
@@ -6250,16 +6259,6 @@ function FindDetailModal({
               </span>
             </div>
           </div>
-          {find.draft && (
-            <button
-              onClick={onRegenerate}
-              disabled={drafting}
-              title="Re-scan the site for the latest info and write a fresh draft"
-              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-50"
-            >
-              {drafting ? "Regenerating…" : "Regenerate draft"}
-            </button>
-          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -6397,6 +6396,7 @@ function FindDetailModal({
                 drafting={drafting}
                 gmailBusy={gmailBusy}
                 onDraft={onDraft}
+                onRegenerate={onRegenerate}
                 onDeny={onDeny}
                 onSetReason={onSetReason}
                 onReopen={onReopen}
@@ -6720,10 +6720,11 @@ function FindsTab({
           : f.status === filter && !f.pinned
     )
     .slice()
-    // Newest found first; fit only breaks ties within the same moment.
+    // Newest ACTIVITY first: the latest of found / drafted / sent bubbles a find to
+    // the top, so the thing you just drafted leads. Fit only breaks exact ties.
     .sort(
       (a, b) =>
-        (b.addedAt || 0) - (a.addedAt || 0) ||
+        lastActivityAt(b) - lastActivityAt(a) ||
         (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
     );
 
@@ -6853,6 +6854,7 @@ function FindsTab({
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
               onDraft={() => onDraft(f)}
+              onRegenerate={() => onDraft(f, { force: true })}
               onDeny={(reason) => onDeny(f, reason)}
               onSetReason={(reason) => onSetReason(f, reason)}
               onReopen={() => onReopen(f)}
@@ -7108,6 +7110,7 @@ function FindCard({
   drafting,
   gmailBusy,
   onDraft,
+  onRegenerate,
   onDeny,
   onSetReason,
   onReopen,
@@ -7142,6 +7145,7 @@ function FindCard({
   drafting: boolean;
   gmailBusy: boolean;
   onDraft: () => void;
+  onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
@@ -7361,6 +7365,7 @@ function FindCard({
         drafting={drafting}
         gmailBusy={gmailBusy}
         onDraft={onDraft}
+        onRegenerate={onRegenerate}
         onDeny={onDeny}
         onSetReason={onSetReason}
         onReopen={onReopen}
@@ -7401,6 +7406,7 @@ function FindWorkflow({
   drafting,
   gmailBusy,
   onDraft,
+  onRegenerate,
   onDeny,
   onSetReason,
   onReopen,
@@ -7431,6 +7437,7 @@ function FindWorkflow({
   drafting: boolean;
   gmailBusy: boolean;
   onDraft: () => void;
+  onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
@@ -7708,6 +7715,16 @@ function FindWorkflow({
 
         {d && (
           <>
+            {!done && (
+              <button
+                onClick={onRegenerate}
+                disabled={drafting}
+                title="Re-scan the site for the latest info and write a fresh draft"
+                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+              >
+                {drafting ? "Regenerating…" : "Regenerate"}
+              </button>
+            )}
             {gmail.connected && emailDraft && !done ? (
               <>
                 <button
