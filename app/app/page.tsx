@@ -4647,7 +4647,7 @@ function ScoutTool({
       {/* ---------------- Footer ---------------- */}
       <footer className="relative border-t border-warm-border bg-surface/70">
         <CornerDog />
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
+        <div className="flex w-full flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
           <span className="font-semibold text-ink">
             <span className="text-brown">Scout</span>
