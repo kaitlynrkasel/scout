@@ -6165,6 +6165,21 @@ function FindDetailModal({
       return "";
     }
   })();
+  // Social/profile links (LinkedIn, IG, X, etc.) can't be previewed in an iframe,
+  // so the preview pane would just show the "blocks automated previews" card. For
+  // those, show a real person-details panel instead of a dead preview.
+  const socialProfile =
+    /(?:linkedin\.com\/in|linkedin\.com\/company|instagram\.com|(?:twitter|x)\.com|facebook\.com|tiktok\.com|threads\.net|youtube\.com\/@)/i.test(
+      o.url || ""
+    );
+  // Every place Scout found this person, with a snippet. Falls back to the single
+  // source when the older `sources` array isn't present.
+  const sourceRows =
+    o.sources && o.sources.length
+      ? o.sources
+      : o.url
+        ? [{ title: o.sourceTitle || host, url: o.url, snippet: o.sourceSnippet || "" }]
+        : [];
 
   // Close on Escape.
   useEffect(() => {
@@ -6487,7 +6502,11 @@ function FindDetailModal({
           >
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-                {isApplication ? "Application preview" : "Website preview"}
+                {socialProfile
+                  ? "About this person"
+                  : isApplication
+                    ? "Application preview"
+                    : "Website preview"}
               </div>
               {host && <span className="truncate text-xs text-body/50">{host}</span>}
               {o.url && (
@@ -6510,12 +6529,14 @@ function FindDetailModal({
                       Autofill
                     </button>
                   )}
-                  <button
-                    onClick={() => setTall((v) => !v)}
-                    className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
-                  >
-                    {tall ? "Contract" : "Expand"}
-                  </button>
+                  {!socialProfile && (
+                    <button
+                      onClick={() => setTall((v) => !v)}
+                      className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                    >
+                      {tall ? "Contract" : "Expand"}
+                    </button>
+                  )}
                   <a
                     href={o.url}
                     target="_blank"
@@ -6541,7 +6562,73 @@ function FindDetailModal({
                 </ol>
               </div>
             )}
-            {o.url ? (
+            {socialProfile ? (
+              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto rounded-xl border border-warm-border bg-surface p-5">
+                <div>
+                  <div className="text-lg font-bold text-ink">{o.name}</div>
+                  {(o.contactRole || o.outlet) && (
+                    <div className="mt-0.5 text-sm text-body/80">
+                      {[o.contactRole || o.contactName ? o.contactRole : "", o.outlet]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </div>
+                  )}
+                  {(o.location || recipientTz) && (
+                    <div className="mt-0.5 text-xs text-body/60">
+                      {o.location}
+                      {recipientTz ? ` · ${localTimeLabel(recipientTz)} their time` : ""}
+                    </div>
+                  )}
+                </div>
+
+                {o.whyItFits && (
+                  <div>
+                    <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                      Why they fit
+                    </div>
+                    <p className="text-sm leading-relaxed text-body">{o.whyItFits}</p>
+                  </div>
+                )}
+
+                {sourceRows.length > 0 && (
+                  <div>
+                    <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                      Where Scout found {o.name.split(" ")[0] || "them"}
+                    </div>
+                    <div className="space-y-2.5">
+                      {sourceRows.map((s, i) => (
+                        <div key={i} className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+                          <a
+                            href={s.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                          >
+                            {s.title || s.url} ↗
+                          </a>
+                          {s.snippet && (
+                            <p className="mt-1 text-xs leading-relaxed text-body/70">{s.snippet}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <a
+                  href={o.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-block rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                >
+                  Open {host || "profile"} ↗
+                </a>
+                <p className="text-[11px] leading-relaxed text-body/45">
+                  {host || "This profile"} can&apos;t be previewed inside Scout, but everything
+                  Scout gathered about this person is here. Open the profile to see the rest.
+                </p>
+              </div>
+            ) : o.url ? (
               <div
                 className="relative w-full min-h-0 flex-1 overflow-hidden rounded-xl border border-warm-border bg-white"
                 style={{ height: tall ? "100%" : "65vh", resize: "vertical", minHeight: 240 }}
@@ -6604,7 +6691,7 @@ function FindDetailModal({
                 {fillNote}
               </p>
             )}
-            {o.url && (
+            {o.url && !socialProfile && (
               <p className="mt-2 text-[11px] leading-relaxed text-body/50">
                 A few sites still resist previewing here (login walls, aggressive
                 anti-bot checks). If the preview stays blank, use{" "}
