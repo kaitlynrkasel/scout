@@ -757,6 +757,73 @@ async function findRecruiterContact(
   }
 }
 
+// Phase 2 — recursive contact enrichment for ANY search (not just jobs). When a
+// strong candidate has no reachable contact, spawn targeted follow-up searches to
+// find one: a personal email, LinkedIn, or the right gatekeeper (manager, agent,
+// booking, publicist, PR, press/partnerships). Never invents contacts.
+async function findContactFor(
+  opp: Opportunity,
+  goal: string,
+  useCase: string
+): Promise<{ name: string; role: string; email: string; handle: string; phone: string } | null> {
+  const who = (opp.name || "").trim();
+  const org = (opp.outlet || "").trim();
+  if (!who) return null;
+  const isPerson = (opp.targetType || "") === "person";
+  const label = `${who}${org && org !== who ? ` (${org})` : ""}`;
+  const queries = isPerson
+    ? [
+        `"${who}"${org ? ` ${org}` : ""} email OR contact`,
+        `"${who}"${org ? ` ${org}` : ""} LinkedIn OR manager OR agent OR publicist OR booking contact`,
+      ]
+    : [
+        `${who} contact email OR "get in touch"`,
+        `${who} team OR press OR partnerships email`,
+      ];
+  const snippets: string[] = [];
+  try {
+    for (const q of queries) {
+      const results = await tavilySearch(q, 4);
+      for (const r of results) {
+        snippets.push(
+          `Title: ${r.title || ""}\nURL: ${r.url || ""}\n${String(r.content || "").slice(0, 900)}`
+        );
+      }
+      if (snippets.length >= 8) break;
+    }
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    return null;
+  }
+  if (!snippets.length) return null;
+
+  const sys =
+    `You find ONE real way to reach this target for outreach about: "${goal}". ` +
+    (isPerson
+      ? `The target is a PERSON. Return the best reachable contact: their own work/personal email, or the email of ` +
+        `their manager / agent / publicist / booking or press contact, plus a LinkedIn or @handle if present. `
+      : `The target is an ORGANIZATION. Return a real contact route: a named person's email if shown, else the best ` +
+        `team/press/partnerships email, plus any handle. `) +
+    `Return ONLY JSON {name, role, email, handle, phone}. CRITICAL: never invent an email, name, or phone, use only ` +
+    `values that appear VERBATIM in the results. Prefer a specific personal email over a generic inbox ` +
+    `(info@, contact@, hello@). If a phone appears verbatim, include it. If nothing reachable is present, return ` +
+    `all-empty fields.`;
+  const user = `TARGET: ${label}\n\nSEARCH RESULTS:\n${snippets.join("\n\n").slice(0, 6000)}`;
+  try {
+    const parsed: any = parseJsonLoose(await claudeJson(sys, user));
+    const email = String(parsed?.email || "").trim();
+    const name = String(parsed?.name || "").trim();
+    const handle = String(parsed?.handle || "").trim();
+    const role = String(parsed?.role || "").trim();
+    const phone = String(parsed?.phone || "").trim();
+    if (!email && !handle && !phone) return null;
+    return { name, role, email, handle, phone };
+  } catch (e) {
+    if (e instanceof ApiCreditError) throw e;
+    return null;
+  }
+}
+
 async function extract(
   cand: TavilyResult,
   goal: string,
@@ -1526,26 +1593,48 @@ export async function discover(
   // Best-fit first (evidence-boosted).
   opps.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0));
 
-  // For job/internship hunts, attach a specific recruiter / team-member contact
-  // to openings that don't already list a real person. Enrich the top few in
-  // parallel (bounded so we stay within the serverless time budget).
+  // Phase 2 — confidence-gated contact enrichment. The best candidates that lack a
+  // reachable contact get targeted follow-up searches to find one (a personal
+  // email, LinkedIn, or the right gatekeeper). Runs for EVERY search, not just
+  // jobs, and is bounded to the top few so we stay within the time budget.
+  const jobSearch = isJobSearch(useCase, goal);
   let enrichSearches = 0;
-  if (isJobSearch(useCase, goal) && !aborted()) {
+  if (!aborted()) {
     const needContact = opps.filter((o) => !hasPersonalEmail(o)).slice(0, 6);
     enrichSearches = needContact.length * 2;
+    if (needContact.length)
+      emit(`Chasing contacts for ${needContact.length} strong ${needContact.length === 1 ? "match" : "matches"}…`);
     const found = await Promise.all(
-      needContact.map((o) => findRecruiterContact(o, goal).catch(() => null))
+      needContact.map((o) =>
+        (jobSearch ? findRecruiterContact(o, goal) : findContactFor(o, goal, useCase)).catch(
+          () => null
+        )
+      )
     );
     needContact.forEach((o, i) => {
-      const c = found[i];
+      const c = found[i] as {
+        name?: string;
+        role?: string;
+        email?: string;
+        handle?: string;
+        phone?: string;
+      } | null;
       if (!c) return;
       if (c.name && !o.contactName) o.contactName = c.name;
       if (c.role && !o.contactRole) o.contactRole = c.role;
       if (c.handle && !o.contactHandle) o.contactHandle = c.handle;
-      if (c.email && !o.contactEmail) {
+      if (c.phone && !o.contactPhone) o.contactPhone = c.phone;
+      // Upgrade to a real email (or a personal one over a generic inbox).
+      if (
+        c.email &&
+        (!o.contactEmail || (!isPersonalEmail(o.contactEmail) && isPersonalEmail(c.email)))
+      ) {
         o.contactEmail = c.email;
-        if (o.channel === "Company Portal" || o.channel === "Unknown") o.channel = "Email";
+        if (o.channel === "Company Portal" || o.channel === "Unknown" || !o.channel)
+          o.channel = "Email";
       }
+      if (c.email || c.handle || c.phone)
+        emit(`Found a way to reach ${o.name}${c.email ? ` (${c.email})` : ""}`);
     });
   }
 
