@@ -7198,6 +7198,40 @@ function FindsTab({
   const [detailId, setDetailId] = useState("");
   const detailFind = detailId ? finds.find((f) => f.id === detailId) || null : null;
 
+  // Bulk selection: pick several finds at once and act on all of them.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkMoveTo, setBulkMoveTo] = useState("");
+  const toggleSelected = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  const exitSelect = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setBulkMoveTo("");
+  };
+  // The selected finds that are actually in the current filtered view. Keeps
+  // bulk actions scoped to what the user can see (and lets "select all" work).
+  const selectedShown = shown.filter((f) => selectedIds.has(f.id));
+  const allShownSelected =
+    shown.length > 0 && shown.every((f) => selectedIds.has(f.id));
+  const bulkDraftable = selectedShown.filter(
+    (f) => f.status === "new" && !f.draft?.body
+  );
+  // Move targets: any project other than the one the *first* selected find is in
+  // is a reasonable list; finds can span projects, so offer every other project.
+  const moveTargets = projects.filter(
+    (p) => !selectedShown.every((f) => f.projectId === p.id)
+  );
+  const runBulk = (fn: (f: Find) => void, list: Find[] = selectedShown) => {
+    list.forEach(fn);
+    exitSelect();
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -7293,6 +7327,44 @@ function FindsTab({
         })}
       </div>
 
+      {/* Select toggle — turns the list into a multi-select for bulk actions. */}
+      {shown.length > 0 && (
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {!selectMode ? (
+            <button
+              onClick={() => setSelectMode(true)}
+              className="rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Select
+            </button>
+          ) : (
+            <>
+              <button
+                onClick={() =>
+                  setSelectedIds(
+                    allShownSelected
+                      ? new Set()
+                      : new Set(shown.map((f) => f.id))
+                  )
+                }
+                className="rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+              >
+                {allShownSelected ? "Select none" : `Select all ${shown.length}`}
+              </button>
+              <span className="text-xs font-medium text-body/60">
+                {selectedShown.length} selected
+              </span>
+              <button
+                onClick={exitSelect}
+                className="ml-auto rounded-lg px-2 py-1.5 text-xs font-semibold text-body/60 transition hover:text-ink"
+              >
+                Cancel
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {shown.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
           {finds.length === 0 ? (
@@ -7311,7 +7383,79 @@ function FindsTab({
         </div>
       ) : (
         <div className="mt-5 space-y-3">
-          {shown.map((f) => (
+          {shown.map((f) =>
+            selectMode ? (
+              <div key={f.id} className="flex items-stretch gap-3">
+                <button
+                  onClick={() => toggleSelected(f.id)}
+                  aria-label={selectedIds.has(f.id) ? "Deselect" : "Select"}
+                  className="flex w-6 shrink-0 items-start justify-center pt-5"
+                >
+                  <span
+                    className={`grid h-5 w-5 place-items-center rounded-md border-2 transition ${
+                      selectedIds.has(f.id)
+                        ? "border-coral bg-brand-gradient text-white"
+                        : "border-warm-border bg-surface"
+                    }`}
+                  >
+                    {selectedIds.has(f.id) && (
+                      <svg viewBox="0 0 20 20" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="3">
+                        <path d="M5 10l3.5 3.5L15 6" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                </button>
+                <div
+                  onClick={() => toggleSelected(f.id)}
+                  className="min-w-0 flex-1 cursor-pointer"
+                >
+                  {/* Card is inert while selecting: the overlay swallows clicks so
+                      tapping anywhere on it toggles selection instead of firing
+                      the card's own buttons. */}
+                  <div className="pointer-events-none">
+                    <FindCard
+                      find={f}
+                      gmail={gmail}
+                      drafting={draftingId === f.id}
+                      gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
+                      onDraft={() => {}}
+                      onRegenerate={() => {}}
+                      onDeny={() => {}}
+                      onSetReason={() => {}}
+                      onReopen={() => {}}
+                      onMarkSent={() => {}}
+                      onStatus={() => {}}
+                      onRemove={() => {}}
+                      onSendGmail={() => {}}
+                      onSchedule={() => {}}
+                      onMeetingPrep={() => {}}
+                      meetingPrepBusy={false}
+                      onCopy={() => {}}
+                      onEditDraft={() => {}}
+                      onDeepScan={() => {}}
+                      scanning={false}
+                      onFollowUp={() => {}}
+                      followUpBusy={false}
+                      jobMode={jobMode}
+                      onDraftApplication={() => {}}
+                      applying={false}
+                      hasResume={hasResume}
+                      onToggleAttach={() => {}}
+                      onTogglePin={() => {}}
+                      onOpenDetail={() => {}}
+                      wantedChannels={
+                        categories.find((c) => c.id === f.categoryId)?.wantedChannels || []
+                      }
+                      otherProjects={projects.filter((p) => p.id !== f.projectId)}
+                      onMoveProject={() => {}}
+                      currentSignature={getSignatureFor(f.projectId)}
+                      signatureOptions={signatureOptions}
+                      onEditSignature={() => {}}
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
             <FindCard
               key={f.id}
               find={f}
@@ -7352,7 +7496,69 @@ function FindsTab({
               signatureOptions={signatureOptions}
               onEditSignature={(sig) => onEditSignature(f.projectId, sig)}
             />
-          ))}
+            )
+          )}
+        </div>
+      )}
+
+      {/* Bulk action bar — floats over the list while items are selected. */}
+      {selectMode && selectedShown.length > 0 && (
+        <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
+          <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface/95 px-4 py-3 shadow-xl backdrop-blur">
+            <span className="mr-1 text-sm font-bold text-ink">
+              {selectedShown.length} selected
+            </span>
+            {bulkDraftable.length > 0 && (
+              <button
+                onClick={() => runBulk((f) => onDraft(f), bulkDraftable)}
+                className="rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
+              >
+                Draft {bulkDraftable.length}
+              </button>
+            )}
+            {moveTargets.length > 0 && (
+              <select
+                value={bulkMoveTo}
+                onChange={(e) => {
+                  const pid = e.target.value;
+                  if (pid) runBulk((f) => onMoveProject(f, pid));
+                }}
+                className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-xs font-semibold text-ink outline-none transition focus:border-brown"
+              >
+                <option value="">Move to…</option>
+                {moveTargets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              onClick={() => runBulk((f) => onMarkSent(f))}
+              className="rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Mark sent
+            </button>
+            <button
+              onClick={() => runBulk((f) => onDeny(f, ""))}
+              className="rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Deny
+            </button>
+            <button
+              onClick={() => {
+                if (
+                  typeof window !== "undefined" &&
+                  !window.confirm(`Remove ${selectedShown.length} finds? This can't be undone.`)
+                )
+                  return;
+                runBulk((f) => onRemove(f));
+              }}
+              className="rounded-xl border border-red-200 bg-white px-3.5 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+            >
+              Remove
+            </button>
+          </div>
         </div>
       )}
 
