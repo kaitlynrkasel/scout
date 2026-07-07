@@ -9,7 +9,9 @@ export const maxDuration = 60; // reads many drafts + one Claude pass; scales wi
 // specific observations about THESE messages, not generic outreach tips.
 export async function POST(req: NextRequest) {
   try {
-    const { drafts } = await req.json();
+    const { drafts, about, useCase } = await req.json();
+    const aboutStr = String(about || "").slice(0, 1200).trim();
+    const useCaseStr = String(useCase || "").slice(0, 200).trim();
     const list = (Array.isArray(drafts) ? drafts : [])
       .slice(0, 8)
       .map((d: any) => ({
@@ -44,11 +46,23 @@ export async function POST(req: NextRequest) {
       "short phrases from them so the person can see exactly what you mean. Point out what's working, " +
       "not just problems. Weigh outcomes heavily: when some drafts GOT A REPLY and others didn't, " +
       "identify what the replied ones do differently and tell the person to do more of that. " +
+      // Ground the advice in WHO the sender is and WHAT they're trying to do, so
+      // tips are specific to their goal and their company instead of generic.
+      "You are ALSO given who the sender is and their goal. Judge each draft against that goal: " +
+      "does it lead with what THIS sender uniquely offers, is the ask right for what they want, " +
+      "does it sound like their world? At least one tip must tie directly to their stated goal or " +
+      "who they are (e.g. leverage a specific detail about them they're leaving out). " +
       "Skip generic advice (be personal, keep it short, soft ask) UNLESS a draft " +
       "actually violates it, and then show where. Never use em-dashes. Keep each tip to 2-3 sentences.";
 
+    const context =
+      (useCaseStr ? `MY GOAL / USE CASE: ${useCaseStr}\n` : "") +
+      (aboutStr ? `WHO I AM / MY COMPANY: ${aboutStr}\n` : "");
+
     const user =
-      "Here are my recent outreach drafts (with whether I ended up sending them). What should I know about my writing?\n\n" +
+      (context ? context + "\n" : "") +
+      "Here are my recent outreach drafts (with whether I ended up sending them). " +
+      "What should I know about my writing, specifically for my goal above?\n\n" +
       list
         .map(
           (d, i) =>

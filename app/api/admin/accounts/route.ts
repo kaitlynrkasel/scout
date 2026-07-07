@@ -59,6 +59,17 @@ export async function GET(req: Request) {
     searches: number;
     pendingSeeds: number;
     updatedAt: string;
+    // Profile detail so the operator knows what to seed for this person.
+    bio: string;
+    accountType: string;
+    company: {
+      name: string;
+      about: string;
+      industry: string;
+      stage: string;
+    };
+    location: string;
+    projects: { name: string; useCase: string; context: string }[];
   };
   const accounts: Account[] = [];
   const seenEmails = new Set<string>();
@@ -70,6 +81,7 @@ export async function GET(req: Request) {
     const prof = profById.get(u.id) || {};
     const state = stateById.get(u.id);
     const data = (state?.data || {}) as any;
+    const ex = (data?.profileExtras || {}) as any;
     const finds: any[] = Array.isArray(data.finds) ? data.finds : [];
     let sent = 0;
     let replied = 0;
@@ -78,9 +90,16 @@ export async function GET(req: Request) {
       if (st === "sent") sent++;
       else if (st === "replied") replied++;
     }
+    const projects = (Array.isArray(data?.projects) ? data.projects : [])
+      .slice(0, 12)
+      .map((p: any) => ({
+        name: String(p?.name || ""),
+        useCase: String(p?.useCase || ""),
+        context: String(p?.context || ""),
+      }));
     accounts.push({
       email,
-      name: String(prof.name || data?.profileExtras?.companyName || ""),
+      name: String(prof.name || ex.companyName || ""),
       useCase: String(prof.use_case || ""),
       hasAccount: true,
       finds: finds.length,
@@ -89,6 +108,16 @@ export async function GET(req: Request) {
       searches: Number(data?.activity?.searches || 0),
       pendingSeeds: pendingByEmail.get(email) || 0,
       updatedAt: String(state?.updated_at || ""),
+      bio: String(prof.bio || ""),
+      accountType: String(ex.accountType || ""),
+      company: {
+        name: String(ex.companyName || ""),
+        about: String(ex.companyAbout || ""),
+        industry: String(ex.companyIndustry || ""),
+        stage: String(ex.companyStage || ""),
+      },
+      location: String(ex.location || ""),
+      projects,
     });
   }
 
@@ -106,6 +135,11 @@ export async function GET(req: Request) {
       searches: 0,
       pendingSeeds: pendingByEmail.get(email) || 0,
       updatedAt: "",
+      bio: "",
+      accountType: "",
+      company: { name: "", about: "", industry: "", stage: "" },
+      location: "",
+      projects: [],
     });
   }
 

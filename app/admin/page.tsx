@@ -10,12 +10,13 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
-import InsightsView from "./InsightsView";
+import InsightsView, { ConciergePanel } from "./InsightsView";
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
+  const [adminTab, setAdminTab] = useState<"insights" | "concierge">("insights");
 
   useEffect(() => {
     if (!supabase) {
@@ -89,6 +90,21 @@ export default function AdminPage() {
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
+          <nav className="ml-4 flex items-center gap-1">
+            {(["insights", "concierge"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setAdminTab(t)}
+                className={`rounded-lg px-3 py-1.5 text-xs font-bold capitalize transition ${
+                  adminTab === t
+                    ? "bg-brown-tint text-brown-deep"
+                    : "text-body hover:bg-brown-tint/50"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </nav>
           <Link
             href="/app"
             className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-brown-tint"
@@ -97,7 +113,22 @@ export default function AdminPage() {
           </Link>
         </div>
       </header>
-      <InsightsView getToken={getToken} />
+      {adminTab === "insights" ? (
+        <InsightsView getToken={getToken} />
+      ) : (
+        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+              <span className="brand-text">Concierge</span>
+            </h1>
+            <p className="mt-1 text-sm text-body">
+              Hand-pick or run finds for any account (even one that hasn't signed
+              up yet). They land on that account's next load or search.
+            </p>
+          </div>
+          <ConciergePanel getToken={getToken} />
+        </main>
+      )}
     </div>
   );
 }

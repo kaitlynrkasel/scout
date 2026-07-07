@@ -95,6 +95,37 @@ function outreachSalt(accountEmail?: string): string {
   }
 }
 
+// Copy text to the clipboard, returning whether it actually worked. The async
+// Clipboard API is blocked in some contexts (permissions, non-secure origins,
+// certain in-app webviews); we fall back to the legacy execCommand path and,
+// only if BOTH fail, report false so callers can tell the user instead of
+// flashing a false "Copied!".
+async function copyToClipboard(text: string): Promise<boolean> {
+  try {
+    if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    /* fall through to the legacy path */
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.top = "-1000px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 // A compact, aggregate "people like you" directive for the query planner, derived
 // from the cohort patterns. Empty when there's no real cohort yet.
 function cohortHintFrom(community: CommunityStats | null): string {
@@ -1105,6 +1136,13 @@ function ScoutTool({
   }, [redraftChat, revisingBatch]);
   const [stats, setStats] = useState("");
   const [searchNotice, setSearchNotice] = useState(""); // job-fallback disclosure
+  // A completed search (including the auto-broadened retry) genuinely found
+  // nothing, so we show a real empty state instead of a silent stat line.
+  const [noResults, setNoResults] = useState(false);
+  // Set when a zero-result search should immediately re-run with filters relaxed;
+  // consumed in runDiscover's finally so the retry starts after cleanup.
+  const broadenRetryRef = useRef<{ plan: any; clarify: string } | null>(null);
+  const goalInputRef = useRef<HTMLTextAreaElement | null>(null); // focus target for the empty state
   const [searchLog, setSearchLog] = useState<string[]>([]); // live "what Scout is doing"
   const [expanded, setExpanded] = useState(false);
 
@@ -3515,12 +3553,18 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, activeMailbox.connected]);
 
-  async function runDiscover(precomputedPlan: any = null, clarifyText = "") {
-    if (!profileComplete) {
+  async function runDiscover(
+    precomputedPlan: any = null,
+    clarifyText = "",
+    opts: { broaden?: boolean } = {}
+  ) {
+    const broaden = !!opts.broaden;
+    if (!profileComplete && !guest) {
       setTab("profile");
       return;
     }
     setPlanGate(null); // close the confidence popup if it was open
+    setNoResults(false);
     const runCatId = autoSaveCustomSearch();
     resetResults();
     setDiscoverStartedAt(Date.now());
@@ -3560,16 +3604,25 @@ function ScoutTool({
             : "any"
         : "any";
       const extras: string[] = [];
-      if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
-      if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
-      // Contact channels the user picked for this search, read by discover's
-      // "REQUIRED CHANNELS" instruction, which favors results exposing all of them.
-      if (wantedChannels.length) {
-        const hints = CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map(
-          (c) => c.hint
-        );
+      // On the broaden retry we deliberately drop the narrowing filters
+      // (competitiveness, company size, required channels) so a too-tight
+      // search can't come back empty a second time.
+      if (!broaden) {
+        if (compLevel !== "any") extras.push(COMPETITIVENESS_HINTS[compLevel]);
+        if (sizePref !== "any") extras.push(COMPANY_SIZE_HINTS[sizePref]);
+        // Contact channels the user picked for this search, read by discover's
+        // "REQUIRED CHANNELS" instruction, which favors results exposing all of them.
+        if (wantedChannels.length) {
+          const hints = CONTACT_CHANNELS.filter((c) => wantedChannels.includes(c.key)).map(
+            (c) => c.hint
+          );
+          extras.push(
+            `The user specifically wants these contact channels back for every result: ${hints.join(", ")}.`
+          );
+        }
+      } else {
         extras.push(
-          `The user specifically wants these contact channels back for every result: ${hints.join(", ")}.`
+          "BROADEN: an earlier, stricter search for this returned nothing. Relax the constraints now — accept strong adjacent matches (nearby locations, related roles or industries, any available contact channel) rather than coming back empty. Prioritize returning real, reachable people over a perfect filter match."
         );
       }
       // Answers the user gave to Scout's confidence questions ride along with
@@ -3688,6 +3741,17 @@ function ScoutTool({
       // Only count a search against usage when it ran to completion.
       if (done) bumpActivity({ searches: 1, found: finalOpps.length });
       if (added) setStats((s) => `${s} · ${added} new saved to Finds`);
+      // Never strand the user on a bare "0 found": if a completed search found
+      // nothing, immediately re-run once with the filters relaxed. If even the
+      // broadened pass is empty, show a real empty state (below) instead.
+      if (done && finalOpps.length === 0) {
+        if (!broaden) {
+          setStats("No exact matches — broadening the search…");
+          broadenRetryRef.current = { plan: precomputedPlan, clarify: clarifyText };
+        } else {
+          setNoResults(true);
+        }
+      }
     } catch (e: any) {
       if (e?.name === "AbortError") return; // cancelled before any stream read
       setError(e.message);
@@ -3700,6 +3764,12 @@ function ScoutTool({
       // search's results. Deferred to the next render (see seedPullTick) so it
       // merges on top of the finds this search just saved.
       setSeedPullTick((t) => t + 1);
+      // Kick off the broaden retry after cleanup (so discovering resets first).
+      const retry = broadenRetryRef.current;
+      if (retry) {
+        broadenRetryRef.current = null;
+        setTimeout(() => runDiscover(retry.plan, retry.clarify, { broaden: true }), 0);
+      }
     }
   }
 
@@ -4549,6 +4619,7 @@ function ScoutTool({
                     <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} />
                   </div>
                   <textarea
+                    ref={goalInputRef}
                     value={goal}
                     onChange={(e) => setGoal(e.target.value)}
                     placeholder={goalPlaceholder}
@@ -4808,6 +4879,46 @@ function ScoutTool({
             )}
 
             {/* ---------------- Results as a chat bubble ---------------- */}
+            {/* Real empty state: shown only after a completed search AND its
+                auto-broadened retry both came back with nothing. */}
+            {noResults && !discovering && visibleOpps.length === 0 && (
+              <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 text-center shadow-soft sm:p-8">
+                <div className="mx-auto grid h-11 w-11 place-items-center rounded-xl bg-brown-tint text-brown-deep">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+                </div>
+                <h3 className="mt-3 text-lg font-semibold tracking-tight text-ink">
+                  No matches yet — even after broadening
+                </h3>
+                <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-body">
+                  Scout widened the search and still came up empty. That usually
+                  means the goal is too specific or points somewhere with a thin
+                  public trail. Try loosening it — drop a location, a niche, or a
+                  hard requirement — and search again.
+                </p>
+                <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+                  <button
+                    onClick={() => {
+                      setNoResults(false);
+                      goalInputRef.current?.focus();
+                      goalInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }}
+                    className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                  >
+                    Edit my goal
+                  </button>
+                  <button
+                    onClick={() => {
+                      setNoResults(false);
+                      runDiscover(null, "", { broaden: true });
+                    }}
+                    className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    Search again, wider
+                  </button>
+                </div>
+              </section>
+            )}
+
             {visibleOpps.length > 0 && (
               <section className="mt-10">
                 <div className="flex items-start gap-3">
@@ -4857,7 +4968,11 @@ function ScoutTool({
                         disabled={drafting || selectedCount === 0}
                         className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                       >
-                        {drafting ? "Drafting…" : `Draft the ${selectedCount} approved`}
+                        {drafting
+                  ? "Drafting…"
+                  : selectedCount === 0
+                  ? "Select who to draft"
+                  : `Draft ${selectedCount} selected`}
                       </button>
                     </div>
                   </div>
@@ -4996,11 +5111,12 @@ function ScoutTool({
                               <SendAction draft={d} onUse={() => bumpActivity({ copies: 1 })} />
                             )}
                             <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(
+                              onClick={async () => {
+                                const ok = await copyToClipboard(
                                   (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
                                 );
-                                bumpActivity({ copies: 1 });
+                                if (ok) bumpActivity({ copies: 1 });
+                                else setError("Couldn't copy — select the text and press ⌘C.");
                               }}
                               className="rounded-lg border border-warm-border px-3 py-1 text-xs font-semibold text-body transition hover:bg-warm-bg"
                             >
@@ -5087,6 +5203,8 @@ function ScoutTool({
         <DashboardTab
           activity={activity}
           profile={profile}
+          about={aboutText}
+          useCase={activeUseCase}
           templates={myTemplates}
           projects={projects}
           categoriesCount={categories.length}
@@ -5501,7 +5619,11 @@ function ScoutTool({
                 disabled={drafting || selectedCount === 0}
                 className="ml-auto rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
               >
-                {drafting ? "Drafting…" : `Draft the ${selectedCount} approved`}
+                {drafting
+                  ? "Drafting…"
+                  : selectedCount === 0
+                  ? "Select who to draft"
+                  : `Draft ${selectedCount} selected`}
               </button>
             </div>
           </div>
@@ -7584,6 +7706,8 @@ function FindsTab({
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkMoveTo, setBulkMoveTo] = useState("");
+  const [bulkDenyOpen, setBulkDenyOpen] = useState(false);
+  const [bulkDenyText, setBulkDenyText] = useState("");
   const toggleSelected = (id: string) =>
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -7595,6 +7719,8 @@ function FindsTab({
     setSelectMode(false);
     setSelectedIds(new Set());
     setBulkMoveTo("");
+    setBulkDenyOpen(false);
+    setBulkDenyText("");
   };
   // The selected finds that are actually in the current filtered view. Keeps
   // bulk actions scoped to what the user can see (and lets "select all" work).
@@ -7921,12 +8047,58 @@ function FindsTab({
             >
               Mark sent
             </button>
-            <button
-              onClick={() => runBulk((f) => onDeny(f, ""))}
-              className="rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
-            >
-              Deny
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setBulkDenyOpen((v) => !v)}
+                className={`rounded-xl border px-3.5 py-2 text-xs font-semibold transition ${
+                  bulkDenyOpen
+                    ? "border-brown bg-brown-tint/50 text-brown-deep"
+                    : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                }`}
+              >
+                Deny…
+              </button>
+              {/* One shared reason for the whole batch, so bulk denials still
+                  teach the ranking model why (not a silent, reasonless pass). */}
+              {bulkDenyOpen && (
+                <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-warm-border bg-surface p-3 shadow-xl">
+                  <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-body/50">
+                    Why pass on these {selectedShown.length}?
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {DENY_REASONS.map((r) => (
+                      <button
+                        key={r}
+                        onClick={() => runBulk((f) => onDeny(f, r))}
+                        className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-body transition hover:border-brown hover:bg-brown-tint/40"
+                      >
+                        {r}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-2.5 flex items-center gap-1.5">
+                    <input
+                      value={bulkDenyText}
+                      onChange={(e) => setBulkDenyText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && bulkDenyText.trim())
+                          runBulk((f) => onDeny(f, bulkDenyText.trim()));
+                      }}
+                      placeholder="Or type a reason…"
+                      className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs text-ink outline-none focus:border-brown"
+                    />
+                    <button
+                      onClick={() =>
+                        runBulk((f) => onDeny(f, bulkDenyText.trim() || ""))
+                      }
+                      className="shrink-0 rounded-lg bg-brown px-2.5 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                    >
+                      Deny
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => {
                 if (
@@ -8047,8 +8219,13 @@ function ApplicationPacket({
   const drafted = components.filter((c: any) => c.draft);
   const todos = components.filter((c: any) => !c.draft);
 
-  const copy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text);
+  const copy = async (text: string, key: string) => {
+    const ok = await copyToClipboard(text);
+    if (!ok) {
+      setCopied(`${key}__fail`);
+      setTimeout(() => setCopied(""), 2500);
+      return;
+    }
     onCopy();
     setCopied(key);
     setTimeout(() => setCopied(""), 1500);
@@ -8072,7 +8249,7 @@ function ApplicationPacket({
             onClick={copyAll}
             className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-surface"
           >
-            {copied === "__all" ? "Copied!" : "Copy all"}
+            {copied === "__all" ? "Copied!" : copied === "__all__fail" ? "Press ⌘C" : "Copy all"}
           </button>
         )}
       </div>
@@ -8103,7 +8280,7 @@ function ApplicationPacket({
                 onClick={() => copy(c.draft, `d${i}`)}
                 className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-accent transition hover:bg-warm-bg"
               >
-                {copied === `d${i}` ? "Copied!" : "Copy"}
+                {copied === `d${i}` ? "Copied!" : copied === `d${i}__fail` ? "Press ⌘C" : "Copy"}
               </button>
             </div>
             {c.prompt && c.prompt !== c.title && (
@@ -8867,11 +9044,11 @@ function FindWorkflow({
               !done && <SendAction draft={d} onUse={onCopy} />
             )}
             <button
-              onClick={() => {
-                navigator.clipboard.writeText(
+              onClick={async () => {
+                const ok = await copyToClipboard(
                   (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
                 );
-                onCopy();
+                if (ok) onCopy();
               }}
               className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
             >
@@ -9135,12 +9312,32 @@ function learnedFromFinds(finds: Find[]) {
     repliedCount,
     sentCount: sentish.length,
     denyReasons: (() => {
-      const m: Record<string, number> = {};
+      // Group near-identical reasons: key by a normalized form (lowercase, no
+      // punctuation/apostrophes, collapsed whitespace) so "I don't like X" and
+      // "I dont like X" count as one, but DISPLAY the wording the user typed
+      // most often for that key.
+      const norm = (s: string) =>
+        s
+          .toLowerCase()
+          .replace(/['’]/g, "")
+          .replace(/[^a-z0-9\s]/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+      const groups: Record<string, { count: number; variants: Record<string, number> }> = {};
       for (const f of denied) {
-        const r = (f.denyReason || "").trim();
-        if (r) m[r] = (m[r] || 0) + 1;
+        const raw = (f.denyReason || "").trim();
+        if (!raw) continue;
+        const key = norm(raw);
+        const g = (groups[key] = groups[key] || { count: 0, variants: {} });
+        g.count += 1;
+        g.variants[raw] = (g.variants[raw] || 0) + 1;
       }
-      return Object.entries(m).sort((a, b) => b[1] - a[1]);
+      return Object.values(groups)
+        .map((g) => {
+          const label = Object.entries(g.variants).sort((a, b) => b[1] - a[1])[0][0];
+          return [label, g.count] as [string, number];
+        })
+        .sort((a, b) => b[1] - a[1]);
     })(),
   };
 }
@@ -9338,6 +9535,8 @@ const FIND_STATUS: Record<
 function DashboardTab({
   activity,
   profile,
+  about,
+  useCase,
   templates,
   projects,
   categoriesCount,
@@ -9361,6 +9560,8 @@ function DashboardTab({
 }: {
   activity: Activity;
   profile: Profile;
+  about: string;
+  useCase: string;
   templates: OutreachTemplate[];
   projects: Project[];
   categoriesCount: number;
@@ -10409,6 +10610,8 @@ function DashboardTab({
       <OutreachAdvice
         community={community}
         finds={finds}
+        about={about}
+        useCase={useCase}
         templates={templates}
         coaching={coaching}
         dismissedAdvice={dismissedAdvice}
@@ -10581,8 +10784,9 @@ function DashboardTab({
                 {tuningPrompt}
               </pre>
               <button
-                onClick={() => {
-                  navigator.clipboard.writeText(tuningPrompt);
+                onClick={async () => {
+                  const ok = await copyToClipboard(tuningPrompt);
+                  if (!ok) return;
                   setTuningCopied(true);
                   setTimeout(() => setTuningCopied(false), 1500);
                 }}
@@ -10754,6 +10958,8 @@ function DashboardTab({
 function OutreachAdvice({
   community,
   finds,
+  about,
+  useCase,
   templates,
   coaching,
   dismissedAdvice,
@@ -10765,6 +10971,8 @@ function OutreachAdvice({
 }: {
   community: CommunityStats | null;
   finds: Find[];
+  about: string;
+  useCase: string;
   templates: OutreachTemplate[];
   coaching: string[];
   dismissedAdvice: string[];
@@ -10878,7 +11086,7 @@ function OutreachAdvice({
       const r = await fetch("/api/draft-advice", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ drafts: myDrafts }),
+        body: JSON.stringify({ drafts: myDrafts, about, useCase }),
       });
       const j = await r.json();
       if (r.ok && j.tips) {

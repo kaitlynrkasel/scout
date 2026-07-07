@@ -143,10 +143,6 @@ export default function InsightsView({
         </div>
       </div>
 
-      {/* White-glove concierge: hand-pick finds for a specific account (or an
-          email that hasn't signed up yet) to jump-start the algorithm. */}
-      <ConciergePanel getToken={getToken} />
-
       {error && (
         <div className="mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {error}
@@ -538,6 +534,11 @@ interface AdminAccount {
   searches: number;
   pendingSeeds: number;
   updatedAt: string;
+  bio: string;
+  accountType: string;
+  company: { name: string; about: string; industry: string; stage: string };
+  location: string;
+  projects: { name: string; useCase: string; context: string }[];
 }
 
 type ConciergeOpp = {
@@ -557,7 +558,7 @@ type ConciergeOpp = {
   [k: string]: unknown;
 };
 
-function ConciergePanel({ getToken }: { getToken?: () => Promise<string | null> }) {
+export function ConciergePanel({ getToken }: { getToken?: () => Promise<string | null> }) {
   const [accounts, setAccounts] = useState<AdminAccount[]>([]);
   const [email, setEmail] = useState("");
   const [goal, setGoal] = useState("");
@@ -736,6 +737,75 @@ function ConciergePanel({ getToken }: { getToken?: () => Promise<string | null> 
           />
         </div>
       </div>
+
+      {/* Target's profile — so you know what to plant for them. */}
+      {selected && selected.hasAccount && (
+        <div className="mt-3 rounded-xl border border-warm-border bg-surface p-4">
+          <div className="mb-2 flex flex-wrap items-baseline gap-2">
+            <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
+              Their profile
+            </span>
+            <span className="text-sm font-bold text-ink">{selected.name || "(no name)"}</span>
+            {selected.accountType && (
+              <span className="rounded-full bg-brown-tint px-2 py-0.5 text-[10px] font-bold uppercase text-brown-deep">
+                {selected.accountType}
+              </span>
+            )}
+            {selected.useCase && (
+              <span className="text-xs text-body/70">goal: {selected.useCase}</span>
+            )}
+            {selected.location && (
+              <span className="text-xs text-body/60">📍 {selected.location}</span>
+            )}
+          </div>
+          {selected.bio && (
+            <p className="text-xs leading-relaxed text-body">
+              <span className="font-semibold">Bio: </span>
+              {selected.bio}
+            </p>
+          )}
+          {(selected.company.name ||
+            selected.company.about ||
+            selected.company.industry ||
+            selected.company.stage) && (
+            <p className="mt-1.5 text-xs leading-relaxed text-body">
+              <span className="font-semibold">Company: </span>
+              {[
+                selected.company.name,
+                selected.company.industry,
+                selected.company.stage,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+              {selected.company.about ? ` — ${selected.company.about}` : ""}
+            </p>
+          )}
+          {selected.projects.length > 0 && (
+            <div className="mt-2">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-muted">
+                Projects ({selected.projects.length})
+              </div>
+              <ul className="mt-1 space-y-1">
+                {selected.projects.map((p, i) => (
+                  <li key={i} className="text-xs leading-relaxed text-body">
+                    <span className="font-semibold text-ink">{p.name || "Untitled"}</span>
+                    {p.useCase ? ` · ${p.useCase}` : ""}
+                    {p.context ? <span className="text-body/70"> — {p.context}</span> : ""}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {!selected.bio &&
+            !selected.company.name &&
+            selected.projects.every((p) => !p.context) && (
+              <p className="text-xs text-body/50">
+                This account hasn't filled in much yet — search on their use case
+                and pick broadly.
+              </p>
+            )}
+        </div>
+      )}
 
       {/* Goal + run */}
       <div className="mt-3">
