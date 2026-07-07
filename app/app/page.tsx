@@ -6328,6 +6328,15 @@ function FindDetailModal({
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
+  // On phones the two-column grid is unusable, so stack the sections and let the
+  // whole modal scroll instead.
+  const [narrow, setNarrow] = useState(false);
+  useEffect(() => {
+    const check = () => setNarrow(window.innerWidth < 1024);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeAliveRef = useRef(false); // our injected script phoned home = preview OK
   // Whether the previewed page has a fillable form (reported by the autofill
@@ -6563,21 +6572,31 @@ function FindDetailModal({
             areas. When editing, the editor takes the preview's pane (contact stays
             put) instead of going full-page, and nothing remounts. */}
         <div
-          className="grid min-h-0 flex-1 gap-0"
-          style={{
-            gridTemplateColumns: "minmax(280px, 340px) 1fr",
-            gridTemplateRows: editingDraft
-              ? "minmax(0,1fr)"
-              : "minmax(0,0.9fr) minmax(0,1.1fr)",
-            gridTemplateAreas: editingDraft
-              ? "'info work'"
-              : "'info preview' 'work preview'",
-          }}
+          className={`grid min-h-0 flex-1 gap-0 ${narrow ? "overflow-y-auto" : ""}`}
+          style={
+            narrow
+              ? {
+                  gridTemplateColumns: "1fr",
+                  gridAutoRows: "min-content",
+                  gridTemplateAreas: editingDraft ? "'info' 'work'" : "'info' 'work' 'preview'",
+                }
+              : {
+                  gridTemplateColumns: "minmax(280px, 340px) 1fr",
+                  gridTemplateRows: editingDraft
+                    ? "minmax(0,1fr)"
+                    : "minmax(0,0.9fr) minmax(0,1.1fr)",
+                  gridTemplateAreas: editingDraft
+                    ? "'info work'"
+                    : "'info preview' 'work preview'",
+                }
+          }
         >
           {/* Contact + why-it-fits */}
           <div
             style={{ gridArea: "info" }}
-            className="space-y-4 overflow-y-auto border-b border-warm-border p-5 lg:border-b-0 lg:border-r"
+            className={`space-y-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r ${
+              narrow ? "" : "overflow-y-auto"
+            }`}
           >
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
@@ -6746,7 +6765,9 @@ function FindDetailModal({
               preview's pane while editing so the editor gets the room. */}
           <div
             style={{ gridArea: "work" }}
-            className="overflow-y-auto border-t border-warm-border p-5 lg:border-r"
+            className={`border-t border-warm-border p-5 lg:border-r ${
+              narrow ? "" : "overflow-y-auto"
+            }`}
           >
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
@@ -6792,8 +6813,10 @@ function FindDetailModal({
           {/* Website preview. Occupies the right pane until you edit the draft,
               which takes over this space. */}
           <div
-            style={{ gridArea: "preview" }}
-            className={`${editingDraft ? "hidden" : "flex"} h-full min-h-0 flex-col p-5`}
+            style={{ gridArea: "preview", ...(narrow ? { height: "80vh" } : {}) }}
+            className={`${editingDraft ? "hidden" : "flex"} ${
+              narrow ? "border-t border-warm-border" : "h-full"
+            } min-h-0 flex-col p-5`}
           >
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
