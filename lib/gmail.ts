@@ -226,19 +226,31 @@ export async function gmailSendOrDraft(opts: {
 
 // Which of these threads have a reply (a message from someone other than the
 // user)? Uses metadata-only reads: headers, never bodies.
+// A delivery-failure message, not a real reply: sent by the mail system, or a
+// classic bounce subject. Reading it as a "reply" would falsely mark dead
+// addresses as answered and pollute outcome learning, so classify it apart.
+function looksLikeBounce(from: string, subject: string): boolean {
+  const f = from.toLowerCase();
+  if (/mailer-daemon|postmaster@|mail delivery (subsystem|system)/i.test(f)) return true;
+  return /(delivery (status notification|has failed|incomplete)|undeliverable|undelivered mail|address not found|returned to sender|failure notice|delivery failure|mail delivery failed|couldn'?t be delivered|message not delivered|550[ -])/i.test(
+    subject
+  );
+}
+
 export async function gmailThreadsWithReplies(
   refreshToken: string,
   userEmail: string,
   threadIds: string[]
-): Promise<Set<string>> {
+): Promise<{ replied: Set<string>; bounced: Set<string> }> {
   const at = await accessTokenFromRefresh(refreshToken);
   const me = userEmail.toLowerCase();
   const replied = new Set<string>();
+  const bounced = new Set<string>();
   for (const tid of threadIds.slice(0, 20)) {
     const r = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(
         tid
-      )}?format=metadata&metadataHeaders=From`,
+      )}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
       { headers: { authorization: `Bearer ${at}` } }
     );
     if (r.status === 403) {
@@ -250,14 +262,21 @@ export async function gmailThreadsWithReplies(
     if (!r.ok) continue; // thread gone/inaccessible, skip, don't fail the batch
     const j = await r.json();
     const msgs = j.messages || [];
-    const hasReply = msgs.some((m: any) => {
-      if ((m.labelIds || []).includes("DRAFT")) return false;
-      const from = (m.payload?.headers || []).find(
-        (h: any) => (h.name || "").toLowerCase() === "from"
-      );
-      return from && !String(from.value || "").toLowerCase().includes(me);
-    });
-    if (hasReply) replied.add(tid);
+    let realReply = false;
+    let bounce = false;
+    for (const m of msgs) {
+      if ((m.labelIds || []).includes("DRAFT")) continue;
+      const headers = m.payload?.headers || [];
+      const hv = (name: string) =>
+        String(headers.find((h: any) => (h.name || "").toLowerCase() === name)?.value || "");
+      const from = hv("from");
+      if (!from || from.toLowerCase().includes(me)) continue; // our own message
+      if (looksLikeBounce(from, hv("subject"))) bounce = true;
+      else realReply = true;
+    }
+    // A genuine reply wins over a bounce (bounced once, then replied elsewhere).
+    if (realReply) replied.add(tid);
+    else if (bounce) bounced.add(tid);
   }
-  return replied;
+  return { replied, bounced };
 }

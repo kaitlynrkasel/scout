@@ -28,15 +28,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const repliedThreads = await gmailThreadsWithReplies(
-      data.refresh_token,
-      data.email || "",
-      list.map((t: any) => String(t.threadId))
-    );
+    const { replied: repliedThreads, bounced: bouncedThreads } =
+      await gmailThreadsWithReplies(
+        data.refresh_token,
+        data.email || "",
+        list.map((t: any) => String(t.threadId))
+      );
     const replied = list
       .filter((t: any) => repliedThreads.has(String(t.threadId)))
       .map((t: any) => String(t.id));
-    return NextResponse.json({ replied, checked: list.length });
+    const bounced = list
+      .filter((t: any) => bouncedThreads.has(String(t.threadId)))
+      .map((t: any) => String(t.id));
+    return NextResponse.json({ replied, bounced, checked: list.length });
   } catch (e: any) {
     if (e?.needsReconnect) {
       return NextResponse.json(

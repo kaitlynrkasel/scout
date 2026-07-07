@@ -29,15 +29,19 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const repliedConvos = await outlookConversationsWithReplies(
-      data.refresh_token,
-      data.email || "",
-      list.map((t: any) => String(t.threadId))
-    );
+    const { replied: repliedConvos, bounced: bouncedConvos } =
+      await outlookConversationsWithReplies(
+        data.refresh_token,
+        data.email || "",
+        list.map((t: any) => String(t.threadId))
+      );
     const replied = list
       .filter((t: any) => repliedConvos.has(String(t.threadId)))
       .map((t: any) => String(t.id));
-    return NextResponse.json({ replied, checked: list.length });
+    const bounced = list
+      .filter((t: any) => bouncedConvos.has(String(t.threadId)))
+      .map((t: any) => String(t.id));
+    return NextResponse.json({ replied, bounced, checked: list.length });
   } catch (e: any) {
     if (e?.needsReconnect) {
       return NextResponse.json(

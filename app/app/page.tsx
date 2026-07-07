@@ -428,6 +428,7 @@ interface Find {
   denyReason?: string; // why the user passed on this find
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
+  bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
   draftedAt?: number; // when a draft was last written for this find (drives ordering)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
@@ -535,7 +536,7 @@ function outcomePatterns(finds: Find[]): string[] {
   const now = Date.now();
   const replied = finds.filter((f) => f.status === "replied");
   const silent = finds.filter(
-    (f) => f.status === "sent" && f.sentAt && now - f.sentAt > WEEK
+    (f) => f.status === "sent" && !f.bounced && f.sentAt && now - f.sentAt > WEEK
   );
   const out: string[] = [];
   if (!replied.length) return out; // nothing proven yet, say nothing
@@ -1907,11 +1908,31 @@ function ScoutTool({
 
   // threadId threads a Gmail follow-up into an existing conversation (Outlook
   // threading isn't wired yet, so it ignores it).
+  // Deliverability guard: cold-sending too much from one inbox in a day tanks
+  // sender reputation and trips spam filters. Cap auto-SENDS per day (bounces
+  // count — they hurt reputation most). "Create draft" mode isn't capped since
+  // nothing goes out automatically.
+  const SEND_CAP_PER_DAY = 40;
+  function sentToday(): number {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const s = start.getTime();
+    return finds.filter((f) => f.sentAt && f.sentAt >= s).length;
+  }
   const sendViaMailbox = (
     d: Draft,
     threadId?: string
-  ): Promise<"draft" | "send" | null> =>
-    activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d, threadId);
+  ): Promise<"draft" | "send" | null> => {
+    if (activeMailbox.sendMode === "send" && sentToday() >= SEND_CAP_PER_DAY) {
+      setError(
+        `Daily send limit reached (${SEND_CAP_PER_DAY} from this inbox today). Sending more in one day hurts ` +
+          `deliverability and risks spam filtering. Switch "Send from your email" to Create-draft mode to keep ` +
+          `queuing, or continue tomorrow, it resets at midnight.`
+      );
+      return Promise.resolve(null);
+    }
+    return activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d, threadId);
+  };
 
   const saveProjectsRaw = (n: Project[]) => {
     try {
@@ -3191,7 +3212,7 @@ function ScoutTool({
     const token = await getToken();
     if (!token) return;
     const untracked = (f: Find) =>
-      f.status !== "replied" && f.status !== "denied";
+      f.status !== "replied" && f.status !== "denied" && !f.bounced;
     const gmailCands = finds
       .filter((f) => f.gmailThreadId && untracked(f))
       .slice(0, 20)
@@ -3211,7 +3232,8 @@ function ScoutTool({
     if (!silent) setRepliesNote("");
     // Ask each connected provider about its own threads, then merge the results.
     const ask = async (path: string, threads: any[]) => {
-      if (!threads.length) return { replied: [] as string[], checked: 0, error: "" };
+      if (!threads.length)
+        return { replied: [] as string[], bounced: [] as string[], checked: 0, error: "" };
       try {
         const r = await fetch(path, {
           method: "POST",
@@ -3220,10 +3242,15 @@ function ScoutTool({
         });
         const j = await r.json();
         return r.ok
-          ? { replied: (j.replied || []) as string[], checked: j.checked || threads.length, error: "" }
-          : { replied: [] as string[], checked: 0, error: j.error || "Couldn't check for replies." };
+          ? {
+              replied: (j.replied || []) as string[],
+              bounced: (j.bounced || []) as string[],
+              checked: j.checked || threads.length,
+              error: "",
+            }
+          : { replied: [] as string[], bounced: [] as string[], checked: 0, error: j.error || "Couldn't check for replies." };
       } catch (e: any) {
-        return { replied: [] as string[], checked: 0, error: e?.message || "Couldn't check for replies." };
+        return { replied: [] as string[], bounced: [] as string[], checked: 0, error: e?.message || "Couldn't check for replies." };
       }
     };
     try {
@@ -3232,17 +3259,26 @@ function ScoutTool({
         ask("/api/outlook/replies", outlookCands),
       ]);
       const repliedSet = new Set<string>([...g.replied, ...o.replied]);
+      const bouncedSet = new Set<string>([...g.bounced, ...o.bounced]);
       const err = g.error || o.error;
-      if (repliedSet.size) {
+      if (repliedSet.size || bouncedSet.size) {
         saveFinds(
           finds.map((f) =>
-            repliedSet.has(f.id) ? { ...f, status: "replied" as FindStatus } : f
+            repliedSet.has(f.id)
+              ? { ...f, status: "replied" as FindStatus, bounced: false }
+              : bouncedSet.has(f.id)
+                ? { ...f, bounced: true }
+                : f
           )
         );
-        if (!silent)
-          setRepliesNote(
-            `${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"} found and marked.`
-          );
+        if (!silent) {
+          const parts: string[] = [];
+          if (repliedSet.size)
+            parts.push(`${repliedSet.size} ${repliedSet.size === 1 ? "reply" : "replies"}`);
+          if (bouncedSet.size)
+            parts.push(`${bouncedSet.size} bounced (dead address)`);
+          setRepliesNote(`Found ${parts.join(" and ")}.`);
+        }
       } else if (err) {
         if (!silent) setRepliesNote(err);
       } else {
@@ -7524,6 +7560,14 @@ function FindCard({
           {o.name}
         </button>
         <FindStatusBadge status={find.status} onStatus={onStatus} />
+        {find.bounced && (
+          <span
+            title="This address bounced, the email didn't get delivered. Try scanning for another contact."
+            className="rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+          >
+            Bounced
+          </span>
+        )}
         {o.fitScore != null && (
           <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
             {Math.round(o.fitScore * 100)}% fit

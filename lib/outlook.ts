@@ -177,18 +177,28 @@ export async function outlookSendOrDraft(opts: {
 // Which of these conversations have a reply (a message from someone other than the
 // user)? Reads only From + isDraft on the messages in each conversation, via the
 // Mail.ReadWrite scope the connection already has (no extra consent needed).
+function outlookLooksLikeBounce(from: string, subject: string): boolean {
+  const f = from.toLowerCase();
+  if (/mailer-daemon|postmaster@|mail delivery (subsystem|system)|microsoftexchange/i.test(f))
+    return true;
+  return /(delivery (status notification|has failed|incomplete)|undeliverable|undelivered mail|address not found|returned to sender|failure notice|delivery failure|couldn'?t be delivered|not delivered|550[ -])/i.test(
+    subject
+  );
+}
+
 export async function outlookConversationsWithReplies(
   refreshToken: string,
   userEmail: string,
   conversationIds: string[]
-): Promise<Set<string>> {
+): Promise<{ replied: Set<string>; bounced: Set<string> }> {
   const at = await accessTokenFromRefresh(refreshToken);
   const me = userEmail.toLowerCase();
   const replied = new Set<string>();
+  const bounced = new Set<string>();
   for (const cid of conversationIds.slice(0, 20)) {
     const params = new URLSearchParams({
       $filter: `conversationId eq '${cid.replace(/'/g, "''")}'`,
-      $select: "from,isDraft,sentDateTime",
+      $select: "from,isDraft,sentDateTime,subject",
       $top: "25",
     });
     const r = await fetch(`${GRAPH}/me/messages?${params.toString()}`, {
@@ -203,12 +213,17 @@ export async function outlookConversationsWithReplies(
     if (!r.ok) continue; // conversation gone/inaccessible, skip, don't fail the batch
     const j = await r.json();
     const msgs = j.value || [];
-    const hasReply = msgs.some((m: any) => {
-      if (m.isDraft) return false;
+    let realReply = false;
+    let bounce = false;
+    for (const m of msgs) {
+      if (m.isDraft) continue;
       const addr = String(m.from?.emailAddress?.address || "").toLowerCase();
-      return addr && addr !== me;
-    });
-    if (hasReply) replied.add(cid);
+      if (!addr || addr === me) continue;
+      if (outlookLooksLikeBounce(addr, String(m.subject || ""))) bounce = true;
+      else realReply = true;
+    }
+    if (realReply) replied.add(cid);
+    else if (bounce) bounced.add(cid);
   }
-  return replied;
+  return { replied, bounced };
 }
