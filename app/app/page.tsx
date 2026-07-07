@@ -382,6 +382,9 @@ interface Project {
   // from this project so you're represented as yourself (e.g. a co-founder
   // searching internships for herself, not pitching on the company's behalf).
   usesCompany?: boolean;
+  // When on, sending a find auto-queues one follow-up a few days later (canceled
+  // automatically if they reply or the address bounces). Off by default.
+  autoFollowUp?: boolean;
 }
 interface Category {
   id: string;
@@ -429,6 +432,7 @@ interface Find {
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
+  followUpQueuedAt?: number; // an auto follow-up has been scheduled (prevents double-queue)
   draftedAt?: number; // when a draft was last written for this find (drives ordering)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
@@ -1787,6 +1791,7 @@ function ScoutTool({
           } catch {}
           return next;
         });
+        if (j.mode === "send" && j.threadId) void maybeQueueFollowUp(d.opportunityId, j.threadId);
         return j.mode as "draft" | "send";
       }
       reportError(j);
@@ -1869,6 +1874,7 @@ function ScoutTool({
           } catch {}
           return next;
         });
+        if (j.mode === "send" && j.threadId) void maybeQueueFollowUp(d.opportunityId, j.threadId);
         return j.mode as "draft" | "send";
       }
       reportError(j);
@@ -2084,6 +2090,9 @@ function ScoutTool({
   }
   function setProjectUsesCompany(id: string, usesCompany: boolean) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, usesCompany } : p)));
+  }
+  function setProjectAutoFollowUp(id: string, autoFollowUp: boolean) {
+    saveProjects(projects.map((p) => (p.id === id ? { ...p, autoFollowUp } : p)));
   }
 
   // Per-project email signature, falling back to the account-wide default
@@ -3203,6 +3212,63 @@ function ScoutTool({
     }
   }
 
+  // Auto follow-up sequence: after a real SEND, if the find's project opted in and
+  // no follow-up is queued yet, draft one and schedule it a few days out. The
+  // send-scheduled cron fires it, but cancels it first if they replied or bounced.
+  const FOLLOWUP_DAYS = 4;
+  async function maybeQueueFollowUp(oppId: string, threadId: string) {
+    const token = getToken ? await getToken() : null;
+    if (!token || !threadId) return;
+    const find = finds.find((f) => f.draft?.opportunityId === oppId);
+    if (!find) return;
+    const proj = projects.find((p) => p.id === find.projectId);
+    if (!proj?.autoFollowUp || find.followUpQueuedAt || find.bounced) return;
+    const to = find.draft?.to || find.opp.contactEmail || "";
+    if (!to) return;
+    if (find.draft?.channelType && find.draft.channelType !== "email") return;
+    try {
+      // Draft the follow-up now, so it's ready and personal when it fires.
+      const dr = await fetch("/api/draft-followup", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          opp: find.opp,
+          about: aboutForProjectId(find.projectId),
+          useCase: activeUseCase,
+          firstMessage: find.draft
+            ? { subject: find.draft.subject, body: find.draft.body }
+            : null,
+          inThread: true,
+        }),
+      });
+      const fj = await dr.json().catch(() => ({}));
+      if (!dr.ok || fj?.error) return;
+      const sendAt = new Date(Date.now() + FOLLOWUP_DAYS * 86400000);
+      const res = await fetch("/api/schedule-send", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          provider: activeMailbox.provider,
+          to,
+          subject: fj.subject || (find.draft?.subject ? `Re: ${find.draft.subject}` : ""),
+          body: fj.body || "",
+          sendAt: sendAt.toISOString(),
+          findId: find.id,
+          opportunityId: oppId,
+          isFollowup: true,
+          threadId,
+        }),
+      });
+      if (!res.ok) return;
+      saveFinds(finds.map((f) => (f.id === find.id ? { ...f, followUpQueuedAt: Date.now() } : f)));
+      setRepliesNote(
+        `Auto follow-up queued for ${find.opp.name} in ${FOLLOWUP_DAYS} days (canceled if they reply).`
+      );
+    } catch {
+      /* best-effort; a failed follow-up queue never blocks the send */
+    }
+  }
+
   // ---- Reply tracking: check tracked Gmail + Outlook threads for responses ----
   const [repliesBusy, setRepliesBusy] = useState(false);
   const [repliesNote, setRepliesNote] = useState("");
@@ -4136,6 +4202,23 @@ function ScoutTool({
                         </span>
                       </label>
                     )}
+
+                  {/* Auto follow-up sequence for this project's sends. */}
+                  <label className="mt-3 flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={activeProject?.autoFollowUp === true}
+                      onChange={(e) => setProjectAutoFollowUp(activeId, e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                    />
+                    <span className="text-xs leading-relaxed text-body/80">
+                      <span className="font-semibold text-ink">Auto follow-up</span>
+                      <br />
+                      When you send a message from this project, Scout queues one follow-up 4 days
+                      later, and cancels it automatically if they reply or the address bounces.
+                      Needs a connected email in send mode.
+                    </span>
+                  </label>
                 </div>
               </div>
 

@@ -21,6 +21,8 @@ export async function POST(req: NextRequest) {
     findId,
     opportunityId,
     attachment,
+    isFollowup,
+    threadId,
   } = body || {};
 
   if (provider !== "gmail" && provider !== "outlook") {
@@ -72,6 +74,8 @@ export async function POST(req: NextRequest) {
       find_id: findId ? String(findId) : null,
       opportunity_id: opportunityId ? String(opportunityId) : null,
       attachment: attachment && attachment.dataUrl ? attachment : null,
+      is_followup: !!isFollowup,
+      thread_id: threadId ? String(threadId) : null,
     })
     .select("id, send_at")
     .single();

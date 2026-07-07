@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
-import { gmailSendOrDraft } from "@/lib/gmail";
-import { outlookSendOrDraft } from "@/lib/outlook";
+import { gmailSendOrDraft, gmailThreadsWithReplies } from "@/lib/gmail";
+import { outlookSendOrDraft, outlookConversationsWithReplies } from "@/lib/outlook";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -33,7 +33,7 @@ export async function GET(req: NextRequest) {
   const BATCH = 25;
   const { data: due, error } = await supabaseAdmin
     .from("scheduled_sends")
-    .select("id, user_id, provider, to_addr, subject, body, attachment, find_id, opportunity_id, attempts")
+    .select("id, user_id, provider, to_addr, subject, body, attachment, find_id, opportunity_id, attempts, is_followup, thread_id")
     .lte("send_at", new Date().toISOString())
     .eq("status", "pending")
     .order("send_at", { ascending: true })
@@ -63,6 +63,28 @@ export async function GET(req: NextRequest) {
         .maybeSingle();
       if (!conn.data?.refresh_token) {
         throw new Error(`No ${provider} connection.`);
+      }
+
+      // Follow-up safety guard: never send a scheduled follow-up if the recipient
+      // already replied (or the first message bounced). Check the thread first and
+      // cancel the row instead of sending.
+      if (row.is_followup && row.thread_id) {
+        try {
+          const tid = String(row.thread_id);
+          const check =
+            provider === "gmail"
+              ? await gmailThreadsWithReplies(conn.data.refresh_token as string, (conn.data.email as string) || "", [tid])
+              : await outlookConversationsWithReplies(conn.data.refresh_token as string, (conn.data.email as string) || "", [tid]);
+          if (check.replied.has(tid) || check.bounced.has(tid)) {
+            await supabaseAdmin
+              .from("scheduled_sends")
+              .update({ status: "cancelled", sent_at: new Date().toISOString() })
+              .eq("id", id);
+            continue; // resolved without sending
+          }
+        } catch {
+          /* if the reply-check errors, fall through and send, don't strand the row */
+        }
       }
 
       // Attachment stored as { name, mime, dataUrl }, unpack to base64 for

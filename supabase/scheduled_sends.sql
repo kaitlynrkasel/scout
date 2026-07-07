@@ -18,8 +18,14 @@ create table if not exists scheduled_sends (
   attempts int not null default 0,
   last_error text,
   sent_at timestamptz,                            -- when it actually went out
+  is_followup boolean not null default false,     -- an auto follow-up (reply-guarded)
+  thread_id text,                                 -- thread to reply-check before a follow-up fires
   created_at timestamptz not null default now()
 );
+
+-- For existing installs that predate the follow-up columns.
+alter table scheduled_sends add column if not exists is_followup boolean not null default false;
+alter table scheduled_sends add column if not exists thread_id text;
 
 -- Fast lookup for "what's due right now" — index only pending rows.
 create index if not exists idx_scheduled_sends_due
