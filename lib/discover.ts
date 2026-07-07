@@ -650,6 +650,17 @@ function normHandle(h: string): string {
   if (ig) return "ig:" + ig[1];
   return s.replace(/^@+/, "").replace(/[^a-z0-9]/g, "");
 }
+function normEmail(e: string): string {
+  return String(e || "").trim().toLowerCase();
+}
+// True for role inboxes (careers@, info@, hello@…) that aren't a specific person,
+// so entity-resolution can prefer a real personal address over one of these.
+const GENERIC_EMAIL_PREFIX =
+  /^(careers?|jobs?|hr|recruit(ing|ment)?|talent|info|hello|contact|apply|applications?|resumes?|staffing|people|hiring|admin|support|team|noreply|no-reply|press|media|sales|partnerships?)@/i;
+function isPersonalEmail(e: string): boolean {
+  const s = normEmail(e);
+  return !!s && !GENERIC_EMAIL_PREFIX.test(s);
+}
 
 // Is this a job/internship hunt? Those postings rarely list a real person, so we
 // do an extra pass to find a named recruiter / team member to email.
@@ -1297,20 +1308,34 @@ export async function discover(
       }
       const nm = normName(r.name);
       const handleKey = normHandle(r.contact_handle || "");
+      const emailKey = normEmail(r.contact_email || "");
+      // A social/profile URL is itself an identity (linkedin.com/in/x, etc.).
+      const urlKey = normHandle(r.url || "");
       const host = urlHost(r.url || cand.url);
       if (nm && deniedNames.has(nm)) {
         skippedDupes++;
         logSkip(cand.title, cand.url, `you denied "${r.name}" before`);
         continue; // already rejected this exact one before
       }
-      // Same-person detection across articles: match either the normalized
-      // name or the same LinkedIn/Twitter/Instagram handle. When we hit one,
-      // don't drop the article, attach it as another source on the existing
-      // opp so the user can see every place we found this person.
+      // ---- Entity resolution ----
+      // Decide whether this record is the SAME entity as one we already have.
+      // Strong keys (email / social handle / profile URL) match confidently. A
+      // same-name match is accepted too, but ONLY when nothing contradicts it
+      // (two "John Smith"s with different emails or different handles are treated
+      // as different people, not merged).
       const dupIdx = opps.findIndex((o) => {
-        if (nm && normName(o.name) === nm) return true;
-        const ok = normHandle(o.contactHandle);
-        if (handleKey && ok && ok === handleKey) return true;
+        const oEmail = normEmail(o.contactEmail);
+        const oHandle = normHandle(o.contactHandle);
+        const oUrlKey = normHandle(o.url);
+        if (emailKey && oEmail && emailKey === oEmail) return true;
+        if (handleKey && (handleKey === oHandle || handleKey === oUrlKey)) return true;
+        if (urlKey && (urlKey === oHandle || urlKey === oUrlKey)) return true;
+        if (nm && normName(o.name) === nm) {
+          const emailConflict = !!emailKey && !!oEmail && emailKey !== oEmail;
+          const handleConflict =
+            !!handleKey && !!oHandle && handleKey !== oHandle && handleKey !== oUrlKey;
+          return !emailConflict && !handleConflict;
+        }
         return false;
       });
       if (dupIdx >= 0) {
@@ -1325,16 +1350,39 @@ export async function discover(
             { title: existing.sourceTitle, url: existing.url, snippet: existing.sourceSnippet },
           ];
         }
-        // Avoid re-adding an identical article URL, but merge in any missing
-        // contact detail the second article surfaces.
+        // Accumulate this source (skip an identical URL).
         if (newRef.url && !existing.sources.find((s) => s.url === newRef.url)) {
           existing.sources.push(newRef);
         }
-        if (!existing.contactEmail && r.contact_email) existing.contactEmail = r.contact_email;
+        // Merge evidence: fill gaps, and UPGRADE a generic inbox to a real
+        // personal email when a later source surfaces one.
+        if (
+          r.contact_email &&
+          (!existing.contactEmail ||
+            (!isPersonalEmail(existing.contactEmail) && isPersonalEmail(r.contact_email)))
+        ) {
+          existing.contactEmail = r.contact_email;
+          if (r.contact_name && !existing.contactName) existing.contactName = r.contact_name;
+        }
         if (!existing.contactHandle && r.contact_handle) existing.contactHandle = r.contact_handle;
         if (!existing.contactRole && r.contact_role) existing.contactRole = r.contact_role;
         if (!existing.contactPhone && r.contact_phone) existing.contactPhone = r.contact_phone;
+        if (!existing.contactName && r.contact_name) existing.contactName = r.contact_name;
         if (!existing.location && r.location) existing.location = r.location;
+        if (!existing.outlet && r.outlet) existing.outlet = r.outlet;
+        if (!existing.timezone && r.timezone) existing.timezone = r.timezone;
+        // Keep the strongest fit, and the more specific why-it-fits.
+        const rFit =
+          typeof r.fit_score === "number" ? r.fit_score : parseFloat(r.fit_score);
+        if (!isNaN(rFit) && (existing.fitScore == null || rFit > existing.fitScore)) {
+          existing.fitScore = rFit;
+        }
+        const rWhy = noDash(String(r.why_it_fits || "").trim());
+        if (rWhy && rWhy.length > (existing.whyItFits || "").length) existing.whyItFits = rWhy;
+        // A reachable email upgrades an unreachable channel.
+        if (existing.contactEmail && (!existing.channel || /unknown/i.test(existing.channel)))
+          existing.channel = "Email";
+        emit(`Merged: ${existing.name} now backed by ${existing.sources.length} sources`);
         logSkip(
           cand.title,
           cand.url,
@@ -1465,7 +1513,17 @@ export async function discover(
     opps.push(...collapsed);
   }
 
-  // Best-fit first.
+  // Evidence-confidence boost: a candidate corroborated by several INDEPENDENT
+  // sources (different hosts) is more trustworthy, so nudge its fit up. Capped and
+  // counted by distinct host so three articles from one site don't inflate it.
+  for (const o of opps) {
+    const hosts = new Set((o.sources || []).map((s) => urlHost(s.url)).filter(Boolean));
+    const extra = Math.max(0, hosts.size - 1);
+    if (extra > 0 && o.fitScore != null) {
+      o.fitScore = Math.min(1, o.fitScore + Math.min(0.15, extra * 0.05));
+    }
+  }
+  // Best-fit first (evidence-boosted).
   opps.sort((a, b) => (b.fitScore || 0) - (a.fitScore || 0));
 
   // For job/internship hunts, attach a specific recruiter / team-member contact

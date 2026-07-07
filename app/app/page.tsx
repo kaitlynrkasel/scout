@@ -7353,6 +7353,15 @@ function FindCard({
             {Math.round(o.fitScore * 100)}% fit
           </span>
         )}
+        {o.sources && o.sources.length > 1 && (
+          <span
+            title={`Corroborated across ${o.sources.length} sources`}
+            className="inline-flex items-center gap-1 rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep"
+          >
+            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+            {o.sources.length} sources
+          </span>
+        )}
         <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
           {o.channel}
         </span>
