@@ -6337,6 +6337,81 @@ function FindDetailModal({
     window.addEventListener("resize", check);
     return () => window.removeEventListener("resize", check);
   }, []);
+
+  // Section order for the stacked (mobile) layout — drag the panels into the
+  // order you like. Persisted so the modal remembers it next time.
+  const DEFAULT_ORDER = ["info", "work", "preview"] as const;
+  const [order, setOrder] = useState<string[]>(() => [...DEFAULT_ORDER]);
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem("scout_modal_order") || "null");
+      if (
+        Array.isArray(saved) &&
+        saved.length === 3 &&
+        DEFAULT_ORDER.every((k) => saved.includes(k))
+      )
+        setOrder(saved);
+    } catch {
+      /* ignore malformed saved order */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const [dragKey, setDragKey] = useState<string>("");
+  const reorder = (from: string, to: string) => {
+    if (from === to) return;
+    setOrder((prev) => {
+      const next = prev.filter((k) => k !== from);
+      const at = next.indexOf(to);
+      next.splice(at < 0 ? next.length : at, 0, from);
+      try {
+        localStorage.setItem("scout_modal_order", JSON.stringify(next));
+      } catch {
+        /* storage unavailable, keep in-memory */
+      }
+      return next;
+    });
+  };
+  // Grid-areas string for the stacked layout, honoring `order`. While editing a
+  // draft only info + work are shown, so preview drops out.
+  const stackedAreas = (editingDraft ? order.filter((k) => k !== "preview") : order)
+    .map((k) => `'${k}'`)
+    .join(" ");
+  // Drop-target props for a panel (only active in the stacked layout), plus the
+  // little grip that starts a drag. Reordering is mobile-only; on desktop the
+  // two-column grid is fixed and the handles don't render.
+  const dropProps = (key: string) =>
+    narrow
+      ? {
+          onDragOver: (e: React.DragEvent) => e.preventDefault(),
+          onDrop: () => {
+            if (dragKey) reorder(dragKey, key);
+            setDragKey("");
+          },
+        }
+      : {};
+  const renderHandle = (k: string) =>
+    narrow ? (
+      <div
+        draggable
+        onDragStart={() => setDragKey(k)}
+        onDragEnd={() => setDragKey("")}
+        className={`-mt-1 mb-3 flex cursor-grab select-none items-center gap-1.5 text-body/40 transition active:cursor-grabbing ${
+          dragKey === k ? "opacity-40" : ""
+        }`}
+      >
+        <svg viewBox="0 0 20 20" className="h-4 w-4" fill="currentColor">
+          <circle cx="7" cy="5" r="1.4" />
+          <circle cx="13" cy="5" r="1.4" />
+          <circle cx="7" cy="10" r="1.4" />
+          <circle cx="13" cy="10" r="1.4" />
+          <circle cx="7" cy="15" r="1.4" />
+          <circle cx="13" cy="15" r="1.4" />
+        </svg>
+        <span className="text-[10px] font-bold uppercase tracking-wider">
+          Drag to reorder
+        </span>
+      </div>
+    ) : null;
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const bridgeAliveRef = useRef(false); // our injected script phoned home = preview OK
   // Whether the previewed page has a fillable form (reported by the autofill
@@ -6578,7 +6653,7 @@ function FindDetailModal({
               ? {
                   gridTemplateColumns: "1fr",
                   gridAutoRows: "min-content",
-                  gridTemplateAreas: editingDraft ? "'info' 'work'" : "'info' 'work' 'preview'",
+                  gridTemplateAreas: stackedAreas,
                 }
               : {
                   gridTemplateColumns: "minmax(280px, 340px) 1fr",
@@ -6594,10 +6669,12 @@ function FindDetailModal({
           {/* Contact + why-it-fits */}
           <div
             style={{ gridArea: "info" }}
+            {...dropProps("info")}
             className={`space-y-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r ${
               narrow ? "" : "overflow-y-auto"
             }`}
           >
+            {renderHandle("info")}
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Contact
@@ -6765,10 +6842,12 @@ function FindDetailModal({
               preview's pane while editing so the editor gets the room. */}
           <div
             style={{ gridArea: "work" }}
+            {...dropProps("work")}
             className={`border-t border-warm-border p-5 lg:border-r ${
               narrow ? "" : "overflow-y-auto"
             }`}
           >
+            {renderHandle("work")}
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Outreach
@@ -6814,10 +6893,12 @@ function FindDetailModal({
               which takes over this space. */}
           <div
             style={{ gridArea: "preview", ...(narrow ? { height: "80vh" } : {}) }}
+            {...dropProps("preview")}
             className={`${editingDraft ? "hidden" : "flex"} ${
               narrow ? "border-t border-warm-border" : "h-full"
             } min-h-0 flex-col p-5`}
           >
+            {renderHandle("preview")}
             <div className="mb-2 flex items-center gap-2">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
                 {socialProfile
