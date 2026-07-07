@@ -6437,6 +6437,55 @@ function FindDetailModal({
               </div>
             )}
 
+            {/* Per-signal probabilistic breakdown (why they rank). */}
+            {o.scores &&
+              (() => {
+                const rows = (
+                  [
+                    ["Relevance", o.scores.relevance],
+                    ["Reachability", o.scores.reachability],
+                    ["Timing", o.scores.timing],
+                    ["Momentum", o.scores.momentum],
+                  ] as [string, number | undefined][]
+                ).filter((r): r is [string, number] => typeof r[1] === "number");
+                if (!rows.length) return null;
+                return (
+                  <div>
+                    <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                      Why this scores
+                    </div>
+                    <div className="space-y-1.5">
+                      {rows.map(([label, v]) => (
+                        <div key={label} className="flex items-center gap-2">
+                          <span className="w-24 shrink-0 text-[11px] text-body/70">{label}</span>
+                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-warm-bg">
+                            <div
+                              className="h-full rounded-full bg-brown"
+                              style={{ width: `${Math.round(v * 100)}%` }}
+                            />
+                          </div>
+                          <span className="w-7 shrink-0 text-right text-[10px] font-semibold text-body/60">
+                            {Math.round(v * 100)}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {o.signals && o.signals.length > 0 && (
+                      <div className="mt-2.5 flex flex-wrap gap-1.5">
+                        {o.signals.map((s, i) => (
+                          <span
+                            key={i}
+                            className="rounded-full border border-sage/40 bg-sage/10 px-2 py-0.5 text-[10px] font-medium text-sage-deep"
+                          >
+                            {s}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
             {find.requirements && (
               <div className="rounded-xl border border-sage/40 bg-sage/10 p-2.5 text-xs leading-relaxed text-brown-deep">
                 <span className="font-bold">What they ask for: </span>

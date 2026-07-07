@@ -661,6 +661,21 @@ function isPersonalEmail(e: string): boolean {
   const s = normEmail(e);
   return !!s && !GENERIC_EMAIL_PREFIX.test(s);
 }
+// Clamp an LLM-provided 0..1 component to a valid number, or undefined if absent.
+function clamp01(n: any): number | undefined {
+  const x = Number(n);
+  if (isNaN(x)) return undefined;
+  return Math.max(0, Math.min(1, x));
+}
+// How reachable a candidate is, straight from the contact data we actually have.
+// A named personal email is best; a DM handle alone is weakest.
+function reachabilityFrom(email?: string, handle?: string, phone?: string): number {
+  if (isPersonalEmail(email || "")) return 0.95;
+  if (email && String(email).trim()) return 0.7; // usable but generic inbox
+  if (phone && String(phone).trim()) return 0.6;
+  if (handle && String(handle).trim()) return 0.5; // DM only
+  return 0.15;
+}
 
 // Is this a job/internship hunt? Those postings rarely list a real person, so we
 // do an extra pass to find a named recruiter / team member to email.
@@ -983,6 +998,13 @@ async function extract(
     `url (best link), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
+    `components (an object grading WHY this is a good opportunity, each 0 to 1: {relevance = how squarely they match the ` +
+    `goal/target profile; timing = whether NOW is a good moment to reach out based on recent/upcoming events (funding, ` +
+    `hiring, a launch/release, a tour stop, a conference, a new role) — 0.5 when neutral/unknown; momentum = how active ` +
+    `and in-motion they are right now (recent press, posts, growth, output)}), ` +
+    `signals (an array of up to 5 SHORT concrete evidence phrases that justify the scores and answer "why now / why them", ` +
+    `each true and drawn from the source, e.g. "recently raised a seed round", "hiring a marketing lead", "new album out ` +
+    `this month", "public booking email", "speaking at a conference"; empty if none), ` +
     `why_it_fits (one specific, true detail used to personalize outreach, follow the WHY_IT_FITS rule above exactly for what it should describe; empty if unknown).`;
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
@@ -1491,6 +1513,18 @@ export async function discover(
         location: noDash(r.location || ""),
         timezone: r.timezone || "",
         fitScore: fit,
+        // Per-signal breakdown (Phase 3). relevance/timing/momentum are the LLM's
+        // read; reachability is computed from the contact data we actually hold and
+        // is refreshed after Phase 2 enrichment.
+        scores: {
+          relevance: clamp01(r.components?.relevance) ?? (fit != null ? fit : undefined),
+          reachability: reachabilityFrom(r.contact_email, r.contact_handle, r.contact_phone),
+          timing: clamp01(r.components?.timing),
+          momentum: clamp01(r.components?.momentum),
+        },
+        signals: Array.isArray(r.signals)
+          ? r.signals.map((s: any) => noDash(String(s || "").trim())).filter(Boolean).slice(0, 5)
+          : [],
         // A specific open posting is a "listing" (apply); a named contact is a
         // "person"; everything else reachable is a "company" to cold-email.
         targetType: r.is_listing
@@ -1636,6 +1670,13 @@ export async function discover(
       if (c.email || c.handle || c.phone)
         emit(`Found a way to reach ${o.name}${c.email ? ` (${c.email})` : ""}`);
     });
+  }
+
+  // Recompute reachability from the FINAL contact data (after Phase 1 merging and
+  // Phase 2 enrichment), so the reachability signal reflects what we actually have.
+  for (const o of opps) {
+    if (o.scores)
+      o.scores.reachability = reachabilityFrom(o.contactEmail, o.contactHandle, o.contactPhone);
   }
 
   // Hard cap: drop any target already contacted by too many other users recently,

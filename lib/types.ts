@@ -44,7 +44,19 @@ export interface Opportunity {
   contactPhone: string; // phone number if the source lists one (lead-gen / local businesses)
   location: string;
   timezone?: string; // IANA tz inferred from location (e.g. America/Chicago), for send timing
-  fitScore: number | null; // 0..1
+  fitScore: number | null; // 0..1 — headline score (drives ranking)
+  // Per-signal probabilistic breakdown behind the headline fit, each 0..1, so the
+  // UI can explain WHY someone ranks: how well they match, how reachable they are,
+  // whether now is a good time, and how active/in-motion they are right now.
+  scores?: {
+    relevance?: number;
+    reachability?: number;
+    timing?: number;
+    momentum?: number;
+  };
+  // Concrete "why now / why them" evidence phrases (recently funded, hiring,
+  // touring nearby, public email, new release, speaking soon…).
+  signals?: string[];
   // What kind of result this is, so the UI can show "Apply" on a real posting vs
   // "cold email" on a company/person. "listing" = a specific open job/internship
   // you can apply to (url is the application link); "company" = an employer to
