@@ -161,6 +161,7 @@ export async function draftFor(
     editPairs?: { before: string; after: string }[];
     requirements?: string;
     signature?: string;
+    senderName?: string; // who signs the message — independent of search grounding
     kind?: string; // one of OUTREACH_KINDS; overrides auto-picked channel
     goal?: string; // the search goal these finds came from, so we frame intent right
   } = {}
@@ -169,6 +170,7 @@ export async function draftFor(
   const templates = opts.templates || [];
   const requirements = opts.requirements || (opp as any).requirements || "";
   const signature = String(opts.signature || "").trim();
+  const senderName = String(opts.senderName || "").trim();
   const t = resolveTemplate(useCase);
   let draftStyle = t ? t.draftStyle : GENERIC.draftStyle;
   const { channelType, to, kindLabel } = routeForKind(opp, opts.kind);
@@ -300,12 +302,22 @@ export async function draftFor(
         : "");
   }
 
+  // The message is always FROM the sender personally, even when the search was
+  // grounded on the company only (so their name may not be in `about`). When
+  // they have no saved signature, make sure the model still signs with their
+  // real name rather than as the company or leaving it blank.
+  const signoffBlock =
+    !signature && senderName
+      ? `\n\nSIGN-OFF: this note is sent personally by ${senderName}. End with a brief closing signed as "${senderName}" (their real first name), even if little about them appears above. Never sign as the company or leave it unsigned.`
+      : "";
+
   const tpl = templateBlock(templates, channelType);
   const extras =
     requirementsBlock(requirements) +
     coachingBlock(opts.coaching) +
     dismissedAdviceBlock(opts.dismissedAdvice) +
-    editBlock(opts.editPairs);
+    editBlock(opts.editPairs) +
+    signoffBlock;
 
   let gen: any = null;
   try {

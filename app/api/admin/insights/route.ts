@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin, userFromReq } from "@/lib/supabaseAdmin";
 import { isOwnerEmail } from "@/lib/owner";
+import { bucketDenyReason } from "@/lib/denyBuckets";
 
 export const maxDuration = 60; // walks every user_state row; scales with user count
 export const dynamic = "force-dynamic";
@@ -149,7 +150,9 @@ export async function GET(req: Request) {
       byUseCase.set(uc, bucket);
 
       if (status === "denied") {
-        const reason = String(f?.denyReason || "").trim() || "(no reason given)";
+        // Group by concept so "Wrong industry" + its elaborated/typo'd variants
+        // count as one row instead of scattering (matches the user dashboard).
+        const reason = bucketDenyReason(String(f?.denyReason || ""));
         reasonCounts.set(reason, (reasonCounts.get(reason) || 0) + 1);
         const ex = reasonExamples.get(reason) || [];
         if (ex.length < 3) {

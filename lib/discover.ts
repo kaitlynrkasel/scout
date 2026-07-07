@@ -38,7 +38,7 @@ export interface DiscoverFeedback {
 }
 
 // Compact "learned from your feedback" block for the Claude prompts.
-function feedbackBlock(feedback?: DiscoverFeedback): string {
+function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
   const avoid = (feedback?.avoid || []).filter((a) => a && (a.name || a.reason)).slice(0, 12);
   const favor = (feedback?.favor || []).filter((f) => f && f.name).slice(0, 10);
   const outcomes = (feedback?.outcomes || [])
@@ -46,6 +46,18 @@ function feedbackBlock(feedback?: DiscoverFeedback): string {
     .filter(Boolean)
     .slice(0, 6);
   let s = "";
+  // The user's EXPLICIT instruction outranks learned history. If they asked for
+  // a variety of industries this run, say so up front, so the model doesn't let
+  // "kept/replied before" patterns quietly collapse the results back to the one
+  // or two industries they've engaged with most.
+  const wantsVariety = goalWantsAnyIndustry(goal);
+  if (wantsVariety && (outcomes.length || favor.length)) {
+    s +=
+      "\n\nINSTRUCTION OVERRIDE: this search explicitly asks for a VARIETY of industries. The learned " +
+      "preferences below are secondary — use them ONLY to judge quality/reachability WITHIN each industry, " +
+      "never to narrow WHICH industries appear. Keep the results spread across many distinct industries even " +
+      "if the user has kept or replied to some industries more than others. The explicit ask wins.";
+  }
   if (outcomes.length) {
     s +=
       "\n\nPROVEN OUTCOMES for this user (from real replies, not just approvals). Weight these HEAVIEST when scoring " +
@@ -572,7 +584,7 @@ async function planQueries(
   const user =
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
     planBlock(plan) +
-    feedbackBlock(feedback);
+    feedbackBlock(feedback, g);
 
   try {
     const parsed: any = parseJsonLoose(await claudeJson(sys, user));
@@ -1026,7 +1038,7 @@ async function extract(
   const ctx =
     `USER'S USE CASE: ${useCase}\nUSER GOAL: ${goal}\nABOUT THE USER: ${about}`;
   const learned =
-    feedbackBlock(feedback) +
+    feedbackBlock(feedback, goal) +
     (anyIndustry && feedback
       ? "\n\nNOTE: the user wants results spanning MANY industries. Treat the kept/denied examples above as signals about " +
         "outreach FIT and quality only, NOT about industry. Do NOT lower fit_score or set is_relevant false just because a " +

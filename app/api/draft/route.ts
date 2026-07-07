@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
       dismissedAdvice,
       editPairs,
       signature,
+      senderName,
       kind,
     } = await req.json();
     const opps: Opportunity[] = opportunities || [];
@@ -49,6 +50,7 @@ export async function POST(req: NextRequest) {
           editPairs: edits,
           requirements: (o as any).requirements || "",
           signature: sig,
+          senderName: String(senderName || ""),
           kind: kindStr,
           goal: String(goal || ""),
         })

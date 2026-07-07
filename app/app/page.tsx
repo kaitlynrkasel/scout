@@ -14,6 +14,7 @@ import ImportOutreach from "./ImportOutreach";
 import ComboInput from "./ComboInput";
 import { CITY_SUGGESTIONS, SCHOOL_SUGGESTIONS } from "./suggest";
 import { fileToText } from "@/lib/fileText";
+import { bucketDenyReason } from "@/lib/denyBuckets";
 import {
   guessTimezone,
   isBusinessHours,
@@ -93,6 +94,12 @@ function outreachSalt(accountEmail?: string): string {
   } catch {
     return "anon";
   }
+}
+
+// Replace em/en dashes with commas at render time, so text scouted before the
+// engine started stripping them (stored on old finds) still displays cleanly.
+function cleanDash(s: string | undefined | null): string {
+  return String(s ?? "").replace(/\s*[‒–—―−]\s*/g, ", ");
 }
 
 // Copy text to the clipboard, returning whether it actually worked. The async
@@ -448,7 +455,7 @@ function channelValue(o: Opportunity, key: string): string {
 
 // A find is a saved person/opportunity you can work through: draft, deny, mark
 // contacted, and log replies. Finds accumulate across searches, per project.
-type FindStatus = "new" | "drafted" | "sent" | "replied" | "denied";
+type FindStatus = "new" | "undecided" | "drafted" | "sent" | "replied" | "denied";
 interface Find {
   id: string; // stable dedup key: project + normalized name + host
   projectId: string;
@@ -666,6 +673,7 @@ type FindFilter = FindStatus | "all" | "pinned";
 const FIND_STATUSES: { key: FindFilter; label: string }[] = [
   { key: "pinned", label: "Pinned" },
   { key: "new", label: "New" },
+  { key: "undecided", label: "Undecided" },
   { key: "drafted", label: "Drafted" },
   { key: "sent", label: "Sent" },
   { key: "replied", label: "Replied" },
@@ -676,6 +684,7 @@ const FIND_STATUSES: { key: FindFilter; label: string }[] = [
 // Labels for the manual status control on each find.
 const STATUS_OPTIONS: { key: FindStatus; label: string }[] = [
   { key: "new", label: "New" },
+  { key: "undecided", label: "Undecided" },
   { key: "drafted", label: "Drafted" },
   { key: "sent", label: "Sent" },
   { key: "replied", label: "Replied" },
@@ -1089,10 +1098,24 @@ function ScoutTool({
     } | null
   >(null);
   const [gating, setGating] = useState(false); // the understanding pass is running
-  // Multiple-choice picks for the current round, keyed by question index. The
-  // value is the chosen option, or "__other__" when the write-in is active.
-  const [picks, setPicks] = useState<Record<number, string>>({});
+  // Multiple-choice picks for the current round, keyed by question index. Each is
+  // an ARRAY (multi-select): option strings, plus the special tokens "__any__"
+  // (any/all — exclusive) and "__other__" (a free-text write-in is active).
+  const [picks, setPicks] = useState<Record<number, string[]>>({});
   const [otherText, setOtherText] = useState<Record<number, string>>({});
+  // Toggle one option for a question. "Any / all" is exclusive (clears the rest
+  // and vice-versa); everything else stacks.
+  const togglePick = (i: number, opt: string) =>
+    setPicks((p) => {
+      const cur = p[i] || [];
+      if (opt === "__any__")
+        return { ...p, [i]: cur.includes("__any__") ? [] : ["__any__"] };
+      const rest = cur.filter((x) => x !== "__any__");
+      return {
+        ...p,
+        [i]: rest.includes(opt) ? rest.filter((x) => x !== opt) : [...rest, opt],
+      };
+    });
   // Lets the user cancel an in-flight search but keep what was already scouted.
   const discoverAbort = useRef<AbortController | null>(null);
   // Instant-first-search onboarding: the moment a brand-new user finishes
@@ -2945,6 +2968,7 @@ function ScoutTool({
             dismissedAdvice,
             editPairs,
             signature: signatureFor(activeId),
+            senderName: profile.name || "",
           }),
         });
         const data = await parseApiResponse(res);
@@ -3304,6 +3328,7 @@ function ScoutTool({
           dismissedAdvice,
           editPairs,
           signature: signatureFor(f.projectId),
+          senderName: profile.name || "",
         }),
       });
       const data = await parseApiResponse(res);
@@ -3867,22 +3892,32 @@ function ScoutTool({
     if (!planGate) return "";
     return planGate.questions
       .map((q, i) => {
-        const pick = picks[i];
-        if (!pick) return "";
-        const ans = pick === "__other__" ? (otherText[i] || "").trim() : pick;
-        return ans ? `${q.question} ${ans}` : "";
+        const sel = picks[i] || [];
+        if (!sel.length) return "";
+        const parts = sel
+          .map((s) =>
+            s === "__any__"
+              ? "any / all of these"
+              : s === "__other__"
+              ? (otherText[i] || "").trim()
+              : s
+          )
+          .filter(Boolean);
+        return parts.length ? `${q.question} ${parts.join(", ")}` : "";
       })
       .filter(Boolean)
       .join(". ");
   }
 
-  // How many questions the user has answered so far (gates Sharpen). Counts an
-  // "Other" pick only once it has text.
+  // How many questions the user has answered so far (gates Sharpen). A lone
+  // "Other" pick counts only once it has text.
   const answeredCount = planGate
     ? planGate.questions.filter((_, i) => {
-        const pick = picks[i];
-        if (!pick) return false;
-        return pick === "__other__" ? (otherText[i] || "").trim().length > 0 : true;
+        const sel = picks[i] || [];
+        if (!sel.length) return false;
+        if (sel.length === 1 && sel[0] === "__other__")
+          return (otherText[i] || "").trim().length > 0;
+        return true;
       }).length
     : 0;
 
@@ -4109,6 +4144,7 @@ function ScoutTool({
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
+            senderName: profile.name || "",
         }),
       });
       const data = await parseApiResponse(res);
@@ -4213,6 +4249,7 @@ function ScoutTool({
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
+            senderName: profile.name || "",
           kind,
         }),
       });
@@ -4468,6 +4505,17 @@ function ScoutTool({
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
 
+                  {/* Per-project options tucked into a collapsible so the search
+                      form stays uncluttered; open it to tune profile/company
+                      grounding and auto follow-up. */}
+                  <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
+                    Project options
+                    <span className="font-normal text-body/50">
+                      · profile, company, follow-up
+                    </span>
+                  </summary>
                   {/* Per-project: read my profile + learn from my other searches? */}
                   <label className="mt-3 flex cursor-pointer items-start gap-2.5">
                     <input
@@ -4520,6 +4568,7 @@ function ScoutTool({
                       Needs a connected email in send mode.
                     </span>
                   </label>
+                  </details>
                 </div>
               </div>
 
@@ -4724,15 +4773,16 @@ function ScoutTool({
                           <div className="text-xs font-bold leading-relaxed text-ink">
                             {q.question}
                           </div>
+                          <div className="mt-0.5 text-[11px] text-body/50">
+                            Pick any that apply.
+                          </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
                             {q.options.map((opt, j) => {
-                              const active = picks[i] === opt;
+                              const active = (picks[i] || []).includes(opt);
                               return (
                                 <button
                                   key={j}
-                                  onClick={() =>
-                                    setPicks((p) => ({ ...p, [i]: opt }))
-                                  }
+                                  onClick={() => togglePick(i, opt)}
                                   className={
                                     "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
                                     (active
@@ -4744,13 +4794,24 @@ function ScoutTool({
                                 </button>
                               );
                             })}
+                            {/* Any / all — an explicit "no preference" that clears
+                                the rest, so the search doesn't over-narrow. */}
                             <button
-                              onClick={() =>
-                                setPicks((p) => ({ ...p, [i]: "__other__" }))
+                              onClick={() => togglePick(i, "__any__")}
+                              className={
+                                "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
+                                ((picks[i] || []).includes("__any__")
+                                  ? "border-coral bg-coral text-white"
+                                  : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
                               }
+                            >
+                              Any / all
+                            </button>
+                            <button
+                              onClick={() => togglePick(i, "__other__")}
                               className={
                                 "rounded-full border border-dashed px-3 py-1.5 text-xs font-semibold transition " +
-                                (picks[i] === "__other__"
+                                ((picks[i] || []).includes("__other__")
                                   ? "border-coral bg-coral text-white"
                                   : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
                               }
@@ -4758,7 +4819,7 @@ function ScoutTool({
                               Other…
                             </button>
                           </div>
-                          {picks[i] === "__other__" && (
+                          {(picks[i] || []).includes("__other__") && (
                             <input
                               value={otherText[i] || ""}
                               onChange={(e) =>
@@ -6344,7 +6405,7 @@ function FindsList({
               </div>
               {o.whyItFits && (
                 <div className="mt-1.5 text-xs leading-relaxed text-body">
-                  {o.whyItFits}
+                  {cleanDash(o.whyItFits)}
                 </div>
               )}
             </div>
@@ -6480,7 +6541,12 @@ function DenyReasons({
 
   if (phase === "pick") {
     return (
-      <div className="flex flex-wrap items-center gap-1.5">
+      <div>
+        <p className="mb-1.5 text-[11px] text-body/60">
+          A quick reason trains <span className="font-semibold text-body/80">your</span>{" "}
+          Scout — it stops surfacing ones like this and finds more of what you want.
+        </p>
+        <div className="flex flex-wrap items-center gap-1.5">
         {DENY_REASONS.map((r) => (
           <button
             key={r}
@@ -6500,6 +6566,7 @@ function DenyReasons({
         >
           Other…
         </button>
+        </div>
       </div>
     );
   }
@@ -7045,6 +7112,19 @@ function FindDetailModal({
               </span>
             </div>
           </div>
+          {find.status !== "denied" && find.status !== "undecided" && (
+            <button
+              onClick={() => {
+                onStatus("undecided");
+                if (position < total) onNext();
+                else onClose();
+              }}
+              title="Park this one — decide whether to reach out later"
+              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+            >
+              Decide later
+            </button>
+          )}
           {find.status !== "denied" && (
             <button
               onClick={() => {
@@ -7198,7 +7278,7 @@ function FindDetailModal({
                 <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
                   Why it fits
                 </div>
-                <p className="text-sm leading-relaxed text-body">{o.whyItFits}</p>
+                <p className="text-sm leading-relaxed text-body">{cleanDash(o.whyItFits)}</p>
               </div>
             )}
 
@@ -7408,7 +7488,7 @@ function FindDetailModal({
                     <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
                       Why they fit
                     </div>
-                    <p className="text-sm leading-relaxed text-body">{o.whyItFits}</p>
+                    <p className="text-sm leading-relaxed text-body">{cleanDash(o.whyItFits)}</p>
                   </div>
                 )}
 
@@ -7671,7 +7751,7 @@ function FindsTab({
     pinned: finds.filter((f) => f.pinned).length,
     all: finds.filter((f) => !f.pinned).length,
   };
-  for (const s of ["new", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
+  for (const s of ["new", "undecided", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
     counts[s] = finds.filter((f) => f.status === s && !f.pinned).length;
   }
   const trackable = finds.some(
@@ -8062,9 +8142,12 @@ function FindsTab({
                   teach the ranking model why (not a silent, reasonless pass). */}
               {bulkDenyOpen && (
                 <div className="absolute bottom-full left-0 mb-2 w-64 rounded-2xl border border-warm-border bg-surface p-3 shadow-xl">
-                  <div className="mb-2 text-[11px] font-bold uppercase tracking-wide text-body/50">
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-body/50">
                     Why pass on these {selectedShown.length}?
                   </div>
+                  <p className="mb-2 mt-0.5 text-[11px] text-body/60">
+                    Trains your Scout to find fewer like these.
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {DENY_REASONS.map((r) => (
                       <button
@@ -8182,6 +8265,7 @@ function FindStatusBadge({
 }) {
   const map: Record<FindStatus, string> = {
     new: "border-warm-border bg-warm-bg text-body",
+    undecided: "border-amber-300/50 bg-amber-50 text-amber-800",
     drafted: "border-coral/30 bg-warm-bg text-accent",
     sent: "border-sage/40 bg-sage/15 text-sage",
     replied: "border-sage/60 bg-sage/25 text-brown-deep",
@@ -8333,6 +8417,7 @@ function findCardTone(find: Find): string {
     return "border-sage/30 bg-surface"; // fresh send
   }
   if (find.status === "drafted") return "border-coral/30 bg-warm-bg/40"; // draft ready
+  if (find.status === "undecided") return "border-amber-300/40 bg-amber-50/40"; // parked
   return "border-warm-border bg-surface"; // new
 }
 
@@ -8557,7 +8642,7 @@ function FindCard({
         );
       })()}
       {o.whyItFits && (
-        <div className="mt-1.5 text-xs leading-relaxed text-body">{o.whyItFits}</div>
+        <div className="mt-1.5 text-xs leading-relaxed text-body">{cleanDash(o.whyItFits)}</div>
       )}
 
       {/* Every contact channel the search asked for, found or not, as one
@@ -9256,28 +9341,15 @@ function learnedFromFinds(finds: Find[]) {
     }
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
   };
-  // Bucket similar deny reasons into a shared concept so "wrong location",
-  // "not in my city", and "too far" collapse into a single Location tally.
-  // Anything the buckets don't catch falls through as its own literal reason.
-  const CONCEPT_BUCKETS: { label: string; test: RegExp }[] = [
-    { label: "Wrong location", test: /\b(location|city|region|country|state|area|place|based|distant|near|far|remote|abroad|foreign|domestic)\b/i },
-    { label: "Wrong industry", test: /\b(industry|field|sector|niche|category|market|space|vertical)\b/i },
-    { label: "Wrong role or level", test: /\b(role|level|junior|senior|entry|position|title|seniority|too small|too big|too senior|too junior|wrong seniority)\b/i },
-    { label: "Wrong timing", test: /\b(time|timing|deadline|closed|expired|past|future|old|stale|next year|next semester|fall|spring|summer|winter)\b/i },
-    { label: "No way to contact", test: /\b(contact|reach|email|way|closed|no email|no phone|dm only|form only)\b/i },
-    { label: "Genre / topic mismatch", test: /\b(country music|rock|pop|jazz|genre|topic|category|subject)\b/i },
-    { label: "Already reached out", test: /\balready\b|\bcontacted\b|\bknow them\b/i },
-  ];
-  const bucketReason = (r: string): string => {
-    for (const b of CONCEPT_BUCKETS) if (b.test.test(r)) return b.label;
-    return r;
-  };
+  // Bucket similar deny reasons into a shared concept (see lib/denyBuckets) so
+  // "Wrong industry", "Wrong industry, not sports business", and typo variants
+  // all collapse into one Industry tally instead of scattering.
   const deniedReasons = (() => {
     const m: Record<string, number> = {};
     for (const f of denied) {
       const raw = (f.denyReason || "").trim();
       if (!raw) continue;
-      const key = bucketReason(raw);
+      const key = bucketDenyReason(raw);
       m[key] = (m[key] || 0) + 1;
     }
     return Object.entries(m).sort((a, b) => b[1] - a[1]);
@@ -9312,30 +9384,23 @@ function learnedFromFinds(finds: Find[]) {
     repliedCount,
     sentCount: sentish.length,
     denyReasons: (() => {
-      // Group near-identical reasons: key by a normalized form (lowercase, no
-      // punctuation/apostrophes, collapsed whitespace) so "I don't like X" and
-      // "I dont like X" count as one, but DISPLAY the wording the user typed
-      // most often for that key.
-      const norm = (s: string) =>
-        s
-          .toLowerCase()
-          .replace(/['’]/g, "")
-          .replace(/[^a-z0-9\s]/g, " ")
-          .replace(/\s+/g, " ")
-          .trim();
+      // Group by concept (see lib/denyBuckets) so "Wrong industry" and its
+      // elaborated/typo'd variants collapse into one row, but DISPLAY the
+      // wording the user typed most often within that group.
       const groups: Record<string, { count: number; variants: Record<string, number> }> = {};
       for (const f of denied) {
         const raw = (f.denyReason || "").trim();
         if (!raw) continue;
-        const key = norm(raw);
+        const key = bucketDenyReason(raw);
         const g = (groups[key] = groups[key] || { count: 0, variants: {} });
         g.count += 1;
         g.variants[raw] = (g.variants[raw] || 0) + 1;
       }
       return Object.values(groups)
         .map((g) => {
-          const label = Object.entries(g.variants).sort((a, b) => b[1] - a[1])[0][0];
-          return [label, g.count] as [string, number];
+          // Show the most common real wording within the concept group.
+          const top = Object.entries(g.variants).sort((a, b) => b[1] - a[1])[0][0];
+          return [top, g.count] as [string, number];
         })
         .sort((a, b) => b[1] - a[1]);
     })(),
@@ -9526,6 +9591,7 @@ const FIND_STATUS: Record<
   { label: string; cls: string; action: string }
 > = {
   new: { label: "New", cls: "bg-brown-tint text-brown-deep", action: "Draft" },
+  undecided: { label: "Undecided", cls: "bg-amber-50 text-amber-800", action: "Decide" },
   drafted: { label: "Drafted", cls: "bg-warm-bg text-body", action: "Send" },
   sent: { label: "Sent", cls: "bg-warm-bg text-body", action: "Follow up" },
   replied: { label: "Replied", cls: "bg-success/10 text-success-deep", action: "View" },
@@ -10059,7 +10125,7 @@ function DashboardTab({
               {pick.opp.name}
             </h3>
             <p className="mt-1 max-w-[52ch] text-sm leading-relaxed text-[#c9c0b4]">
-              {(pick.opp.whyItFits || "").trim() ||
+              {cleanDash(pick.opp.whyItFits).trim() ||
                 "Your strongest still-open match, worth a short, specific intro."}
             </p>
           </div>
@@ -10399,10 +10465,13 @@ function DashboardTab({
           How you compare to everyone else using Scout. Aggregate averages only,
           never anyone&apos;s private data.
         </p>
-        {!community || community.users < 1 ? (
+        {/* Hold the comparison (and the user count) until the cohort is big
+            enough to mean something — a benchmark against a handful of people
+            is noise, and surfacing a tiny headcount undersells Scout. */}
+        {!community || community.users < 50 ? (
           <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-8 text-center text-sm text-body/70">
-            Community benchmarks appear here as more people use Scout. Yours are
-            ready, everyone else&apos;s are still coming.
+            Community benchmarks unlock once enough people are using Scout with
+            your use case. Yours are ready, everyone else&apos;s are still coming.
           </div>
         ) : (
           <>
@@ -10528,7 +10597,9 @@ function DashboardTab({
       {/* -------- People like you (cohort patterns) -------- */}
       {(() => {
         const c = community?.cohort;
-        if (!c) return null;
+        // Same 50-person floor as the comparison above — don't present a handful
+        // of people's behavior as "people like you."
+        if (!c || (community?.users || 0) < 50) return null;
         const pct = (v: number) => `${Math.round(v * 100)}%`;
         const top = c.patterns.channels?.[0];
         const fitK = c.patterns.fitKept;
@@ -12584,7 +12655,7 @@ function FindPeek({
                   ))}
                 {tab === 1 && (
                   <p className="text-sm leading-relaxed text-body">
-                    {f.opp.whyItFits?.trim() || "Scout will note why this one fits once you've worked a few more finds."}
+                    {cleanDash(f.opp.whyItFits).trim() || "Scout will note why this one fits once you've worked a few more finds."}
                   </p>
                 )}
                 {tab === 2 && (
