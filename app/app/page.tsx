@@ -330,6 +330,10 @@ interface Profile {
   companyName?: string;
   companyRole?: string; // your specific role/title at the company
   companyContribution?: string; // how you serve / what you do on the company's projects
+  // Cached from the company's workspace record so they flow into search + drafts.
+  companyAbout?: string; // what the company does / who it serves
+  companyIndustry?: string; // e.g. Music
+  companyStage?: string; // Pre-seed / Startup / Growth / …
   companyWorkspaceId?: string; // the Teams workspace this company maps to (created or joined)
   // Optional personalization. Stored locally only for now (the Supabase
   // `profiles` row keeps its original columns; these ride along in the browser's
@@ -519,6 +523,76 @@ function findKey(projectId: string, o: Opportunity): string {
 // Outreach/Finds lists newest-activity-first so a fresh draft jumps to the top.
 function lastActivityAt(f: Find): number {
   return Math.max(f.addedAt || 0, f.draftedAt || 0, f.sentAt || 0, f.lastFollowUpAt || 0);
+}
+
+// Phase 4 — outcome learning. Distill the user's REAL results (replies vs sent-
+// and-silent) into a few plain-English patterns the discovery engine can weight.
+// Uses hard evidence only: statements need enough data to mean something, and a
+// send only counts as "silent" after a week without a reply. Cross-project on
+// purpose — replies are scarce, so every one of them should teach the engine.
+function outcomePatterns(finds: Find[]): string[] {
+  const WEEK = 7 * 86400000;
+  const now = Date.now();
+  const replied = finds.filter((f) => f.status === "replied");
+  const silent = finds.filter(
+    (f) => f.status === "sent" && f.sentAt && now - f.sentAt > WEEK
+  );
+  const out: string[] = [];
+  if (!replied.length) return out; // nothing proven yet, say nothing
+
+  const pct = (n: number, d: number) => Math.round((n / d) * 100);
+  const personal = (f: Find) =>
+    !!f.opp.contactEmail &&
+    !/^(careers?|jobs?|hr|recruit|talent|info|hello|contact|apply|admin|support|team|press|media|sales)@/i.test(
+      f.opp.contactEmail.trim()
+    );
+  const dmOnly = (f: Find) => !f.opp.contactEmail && !!f.opp.contactHandle;
+
+  // Contact-route pattern: does a personal email correlate with replies?
+  const rPersonal = replied.filter(personal).length;
+  if (rPersonal / replied.length >= 0.6) {
+    out.push(
+      `${pct(rPersonal, replied.length)}% of replies came from candidates with a personal email address` +
+        (silent.length && silent.filter(dmOnly).length / silent.length >= 0.4
+          ? "; DM-only contacts mostly went unanswered"
+          : "")
+    );
+  }
+  // Timing/momentum pattern: were repliers "in motion"?
+  const avg = (fs: Find[], k: "timing" | "momentum") => {
+    const vals = fs.map((f) => f.opp.scores?.[k]).filter((v): v is number => typeof v === "number");
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const rT = avg(replied, "timing");
+  const sT = avg(silent, "timing");
+  if (rT != null && rT >= 0.6 && (sT == null || rT - sT >= 0.15)) {
+    out.push(
+      "Replies came from candidates with strong timing signals (recent launches, funding, hiring, upcoming events); favor targets where NOW matters"
+    );
+  }
+  // Signal phrases that showed up in replied finds.
+  const phrases = new Map<string, number>();
+  for (const f of replied)
+    for (const s of f.opp.signals || []) {
+      const k = s.toLowerCase().trim();
+      if (k) phrases.set(k, (phrases.get(k) || 0) + 1);
+    }
+  const common = [...phrases.entries()].filter(([, n]) => n >= 2).map(([k]) => k);
+  if (common.length)
+    out.push(`Signals present on replied candidates: ${common.slice(0, 4).join("; ")}`);
+  // Target-type pattern (e.g. small companies reply, big ones don't).
+  const types = new Map<string, number>();
+  for (const f of replied) {
+    const t = f.opp.targetType || "";
+    if (t) types.set(t, (types.get(t) || 0) + 1);
+  }
+  const topType = [...types.entries()].sort((a, b) => b[1] - a[1])[0];
+  if (topType && replied.length >= 3 && topType[1] / replied.length >= 0.7) {
+    out.push(
+      `${pct(topType[1], replied.length)}% of replies were ${topType[0] === "person" ? "individual people" : topType[0] === "listing" ? "job listings" : "companies"}; lean toward that kind of target`
+    );
+  }
+  return out.slice(0, 6);
 }
 
 // Aggregate community benchmarks + what's-working patterns from /api/community-stats.
@@ -755,6 +829,10 @@ function AuthedShell() {
       if (typeof raw.companyRole === "string") mergedExtras.companyRole = raw.companyRole;
       if (typeof raw.companyContribution === "string")
         mergedExtras.companyContribution = raw.companyContribution;
+      if (typeof raw.companyAbout === "string") mergedExtras.companyAbout = raw.companyAbout;
+      if (typeof raw.companyIndustry === "string")
+        mergedExtras.companyIndustry = raw.companyIndustry;
+      if (typeof raw.companyStage === "string") mergedExtras.companyStage = raw.companyStage;
       if (typeof raw.companyWorkspaceId === "string")
         mergedExtras.companyWorkspaceId = raw.companyWorkspaceId;
       if (typeof raw.age === "number") mergedExtras.age = raw.age;
@@ -1223,6 +1301,9 @@ function ScoutTool({
         companyName: profile.companyName,
         companyRole: profile.companyRole,
         companyContribution: profile.companyContribution,
+        companyAbout: profile.companyAbout,
+        companyIndustry: profile.companyIndustry,
+        companyStage: profile.companyStage,
         companyWorkspaceId: profile.companyWorkspaceId,
         age: profile.age,
         eduStatus: profile.eduStatus,
@@ -1234,7 +1315,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -1544,6 +1625,41 @@ function ScoutTool({
       setAccountBusy("");
     }
   };
+
+  // Cache the company's workspace details (about / industry / stage) onto the
+  // profile so they flow into search + drafts via companyBits. Refreshes on load
+  // so admin edits to the shared record reach every member's searches.
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (profile.accountType !== "company" || !profile.companyWorkspaceId || !getToken) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/team/workspace", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        const ws = (data.workspaces || []).find(
+          (w: any) => w.id === profile.companyWorkspaceId
+        );
+        if (!alive || !ws) return;
+        const patch: Partial<Profile> = {};
+        if ((ws.about || "") !== (profile.companyAbout || "")) patch.companyAbout = ws.about || "";
+        if ((ws.industry || "") !== (profile.companyIndustry || ""))
+          patch.companyIndustry = ws.industry || "";
+        if ((ws.stage || "") !== (profile.companyStage || "")) patch.companyStage = ws.stage || "";
+        if (ws.name && ws.name !== profile.companyName) patch.companyName = ws.name;
+        if (Object.keys(patch).length) patchProfile(patch);
+      } catch {
+        /* teams not configured; companyBits just omits these lines */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.companyWorkspaceId, profile.accountType]);
 
   useEffect(() => {
     refreshGmail();
@@ -2250,6 +2366,15 @@ function ScoutTool({
           profile.companyName
             ? `Reaching out on behalf of ${profile.companyName}` +
               (profile.companyRole ? ` as ${profile.companyRole}` : "")
+            : "",
+          profile.companyAbout
+            ? `What the company does: ${profile.companyAbout}`
+            : "",
+          profile.companyIndustry
+            ? `Company industry: ${profile.companyIndustry}`
+            : "",
+          profile.companyStage
+            ? `Company stage: ${profile.companyStage}`
             : "",
           profile.companyContribution
             ? `Their role / how they serve the company's work: ${profile.companyContribution}`
@@ -3161,7 +3286,8 @@ function ScoutTool({
     setDiscovering(true);
     try {
       // Teach the search from this project's history: avoid denied finds (with
-      // reasons), favor the ones the user kept/drafted.
+      // reasons), favor the ones the user kept/drafted, and — heaviest — the
+      // outcome patterns behind real replies (Phase 4 learning).
       const projFinds = finds.filter((f) => f.projectId === activeId);
       const feedback = {
         avoid: projFinds
@@ -3172,6 +3298,7 @@ function ScoutTool({
           .filter((f) => f.status !== "denied" && f.status !== "new")
           .slice(0, 10)
           .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
+        outcomes: outcomePatterns(finds), // learn across ALL projects: replies are scarce
       };
       // For job/internship searches, layer in the competitiveness + company-size
       // directives so the LLM narrows to the right tier of opportunity. The

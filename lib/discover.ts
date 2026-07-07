@@ -28,13 +28,30 @@ export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
 export interface DiscoverFeedback {
   avoid?: { name: string; reason: string }[]; // denied finds + why
   favor?: { name: string; why: string }[]; // kept / drafted finds + why they fit
+  // Phase 4 — outcome learning. Compact, plain-English facts about what actually
+  // produced results for THIS user (replies vs silence vs denies), computed from
+  // their real pipeline. e.g. "Replies so far came from candidates with a personal
+  // email (avg reachability 0.9) and recent-launch signals; DM-only finds got no
+  // replies." Fed to query planning + fit scoring so ranking chases outcomes,
+  // not just approvals.
+  outcomes?: string[];
 }
 
 // Compact "learned from your feedback" block for the Claude prompts.
 function feedbackBlock(feedback?: DiscoverFeedback): string {
   const avoid = (feedback?.avoid || []).filter((a) => a && (a.name || a.reason)).slice(0, 12);
   const favor = (feedback?.favor || []).filter((f) => f && f.name).slice(0, 10);
+  const outcomes = (feedback?.outcomes || [])
+    .map((s) => String(s || "").trim())
+    .filter(Boolean)
+    .slice(0, 6);
   let s = "";
+  if (outcomes.length) {
+    s +=
+      "\n\nPROVEN OUTCOMES for this user (from real replies, not just approvals). Weight these HEAVIEST when scoring " +
+      "fit: favor candidates matching the patterns that got replies, deprioritize the patterns that went nowhere:\n" +
+      outcomes.map((o) => `- ${o}`).join("\n");
+  }
   if (favor.length) {
     s +=
       "\n\nWORKED BEFORE, the user KEPT and reached out to these, so favor results like them:\n" +
