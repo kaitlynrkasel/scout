@@ -102,6 +102,41 @@ function cleanDash(s: string | undefined | null): string {
   return String(s ?? "").replace(/\s*[‒–—―−]\s*/g, ", ");
 }
 
+// Client mirror of the server's goalWantsAnyIndustry: an explicit "any / all /
+// wide variety of industries" is a complete answer, not missing information.
+function goalWantsAnyIndustryClient(goal: string): boolean {
+  const g = String(goal || "");
+  return (
+    /\b(any|all|every|various|a variety|wide variety|multiple|different|range of|across|no preference)\b[^.]*\b(industr|sector|field|niche|vertical|market|space)/i.test(g) ||
+    /\b(industr|sector|field)\w*[\s-]*agnostic\b/i.test(g)
+  );
+}
+
+// A content-based floor for "how much Scout understands", so a substantive
+// prompt never shows an implausible 0%. It's blended with — and never below —
+// the model's own read and anything already learned for this search.
+function baselineUnderstanding(
+  goal: string,
+  about: string,
+  answered: number
+): number {
+  const g = String(goal || "").trim();
+  if (!g) return 0;
+  let u = 35; // a real objective is on the table
+  if (g.length > 40) u += 12;
+  if (g.length > 90) u += 8;
+  const specifics = (
+    g.match(
+      /\b(industr|location|city|remote|near|size|employees|stage|budget|revenue|startup|smb|enterprise|email|phone|website|role|senior|junior|founder|any|variety|pitch|product)\w*/gi
+    ) || []
+  ).length;
+  u += Math.min(20, specifics * 4);
+  if (String(about || "").trim().length > 40) u += 8;
+  u += answered * 8;
+  if (goalWantsAnyIndustryClient(g)) u = Math.max(u, 70);
+  return Math.max(0, Math.min(96, u));
+}
+
 // Copy text to the clipboard, returning whether it actually worked. The async
 // Clipboard API is blocked in some contexts (permissions, non-secure origins,
 // certain in-app webviews); we fall back to the legacy execCommand path and,
@@ -433,6 +468,12 @@ interface Category {
   // from CONTACT_CHANNELS below, e.g. ["email","phone"]). Empty/undefined =
   // no specific preference, Scout returns whatever it finds.
   wantedChannels?: string[];
+  // Persisted "understanding" state so the confidence gate is cumulative, not
+  // reset every run: how well Scout grasps this search, the question TEXTS
+  // already surfaced (never re-asked), and the answers folded into the search.
+  understanding?: number;
+  askedQuestions?: string[];
+  clarifyAnswers?: string;
 }
 
 // The contact channels a user can ask Scout to prioritize per search.
@@ -1095,6 +1136,10 @@ function ScoutTool({
       understanding: number;
       questions: { question: string; options: string[] }[];
       plan: any;
+      // Cumulative context carried from earlier rounds/runs of THIS search:
+      // question texts already answered (never re-shown) and their answers.
+      priorAsked?: string[];
+      priorAnswers?: string;
     } | null
   >(null);
   const [gating, setGating] = useState(false); // the understanding pass is running
@@ -2620,7 +2665,8 @@ function ScoutTool({
   // template placeholder until a personalized one loads (or if there's no
   // profile to personalize from). Cached per (useCase + category + profile) so
   // we don't refetch on every render or when flipping back to a seen category.
-  const activeCatName = myCats.find((c) => c.id === catId)?.name || "";
+  const activeCategory = myCats.find((c) => c.id === catId);
+  const activeCatName = activeCategory?.name || "";
   const exampleCacheRef = useRef<Record<string, string>>({});
   const [dynExample, setDynExample] = useState("");
   useEffect(() => {
@@ -3812,11 +3858,61 @@ function ScoutTool({
     discoverAbort.current?.abort();
   }
 
-  // Ask Scout to decompose the goal (no searching). Returns understanding %,
-  // questions, and the plan. Best-effort; on any hiccup, acts as fully understood.
+  // The finds already scouted for THIS search (project + category). Their
+  // approve/deny ratio nudges the understanding %: approvals mean Scout is on
+  // target (raise it), denials pull it back and leave room for more questions.
+  function catFindsFor(): Find[] {
+    return finds.filter(
+      (f) => f.projectId === activeId && (f.categoryId || "") === (catId || "")
+    );
+  }
+  function learnedBump(catFinds: Find[]): number {
+    const decided = catFinds.filter(
+      (f) => f.status !== "new" && f.status !== "undecided"
+    );
+    const n = decided.length;
+    if (n < 2) return 0;
+    const approved = decided.filter((f) => f.status !== "denied").length;
+    const rate = approved / n;
+    const weight = Math.min(1, n / 8); // more decisions = a firmer signal
+    return Math.round((rate - 0.5) * 24 * weight); // ~ -12..+12
+  }
+  // Persist this search's understanding state onto its category, so the gate is
+  // cumulative across runs (no re-asking, and the % it shows is the real one).
+  function persistUnderstanding(patch: {
+    understanding?: number;
+    askedQuestions?: string[];
+    clarifyAnswers?: string;
+  }) {
+    if (!catId) return; // a custom one-off search has no category to persist onto
+    saveCats(
+      categories.map((c) => (c.id === catId ? { ...c, ...patch } : c))
+    );
+  }
+
+  // Ask Scout to decompose the goal (no searching). Returns a blended
+  // understanding % (model read, a content floor so it never starts at 0, and
+  // the approve/deny signal), plus any NEW questions. Best-effort.
   async function fetchUnderstanding(clarifyText = "", asked: string[] = []) {
     const aboutForApi = aboutForProject(activeProject);
-    const g = clarifyText.trim() ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}` : goal;
+    // Fold in what recent passes revealed, so the planner can raise a genuinely
+    // new question when the user's rejections hint at an unstated preference.
+    const cf = catFindsFor();
+    const denies = cf
+      .filter((f) => f.status === "denied" && (f.denyReason || "").trim())
+      .slice(0, 6)
+      .map((f) => bucketDenyReason(f.denyReason || ""));
+    const denyHint = denies.length
+      ? `\n\nRecent passes (reasons the user rejected earlier results): ${Array.from(
+          new Set(denies)
+        ).join(
+          "; "
+        )}. If any of these reveal an unstated preference, ask ONE new question about it.`
+      : "";
+    const g =
+      (clarifyText.trim()
+        ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}`
+        : goal) + denyHint;
     const token = getToken ? await getToken() : null;
     try {
       const res = await fetch("/api/plan", {
@@ -3844,11 +3940,14 @@ function ScoutTool({
             )
             .filter((q: { question: string }) => q.question)
         : [];
-      return {
-        understanding: typeof d.understanding === "number" ? d.understanding : 100,
-        questions,
-        plan: d.plan ?? null,
-      };
+      // Blend: never below the content floor (so a real prompt never reads 0%),
+      // never below what we already understood for this search, plus the learned
+      // approve/deny nudge. Answered questions (asked) raise the floor.
+      const modelU = typeof d.understanding === "number" ? d.understanding : 100;
+      const floor = baselineUnderstanding(goal, aboutForApi, asked.length);
+      const stored = activeCategory?.understanding ?? 0;
+      const blended = Math.max(0, Math.min(100, Math.max(modelU, floor, stored) + learnedBump(cf)));
+      return { understanding: blended, questions, plan: d.plan ?? null };
     } catch {
       return {
         understanding: 100,
@@ -3873,11 +3972,17 @@ function ScoutTool({
     setOtherText({});
     setGating(true);
     try {
-      const u = await fetchUnderstanding();
+      // Resume this search's cumulative state: answers we've already folded in,
+      // and questions already asked (so they're never re-asked).
+      const priorAsked = activeCategory?.askedQuestions || [];
+      const priorAnswers = activeCategory?.clarifyAnswers || "";
+      const u = await fetchUnderstanding(priorAnswers, priorAsked);
+      // Remember the (cumulative) understanding so the next run shows the real %.
+      persistUnderstanding({ understanding: u.understanding });
       if (u.understanding >= UNDERSTAND_GATE || u.questions.length === 0) {
-        await runDiscover(u.plan);
+        await runDiscover(u.plan, priorAnswers);
       } else {
-        setPlanGate(u);
+        setPlanGate({ ...u, priorAsked, priorAnswers });
       }
     } finally {
       setGating(false);
@@ -3926,28 +4031,68 @@ function ScoutTool({
   // answer) and only APPEND genuinely new questions — never reset picks — so the
   // user can always go back and change an earlier answer.
   async function sharpenPlan() {
-    if (gating || answeredCount === 0) return;
-    const answers = composeAllAnswers();
-    const alreadyAsked = planGate ? planGate.questions.map((q) => q.question) : [];
+    if (gating || answeredCount === 0 || !planGate) return;
+    // Everything answered this session: prior runs' answers + this round's.
+    const allAnswers = [planGate.priorAnswers, composeAllAnswers()]
+      .filter(Boolean)
+      .join(". ");
+    const alreadyAsked = Array.from(
+      new Set([
+        ...(planGate.priorAsked || []),
+        ...planGate.questions.map((q) => q.question),
+      ])
+    );
     setGating(true);
     try {
-      const u = await fetchUnderstanding(answers, alreadyAsked);
+      const u = await fetchUnderstanding(allAnswers, alreadyAsked);
+      // Bank the progress so re-running later doesn't re-ask or reset the %.
+      persistUnderstanding({
+        understanding: u.understanding,
+        askedQuestions: alreadyAsked,
+        clarifyAnswers: allAnswers,
+      });
       setPlanGate((prev) => {
-        const existing = prev ? prev.questions : [];
-        const seen = new Set(existing.map((q) => q.question.trim().toLowerCase()));
+        if (!prev) return prev;
+        const seen = new Set(prev.questions.map((q) => q.question.trim().toLowerCase()));
         const added = u.questions.filter(
           (q: { question: string; options: string[] }) =>
             !seen.has(q.question.trim().toLowerCase())
         );
         return {
           understanding: u.understanding,
-          questions: [...existing, ...added],
+          questions: [...prev.questions, ...added],
           plan: u.plan,
+          priorAsked: prev.priorAsked,
+          priorAnswers: prev.priorAnswers,
         };
       });
     } finally {
       setGating(false);
     }
+  }
+
+  // Run the search from the gate: fold this round's answers into the cumulative
+  // set, bank the asked-questions + understanding so a later run won't re-ask,
+  // then search with everything the user has told us.
+  async function runFromGate() {
+    if (!planGate) return;
+    const allAnswers = [planGate.priorAnswers, composeAllAnswers()]
+      .filter(Boolean)
+      .join(". ");
+    const asked = Array.from(
+      new Set([
+        ...(planGate.priorAsked || []),
+        ...planGate.questions.map((q) => q.question),
+      ])
+    );
+    persistUnderstanding({
+      understanding: planGate.understanding,
+      askedQuestions: asked,
+      clarifyAnswers: allAnswers,
+    });
+    const plan = planGate.plan;
+    setPlanGate(null);
+    await runDiscover(plan, allAnswers);
   }
 
   // ---- Billing helpers ----
@@ -4842,7 +4987,7 @@ function ScoutTool({
                         {gating ? "Sharpening…" : "Sharpen understanding"}
                       </button>
                       <button
-                        onClick={() => runDiscover(planGate.plan, composeAllAnswers())}
+                        onClick={runFromGate}
                         disabled={discovering}
                         className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
