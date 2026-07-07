@@ -1012,6 +1012,12 @@ function ScoutTool({
   const [otherText, setOtherText] = useState<Record<number, string>>({});
   // Lets the user cancel an in-flight search but keep what was already scouted.
   const discoverAbort = useRef<AbortController | null>(null);
+  // Instant-first-search onboarding: the moment a brand-new user finishes
+  // account setup we kick off one search on their seeded goal so they see real
+  // results immediately, then can refine and search again. Fires exactly once
+  // per browser (localStorage guard), and only when the profile is complete.
+  const firstSearchPending = useRef(false);
+  const [firstSearchBanner, setFirstSearchBanner] = useState(false);
   // When discovery started (ms epoch), so the progress bar can resume at the
   // right % after tab switches, SearchProgress is scoped to the Outreach tab
   // and remounts when the user comes back.
@@ -2452,6 +2458,25 @@ function ScoutTool({
   // A light gate: a name OR a bio is enough to start. Resume and LinkedIn are
   // optional, they just make outreach more personal.
   const profileComplete = !!(profile.name.trim() || profile.bio.trim());
+
+  // Instant first search: once onboarding armed it, fire a single search as soon
+  // as everything it needs is ready (we're on Outreach, the profile is complete,
+  // a seeded goal exists, nothing's already running or found). Guarded so it can
+  // only ever happen once per browser.
+  useEffect(() => {
+    if (!firstSearchPending.current) return;
+    if (tab !== "outreach" || !profileComplete) return;
+    if (discovering || opps.length > 0) return;
+    if (!goal.trim()) return;
+    firstSearchPending.current = false;
+    try {
+      localStorage.setItem("scout_first_search_done", "1");
+    } catch {
+      /* storage blocked; the ref already prevents a re-fire this session */
+    }
+    runDiscover();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, profileComplete, discovering, opps.length, goal]);
 
   // ---- Personalized "who are you looking for?" placeholder ----
   // The greyed-out example under the goal field is tailored to THIS user's
@@ -4044,7 +4069,21 @@ function ScoutTool({
       {!profile.accountType && (
         <AccountOnboarding
           name={profile.name.trim().split(/\s+/)[0] || ""}
-          onComplete={(patch) => patchProfile(patch)}
+          onComplete={(patch) => {
+            patchProfile(patch);
+            // Line up an instant first search unless this browser already had one.
+            let done = false;
+            try {
+              done = localStorage.getItem("scout_first_search_done") === "1";
+            } catch {
+              /* storage blocked; treat as not-done, the ref still gates re-fires */
+            }
+            if (!done) {
+              firstSearchPending.current = true;
+              setFirstSearchBanner(true);
+              setTab("outreach");
+            }
+          }}
           listCompanies={listCompanies}
           createCompany={createCompany}
           joinCompany={joinCompany}
@@ -4098,6 +4137,31 @@ function ScoutTool({
               Find your people and draft messages in your voice.
             </p>
           </div>
+
+          {/* First-run welcome: we auto-run one search so a new user sees results
+              right away. Clears itself once results land or on dismiss. */}
+          {firstSearchBanner && opps.length === 0 && (
+            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-sage/40 bg-sage/10 p-4">
+              <div className="min-w-0 flex-1">
+                <div className="text-sm font-extrabold text-ink">
+                  {discovering
+                    ? "Running your first search…"
+                    : "Welcome — let's find your first people"}
+                </div>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
+                  Scout is searching on the goal below so you can see real results
+                  fast. Tweak the goal or category anytime and search again.
+                </p>
+              </div>
+              <button
+                onClick={() => setFirstSearchBanner(false)}
+                aria-label="Dismiss"
+                className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-body/50 transition hover:text-ink"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete ? (
