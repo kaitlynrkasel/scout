@@ -1144,9 +1144,18 @@ function ScoutTool({
   const [community, setCommunity] = useState<CommunityStats | null>(null);
   const [accountBusy, setAccountBusy] = useState("");
   const [accountNote, setAccountNote] = useState("");
+  // Concierge finds an owner hand-picked for this account (see /admin). Pulled
+  // in on load and after each search; this note announces them when they land.
+  const [seededNote, setSeededNote] = useState("");
+  const seedPulledRef = useRef(false); // guards the one-time load-time pull
+  // Bumped after a search finishes so a post-search seed pull runs on the NEXT
+  // render — i.e. after the search's own finds have committed, so mergeFinds
+  // inside the pull sees them instead of clobbering them from a stale closure.
+  const [seedPullTick, setSeedPullTick] = useState(0);
 
   // True once initial hydration finishes, so the sync effect doesn't fire mid-load.
   const hydratedRef = useRef(false);
+  const [hydrated, setHydrated] = useState(false); // reactive mirror, for effects that must run post-load
 
   // Load everything, then make sure at least one project exists (migrating any
   // pre-project categories into a default project the first time). When signed
@@ -1332,7 +1341,19 @@ function ScoutTool({
   // sync only fires on genuine post-load changes, never on the initial values.
   useEffect(() => {
     hydratedRef.current = true;
+    setHydrated(true);
   }, []);
+
+  // Concierge: once hydration has committed the user's real finds, pull any
+  // owner-seeded finds queued for their email. Gated on `hydrated` (not the
+  // mount) so mergeFinds runs against the loaded finds, not the empty initial
+  // state; the ref makes it a one-time load-time pull.
+  useEffect(() => {
+    if (!hydrated || !accountEmail || seedPulledRef.current) return;
+    seedPulledRef.current = true;
+    pullSeededFinds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, accountEmail]);
 
   // Auto-launch the intro tour once, for first-time users. Runs after mount so
   // the sidebar targets exist to spotlight.
@@ -2686,6 +2707,47 @@ function ScoutTool({
     return fresh.length;
   }
 
+  // Concierge: pull any owner-seeded finds queued for this account, merge them
+  // into the active project (deduped like a real search), then mark them
+  // consumed so they don't re-appear. Runs on load and after each search, so a
+  // hand-picked find shows up "at their next search" as promised.
+  async function pullSeededFinds(): Promise<number> {
+    if (!getToken || !accountEmail) return 0;
+    try {
+      const token = await getToken();
+      if (!token) return 0;
+      const res = await fetch("/api/seeded-finds", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return 0;
+      const body = await res.json();
+      const items: Array<{ id: string; opp: Opportunity; note?: string }> =
+        Array.isArray(body?.items) ? body.items : [];
+      if (!items.length) return 0;
+      const added = mergeFinds(items.map((i) => i.opp));
+      // Mark them consumed even if dedupe dropped some — we've now incorporated
+      // everything, and leaving them pending would just re-merge duplicates.
+      await fetch("/api/seeded-finds", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ ids: items.map((i) => i.id) }),
+      }).catch(() => {});
+      if (added > 0) {
+        setSeededNote(
+          `Scout added ${added} hand-picked ${
+            added === 1 ? "find" : "finds"
+          } to your list.`
+        );
+      }
+      return added;
+    } catch {
+      return 0;
+    }
+  }
+
   function setFindStatus(id: string, status: FindStatus) {
     saveFinds(
       finds.map((f) =>
@@ -3582,8 +3644,20 @@ function ScoutTool({
       setDiscovering(false);
       setDiscoverStartedAt(null);
       setLiveCount(0);
+      // Fold in any concierge-seeded finds now, so they surface with this
+      // search's results. Deferred to the next render (see seedPullTick) so it
+      // merges on top of the finds this search just saved.
+      setSeedPullTick((t) => t + 1);
     }
   }
+
+  // Run the deferred post-search seed pull once the search's finds have
+  // committed. Skips the very first (tick 0) render.
+  useEffect(() => {
+    if (seedPullTick === 0) return;
+    pullSeededFinds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seedPullTick]);
 
   // Cancel an in-flight search but keep the finds already scouted (runDiscover
   // catches the abort and finalizes with whatever streamed in).
@@ -4124,6 +4198,31 @@ function ScoutTool({
           startedAt={discoverStartedAt}
           onGo={() => setTab("outreach")}
         />
+      )}
+      {/* Concierge: hand-picked finds just landed. */}
+      {seededNote && (
+        <div className="fixed bottom-4 left-4 z-50 flex max-w-sm items-start gap-3 rounded-2xl border border-sage/40 bg-surface/95 p-4 shadow-xl backdrop-blur">
+          <div className="min-w-0 flex-1">
+            <div className="text-sm font-extrabold text-ink">{seededNote}</div>
+            <button
+              onClick={() => {
+                setTab("finds");
+                setFindFilter("new");
+                setSeededNote("");
+              }}
+              className="mt-1 text-xs font-semibold text-accent hover:underline"
+            >
+              View in Finds →
+            </button>
+          </div>
+          <button
+            onClick={() => setSeededNote("")}
+            aria-label="Dismiss"
+            className="shrink-0 rounded-lg px-1.5 text-lg leading-none text-body/50 transition hover:text-ink"
+          >
+            ×
+          </button>
+        </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col">
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
