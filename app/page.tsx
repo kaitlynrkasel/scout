@@ -46,7 +46,7 @@ export default function Landing() {
             </p>
             <div className="mt-7 flex flex-wrap items-center gap-3">
               <a
-                href="/app"
+                href="/app?try=1"
                 className="rounded-xl bg-brand-gradient px-6 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
               >
                 Try Scout free
@@ -199,10 +199,10 @@ export default function Landing() {
             in under a minute.
           </p>
           <a
-            href="/app"
+            href="/app?try=1"
             className="mt-7 inline-block rounded-xl bg-surface px-7 py-3.5 text-sm font-bold text-ink shadow-card transition hover:bg-surface/90"
           >
-            Open Scout
+            Try Scout free
           </a>
         </div>
       </section>
@@ -348,7 +348,7 @@ function UseCases() {
       </div>
       <div className="mt-8">
         <a
-          href="/app"
+          href="/app?try=1"
           className="inline-block rounded-xl bg-brand-gradient px-6 py-3.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
         >
           Search for yours

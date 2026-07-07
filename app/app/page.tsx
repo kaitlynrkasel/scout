@@ -653,7 +653,7 @@ const STATUS_OPTIONS: { key: FindStatus; label: string }[] = [
 
 interface ScoutToolProps {
   initialProfile: Profile;
-  onSaveProfile: (p: Profile) => void;
+  onSaveProfile?: (p: Profile) => void;
   onLogout?: () => void;
   showLogout?: boolean;
   // Returns the current Supabase access token, used to call the Gmail routes.
@@ -664,6 +664,8 @@ interface ScoutToolProps {
   initialState?: AppState | null;
   onSaveState?: (state: AppState) => void;
   accountEmail?: string; // the signed-in user's email, for the Account section
+  guest?: boolean; // no-account trial: local-only, prompts to sign up to save
+  onCreateAccount?: () => void; // leave guest mode and show the sign-up screen
 }
 
 // ---- Auth shell: login vs. tool; loads the profile from the account (or, if
@@ -706,6 +708,20 @@ function LocalShell() {
 function AuthedShell() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
+  // Guest / no-account trial: the landing's "Try Scout free" links to
+  // /app?try=1, which drops the visitor straight into the tool (per-browser
+  // localStorage, no Gmail), and an "explore without an account" link on the
+  // sign-in screen sets it too. Everything they do is kept locally until they
+  // create an account, at which point it syncs.
+  const [guest, setGuest] = useState(false);
+  useEffect(() => {
+    try {
+      const p = new URLSearchParams(window.location.search);
+      if (p.get("try") === "1") setGuest(true);
+    } catch {
+      /* no window/search, ignore */
+    }
+  }, []);
   // Set when the user arrives via a password-reset email link, shows the
   // "set a new password" screen even though a (recovery) session now exists.
   const [recovery, setRecovery] = useState(false);
@@ -879,7 +895,41 @@ function AuthedShell() {
   if (!checked) return <Loading />;
   if (recovery)
     return <AuthScreen recovery onRecoveryDone={() => setRecovery(false)} />;
-  if (!session) return <AuthScreen />;
+  // Guest trial: render the tool with no account. Skip AccountOnboarding by
+  // presetting an individual profile, run purely on localStorage, and surface a
+  // "create an account to save" banner (handled inside ScoutTool via `guest`).
+  if (!session && guest) {
+    return (
+      <ScoutTool
+        key="guest"
+        guest
+        onCreateAccount={() => {
+          setGuest(false);
+          try {
+            // Drop the ?try=1 so a refresh doesn't bounce back to guest mode.
+            window.history.replaceState(null, "", "/app");
+          } catch {
+            /* ignore */
+          }
+        }}
+        onSaveProfile={(n) => {
+          try {
+            localStorage.setItem(PROFILE_KEY, JSON.stringify(n));
+          } catch {
+            /* storage blocked; profile stays in memory this session */
+          }
+        }}
+        initialProfile={{
+          name: "",
+          bio: "",
+          useCase: "Networking",
+          accountType: "individual",
+        }}
+        initialState={null}
+      />
+    );
+  }
+  if (!session) return <AuthScreen onGuest={() => setGuest(true)} />;
   if (!profileLoaded) return <Loading />;
   return (
     <ScoutTool
@@ -946,6 +996,8 @@ function ScoutTool({
   initialState,
   onSaveState,
   accountEmail,
+  guest,
+  onCreateAccount,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
     "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing"
@@ -1457,7 +1509,7 @@ function ScoutTool({
   const patchProfile = (patch: Partial<Profile>) => {
     setProfile((prev) => {
       const next = { ...prev, ...patch };
-      onSaveProfile(next);
+      onSaveProfile?.(next);
       return next;
     });
   };
@@ -2198,7 +2250,7 @@ function ScoutTool({
         changed = true;
       }
       if (!changed) return prev;
-      onSaveProfile(next);
+      onSaveProfile?.(next);
       return next;
     });
     if (useCase && useCase.trim()) changeUseCase(useCase.trim());
@@ -4224,7 +4276,23 @@ function ScoutTool({
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col pt-[52px] md:pt-0">
+      {/* Guest trial banner: everything is local until they make an account. */}
+      {guest && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warm-border bg-brown-tint/50 px-6 py-2.5 text-sm">
+          <span className="font-semibold text-ink">You're trying Scout.</span>
+          <span className="text-body/80">
+            Your finds are saved on this device only — create a free account to
+            save them for good and send outreach.
+          </span>
+          <button
+            onClick={() => onCreateAccount?.()}
+            className="ml-auto shrink-0 rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            Create free account
+          </button>
+        </div>
+      )}
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
       <div className="flex flex-1 flex-col">
 
@@ -4263,7 +4331,7 @@ function ScoutTool({
           )}
 
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
-            {profileComplete ? (
+            {profileComplete || guest ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
               <div
@@ -5314,14 +5382,18 @@ function ScoutTool({
               </svg>
             </div>
             <h2 className="mt-4 text-lg font-semibold tracking-tight text-ink">
-              {upgradePrompt.code === "free_exhausted"
+              {upgradePrompt.code === "guest_exhausted"
+                ? "Create a free account to keep going"
+                : upgradePrompt.code === "free_exhausted"
                 ? "You've used your free searches"
                 : upgradePrompt.tier === "starter"
                 ? "You've hit your Starter limit"
                 : "You've used every search this month"}
             </h2>
             <p className="mt-1.5 text-sm leading-relaxed text-body">
-              {upgradePrompt.code === "free_exhausted"
+              {upgradePrompt.code === "guest_exhausted"
+                ? "You've used your free trial searches. Creating an account is still free, and it saves your finds and drafts so you don't lose them."
+                : upgradePrompt.code === "free_exhausted"
                 ? "You get 3 free searches a month. Pick a plan to keep scouting, it resets on the 1st either way."
                 : upgradePrompt.tier === "starter"
                 ? "Starter includes 30 searches a month. Upgrade to Pro for 60, you keep going right away, and Stripe only charges the difference."
@@ -5329,6 +5401,17 @@ function ScoutTool({
             </p>
 
             <div className="mt-5 space-y-2.5">
+              {upgradePrompt.code === "guest_exhausted" && (
+                <button
+                  onClick={() => {
+                    setUpgradePrompt(null);
+                    onCreateAccount?.();
+                  }}
+                  className="w-full rounded-xl bg-brand-gradient px-4 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+                >
+                  Create free account
+                </button>
+              )}
               {upgradePrompt.code === "free_exhausted" && (
                 <>
                   <button
@@ -5728,8 +5811,15 @@ function SideNav({
       : []),
   ];
 
-  return (
-    <aside className="sticky top-0 flex h-screen w-[236px] shrink-0 flex-col gap-0.5 border-r border-warm-border bg-surface-2 p-2.5">
+  // Below `md` the sidebar collapses into a top bar + slide-in drawer. Any tab
+  // change closes the drawer so a nav tap takes you straight to the screen.
+  const [mobileOpen, setMobileOpen] = useState(false);
+  useEffect(() => {
+    setMobileOpen(false);
+  }, [tab]);
+
+  const navContent = (
+    <>
       <a
         href="/"
         aria-label="Scout home"
@@ -5909,7 +5999,55 @@ function SideNav({
           </button>
         )}
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile top bar (hamburger + logo + search). Fixed, so it spans the
+          full width above the content; the content column adds top padding. */}
+      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 backdrop-blur md:hidden">
+        <button
+          onClick={() => setMobileOpen(true)}
+          aria-label="Open menu"
+          className="rounded-lg p-2 text-body transition hover:bg-warm-bg"
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
+        <a href="/" aria-label="Scout home" className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/scout-logo.png" alt="Scout" width={20} height={20} className="h-5 w-5" />
+          <span className="text-[15px] font-semibold tracking-tight text-ink">Scout</span>
+        </a>
+        <button
+          onClick={openCommand}
+          aria-label="Search"
+          className="ml-auto rounded-lg p-2 text-muted transition hover:bg-warm-bg"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+        </button>
+      </div>
+
+      {/* Mobile drawer */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden">
+          <div
+            className="absolute inset-0 bg-ink/40"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto border-r border-warm-border bg-surface-2 p-2.5 shadow-xl">
+            {navContent}
+          </aside>
+        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <aside className="sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 border-r border-warm-border bg-surface-2 p-2.5 md:flex">
+        {navContent}
+      </aside>
+    </>
   );
 }
 

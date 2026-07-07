@@ -24,9 +24,11 @@ type Mode = "in" | "up" | "verify" | "forgot" | "reset-code" | "newpw";
 export default function AuthScreen({
   recovery = false,
   onRecoveryDone,
+  onGuest,
 }: {
   recovery?: boolean;
   onRecoveryDone?: () => void;
+  onGuest?: () => void;
 } = {}) {
   const [mode, setMode] = useState<Mode>(recovery ? "newpw" : "in");
   const [firstName, setFirstName] = useState("");
@@ -525,6 +527,17 @@ export default function AuthScreen({
                 className="font-semibold text-brown hover:underline"
               >
                 {mode === "in" ? "Create an account" : "Sign in"}
+              </button>
+            </div>
+          )}
+
+          {onGuest && (mode === "in" || mode === "up") && (
+            <div className="mt-4 border-t border-warm-border pt-4 text-center">
+              <button
+                onClick={onGuest}
+                className="text-sm font-semibold text-body/80 transition hover:text-ink"
+              >
+                Or explore without an account →
               </button>
             </div>
           )}

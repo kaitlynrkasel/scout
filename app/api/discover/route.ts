@@ -3,6 +3,7 @@ import { discover } from "@/lib/discover";
 import { ApiCreditError } from "@/lib/apiErrors";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
+import { clientIp, guestSearchAllowed, recordGuestSearch } from "@/lib/guest";
 import { computeTuningSignal, buildPersonalOverride, buildTeamOverride } from "@/lib/autotune";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
@@ -13,11 +14,26 @@ export async function POST(req: NextRequest) {
     // Locally, without Supabase, discovery stays open and unmetered.
     const metered = !!supabaseAdmin;
     let uid: string | null = null;
+    let guest = false;
+    const ip = clientIp(req);
     if (metered) {
       uid = await userIdFromReq(req);
       if (!uid) {
-        return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
-      }
+        // Anonymous trial: no account, so meter by IP instead of blocking. This
+        // is what makes the landing's "no account needed to try" honest.
+        guest = true;
+        if (!(await guestSearchAllowed(ip))) {
+          return NextResponse.json(
+            {
+              error:
+                "You've used your free trial searches. Create a free account to keep going — it's still free.",
+              code: "guest_exhausted",
+              tier: "guest",
+            },
+            { status: 402 }
+          );
+        }
+      } else {
       // Pre-check the allowance so we don't run a search the user can't afford.
       // (A failed search shouldn't cost a credit, so we consume only on success.)
       const ent = await getEntitlement(uid);
@@ -41,6 +57,7 @@ export async function POST(req: NextRequest) {
           },
           { status: 402 }
         );
+      }
       }
     }
 
@@ -195,6 +212,12 @@ export async function POST(req: NextRequest) {
               await consumeSearch(uid);
             } catch (e: any) {
               console.warn("consumeSearch failed (search already returned):", e?.message);
+            }
+          } else if (metered && guest) {
+            try {
+              await recordGuestSearch(ip);
+            } catch (e: any) {
+              console.warn("recordGuestSearch failed (search already returned):", e?.message);
             }
           }
         } catch (e: any) {
