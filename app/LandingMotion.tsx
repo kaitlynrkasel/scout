@@ -52,6 +52,26 @@ export default function LandingMotion() {
       gsap.to(big, { xPercent: -50, duration: dur, ease: "none", repeat: -1 });
     }
 
+    // ---- Run band: the dog runs left → right, off-screen, once every 30s ----
+    const dog = q(".run .dogrun");
+    if (dog) {
+      const band = dog.closest(".run") as HTMLElement | null;
+      const bandW = band?.clientWidth || window.innerWidth;
+      const off = 440; // start/end fully past the edges (band clips overflow)
+      const startX = -off;
+      const endX = bandW + off;
+      const dogSpeed = 220; // px/s — a natural trot, constant across screen sizes
+      const cross = (endX - startX) / dogSpeed;
+      gsap.set(dog, { x: startX });
+      gsap.to(dog, {
+        x: endX,
+        duration: cross,
+        ease: "none",
+        repeat: -1,
+        repeatDelay: Math.max(0, 30 - cross), // hold off-screen so each run is 30s apart
+      });
+    }
+
     // ---- Scroll reveals: headings, kickers, and content rise as they enter ----
     const reveal = (sel: string, opts: gsap.TweenVars = {}) =>
       qa(sel).forEach((el) =>

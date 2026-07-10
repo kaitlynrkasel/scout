@@ -103,6 +103,7 @@ const CSS = `
   .run .cap .t{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
   .run .cap .s{font-size:12.5px;margin-top:7px}
   .run .runner{position:absolute;bottom:44px;left:9%;z-index:3;width:120px;height:120px;background:rgba(245,242,235,.05);border:1px dashed rgba(245,242,235,.34);border-radius:var(--r)}
+  .run .dogrun{position:absolute;left:0;bottom:30px;height:152px;width:auto;z-index:3;pointer-events:none;will-change:transform}
 
   .sec{padding:64px 0}
 
@@ -231,6 +232,7 @@ const CSS = `
   }
   @media (prefers-reduced-motion: reduce){
     .scoutland *{animation:none !important;transition:none !important}
+    .run .dogrun{display:none}
   }
 `;
 const BODY = `
@@ -261,8 +263,8 @@ const BODY = `
 <!-- RUN BAND -->
 <section class="run">
   <div class="big">go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; </div>
-  <div class="ground"></div><div class="runner"></div>
-  <div class="cap"><div class="t">Horizontal animation band</div><div class="s">The dog runs across here, left → right — full-bleed. Sprite / Lottie mounts in #dog-runner.</div></div>
+  <div class="ground"></div>
+  <img class="dogrun" id="dog-runner" src="/dog-run.gif" alt="Scout the dog, running" onerror="this.style.display=&#39;none&#39;" />
 </section>
 
 <!-- HOW IT WORKS (asymmetric) -->
