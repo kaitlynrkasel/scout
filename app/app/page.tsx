@@ -1277,6 +1277,9 @@ function ScoutTool({
   const [resumeFile, setResumeFile] = useState<{ name: string; dataUrl: string } | null>(null);
   const [signature, setSignature] = useState(""); // email signature appended to drafts
   const [scanningId, setScanningId] = useState(""); // find being deep-scanned
+  // Result of the most recent contact scan, keyed by find id, so the detail
+  // view can show what happened right where the button is (not just in a header).
+  const [scanNote, setScanNote] = useState<{ id: string; text: string } | null>(null);
   const [followUpId, setFollowUpId] = useState(""); // find getting a follow-up draft
   const [applyingId, setApplyingId] = useState(""); // find getting a full application draft
 
@@ -3178,12 +3181,19 @@ function ScoutTool({
   }
 
   async function deepScanFind(find: Find) {
+    // One helper so every outcome shows both in the finds header and inline in
+    // the detail view (keyed by find id), so a scan never looks like a no-op.
+    const note = (text: string) => {
+      setRepliesNote(text);
+      setScanNote({ id: find.id, text });
+    };
     if (!find.opp.url) {
-      setRepliesNote("This find has no page to scan.");
+      note("This find has no page to scan.");
       return;
     }
     setScanningId(find.id);
     setRepliesNote("");
+    setScanNote(null);
     try {
       const res = await fetch("/api/deep-scan", {
         method: "POST",
@@ -3198,7 +3208,7 @@ function ScoutTool({
       });
       const j = await parseApiResponse(res);
       if (!res.ok || j?.error) {
-        setRepliesNote(j?.error || "Couldn't scan that site.");
+        note(j?.error || "Couldn't scan that site.");
         return;
       }
       const c = j.contact || {};
@@ -3223,15 +3233,15 @@ function ScoutTool({
           };
         })
       );
-      setRepliesNote(
+      note(
         gotContact || gotReqs
           ? `Scanned ${find.opp.name}.${gotContact ? " Found a contact." : ""}${
               gotReqs ? " Pulled their requirements." : ""
             } Draft again to use it.`
-          : `Scanned ${find.opp.name}, but found no specific contact or requirements on the page.`
+          : `Scanned ${find.opp.name}, but found no specific contact or requirements on the page. The site may block bots or hide contacts, try Open site.`
       );
     } catch (e: any) {
-      setRepliesNote(e?.message || "Couldn't scan that site.");
+      note(e?.message || "Couldn't scan that site.");
     } finally {
       setScanningId("");
     }
@@ -5378,6 +5388,7 @@ function ScoutTool({
           onEditDraft={editFindDraft}
           onDeepScan={deepScanFind}
           scanningId={scanningId}
+          scanNote={scanNote}
           onFollowUp={followUpFind}
           followUpId={followUpId}
           jobMode={isJobUseCaseClient(activeUseCase)}
@@ -6889,6 +6900,7 @@ function FindDetailModal({
   onEditDraft,
   onDeepScan,
   scanning,
+  scanNote,
   onFollowUp,
   followUpBusy,
   jobMode,
@@ -6936,6 +6948,7 @@ function FindDetailModal({
   onEditDraft: (subject: string, body: string) => void;
   onDeepScan: () => void;
   scanning: boolean;
+  scanNote?: string;
   onFollowUp: () => void;
   followUpBusy: boolean;
   jobMode: boolean;
@@ -7508,6 +7521,13 @@ function FindDetailModal({
             }`}
           >
             {renderHandle("work")}
+            {/* Contact-scan result, shown right here so a scan never looks like
+                it did nothing. */}
+            {scanNote && (
+              <div className="mb-3 rounded-xl border border-warm-border bg-warm-bg/60 px-3 py-2 text-xs leading-relaxed text-ink">
+                {scanNote}
+              </div>
+            )}
             <div>
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Outreach
@@ -7826,6 +7846,7 @@ function FindsTab({
   onEditDraft,
   onDeepScan,
   scanningId,
+  scanNote,
   onFollowUp,
   followUpId,
   jobMode,
@@ -7875,6 +7896,7 @@ function FindsTab({
   onEditDraft: (f: Find, subject: string, body: string) => void;
   onDeepScan: (f: Find) => void;
   scanningId: string;
+  scanNote: { id: string; text: string } | null;
   onFollowUp: (f: Find) => void;
   followUpId: string;
   jobMode: boolean;
@@ -8381,6 +8403,7 @@ function FindsTab({
           onEditDraft={(subject, body) => onEditDraft(detailFind, subject, body)}
           onDeepScan={() => onDeepScan(detailFind)}
           scanning={scanningId === detailFind.id}
+          scanNote={scanNote && scanNote.id === detailFind.id ? scanNote.text : ""}
           onFollowUp={() => onFollowUp(detailFind)}
           followUpBusy={followUpId === detailFind.id}
           jobMode={jobMode}
@@ -8636,6 +8659,7 @@ function FindCard({
   onEditDraft: (subject: string, body: string) => void;
   onDeepScan: () => void;
   scanning: boolean;
+  scanNote?: string;
   onFollowUp: () => void;
   followUpBusy: boolean;
   jobMode: boolean;
@@ -8949,6 +8973,7 @@ function FindWorkflow({
   onEditDraft: (subject: string, body: string) => void;
   onDeepScan: () => void;
   scanning: boolean;
+  scanNote?: string;
   onFollowUp: () => void;
   followUpBusy: boolean;
   jobMode: boolean;
@@ -9237,15 +9262,16 @@ function FindWorkflow({
           </button>
         )}
 
-        {/* Deep-scan: read their site for a real contact + what they ask for */}
-        {o.url && !denied && !done && (
+        {/* Deep-scan their site for a real contact — only when we don't already
+            have one (an email or handle). If we do, there's nothing to hunt for. */}
+        {o.url && !denied && !done && !o.contactEmail && !o.contactHandle && (
           <button
             onClick={onDeepScan}
             disabled={scanning}
             title="Read this page for a specific contact and any submission requirements"
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
           >
-            {scanning ? "Scanning…" : find.scanned ? "Re-scan site" : "Scan for contact"}
+            {scanning ? "Scanning…" : find.scanned ? "Re-scan for a contact" : "Scan for contact"}
           </button>
         )}
 

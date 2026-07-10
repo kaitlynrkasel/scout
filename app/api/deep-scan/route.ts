@@ -43,7 +43,7 @@ function safeUrl(raw: string): URL | null {
 
 async function readPage(u: URL): Promise<string> {
   const r = await fetch(u.toString(), {
-    headers: { "user-agent": "Mozilla/5.0 (compatible; ScoutBot/1.0)" },
+    headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "accept-language": "en-US,en;q=0.9" },
     redirect: "follow",
     signal: AbortSignal.timeout(12000),
   });
@@ -72,7 +72,7 @@ export async function POST(req: NextRequest) {
     // Read the main page, then look for a contact/careers/submit/about page to
     // read as well (that's where requirements and named contacts usually live).
     const mainHtmlResp = await fetch(u.toString(), {
-      headers: { "user-agent": "Mozilla/5.0 (compatible; ScoutBot/1.0)" },
+      headers: { "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36", accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8", "accept-language": "en-US,en;q=0.9" },
       redirect: "follow",
       signal: AbortSignal.timeout(12000),
     }).catch(() => null);
