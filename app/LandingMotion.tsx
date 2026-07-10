@@ -40,9 +40,17 @@ export default function LandingMotion() {
       .from(qa(".ledechip"), { opacity: 0, y: 26, duration: 0.7 }, 0.5)
       .from(qa(".sticker"), { opacity: 0, scale: 0.8, duration: 0.5, ease: "back.out(2)" }, 0.75);
 
-    // ---- Run band: seamless "go fetch" marquee (periodic text loops cleanly) ----
+    // ---- Run band: seamless full-width "go fetch" marquee ----
+    // The text is two identical halves, so shifting by exactly -50% loops with no
+    // seam and no gap (each half is wider than the viewport). xPercent stays
+    // correct even after the webfont swaps the text width; duration tracks the
+    // measured width so the scroll speed stays constant across screen sizes.
     const big = q(".run .big");
-    if (big) gsap.to(big, { xPercent: -50, duration: 26, ease: "none", repeat: -1 });
+    if (big) {
+      const speed = 90; // px per second
+      const dur = Math.max(20, big.scrollWidth / 2 / speed);
+      gsap.to(big, { xPercent: -50, duration: dur, ease: "none", repeat: -1 });
+    }
 
     // ---- Scroll reveals: headings, kickers, and content rise as they enter ----
     const reveal = (sel: string, opts: gsap.TweenVars = {}) =>

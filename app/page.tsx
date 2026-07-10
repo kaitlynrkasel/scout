@@ -77,7 +77,8 @@ const CSS = `
   .scoutland nav .cta{margin-left:auto;background:var(--ink);color:var(--paper);font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:var(--rs)}
 
   /* HERO — the one loud moment */
-  .hero{position:relative;height:700px;overflow:hidden}
+  .hero{position:relative;height:748px;overflow:hidden}
+  .herwrap{position:relative;max-width:1180px;height:100%;margin:0 auto}
   .eyebrow{position:absolute;top:30px;left:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--terra-deep)}
   .eyebrow2{position:absolute;top:30px;right:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
   .backword{position:absolute;left:-24px;top:232px;z-index:1;font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:340px;line-height:.8;color:transparent;-webkit-text-stroke:1.5px rgba(36,28,19,.09);white-space:nowrap}
@@ -90,7 +91,7 @@ const CSS = `
   .dog .lab .s{font-size:12px;margin-top:5px;color:#A99E88}
   .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--terra);color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
   .sticker2{position:absolute;left:548px;top:196px;z-index:8;background:var(--olive);color:#F5F2EB;font-size:11px;font-weight:600;letter-spacing:.04em;padding:8px 13px;border-radius:var(--rs)}
-  .ledechip{position:absolute;left:56px;top:520px;z-index:7;width:404px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 20px 44px -30px rgba(36,28,19,.26)}
+  .ledechip{position:absolute;left:56px;top:506px;z-index:7;width:404px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 20px 44px -30px rgba(36,28,19,.26)}
   .ledechip p{font-size:15.5px;line-height:1.55;color:#4a4336}
   .ledechip .row{margin-top:18px;display:flex;gap:12px;align-items:center}
 
@@ -199,6 +200,7 @@ const CSS = `
     .scoutland .wrap{padding:0 22px}
     .scoutland nav .nl{display:none}
     .hero{height:auto;overflow:visible;padding-bottom:34px}
+    .herwrap{height:auto}
     .hero .eyebrow{position:static;display:inline-block;margin:22px 0 0 22px}
     .hero .eyebrow2,.sticker,.backword{display:none}
     .headline{position:static;padding:0 22px;margin-top:14px}
@@ -240,7 +242,7 @@ const BODY = `
 </nav></div>
 
 <!-- HERO -->
-<section class="hero">
+<section class="hero"><div class="herwrap">
   <div class="eyebrow">Professional networking, fetched</div>
   <div class="eyebrow2">Est. for the ambitious</div>
   <div class="backword">Scout</div>
@@ -254,11 +256,11 @@ const BODY = `
     <p>Scout hunts down the mentors, recruiters, and alumni who fit your goal, then drafts a warm intro in your own voice.</p>
     <div class="row"><a class="btn btn-t" href="/app">Start finding →</a><a class="btn btn-o" href="#how">How it works</a></div>
   </div>
-</section>
+</div></section>
 
 <!-- RUN BAND -->
 <section class="run">
-  <div class="big">go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch</div>
+  <div class="big">go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; </div>
   <div class="ground"></div><div class="runner"></div>
   <div class="cap"><div class="t">Horizontal animation band</div><div class="s">The dog runs across here, left → right — full-bleed. Sprite / Lottie mounts in #dog-runner.</div></div>
 </section>
