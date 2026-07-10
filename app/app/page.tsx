@@ -6406,7 +6406,7 @@ function SourcesList({ sources }: { sources: SourceRef[] }) {
           <path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.5 1.5" />
           <path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.5-1.5" />
         </svg>
-        {sources.length} articles about this person
+        Evidence · {sources.length} source{sources.length === 1 ? "" : "s"} Scout found them through
         <span aria-hidden className="text-body/60">{open ? "▴" : "▾"}</span>
       </button>
       {open && (
@@ -7483,7 +7483,19 @@ function FindDetailModal({
               </div>
             )}
 
-            {o.sources && o.sources.length > 1 && <SourcesList sources={o.sources} />}
+            {/* Evidence: the stories / pages Scout found them through. The primary
+                link above is the target's own home; these are the trail. */}
+            {o.sources && o.sources.length > 0 && (
+              <div>
+                <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  Evidence
+                </div>
+                <p className="mb-1 text-[11px] leading-relaxed text-body/60">
+                  How Scout found them — read the sources behind this match.
+                </p>
+                <SourcesList sources={o.sources} />
+              </div>
+            )}
           </div>
 
           {/* Outreach + draft editor. Sits under contact normally; slides into the

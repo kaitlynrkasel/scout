@@ -1024,7 +1024,7 @@ async function extract(
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
-    `url (best link), location, ` +
+    `url (the TARGET'S OWN primary home — their official website, or their main profile page / LinkedIn if they have no website — NOT the news article, press piece, directory, or listicle you found them through. That evidence belongs in the source, never here. Only fall back to the article's link if the target genuinely has no home of its own), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
     `components (an object grading WHY this is a good opportunity, each 0 to 1: {relevance = how squarely they match the ` +
