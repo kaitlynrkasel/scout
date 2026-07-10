@@ -1,4 +1,5 @@
 import localFont from "next/font/local";
+import LandingMotion from "./LandingMotion";
 
 const anton = localFont({
   variable: "--font-anton", display: "swap",
@@ -381,6 +382,7 @@ export default function Landing() {
     <div className={`scoutland ${anton.variable} ${bric.variable} ${inter.variable}`}>
       <style dangerouslySetInnerHTML={{ __html: CSS }} />
       <div dangerouslySetInnerHTML={{ __html: BODY }} />
+      <LandingMotion />
     </div>
   );
 }
