@@ -60,7 +60,7 @@ export default function LandingMotion() {
       const off = 440; // start/end fully past the edges (band clips overflow)
       const startX = -off;
       const endX = bandW + off;
-      const dogSpeed = 220; // px/s — a natural trot, constant across screen sizes
+      const dogSpeed = 420; // px/s
       const cross = (endX - startX) / dogSpeed;
       gsap.set(dog, { x: startX });
       gsap.to(dog, {

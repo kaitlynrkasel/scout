@@ -103,7 +103,7 @@ const CSS = `
   .run .cap .t{font-size:11px;font-weight:600;letter-spacing:.16em;text-transform:uppercase}
   .run .cap .s{font-size:12.5px;margin-top:7px}
   .run .runner{position:absolute;bottom:44px;left:9%;z-index:3;width:120px;height:120px;background:rgba(245,242,235,.05);border:1px dashed rgba(245,242,235,.34);border-radius:var(--r)}
-  .run .dogrun{position:absolute;left:0;bottom:30px;height:152px;width:auto;z-index:3;pointer-events:none;will-change:transform}
+  .run .dogrun{position:absolute;left:0;bottom:44px;height:152px;width:auto;z-index:3;pointer-events:none;will-change:transform}
 
   .sec{padding:64px 0}
 
