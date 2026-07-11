@@ -51,30 +51,31 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // The finds are already in the user's pipeline (seeded at run time), so the
+  // email links just record the decision. Deny also removes it from the pipeline
+  // if the app hasn't pulled it in yet (best-effort).
   if (action === "deny") {
     await supabaseAdmin
       .from("auto_finds")
       .update({ status: "denied", decided_at: new Date().toISOString() })
       .eq("id", findId);
-    return page("Passed", `Scout won't surface ${name} again for this search.`);
+    const email = String((row as any).auto_searches?.email || "").toLowerCase();
+    if (email && opp?.name) {
+      // Pull the still-pending seed for this exact opp so it doesn't surface.
+      await supabaseAdmin
+        .from("admin_seeded_finds")
+        .delete()
+        .eq("email", email)
+        .is("consumed_at", null)
+        .eq("created_by", "auto-search")
+        .contains("opp", { name: opp.name });
+    }
+    return page("Passed", `Scout won't surface ${name} for this search.`);
   }
 
-  // Approve: mark it, then drop the opportunity into the user's Scout pipeline
-  // using the same seeded-finds channel concierge uses, so it appears in Finds.
   await supabaseAdmin
     .from("auto_finds")
     .update({ status: "approved", decided_at: new Date().toISOString() })
     .eq("id", findId);
-
-  const email = String((row as any).auto_searches?.email || "").toLowerCase();
-  if (email && opp?.name) {
-    await supabaseAdmin.from("admin_seeded_finds").insert({
-      email,
-      opp,
-      note: "Approved from an auto-search email",
-      created_by: "auto-search",
-    });
-  }
-
-  return page("Approved", `${name} is on its way to your Scout pipeline — open Scout to draft your message.`);
+  return page("Approved", `${name} is in your Scout pipeline — open Scout to draft your message.`);
 }

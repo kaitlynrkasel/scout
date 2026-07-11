@@ -4,6 +4,7 @@ import { discover } from "@/lib/discover";
 import { gmailSendOrDraft } from "@/lib/gmail";
 import { outlookSendOrDraft } from "@/lib/outlook";
 import { signAction, nextRunAt } from "@/lib/autoSearch";
+import { getEntitlement, consumeSearch } from "@/lib/billing";
 import type { Opportunity } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -65,6 +66,22 @@ export async function GET(req: NextRequest) {
         next_run_at: nextRunAt(String(s.cadence), new Date()).toISOString(),
       })
       .eq("id", id);
+
+    // An auto-run counts as a search: skip (don't run, don't spend) when the
+    // user is out of quota — it'll try again next cadence. Mirrors /api/discover.
+    try {
+      const ent = await getEntitlement(s.user_id as string);
+      const paid = ent.tier === "starter" || ent.tier === "pro";
+      const out = paid
+        ? ent.searchesUsed >= ent.searchLimit
+        : ent.freeUsed >= ent.freeLimit;
+      if (out) {
+        results.push({ id, skipped: "out of searches" });
+        continue;
+      }
+    } catch {
+      /* if entitlement can't be read, fall through and run */
+    }
     ran++;
 
     try {
@@ -74,6 +91,12 @@ export async function GET(req: NextRequest) {
         String(s.use_case || "networking"),
         Math.min(Number(s.max_finds) || 5, 10)
       );
+      // Running the engine spent a search — meter it against their plan.
+      try {
+        await consumeSearch(s.user_id as string);
+      } catch {
+        /* metering is best-effort; never fail the run over it */
+      }
       const opps: Opportunity[] = (result.opportunities || []).slice(
         0,
         Math.min(Number(s.max_finds) || 5, 10)
@@ -94,6 +117,21 @@ export async function GET(req: NextRequest) {
         .insert(rows)
         .select("id");
       const ids: string[] = (inserted.data || []).map((r: any) => r.id);
+
+      // Also drop EVERY find into the user's Scout pipeline (via the seeded-finds
+      // channel), so they show up in Finds on the website too — not just the
+      // email. They land as "new"; the email's Approve/Deny is a quick inbox
+      // shortcut, but the same finds are reviewable in the app.
+      if (s.email && opps.length) {
+        await supabaseAdmin.from("admin_seeded_finds").insert(
+          opps.map((opp) => ({
+            email: String(s.email).toLowerCase(),
+            opp,
+            note: `Auto-search: ${String(s.label || s.goal).slice(0, 80)}`,
+            created_by: "auto-search",
+          }))
+        );
+      }
 
       // Build a plain-text digest — clickable links work in every mail client.
       const label = String(s.label || s.goal).slice(0, 80);
