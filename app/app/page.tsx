@@ -96,6 +96,22 @@ function outreachSalt(accountEmail?: string): string {
   }
 }
 
+// Humanize a live progress line so it reads like a person, not a terminal:
+// drop the straight quotes around raw queries, and hide the debug-y lines
+// (per-candidate skips, internal field names) that read like code. Returns ""
+// for anything that should not be shown to the user.
+function friendlyProgress(m: string): string {
+  const s = String(m || "")
+    .replace(/["'`]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "";
+  if (/^skipped\b/i.test(s)) return ""; // per-candidate rejections are noise
+  if (/\b(target_type|is_relevant|fit_score|is_listing|components?|undefined|null)\b/i.test(s))
+    return "";
+  return s;
+}
+
 // Replace em/en dashes with commas at render time, so text scouted before the
 // engine started stripping them (stored on old finds) still displays cleanly.
 function cleanDash(s: string | undefined | null): string {
@@ -3973,7 +3989,7 @@ function ScoutTool({
   // answer or run anyway. If it already understands well, just search.
   const UNDERSTAND_GATE = 90;
   async function startScout() {
-    if (!profileComplete) {
+    if (!profileComplete && !guest) {
       setTab("profile");
       return;
     }
@@ -5077,20 +5093,50 @@ function ScoutTool({
                 <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-surface px-4 py-3.5 shadow-card">
                   <Tail side="left" />
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} />
-                  {searchLog.length > 0 && (
-                    <div className="mt-3 max-h-40 overflow-y-auto border-t border-warm-border pt-2.5">
-                      <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-body/40">
-                        What Scout is doing
+                  {(() => {
+                    // Only the human-readable steps, newest last. Debug lines are
+                    // filtered out (see friendlyProgress) so this never reads like
+                    // a terminal.
+                    const steps = searchLog
+                      .map(friendlyProgress)
+                      .filter(Boolean)
+                      .slice(-5);
+                    if (!steps.length) return null;
+                    return (
+                      <div className="mt-3 border-t border-warm-border pt-3">
+                        <ul className="space-y-1.5">
+                          {steps.map((m, i, arr) => {
+                            const latest = i === arr.length - 1;
+                            return (
+                              <li
+                                key={i}
+                                className={`flex items-start gap-2 text-xs leading-relaxed transition ${
+                                  latest ? "text-ink" : "text-body/45"
+                                }`}
+                              >
+                                {latest ? (
+                                  <span className="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-coral" />
+                                ) : (
+                                  <svg
+                                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sage"
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="3"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                  >
+                                    <path d="M20 6 9 17l-5-5" />
+                                  </svg>
+                                )}
+                                <span>{m}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
                       </div>
-                      <ul className="space-y-1 font-mono text-[11px] leading-relaxed text-body/70">
-                        {searchLog.slice(-12).map((m, i) => (
-                          <li key={i} className="truncate" title={m}>
-                            {m}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
+                    );
+                  })()}
                 </div>
               </div>
             )}
