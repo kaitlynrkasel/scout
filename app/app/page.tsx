@@ -3802,8 +3802,11 @@ function ScoutTool({
               continue;
             }
             if (msg.type === "opp" && msg.opp) {
+              // Accumulate quietly. We reveal the whole set at once when the
+              // search finishes (see setOpps(finalOpps) below), rather than
+              // popping cards in one by one — only the live COUNT updates, so the
+              // Stop button still shows how many have been found so far.
               live.push(msg.opp);
-              setOpps([...live]);
               setLiveCount(live.length);
             } else if (msg.type === "progress" && typeof msg.message === "string") {
               setSearchLog((prev) => [...prev, msg.message].slice(-50));
