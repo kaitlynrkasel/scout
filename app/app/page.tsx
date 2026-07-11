@@ -9143,6 +9143,12 @@ function FindWorkflow({
             rows={Math.min(16, Math.max(6, editBody.split("\n").length + 1))}
             className="w-full rounded-lg border border-warm-border px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-coral/20"
           />
+          <div className="mt-1 flex justify-end gap-3 text-[11px] tabular-nums text-body/50">
+            <span>
+              {editBody.trim() ? editBody.trim().split(/\s+/).length : 0} words
+            </span>
+            <span>{editBody.length} characters</span>
+          </div>
           {hasSignatureSplit && (
             <div className="mt-2">
               <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
