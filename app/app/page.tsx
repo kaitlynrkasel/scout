@@ -11358,7 +11358,7 @@ function AutoSearchPanel({
       setMsg(
         `On. Scout will run this ${cadence}, drop the finds in your Finds${
           emailDigest ? ", and email them to you" : ""
-        }${items.length === 0 ? " — the first batch arrives in a couple of minutes." : "."}`
+        }${items.length === 0 ? " — the first batch arrives on its next scheduled run." : "."}`
       );
       load();
     } catch (e: any) {

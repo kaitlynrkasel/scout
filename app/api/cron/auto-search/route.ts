@@ -5,6 +5,7 @@ import { gmailSendOrDraft } from "@/lib/gmail";
 import { outlookSendOrDraft } from "@/lib/outlook";
 import { signAction, nextRunAt } from "@/lib/autoSearch";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
+import { draftFor } from "@/lib/draft";
 import type { Opportunity } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -36,14 +37,16 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Search keys not configured." }, { status: 500 });
   }
 
-  // A few due searches per tick, so one run never exceeds maxDuration.
+  // On the free (Hobby) plan this cron fires roughly once a day, so process a
+  // batch of due searches per run — capped to stay well under maxDuration (each
+  // discover is ~30-60s). Extras drain on the next daily run.
   const { data: due, error } = await supabaseAdmin
     .from("auto_searches")
     .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence, email_digest")
     .eq("active", true)
     .lte("next_run_at", new Date().toISOString())
     .order("next_run_at", { ascending: true })
-    .limit(3);
+    .limit(4);
   if (error) {
     return NextResponse.json({ error: `Read failed: ${error.message}` }, { status: 500 });
   }
@@ -207,5 +210,120 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  return NextResponse.json({ ok: true, ran, emailed, results, checkedAt: new Date().toISOString() });
+  // ---- Phase 2: auto-draft the finds the user Approved from the digest email,
+  // then email them the ready-to-send drafts. Bounded so the whole run stays
+  // under maxDuration. Driven by the email "Approve" action (status=approved).
+  let drafted = 0;
+  try {
+    const { data: approved } = await supabaseAdmin
+      .from("auto_finds")
+      .select("id, user_id, opp, auto_searches(email, about, use_case, goal, label)")
+      .eq("status", "approved")
+      .order("decided_at", { ascending: true })
+      .limit(8);
+
+    // Group the approved finds by user so each person gets one drafts email.
+    const byUser = new Map<string, any[]>();
+    for (const r of approved || []) {
+      const u = String((r as any).user_id);
+      if (!byUser.has(u)) byUser.set(u, []);
+      byUser.get(u)!.push(r);
+    }
+
+    for (const [uid, rows] of Array.from(byUser.entries())) {
+      // Load the user's drafting context once (name, signature, templates, voice).
+      const [prof, stateRes] = await Promise.all([
+        supabaseAdmin.from("profiles").select("name").eq("id", uid).maybeSingle(),
+        supabaseAdmin.from("user_state").select("data").eq("user_id", uid).maybeSingle(),
+      ]);
+      const data = (stateRes.data?.data || {}) as any;
+      const senderName = String(prof.data?.name || data?.profileExtras?.companyName || "");
+      const signature = String(data?.signature || "");
+      const templates = Array.isArray(data?.templates) ? data.templates : [];
+      const coaching = Array.isArray(data?.coaching) ? data.coaching : [];
+      const editPairs = Array.isArray(data?.editPairs) ? data.editPairs : [];
+
+      const made: { name: string; channel: string; subject: string; body: string }[] = [];
+      for (const r of rows) {
+        const asr = (r as any).auto_searches || {};
+        try {
+          const d = await draftFor(
+            (r as any).opp,
+            String(asr.about || ""),
+            String(asr.use_case || "networking"),
+            { templates, coaching, editPairs, signature, senderName, goal: String(asr.goal || "") }
+          );
+          await supabaseAdmin
+            .from("auto_finds")
+            .update({ status: "drafted", draft: d })
+            .eq("id", (r as any).id);
+          made.push({
+            name: String((r as any).opp?.name || "this contact"),
+            channel: d.channelType,
+            subject: d.subject || "",
+            body: d.body || "",
+          });
+          drafted++;
+        } catch {
+          /* leave it 'approved' to retry next run */
+        }
+      }
+      if (!made.length) continue;
+
+      // Build a plain-text "your drafts are ready" digest.
+      const to = String((rows[0] as any).auto_searches?.email || "").toLowerCase();
+      const dl: string[] = [
+        `Your Scout drafts are ready — ${made.length} message${made.length === 1 ? "" : "s"} you approved, written in your voice.`,
+        ``,
+      ];
+      made.forEach((m, i) => {
+        dl.push(`${i + 1}. ${m.name} (${m.channel})`);
+        if (m.subject) dl.push(`   Subject: ${m.subject}`);
+        dl.push(m.body.split("\n").map((l) => "   " + l).join("\n"));
+        dl.push(``);
+      });
+      dl.push(`Copy, tweak, or send from Scout: ${base}/app`);
+      const dbody = dl.join("\n");
+      const dsubject = `Scout: ${made.length} draft${made.length === 1 ? "" : "s"} ready to send`;
+
+      try {
+        const gmail = await supabaseAdmin
+          .from("gmail_connections")
+          .select("email, refresh_token")
+          .eq("user_id", uid)
+          .maybeSingle();
+        if (gmail.data?.refresh_token) {
+          await gmailSendOrDraft({
+            refreshToken: gmail.data.refresh_token as string,
+            from: (gmail.data.email as string) || "me",
+            to: to || (gmail.data.email as string) || "",
+            subject: dsubject,
+            body: dbody,
+            mode: "send",
+          });
+        } else {
+          const ol = await supabaseAdmin
+            .from("outlook_connections")
+            .select("email, refresh_token")
+            .eq("user_id", uid)
+            .maybeSingle();
+          if (ol.data?.refresh_token) {
+            await outlookSendOrDraft({
+              refreshToken: ol.data.refresh_token as string,
+              to: to || (ol.data.email as string) || "",
+              subject: dsubject,
+              body: dbody,
+              mode: "send",
+            });
+          }
+        }
+      } catch (e: any) {
+        results.push({ draftsEmailError: String(e?.message || "").slice(0, 160) });
+      }
+    }
+  } catch (e: any) {
+    results.push({ draftPassError: String(e?.message || "").slice(0, 160) });
+  }
+
+  return NextResponse.json({ ok: true, ran, emailed, drafted, results, checkedAt: new Date().toISOString() });
 }

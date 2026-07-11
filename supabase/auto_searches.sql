@@ -31,12 +31,15 @@ create table if not exists auto_finds (
   user_id uuid not null,
   opp jsonb not null,
   status text not null default 'new' check (status in ('new','approved','denied','drafted')),
+  draft jsonb,                          -- Phase 2: the auto-drafted message once approved
   decided_at timestamptz,
   created_at timestamptz not null default now()
 );
 
 -- For installs that predate the email-digest toggle.
 alter table auto_searches add column if not exists email_digest boolean not null default true;
+-- For installs that predate Phase 2 auto-drafting.
+alter table auto_finds add column if not exists draft jsonb;
 
 create index if not exists idx_auto_searches_due
   on auto_searches (next_run_at)
