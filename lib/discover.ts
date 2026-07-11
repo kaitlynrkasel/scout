@@ -295,14 +295,22 @@ const DECOMPOSE_SYS =
   "reply probability. search_dimensions = different ways to attack the search (by geography, profession, event, " +
   "employer, recent news, organization, conference, award, social presence, publication, community, alumni, " +
   "association) — never rely on one. ranking_factors = weighted scoring like [{factor,weight}] where weights total " +
-  "1.0. confidence_questions = the missing information that would most sharpen the search (local only? does budget " +
-  "matter? seniority? timing? prefer independent?). Each is an OBJECT {question, options}: question is a short, plain " +
+  "1.0. confidence_questions = ONLY genuinely missing information that would change WHO Scout looks for. This is the " +
+  "MOST IMPORTANT rule: before writing ANY question, re-read the GOAL, ABOUT THE USER, the context, and any answers " +
+  "already given — if they STATE or reasonably IMPLY the answer, DO NOT ASK IT. Never ask the user something they " +
+  "just told you. Concrete bans: do NOT ask which industry when the goal names one or says 'any/all/various " +
+  "industries'; do NOT ask company size/stage when the goal already says small/startup/SMB/enterprise/early/growth; " +
+  "do NOT ask location or 'local only' when the goal or the user's profile gives a city/region or says " +
+  "remote/anywhere/any location; do NOT ask the user's own field, role, seniority, or what they do when ABOUT THE " +
+  "USER states it; do NOT ask what they're offering or their use case when the goal already makes it clear. It is " +
+  "BETTER to return an EMPTY array than to ask one thing that is already answered — a well-specified inquiry needs " +
+  "zero questions, and understanding should be HIGH in that case. Ask AT MOST 3, each a DISTINCT, decision-changing " +
+  "dimension that is truly unstated. Each is an OBJECT {question, options}: question is a short, plain " +
   "question; options is 2–5 concrete, mutually-exclusive answers the user can pick with one tap (real values like " +
   "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
   "Infer likely options from the goal and the user's field; keep each option under ~4 words. Do NOT add an " +
-  "'Other'/'Not sure' option — the UI supplies its own write-in. Ask AT MOST 4 questions, each about a DISTINCT " +
-  "dimension — never two questions about the same attribute (e.g. don't ask both 'what company size' and 'what employee " +
-  "count'), and never ask about anything the goal or context already answers. Think in evidence and investigations, not keywords or Google " +
+  "'Other'/'Not sure' option — the UI supplies its own write-in. Never ask two questions about the same attribute " +
+  "(e.g. don't ask both 'what company size' and 'what employee count'). Think in evidence and investigations, not keywords or Google " +
   "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
   "Keep each array CONCISE: at most 10 items, each a short phrase (not a paragraph). Return ONLY the JSON object, " +
   "nothing before or after it.";
@@ -375,10 +383,57 @@ export async function decomposeGoal(
           .filter((q: ConfidenceQuestion) => q.question)
           .slice(0, 4)
       : [];
+
+    // Safety net: the model still sometimes asks about a dimension the goal or
+    // profile already states (or even contradicts — e.g. asking to prioritize a
+    // city when the goal says "any location"). Drop those so Scout never asks
+    // the user something they just told it.
+    const hay = `${g} ${about}`.toLowerCase();
+    const anyLocation =
+      /\b(any\s?(location|city|region|country|where)|anywhere|nationwide|worldwide|global(ly)?|remote|location[-\s]?agnostic|no\s+(location|geo))\b/.test(
+        hay
+      );
+    const hasSize =
+      /\b(small(er)?|tiny|startups?|smb|mid[-\s]?size(d)?|large(r)?|enterprise|big|boutique|\d+\s*(employees|people|person|staff|headcount))\b/.test(
+        hay
+      );
+    const hasStage =
+      /\b(pre[-\s]?revenue|early[-\s]?stage|seed|series\s?[a-e]|growth[-\s]?stage|established|mature|bootstrapp?ed|funded|venture[-\s]?backed)\b/.test(
+        hay
+      );
+    const anyIndustryStated = goalWantsAnyIndustry(g);
+    const redundant = (q: string): boolean => {
+      const t = q.toLowerCase();
+      // Stems (not \b-bounded whole words) so "located"/"locate"/"industries"
+      // all match — that mismatch let a "where should they be located?" question
+      // slip through even though the goal said "any location".
+      const isLoc =
+        /(locat|\bcity|region|countr|\blocal|nearby|geograph|distance|radius|\bmiles|\barea\b|\bwhere\b|based in|prioriti[sz])/.test(t);
+      const isInd = /(industr|sector|vertical|niche|\bfield\b|\bspace\b|\bmarket)/.test(t);
+      const isSize =
+        /(company size|employee|headcount|how (big|small|large)|size range|team size|number of (employees|people)|small or large)/.test(t);
+      const isStage = /(\bstage\b|pre[-\s]?revenue|early|growth|mature|\bseed\b|series|funding|funded)/.test(t);
+      if (isLoc && anyLocation) return true;
+      if (isInd && anyIndustryStated) return true;
+      if (isSize && hasSize) return true;
+      if (isStage && hasStage) return true;
+      return false;
+    };
+    const beforeCount = questions.length;
+    const filteredQuestions = questions.filter((q) => !redundant(q.question));
+    // Removing already-answered questions means Scout understands more than the
+    // model admitted — nudge understanding up so a well-specified inquiry isn't
+    // gated behind a redundant question (or an implausible 0%).
+    const dropped = beforeCount - filteredQuestions.length;
+    const bumpedUnderstanding = Math.min(
+      100,
+      understanding + dropped * 15 + (filteredQuestions.length === 0 ? 10 : 0)
+    );
+
     return {
       goal: String(parsed.goal || g).trim(),
       target_type: String(parsed.target_type || "").trim(),
-      understanding,
+      understanding: bumpedUnderstanding,
       required: arr(parsed.required),
       preferred: arr(parsed.preferred),
       hard_constraints: arr(parsed.hard_constraints),
@@ -388,7 +443,7 @@ export async function decomposeGoal(
       opportunity_signals: arr(parsed.opportunity_signals),
       search_dimensions: arr(parsed.search_dimensions),
       ranking_factors: factors,
-      confidence_questions: questions,
+      confidence_questions: filteredQuestions,
     };
   } catch (e) {
     if (e instanceof ApiCreditError) throw e;
