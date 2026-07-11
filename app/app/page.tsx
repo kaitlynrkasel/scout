@@ -4055,51 +4055,21 @@ function ScoutTool({
         return true;
       }).length
     : 0;
-
-  // "Sharpen": re-run the understanding pass with ALL answers folded in, so the
-  // % climbs as detail accumulates. Keep every question already shown (and its
-  // answer) and only APPEND genuinely new questions — never reset picks — so the
-  // user can always go back and change an earlier answer.
-  async function sharpenPlan() {
-    if (gating || answeredCount === 0 || !planGate) return;
-    // Everything answered this session: prior runs' answers + this round's.
-    const allAnswers = [planGate.priorAnswers, composeAllAnswers()]
-      .filter(Boolean)
-      .join(". ");
-    const alreadyAsked = Array.from(
-      new Set([
-        ...(planGate.priorAsked || []),
-        ...planGate.questions.map((q) => q.question),
-      ])
-    );
-    setGating(true);
-    try {
-      const u = await fetchUnderstanding(allAnswers, alreadyAsked);
-      // Bank the progress so re-running later doesn't re-ask or reset the %.
-      persistUnderstanding({
-        understanding: u.understanding,
-        askedQuestions: alreadyAsked,
-        clarifyAnswers: allAnswers,
-      });
-      setPlanGate((prev) => {
-        if (!prev) return prev;
-        const seen = new Set(prev.questions.map((q) => q.question.trim().toLowerCase()));
-        const added = u.questions.filter(
-          (q: { question: string; options: string[] }) =>
-            !seen.has(q.question.trim().toLowerCase())
-        );
-        return {
-          understanding: u.understanding,
-          questions: [...prev.questions, ...added],
-          plan: u.plan,
-          priorAsked: prev.priorAsked,
-          priorAnswers: prev.priorAnswers,
-        };
-      });
-    } finally {
-      setGating(false);
-    }
-  }
+  // Live understanding: each answered question closes a proportional share of
+  // the remaining gap, so the bar climbs the instant you pick an answer — no
+  // "Sharpen" button needed. The precise server value is recomputed on Run.
+  const liveUnderstanding = planGate
+    ? Math.min(
+        100,
+        Math.round(
+          planGate.understanding +
+            (planGate.questions.length
+              ? (answeredCount / planGate.questions.length) *
+                (100 - planGate.understanding)
+              : 0)
+        )
+      )
+    : 0;
 
   // Run the search from the gate: fold this round's answers into the cumulative
   // set, bank the asked-questions + understanding so a later run won't re-ask,
@@ -4116,7 +4086,7 @@ function ScoutTool({
       ])
     );
     persistUnderstanding({
-      understanding: planGate.understanding,
+      understanding: liveUnderstanding,
       askedQuestions: asked,
       clarifyAnswers: allAnswers,
     });
@@ -4952,21 +4922,21 @@ function ScoutTool({
                         <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" className="text-warm-border" />
                         <circle
                           cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                          className="text-coral transition-all"
-                          strokeDasharray={`${(planGate.understanding / 100) * 97.4} 97.4`}
+                          className="text-coral transition-all duration-500"
+                          strokeDasharray={`${(liveUnderstanding / 100) * 97.4} 97.4`}
                         />
                       </svg>
-                      <span className="absolute inset-0 grid place-items-center text-[11px] font-extrabold text-ink">
-                        {planGate.understanding}%
+                      <span className="absolute inset-0 grid place-items-center text-[11px] font-extrabold text-ink tabular-nums">
+                        {liveUnderstanding}%
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-extrabold tracking-tight text-ink">
-                        Scout understands {planGate.understanding}% of your inquiry
+                        Scout understands {liveUnderstanding}% of your inquiry
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                        A few details would sharpen the search. Answer what you can, or run
-                        Scout now.
+                        Answer to sharpen it — the more you tell Scout, the higher this
+                        climbs. Change any answer, or just run Scout now.
                       </p>
                     </div>
                   </div>
@@ -5039,18 +5009,11 @@ function ScoutTool({
                     </div>
                     <div className="mt-4 flex flex-wrap items-center gap-2">
                       <button
-                        onClick={sharpenPlan}
-                        disabled={answeredCount === 0 || gating}
-                        className="rounded-xl bg-brown px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-40"
-                      >
-                        {gating ? "Sharpening…" : "Sharpen understanding"}
-                      </button>
-                      <button
                         onClick={runFromGate}
                         disabled={discovering}
-                        className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                        className="rounded-xl bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                       >
-                        Run Scout
+                        {answeredCount > 0 ? "Run Scout with these" : "Run Scout"}
                       </button>
                       <button
                         onClick={() => setPlanGate(null)}
