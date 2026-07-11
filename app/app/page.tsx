@@ -3358,7 +3358,7 @@ function ScoutTool({
   }
 
   // Draft a message for a single find and store it on that find.
-  async function draftFind(find: Find, opts?: { force?: boolean }) {
+  async function draftFind(find: Find, opts?: { force?: boolean; kind?: string }) {
     setError("");
     setFindDraftingId(find.id);
     try {
@@ -3385,6 +3385,7 @@ function ScoutTool({
           editPairs,
           signature: signatureFor(f.projectId),
           senderName: profile.name || "",
+          kind: opts?.kind || "",
         }),
       });
       const data = await parseApiResponse(res);
@@ -6934,7 +6935,7 @@ function FindDetailModal({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: () => void;
+  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
@@ -7881,7 +7882,7 @@ function FindsTab({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   draftingId: string;
   gmailBusyId: string;
-  onDraft: (f: Find, opts?: { force?: boolean }) => void;
+  onDraft: (f: Find, opts?: { force?: boolean; kind?: string }) => void;
   onDeny: (f: Find, reason?: string) => void;
   onSetReason: (f: Find, reason: string) => void;
   onReopen: (f: Find) => void;
@@ -8229,7 +8230,7 @@ function FindsTab({
               gmail={gmail}
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
-              onDraft={() => onDraft(f)}
+              onDraft={(o) => onDraft(f, o)}
               onRegenerate={() => onDraft(f, { force: true })}
               onDeny={(reason) => onDeny(f, reason)}
               onSetReason={(reason) => onSetReason(f, reason)}
@@ -8388,7 +8389,7 @@ function FindsTab({
           gmail={gmail}
           drafting={draftingId === detailFind.id}
           gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
-          onDraft={() => onDraft(detailFind)}
+          onDraft={(o) => onDraft(detailFind, o)}
           onRegenerate={() => onDraft(detailFind, { force: true })}
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
@@ -8643,7 +8644,7 @@ function FindCard({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: () => void;
+  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
   onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
@@ -8958,7 +8959,7 @@ function FindWorkflow({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: () => void;
+  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
   onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
@@ -8999,6 +9000,18 @@ function FindWorkflow({
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  // Format for the FIRST draft — defaults to the smart channel for this contact
+  // (email if we have one, else the platform their handle points at), but the
+  // user can pick any format before drafting.
+  const smartKind =
+    /email/i.test(o.channel || "") || o.contactEmail
+      ? "Email"
+      : /linkedin/i.test(o.channel || "") || /linkedin/i.test(o.contactHandle || "")
+      ? "LinkedIn message"
+      : /instagram/i.test(o.contactHandle || "")
+      ? "Instagram DM"
+      : "Email";
+  const [draftKind, setDraftKind] = useState(smartKind);
   // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
   // give the editor the big pane and tuck the website preview away.
   useEffect(() => {
@@ -9223,13 +9236,30 @@ function FindWorkflow({
       {/* Actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {find.status === "new" && (
-          <button
-            onClick={onDraft}
-            disabled={drafting}
-            className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
-          >
-            {drafting ? "Drafting…" : "Draft a message"}
-          </button>
+          <span className="inline-flex items-center overflow-hidden rounded-lg shadow-card">
+            <button
+              onClick={() => onDraft({ kind: draftKind })}
+              disabled={drafting}
+              className="bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+            >
+              {drafting ? "Drafting…" : `Draft ${draftKind.toLowerCase()}`}
+            </button>
+            {/* Pick the format (email, LinkedIn, DM, text…) for this first draft. */}
+            <select
+              value={draftKind}
+              onChange={(e) => setDraftKind(e.target.value)}
+              disabled={drafting}
+              aria-label="Message format"
+              title="Choose the message format"
+              className="scout-select h-full border-l border-white/30 bg-brown px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
+            >
+              {OUTREACH_KINDS.map((k) => (
+                <option key={k} value={k} className="text-ink">
+                  {k}
+                </option>
+              ))}
+            </select>
+          </span>
         )}
 
         {/* Move to a different project, a find isn't stuck wherever it was
@@ -9330,7 +9360,7 @@ function FindWorkflow({
             </button>
             {find.status === "new" && (
               <button
-                onClick={onDraft}
+                onClick={() => onDraft({ kind: draftKind })}
                 disabled={drafting}
                 className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
               >
