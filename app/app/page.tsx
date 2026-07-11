@@ -4902,6 +4902,17 @@ function ScoutTool({
                 )}
               </div>
 
+              {/* Auto-search: run this on a schedule and get the finds by email. */}
+              {getToken && goal.trim() && (
+                <AutoSearchPanel
+                  getToken={getToken}
+                  goal={goal}
+                  about={aboutForProject(activeProject)}
+                  useCase={activeUseCase}
+                  label={`${activeProject?.name || "Project"} · ${activeCatName || "search"}`}
+                />
+              )}
+
               {/* Job/internship fallback disclosure: never pass companies off as
                   confirmed openings. */}
               {searchNotice && (
@@ -11282,6 +11293,170 @@ function DashboardTab({
       </>
       )}
     </main>
+  );
+}
+
+/* ---------------- Auto-search: run this search on a schedule + email finds ----------------
+ * Turns the current goal into a recurring search. Scout runs it (daily/weekly),
+ * emails a digest with one-tap Approve / Not-a-fit links, and approvals land in
+ * the pipeline. Needs a connected mailbox (that's how the digest is sent). */
+function AutoSearchPanel({
+  getToken,
+  goal,
+  about,
+  useCase,
+  label,
+}: {
+  getToken: () => Promise<string | null>;
+  goal: string;
+  about: string;
+  useCase: string;
+  label: string;
+}) {
+  const [items, setItems] = useState<any[]>([]);
+  const [open, setOpen] = useState(false);
+  const [cadence, setCadence] = useState<"daily" | "weekly">("daily");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  const auth = async (): Promise<Record<string, string>> => {
+    const t = await getToken();
+    return t ? { authorization: `Bearer ${t}` } : {};
+  };
+  async function load() {
+    try {
+      const res = await fetch("/api/auto-search", { headers: await auth() });
+      const body = await res.json();
+      if (res.ok) setItems(body.items || []);
+    } catch {
+      /* non-fatal */
+    }
+  }
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function create() {
+    setErr("");
+    setMsg("");
+    if (!goal.trim()) {
+      setErr("Enter a goal above first.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/auto-search", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(await auth()) },
+        body: JSON.stringify({ goal, about, useCase, label, cadence }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || "Couldn't turn it on.");
+      setMsg(
+        `On. Scout will run this ${cadence} and email your finds${
+          items.length === 0 ? " — the first batch arrives in a couple of minutes." : "."
+        }`
+      );
+      setOpen(false);
+      load();
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't turn it on.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(id: string) {
+    try {
+      await fetch("/api/auto-search", {
+        method: "DELETE",
+        headers: { "content-type": "application/json", ...(await auth()) },
+        body: JSON.stringify({ id }),
+      });
+      load();
+    } catch {
+      /* non-fatal */
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-brown-deep"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+        <span className="text-sm font-bold text-ink">Run this on autopilot</span>
+        <span className="text-xs text-body/70">
+          Scout searches on a schedule and emails you the finds to approve.
+        </span>
+        {!open && (
+          <button
+            onClick={() => setOpen(true)}
+            className="ml-auto rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+          >
+            Set up
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-warm-border pt-3">
+          <span className="text-xs font-semibold text-body/70">Run</span>
+          <select
+            value={cadence}
+            onChange={(e) => setCadence(e.target.value as "daily" | "weekly")}
+            className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none focus:border-brown"
+          >
+            <option value="daily">every day</option>
+            <option value="weekly">every week</option>
+          </select>
+          <span className="text-xs text-body/60">and email me the finds.</span>
+          <button
+            onClick={create}
+            disabled={busy}
+            className="rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Turning on…" : "Turn on"}
+          </button>
+          <button
+            onClick={() => setOpen(false)}
+            className="text-xs font-semibold text-body/50 transition hover:text-ink"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
+
+      {err && <p className="mt-2 text-xs font-semibold text-red-700">{err}</p>}
+      {msg && <p className="mt-2 text-xs font-semibold text-sage-deep">{msg}</p>}
+
+      {items.length > 0 && (
+        <ul className="mt-3 space-y-1.5 border-t border-warm-border pt-3">
+          {items.map((it) => (
+            <li
+              key={it.id}
+              className="flex items-center justify-between gap-2 text-xs text-body"
+            >
+              <span className="min-w-0 truncate">
+                <span className="font-semibold text-ink">
+                  {it.label || it.goal}
+                </span>{" "}
+                · {it.cadence}
+                {it.last_run_at
+                  ? ` · last ${new Date(it.last_run_at).toLocaleDateString()}`
+                  : " · first run soon"}
+              </span>
+              <button
+                onClick={() => remove(it.id)}
+                className="shrink-0 font-semibold text-body/50 transition hover:text-red-600"
+              >
+                Stop
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
