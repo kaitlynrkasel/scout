@@ -4796,15 +4796,19 @@ function ScoutTool({
                     . Tap the pencil to rename or remove them.
                   </p>
 
-                  {/* Automation for this category — auto finds (run on a schedule)
-                      + auto emails (get a digest), tucked into a collapsible. */}
-                  {getToken && goal.trim() && (
+                  {/* Per-search options for this category — contact info wanted,
+                      plus auto finds (run on a schedule) + auto emails (get a
+                      digest), all tucked into one collapsible. */}
+                  {goal.trim() && (
                     <AutoSearchPanel
                       getToken={getToken}
                       goal={goal}
                       about={aboutForProject(activeProject)}
                       useCase={activeUseCase}
                       label={`${activeProject?.name || "Project"} · ${activeCatName || "search"}`}
+                      wantedChannels={wantedChannels}
+                      onToggleChannel={toggleWantedChannel}
+                      channelsSaved={!!catId}
                     />
                   )}
                 </div>
@@ -4864,14 +4868,6 @@ function ScoutTool({
                   <p className="mt-1.5 text-xs text-body/70">
                     Tip: add your industry, genre, or city to sharpen the results.
                   </p>
-
-                  <div className="mt-3">
-                    <ContactChannelsPicker
-                      selected={wantedChannels}
-                      onToggle={toggleWantedChannel}
-                      saved={!!catId}
-                    />
-                  </div>
 
                   {!aboutText && (
                     <button
@@ -11307,25 +11303,32 @@ function AutoSearchPanel({
   about,
   useCase,
   label,
+  wantedChannels,
+  onToggleChannel,
+  channelsSaved,
 }: {
-  getToken: () => Promise<string | null>;
+  getToken?: () => Promise<string | null>;
   goal: string;
   about: string;
   useCase: string;
   label: string;
+  wantedChannels: string[];
+  onToggleChannel: (key: string) => void;
+  channelsSaved: boolean;
 }) {
   const [items, setItems] = useState<any[]>([]);
   const [cadence, setCadence] = useState<"daily" | "weekly">("daily");
-  const [emailDigest, setEmailDigest] = useState(true); // "auto emails"
+  const [emailDigest, setEmailDigest] = useState(false); // "auto emails" — off by default
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
 
   const auth = async (): Promise<Record<string, string>> => {
-    const t = await getToken();
+    const t = getToken ? await getToken() : null;
     return t ? { authorization: `Bearer ${t}` } : {};
   };
   async function load() {
+    if (!getToken) return; // scheduling is a signed-in feature
     try {
       const res = await fetch("/api/auto-search", { headers: await auth() });
       const body = await res.json();
@@ -11387,7 +11390,7 @@ function AutoSearchPanel({
       <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
         Auto finds &amp; emails
-        <span className="font-normal text-body/50">· run this search on a schedule</span>
+        <span className="font-normal text-body/50">· contact info, schedule &amp; emails</span>
         {activeCount > 0 && (
           <span className="ml-auto rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
             {activeCount} on
@@ -11396,44 +11399,66 @@ function AutoSearchPanel({
       </summary>
 
       <div className="mt-3 space-y-3">
-        {/* The two decisions: auto finds (schedule) + auto emails (digest). */}
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <span className="font-semibold text-body/70">Auto-find:</span>
-          <select
-            value={cadence}
-            onChange={(e) => setCadence(e.target.value as "daily" | "weekly")}
-            className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none focus:border-brown"
-          >
-            <option value="daily">every day</option>
-            <option value="weekly">every week</option>
-          </select>
-          <span className="text-body/60">— finds land in your Finds automatically.</span>
-        </div>
-        <label className="flex cursor-pointer items-start gap-2 text-xs">
-          <input
-            type="checkbox"
-            checked={emailDigest}
-            onChange={(e) => setEmailDigest(e.target.checked)}
-            className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-          />
-          <span className="leading-relaxed text-body/80">
-            <span className="font-semibold text-ink">Auto-email me the finds</span> — a
-            digest to your inbox with one-tap Approve / Not-a-fit. Off = they just
-            appear in Finds, no email.
-          </span>
-        </label>
+        {/* Contact info wanted — what fields Scout should try to return on every
+            find. Lives here so all the per-search options sit in one place. */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            onClick={create}
-            disabled={busy}
-            className="rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
-          >
-            {busy ? "Turning on…" : "Turn on"}
-          </button>
-          <span className="text-[11px] text-body/50">
-            Each run counts as one search against your plan.
-          </span>
+          <ContactChannelsPicker
+            selected={wantedChannels}
+            onToggle={onToggleChannel}
+            saved={channelsSaved}
+          />
         </div>
+
+        {!getToken && (
+          <p className="border-t border-warm-border pt-3 text-[11px] leading-relaxed text-body/60">
+            Sign in to also run this search automatically and get the finds
+            emailed to you.
+          </p>
+        )}
+
+        {getToken && (
+          <>
+            <div className="border-t border-warm-border pt-3" />
+            {/* The two decisions: auto finds (schedule) + auto emails (digest). */}
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-semibold text-body/70">Auto-find:</span>
+              <select
+                value={cadence}
+                onChange={(e) => setCadence(e.target.value as "daily" | "weekly")}
+                className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none focus:border-brown"
+              >
+                <option value="daily">every day</option>
+                <option value="weekly">every week</option>
+              </select>
+              <span className="text-body/60">— finds land in your Finds automatically.</span>
+            </div>
+            <label className="flex cursor-pointer items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={emailDigest}
+                onChange={(e) => setEmailDigest(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+              />
+              <span className="leading-relaxed text-body/80">
+                <span className="font-semibold text-ink">Auto-email me the finds</span> — a
+                digest to your inbox with one-tap Approve / Not-a-fit. Off (the
+                default) = they just appear in Finds, no email.
+              </span>
+            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={create}
+                disabled={busy}
+                className="rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+              >
+                {busy ? "Turning on…" : "Turn on"}
+              </button>
+              <span className="text-[11px] text-body/50">
+                Each run counts as one search against your plan.
+              </span>
+            </div>
+          </>
+        )}
 
         {err && <p className="text-xs font-semibold text-red-700">{err}</p>}
         {msg && <p className="text-xs font-semibold text-sage-deep">{msg}</p>}
