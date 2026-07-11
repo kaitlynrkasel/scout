@@ -9304,7 +9304,7 @@ function FindWorkflow({
               disabled={drafting}
               aria-label="Message format"
               title="Choose the message format"
-              className="scout-select h-full border-l border-white/30 bg-brown px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
+              className="scout-select scout-select-light h-full cursor-pointer border-l border-white/30 bg-brown px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
             >
               {OUTREACH_KINDS.map((k) => (
                 <option key={k} value={k} className="text-ink">
