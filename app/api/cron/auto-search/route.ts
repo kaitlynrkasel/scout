@@ -39,7 +39,7 @@ export async function GET(req: NextRequest) {
   // A few due searches per tick, so one run never exceeds maxDuration.
   const { data: due, error } = await supabaseAdmin
     .from("auto_searches")
-    .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence")
+    .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence, email_digest")
     .eq("active", true)
     .lte("next_run_at", new Date().toISOString())
     .order("next_run_at", { ascending: true })
@@ -131,6 +131,13 @@ export async function GET(req: NextRequest) {
             created_by: "auto-search",
           }))
         );
+      }
+
+      // "Auto-emails" is optional: when off, the finds still land in Finds
+      // (seeded above) but we skip the digest.
+      if (s.email_digest === false) {
+        results.push({ id, finds: opps.length, emailed: false });
+        continue;
       }
 
       // Build a plain-text digest — clickable links work in every mail client.

@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   }
   const { data, error } = await supabaseAdmin
     .from("auto_searches")
-    .select("id, goal, label, cadence, max_finds, active, next_run_at, last_run_at, created_at")
+    .select("id, goal, label, cadence, email_digest, max_finds, active, next_run_at, last_run_at, created_at")
     .eq("user_id", me.id)
     .order("created_at", { ascending: false });
   if (error) return NextResponse.json({ items: [], error: error.message });
@@ -37,6 +37,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "A goal is required." }, { status: 400 });
   }
   const cadence = body?.cadence === "weekly" ? "weekly" : "daily";
+  const emailDigest = body?.emailDigest !== false; // default on ("auto emails")
   const maxFinds = Math.min(Math.max(Number(body?.maxFinds) || 5, 1), 10);
 
   // Require a connected mailbox — that's how the digest reaches them.
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       label: String(body?.label || "").slice(0, 120),
       max_finds: maxFinds,
       cadence,
+      email_digest: emailDigest,
       // First run in ~2 minutes, so the user sees it work without waiting a day.
       next_run_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
     })

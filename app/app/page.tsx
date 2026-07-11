@@ -4795,6 +4795,18 @@ function ScoutTool({
                     </span>
                     . Tap the pencil to rename or remove them.
                   </p>
+
+                  {/* Automation for this category — auto finds (run on a schedule)
+                      + auto emails (get a digest), tucked into a collapsible. */}
+                  {getToken && goal.trim() && (
+                    <AutoSearchPanel
+                      getToken={getToken}
+                      goal={goal}
+                      about={aboutForProject(activeProject)}
+                      useCase={activeUseCase}
+                      label={`${activeProject?.name || "Project"} · ${activeCatName || "search"}`}
+                    />
+                  )}
                 </div>
 
                 <div>
@@ -4901,17 +4913,6 @@ function ScoutTool({
                   </button>
                 )}
               </div>
-
-              {/* Auto-search: run this on a schedule and get the finds by email. */}
-              {getToken && goal.trim() && (
-                <AutoSearchPanel
-                  getToken={getToken}
-                  goal={goal}
-                  about={aboutForProject(activeProject)}
-                  useCase={activeUseCase}
-                  label={`${activeProject?.name || "Project"} · ${activeCatName || "search"}`}
-                />
-              )}
 
               {/* Job/internship fallback disclosure: never pass companies off as
                   confirmed openings. */}
@@ -11314,8 +11315,8 @@ function AutoSearchPanel({
   label: string;
 }) {
   const [items, setItems] = useState<any[]>([]);
-  const [open, setOpen] = useState(false);
   const [cadence, setCadence] = useState<"daily" | "weekly">("daily");
+  const [emailDigest, setEmailDigest] = useState(true); // "auto emails"
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -11350,16 +11351,15 @@ function AutoSearchPanel({
       const res = await fetch("/api/auto-search", {
         method: "POST",
         headers: { "content-type": "application/json", ...(await auth()) },
-        body: JSON.stringify({ goal, about, useCase, label, cadence }),
+        body: JSON.stringify({ goal, about, useCase, label, cadence, emailDigest }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error || "Couldn't turn it on.");
       setMsg(
-        `On. Scout will run this ${cadence} and email your finds${
-          items.length === 0 ? " — the first batch arrives in a couple of minutes." : "."
-        }`
+        `On. Scout will run this ${cadence}, drop the finds in your Finds${
+          emailDigest ? ", and email them to you" : ""
+        }${items.length === 0 ? " — the first batch arrives in a couple of minutes." : "."}`
       );
-      setOpen(false);
       load();
     } catch (e: any) {
       setErr(e?.message || "Couldn't turn it on.");
@@ -11381,27 +11381,24 @@ function AutoSearchPanel({
     }
   }
 
+  const activeCount = items.length;
   return (
-    <div className="mt-4 rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="text-brown-deep"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
-        <span className="text-sm font-bold text-ink">Run this on autopilot</span>
-        <span className="text-xs text-body/70">
-          Scout searches on a schedule and emails you the finds to approve.
-        </span>
-        {!open && (
-          <button
-            onClick={() => setOpen(true)}
-            className="ml-auto rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-          >
-            Set up
-          </button>
+    <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
+        Auto finds &amp; emails
+        <span className="font-normal text-body/50">· run this search on a schedule</span>
+        {activeCount > 0 && (
+          <span className="ml-auto rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+            {activeCount} on
+          </span>
         )}
-      </div>
+      </summary>
 
-      {open && (
-        <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-warm-border pt-3">
-          <span className="text-xs font-semibold text-body/70">Run</span>
+      <div className="mt-3 space-y-3">
+        {/* The two decisions: auto finds (schedule) + auto emails (digest). */}
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-body/70">Auto-find:</span>
           <select
             value={cadence}
             onChange={(e) => setCadence(e.target.value as "daily" | "weekly")}
@@ -11410,7 +11407,22 @@ function AutoSearchPanel({
             <option value="daily">every day</option>
             <option value="weekly">every week</option>
           </select>
-          <span className="text-xs text-body/60">and email me the finds.</span>
+          <span className="text-body/60">— finds land in your Finds automatically.</span>
+        </div>
+        <label className="flex cursor-pointer items-start gap-2 text-xs">
+          <input
+            type="checkbox"
+            checked={emailDigest}
+            onChange={(e) => setEmailDigest(e.target.checked)}
+            className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+          />
+          <span className="leading-relaxed text-body/80">
+            <span className="font-semibold text-ink">Auto-email me the finds</span> — a
+            digest to your inbox with one-tap Approve / Not-a-fit. Off = they just
+            appear in Finds, no email.
+          </span>
+        </label>
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={create}
             disabled={busy}
@@ -11418,45 +11430,40 @@ function AutoSearchPanel({
           >
             {busy ? "Turning on…" : "Turn on"}
           </button>
-          <button
-            onClick={() => setOpen(false)}
-            className="text-xs font-semibold text-body/50 transition hover:text-ink"
-          >
-            Cancel
-          </button>
+          <span className="text-[11px] text-body/50">
+            Each run counts as one search against your plan.
+          </span>
         </div>
-      )}
 
-      {err && <p className="mt-2 text-xs font-semibold text-red-700">{err}</p>}
-      {msg && <p className="mt-2 text-xs font-semibold text-sage-deep">{msg}</p>}
+        {err && <p className="text-xs font-semibold text-red-700">{err}</p>}
+        {msg && <p className="text-xs font-semibold text-sage-deep">{msg}</p>}
 
-      {items.length > 0 && (
-        <ul className="mt-3 space-y-1.5 border-t border-warm-border pt-3">
-          {items.map((it) => (
-            <li
-              key={it.id}
-              className="flex items-center justify-between gap-2 text-xs text-body"
-            >
-              <span className="min-w-0 truncate">
-                <span className="font-semibold text-ink">
-                  {it.label || it.goal}
-                </span>{" "}
-                · {it.cadence}
-                {it.last_run_at
-                  ? ` · last ${new Date(it.last_run_at).toLocaleDateString()}`
-                  : " · first run soon"}
-              </span>
-              <button
-                onClick={() => remove(it.id)}
-                className="shrink-0 font-semibold text-body/50 transition hover:text-red-600"
+        {items.length > 0 && (
+          <ul className="space-y-1.5 border-t border-warm-border pt-3">
+            {items.map((it) => (
+              <li
+                key={it.id}
+                className="flex items-center justify-between gap-2 text-xs text-body"
               >
-                Stop
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                <span className="min-w-0 truncate">
+                  <span className="font-semibold text-ink">{it.label || it.goal}</span> ·{" "}
+                  {it.cadence} · {it.email_digest === false ? "no email" : "email on"}
+                  {it.last_run_at
+                    ? ` · last ${new Date(it.last_run_at).toLocaleDateString()}`
+                    : " · first run soon"}
+                </span>
+                <button
+                  onClick={() => remove(it.id)}
+                  className="shrink-0 font-semibold text-body/50 transition hover:text-red-600"
+                >
+                  Stop
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </details>
   );
 }
 

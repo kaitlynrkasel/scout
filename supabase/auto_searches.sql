@@ -17,6 +17,7 @@ create table if not exists auto_searches (
   label text,                          -- friendly name for the digest subject
   max_finds int not null default 5,    -- cap per run (cost control)
   cadence text not null default 'daily' check (cadence in ('daily','weekly')),
+  email_digest boolean not null default true, -- also email the digest ("auto emails")
   active boolean not null default true,
   next_run_at timestamptz not null default now(),
   last_run_at timestamptz,
@@ -33,6 +34,9 @@ create table if not exists auto_finds (
   decided_at timestamptz,
   created_at timestamptz not null default now()
 );
+
+-- For installs that predate the email-digest toggle.
+alter table auto_searches add column if not exists email_digest boolean not null default true;
 
 create index if not exists idx_auto_searches_due
   on auto_searches (next_run_at)
