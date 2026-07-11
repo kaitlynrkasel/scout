@@ -4621,24 +4621,37 @@ function ScoutTool({
                 className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]"
               >
                 <div>
-                  <Label>Project</Label>
+                  <Label>Project name</Label>
                   <div className="relative">
+                    {/* The project title is edited RIGHT HERE — an obvious text
+                        field, not buried behind the manage dialog. Switching
+                        between projects moves to the small picker below. */}
                     <div className="flex items-center gap-2">
-                      <select
-                        value={activeId}
-                        onChange={(e) => selectProject(e.target.value)}
-                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                      >
-                        {projects.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
+                      <input
+                        value={activeProject?.name || ""}
+                        onChange={(e) =>
+                          saveProjects(
+                            projects.map((p) =>
+                              p.id === activeId ? { ...p, name: e.target.value } : p
+                            )
+                          )
+                        }
+                        onBlur={(e) => {
+                          if (!e.target.value.trim())
+                            saveProjects(
+                              projects.map((p) =>
+                                p.id === activeId ? { ...p, name: "Untitled project" } : p
+                              )
+                            );
+                        }}
+                        placeholder="Name this project"
+                        aria-label="Project name"
+                        className="w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      />
                       <button
                         onClick={() => setEditingProjects(true)}
-                        title="Manage projects"
-                        aria-label="Manage projects"
+                        title="Add or remove projects"
+                        aria-label="Add or remove projects"
                         className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
                         <PencilIcon />
@@ -4657,9 +4670,25 @@ function ScoutTool({
                       />
                     )}
                   </div>
+                  {projects.length > 1 && (
+                    <label className="mt-2 flex items-center gap-2 text-xs font-medium text-body/70">
+                      <span className="shrink-0">Switch to</span>
+                      <select
+                        value={activeId}
+                        onChange={(e) => selectProject(e.target.value)}
+                        className="scout-select min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none transition focus:border-coral"
+                      >
+                        {projects.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
                   <p className="mt-2.5 text-xs leading-relaxed text-body/70">
-                    One workspace per client, brand, or goal, each with its own
-                    categories and searches. Tap the pencil to add or remove projects.
+                    A project is one workspace per client, brand, or goal. Type a
+                    name above; tap the pencil to add or remove projects.
                   </p>
                 </div>
 
