@@ -4692,6 +4692,41 @@ function ScoutTool({
     }
   }
 
+  // Prompt-to-rewrite one draft: take the current subject/body + a plain-English
+  // instruction and rewrite the whole thing in the user's voice. Returns the new
+  // subject/body for the editor to show (not persisted until they Save).
+  async function reviseSingleDraft(
+    find: Find,
+    subject: string,
+    body: string,
+    instruction: string
+  ): Promise<{ subject: string; body: string } | null> {
+    if (!find.draft) return null;
+    const draft = { ...find.draft, subject, body };
+    try {
+      const res = await fetch("/api/redraft-batch", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          drafts: [draft],
+          instruction,
+          about: aboutForProject(projects.find((p) => p.id === find.projectId) || activeProject),
+        }),
+      });
+      const data = await parseApiResponse(res);
+      if (!res.ok || data?.error) {
+        reportError(data);
+        return null;
+      }
+      const revised = (data.drafts || [])[0];
+      if (!revised) return null;
+      return { subject: String(revised.subject ?? subject), body: String(revised.body ?? body) };
+    } catch (e: any) {
+      setError(e?.message || "Couldn't rewrite the draft.");
+      return null;
+    }
+  }
+
   // Rewrite a single existing draft for a different outreach kind (Email,
   // LinkedIn message, Instagram DM, etc.). Called when the user changes the
   // format dropdown on a draft card; only that one draft updates.
@@ -5902,6 +5937,7 @@ function ScoutTool({
           meetingPrepId={meetingPrepId}
           onCopy={() => bumpActivity({ copies: 1 })}
           onEditDraft={editFindDraft}
+          onReviseDraft={reviseSingleDraft}
           onDeepScan={deepScanFind}
           scanningId={scanningId}
           scanNote={scanNote}
@@ -7451,6 +7487,7 @@ function FindDetailModal({
   meetingPrepBusy,
   onCopy,
   onEditDraft,
+  onReviseDraft,
   onDeepScan,
   scanning,
   scanNote,
@@ -7499,6 +7536,12 @@ function FindDetailModal({
   meetingPrepBusy: boolean;
   onCopy: () => void;
   onEditDraft: (subject: string, body: string) => void;
+  onReviseDraft?: (
+    find: Find,
+    subject: string,
+    body: string,
+    instruction: string
+  ) => Promise<{ subject: string; body: string } | null>;
   onDeepScan: () => void;
   scanning: boolean;
   scanNote?: string;
@@ -8105,6 +8148,7 @@ function FindDetailModal({
                 meetingPrepBusy={meetingPrepBusy}
                 onCopy={onCopy}
                 onEditDraft={onEditDraft}
+                onReviseDraft={onReviseDraft}
                 onDeepScan={onDeepScan}
                 scanning={scanning}
                 onFollowUp={onFollowUp}
@@ -8397,6 +8441,7 @@ function FindsTab({
   meetingPrepId,
   onCopy,
   onEditDraft,
+  onReviseDraft,
   onDeepScan,
   scanningId,
   scanNote,
@@ -8447,6 +8492,12 @@ function FindsTab({
   meetingPrepId: string;
   onCopy: () => void;
   onEditDraft: (f: Find, subject: string, body: string) => void;
+  onReviseDraft?: (
+    find: Find,
+    subject: string,
+    body: string,
+    instruction: string
+  ) => Promise<{ subject: string; body: string } | null>;
   onDeepScan: (f: Find) => void;
   scanningId: string;
   scanNote: { id: string; text: string } | null;
@@ -8797,6 +8848,7 @@ function FindsTab({
               meetingPrepBusy={meetingPrepId === f.id}
               onCopy={onCopy}
               onEditDraft={(subject, body) => onEditDraft(f, subject, body)}
+              onReviseDraft={onReviseDraft}
               onDeepScan={() => onDeepScan(f)}
               scanning={scanningId === f.id}
               onFollowUp={() => onFollowUp(f)}
@@ -8955,6 +9007,7 @@ function FindsTab({
           meetingPrepBusy={meetingPrepId === detailFind.id}
           onCopy={onCopy}
           onEditDraft={(subject, body) => onEditDraft(detailFind, subject, body)}
+          onReviseDraft={onReviseDraft}
           onDeepScan={() => onDeepScan(detailFind)}
           scanning={scanningId === detailFind.id}
           scanNote={scanNote && scanNote.id === detailFind.id ? scanNote.text : ""}
@@ -9174,6 +9227,7 @@ function FindCard({
   meetingPrepBusy,
   onCopy,
   onEditDraft,
+  onReviseDraft,
   onDeepScan,
   scanning,
   onFollowUp,
@@ -9211,6 +9265,12 @@ function FindCard({
   meetingPrepBusy: boolean;
   onCopy: () => void;
   onEditDraft: (subject: string, body: string) => void;
+  onReviseDraft?: (
+    find: Find,
+    subject: string,
+    body: string,
+    instruction: string
+  ) => Promise<{ subject: string; body: string } | null>;
   onDeepScan: () => void;
   scanning: boolean;
   scanNote?: string;
@@ -9451,6 +9511,7 @@ function FindCard({
         meetingPrepBusy={meetingPrepBusy}
         onCopy={onCopy}
         onEditDraft={onEditDraft}
+        onReviseDraft={onReviseDraft}
         onDeepScan={onDeepScan}
         scanning={scanning}
         onFollowUp={onFollowUp}
@@ -9492,6 +9553,7 @@ function FindWorkflow({
   meetingPrepBusy,
   onCopy,
   onEditDraft,
+  onReviseDraft,
   onDeepScan,
   scanning,
   onFollowUp,
@@ -9525,6 +9587,12 @@ function FindWorkflow({
   meetingPrepBusy: boolean;
   onCopy: () => void;
   onEditDraft: (subject: string, body: string) => void;
+  onReviseDraft?: (
+    find: Find,
+    subject: string,
+    body: string,
+    instruction: string
+  ) => Promise<{ subject: string; body: string } | null>;
   onDeepScan: () => void;
   scanning: boolean;
   scanNote?: string;
@@ -9553,6 +9621,24 @@ function FindWorkflow({
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
+  // Prompt-to-rewrite: type an instruction and Scout rewrites the whole draft.
+  const [reviseInstruction, setReviseInstruction] = useState("");
+  const [revising, setRevising] = useState(false);
+  async function doRevise() {
+    const instr = reviseInstruction.trim();
+    if (!instr || revising || !onReviseDraft) return;
+    setRevising(true);
+    try {
+      const revised = await onReviseDraft(find, editSubject, editBody, instr);
+      if (revised) {
+        if (typeof revised.subject === "string") setEditSubject(revised.subject);
+        if (typeof revised.body === "string") setEditBody(revised.body);
+        setReviseInstruction("");
+      }
+    } finally {
+      setRevising(false);
+    }
+  }
   // Format for the FIRST draft — defaults to the smart channel for this contact
   // (email if we have one, else the platform their handle points at), but the
   // user can pick any format before drafting.
@@ -9695,6 +9781,35 @@ function FindWorkflow({
       )}
       {d && editing && (
         <div className="mt-3 rounded-xl border border-coral/40 bg-surface p-3">
+          {/* Prompt-to-rewrite: describe a change and Scout rewrites the whole
+              draft in your voice — no need to hand-edit every line. */}
+          {onReviseDraft && (
+            <div className="mb-3 rounded-lg border border-blue-deep/25 bg-blue-tint/40 p-2">
+              <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-blue-deep">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
+                Ask Scout to rewrite this
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <input
+                  value={reviseInstruction}
+                  onChange={(e) => setReviseInstruction(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && reviseInstruction.trim()) doRevise();
+                  }}
+                  disabled={revising}
+                  placeholder="e.g. make it warmer, cut the second paragraph, mention our Q4 launch"
+                  className="min-w-[180px] flex-1 rounded-lg border border-warm-border bg-white px-2.5 py-1.5 text-xs text-ink outline-none focus:border-coral disabled:opacity-60"
+                />
+                <button
+                  onClick={doRevise}
+                  disabled={revising || !reviseInstruction.trim()}
+                  className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+                >
+                  {revising ? "Rewriting…" : "Rewrite"}
+                </button>
+              </div>
+            </div>
+          )}
           {d.channelType === "email" && (
             <input
               value={editSubject}
