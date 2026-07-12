@@ -4539,7 +4539,7 @@ function ScoutTool({
           </span>
           <button
             onClick={() => onCreateAccount?.()}
-            className="ml-auto shrink-0 rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            className="ml-auto shrink-0 rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
           >
             Create free account
           </button>
@@ -5169,7 +5169,7 @@ function ScoutTool({
                       goalInputRef.current?.focus();
                       goalInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
                     }}
-                    className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                    className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
                   >
                     Edit my goal
                   </button>
@@ -5684,7 +5684,7 @@ function ScoutTool({
                 </div>
                 <a
                   href="/admin"
-                  className="rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+                  className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
                 >
                   Open admin →
                 </a>
@@ -5828,7 +5828,7 @@ function ScoutTool({
                 <button
                   onClick={() => startCheckout("pro")}
                   disabled={billingBusy}
-                  className="w-full rounded-xl bg-brown px-4 py-3 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+                  className="w-full rounded-xl bg-brand-gradient px-4 py-3 text-sm font-semibold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
                 >
                   {billingBusy ? "Opening checkout…" : "Upgrade to Pro, $30/mo for 60"}
                 </button>
@@ -6346,7 +6346,7 @@ function SideNav({
             {billingTier && billingTier !== "free" && (
               <span
                 className={`ml-auto rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
-                  tab === "billing" ? "bg-brown text-white" : "bg-brown-tint text-brown-deep"
+                  tab === "billing" ? "bg-brand-gradient text-white" : "bg-brown-tint text-brown-deep"
                 }`}
               >
                 {billingTier}
@@ -7652,7 +7652,7 @@ function FindDetailModal({
                     <button
                       onClick={fillForm}
                       title="Type your details and drafted message into every field Scout can. It never submits."
-                      className="rounded-lg bg-brown px-2.5 py-1 text-[11px] font-semibold text-white shadow-soft transition hover:bg-brown-deep"
+                      className="rounded-lg bg-brand-gradient px-2.5 py-1 text-[11px] font-semibold text-white shadow-soft transition hover:opacity-90"
                     >
                       Autofill
                     </button>
@@ -7747,7 +7747,7 @@ function FindDetailModal({
                   href={o.url}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-block rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                  className="inline-block rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
                 >
                   Open {host || "profile"} ↗
                 </a>
@@ -7801,7 +7801,7 @@ function FindDetailModal({
                         href={o.url}
                         target="_blank"
                         rel="noreferrer"
-                        className="mt-3 inline-block rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:bg-brown-deep"
+                        className="mt-3 inline-block rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
                       >
                         Open in new tab ↗
                       </a>
@@ -8052,7 +8052,8 @@ function FindsTab({
     <main className="mx-auto max-w-4xl px-6 py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          <div className="kicker mb-2">Your pipeline</div>
+          <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
             Your <span className="text-brown">finds</span>
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -8112,7 +8113,7 @@ function FindsTab({
           <button
             onClick={onRefreshDrafts}
             disabled={refreshingVoice}
-            className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
           >
             {refreshingVoice ? "Re-writing…" : "Update my drafts"}
           </button>
@@ -8402,7 +8403,7 @@ function FindsTab({
                       onClick={() =>
                         runBulk((f) => onDeny(f, bulkDenyText.trim() || ""))
                       }
-                      className="shrink-0 rounded-lg bg-brown px-2.5 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
+                      className="shrink-0 rounded-lg bg-brand-gradient px-2.5 py-1.5 text-xs font-bold text-white transition hover:opacity-90"
                     >
                       Deny
                     </button>
@@ -9299,7 +9300,7 @@ function FindWorkflow({
               disabled={drafting}
               aria-label="Message format"
               title="Choose the message format"
-              className="scout-select scout-select-light h-full cursor-pointer border-l border-white/30 bg-brown px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
+              className="scout-select scout-select-light h-full cursor-pointer border-l border-white/30 bg-brand-gradient px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
             >
               {OUTREACH_KINDS.map((k) => (
                 <option key={k} value={k} className="text-ink">
@@ -10304,7 +10305,7 @@ function DashboardTab({
               </p>
               <button
                 onClick={goOutreach}
-                className="mt-3 rounded-lg bg-brown px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-brown-deep"
+                className="mt-3 rounded-lg bg-brand-gradient px-3.5 py-2 text-xs font-semibold text-white transition hover:opacity-90"
               >
                 Run a search
               </button>
@@ -10561,7 +10562,7 @@ function DashboardTab({
             </p>
             <button
               onClick={goOutreach}
-              className="mt-4 rounded-lg bg-brown px-4 py-2 text-sm font-semibold text-white transition hover:bg-brown-deep"
+              className="mt-4 rounded-lg bg-brand-gradient px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90"
             >
               Start scouting
             </button>
@@ -11454,7 +11455,7 @@ function AutoSearchPanel({
               <button
                 onClick={create}
                 disabled={busy}
-                className="rounded-lg bg-brown px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
               >
                 {busy ? "Turning on…" : "Turn on"}
               </button>
@@ -11557,7 +11558,7 @@ function OutreachAdvice({
   const SeedTemplateBtn = ({ channel }: { channel: string }) => (
     <button
       onClick={() => onSeedTemplateForChannel(channel)}
-      className="shrink-0 rounded-lg bg-brown px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90"
+      className="shrink-0 rounded-lg bg-brand-gradient px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90"
       title={`Jump to Templates with ${channel} pre-selected`}
     >
       Draft a {channel.replace(/ message| DM/, "")} template
@@ -11972,7 +11973,7 @@ function MeetingPrepBlock({
           <button
             onClick={onGenerate}
             disabled={busy}
-            className="rounded-lg bg-brown px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-brand-gradient px-2.5 py-1 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
           >
             {busy ? "Pulling facts…" : prep ? "Refresh" : "Prep for a meeting"}
           </button>
@@ -12169,7 +12170,7 @@ function SchedulePicker({
                 onSchedule(d);
                 setOpen(false);
               }}
-              className="flex-1 rounded-lg bg-brown px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+              className="flex-1 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
             >
               Queue send
             </button>
@@ -13229,7 +13230,7 @@ function BillingTab({
                 {comp ? "Unlimited" : paid ? (tier === "pro" ? "Pro" : "Starter") : "Free"}
               </span>
               {comp && (
-                <span className="rounded-full bg-brown px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
                   Comp
                 </span>
               )}
@@ -13303,7 +13304,7 @@ function BillingTab({
             <button
               onClick={submitCode}
               disabled={!code.trim() || redeeming}
-              className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
             >
               {redeeming ? "Redeeming…" : "Redeem"}
             </button>
@@ -13336,7 +13337,7 @@ function BillingTab({
               <div className="flex items-center justify-between">
                 <span className="text-lg font-semibold text-ink">{p.label}</span>
                 {current && (
-                  <span className="rounded-full bg-brown px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
+                  <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">
                     Current
                   </span>
                 )}
@@ -13354,7 +13355,7 @@ function BillingTab({
                 className={`mt-5 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition disabled:opacity-50 ${
                   current
                     ? "border border-warm-border text-body hover:bg-warm-bg"
-                    : "bg-brown text-white shadow-soft hover:bg-brown-deep"
+                    : "bg-brand-gradient text-white shadow-soft hover:opacity-90"
                 }`}
               >
                 {current
@@ -13509,7 +13510,7 @@ function SettingsTab({
               <button
                 onClick={submitCode}
                 disabled={!code.trim() || redeeming}
-                className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+                className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
               >
                 {redeeming ? "Redeeming…" : "Redeem"}
               </button>
@@ -13563,7 +13564,7 @@ function SettingsTab({
             <button
               onClick={changePassword}
               disabled={pwBusy || !newPw || !confirmPw}
-              className="rounded-xl bg-brown px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
             >
               {pwBusy ? "Updating…" : "Update password"}
             </button>
@@ -13663,7 +13664,7 @@ function SettingsTab({
           </div>
           <button
             onClick={onStartTour}
-            className="shrink-0 rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
           >
             Show the tour
           </button>
@@ -13801,7 +13802,8 @@ function TemplatesTab({
   };
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">
+      <div className="kicker mb-2">Your voice</div>
+      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -14502,7 +14504,7 @@ function CompanyDetailsEditor({
               <button
                 onClick={save}
                 disabled={saving}
-                className="rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep disabled:opacity-50"
+                className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save company details"}
               </button>
@@ -14782,7 +14784,8 @@ function ProfileTab({
 
   return (
     <main className="mx-auto max-w-3xl px-6 py-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">
+      <div className="kicker mb-2">About you</div>
+      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
@@ -15191,7 +15194,7 @@ function ProfileTab({
           </div>
           <button
             onClick={onImportOutreach}
-            className="shrink-0 rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
           >
             Import a CSV
           </button>

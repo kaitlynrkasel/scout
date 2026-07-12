@@ -70,7 +70,9 @@ const config: Config = {
           "0 14px 44px -16px rgba(40, 30, 18, 0.22), 0 2px 6px -2px rgba(40, 30, 18, 0.06)",
       },
       backgroundImage: {
-        "brand-gradient": "linear-gradient(120deg, #7c5837 0%, #684a2d 100%)",
+        // Denim-blue primary action, matching the landing's CTA (#4C6375). Blue
+        // leads interaction across app + landing; brown stays the warm identity.
+        "brand-gradient": "linear-gradient(120deg, #536872 0%, #44586a 100%)",
         "warm-fade": "linear-gradient(180deg, #f5f2ec 0%, #ffffff 60%)",
       },
     },

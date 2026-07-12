@@ -47,7 +47,7 @@ export const metadata = {
 // is the mount point for the running-dog intro animation.
 const CSS = `
   :root{
-    --paper:#F5F2EB; --paper2:#EDE6D8; --ink:#241C13; --cream:#F9F5EE;
+    --paper:#F5F2EB; --paper2:#EDE6D8; --ink:#3A2A1B; --cream:#F9F5EE;
     /* Dusty denim-blue is the ACCENT that carries interaction — CTAs, kickers,
        the hero sticker (how a site uses an accent: on the eye-drawing action,
        not sprinkled). Brown/tan stay the warm identity: display type, surfaces,
