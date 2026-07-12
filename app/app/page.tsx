@@ -12316,8 +12316,13 @@ function TeamTab({
   const [openId, setOpenId] = useState("");
   const [sharedFinds, setSharedFinds] = useState<any[]>([]);
   const [recs, setRecs] = useState<any[]>([]);
+  // One account can belong to several companies (each billed separately). Track
+  // which one is being managed; default to the first.
+  const [activeWsId, setActiveWsId] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
 
-  const workspace = ctx.workspaces[0] || null;
+  const workspace =
+    ctx.workspaces.find((w: any) => w.id === activeWsId) || ctx.workspaces[0] || null;
 
   async function authFetch(url: string, opts: any = {}) {
     const token = getToken ? await getToken() : null;
@@ -12335,25 +12340,49 @@ function TeamTab({
     return data;
   }
 
-  async function loadCtx() {
+  async function loadProjects(wsId: string) {
+    if (!wsId) {
+      setSharedProjects([]);
+      return;
+    }
+    try {
+      const p = await authFetch(`/api/team/project?workspaceId=${wsId}`);
+      setSharedProjects(p.projects || []);
+    } catch {
+      setSharedProjects([]);
+    }
+  }
+
+  async function loadCtx(preferredId?: string) {
     setLoading(true);
     setError("");
     try {
       const data = await authFetch("/api/team/workspace");
       const wss = data.workspaces || [];
       setCtx({ workspaces: wss, invites: data.invites || [] });
-      if (wss[0]) {
-        const p = await authFetch(`/api/team/project?workspaceId=${wss[0].id}`);
-        setSharedProjects(p.projects || []);
-      } else {
-        setSharedProjects([]);
-      }
+      // Keep the current company selected across reloads; fall back to the first.
+      const want = preferredId || activeWsId;
+      const targetId = wss.find((w: any) => w.id === want)?.id || wss[0]?.id || "";
+      setActiveWsId(targetId);
+      await loadProjects(targetId);
     } catch (e: any) {
       setError(e.message);
     } finally {
       setLoading(false);
     }
   }
+
+  // Switch which company you're managing (each has its own members + projects).
+  const switchWorkspace = (id: string) => {
+    setActiveWsId(id);
+    setOpenId("");
+    setSharedFinds([]);
+    setRecs([]);
+    setNote("");
+    setError("");
+    setShowCreate(false);
+    loadProjects(id);
+  };
   useEffect(() => {
     loadCtx();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -12374,12 +12403,13 @@ function TeamTab({
 
   const createWorkspace = () =>
     run("create", async () => {
-      await authFetch("/api/team/workspace", {
+      const r = await authFetch("/api/team/workspace", {
         method: "POST",
         body: JSON.stringify({ name: wsName }),
       });
       setWsName("");
-      await loadCtx();
+      setShowCreate(false);
+      await loadCtx(r?.workspace?.id);
     });
 
   const invite = () =>
@@ -12539,16 +12569,58 @@ function TeamTab({
 
       {loading ? (
         <p className="mt-8 text-sm text-body/60">Loading your Team…</p>
-      ) : !workspace ? (
-        /* -------- No workspace yet: create one -------- */
-        <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
-          <h2 className="text-lg font-bold text-ink">Name your workspace</h2>
-          <p className="mt-1 text-sm text-body/80">
-            A workspace is your company or crew. Give it a name, then invite teammates
-            and share projects with them.
-          </p>
+      ) : (
+        <>
+          {/* Company switcher — one account can hold several companies (each is
+              its own workspace + billing). Pick one to manage, or add another. */}
+          {ctx.workspaces.length > 0 && (
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              {ctx.workspaces.map((w: any) => (
+                <button
+                  key={w.id}
+                  onClick={() => switchWorkspace(w.id)}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition ${
+                    w.id === workspace?.id
+                      ? "border-transparent bg-brand-gradient text-white shadow-soft"
+                      : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                  }`}
+                >
+                  {w.name}
+                  <span
+                    className={`text-[9px] font-bold uppercase ${
+                      w.id === workspace?.id ? "text-white/70" : "text-body/40"
+                    }`}
+                  >
+                    {w.role}
+                  </span>
+                </button>
+              ))}
+              <button
+                onClick={() => {
+                  setShowCreate((v) => !v);
+                  setWsName("");
+                }}
+                className="rounded-full border border-dashed border-warm-border px-3.5 py-1.5 text-sm font-semibold text-accent transition hover:bg-warm-bg"
+              >
+                {showCreate ? "Cancel" : "+ New company"}
+              </button>
+            </div>
+          )}
+
+          {(!workspace || showCreate) && (
+            <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
+              <h2 className="text-lg font-bold text-ink">
+                {workspace ? "Add another company" : "Name your company"}
+              </h2>
+              <p className="mt-1 text-sm text-body/80">
+                A company is a separate workspace with its own members, projects, and
+                billing.{" "}
+                {workspace
+                  ? "Adding one starts a second subscription."
+                  : "Give it a name, then invite teammates and share projects with them."}
+              </p>
           <div className="mt-4">
-            <Label>Workspace name</Label>
+            <Label>Company name</Label>
             <div className="flex flex-wrap gap-2">
               <input
                 value={wsName}
@@ -12564,14 +12636,16 @@ function TeamTab({
                 disabled={!wsName.trim() || !!busy}
                 className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
               >
-                {busy === "create" ? "Creating…" : "Create workspace"}
+                {busy === "create" ? "Creating…" : "Create company"}
               </button>
             </div>
           </div>
-        </section>
-      ) : (
-        <>
-          {/* -------- Workspace: members + invite -------- */}
+            </section>
+          )}
+
+          {workspace && (
+            <>
+              {/* -------- Workspace: members + invite -------- */}
           <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-bold text-ink">{workspace.name}</h2>
@@ -12812,6 +12886,8 @@ function TeamTab({
               </div>
             )}
           </section>
+            </>
+          )}
         </>
       )}
     </main>
