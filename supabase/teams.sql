@@ -70,6 +70,12 @@ create table if not exists public.workspace_invites (
 alter table public.workspace_invites add column if not exists role text not null default 'editor';
 alter table public.workspace_invites add column if not exists project_ids uuid[] not null default '{}';
 
+-- Shareable invite code: a short token the owner can drop in Slack/text so
+-- teammates join without an individual email invite. Generated on demand.
+alter table public.workspaces add column if not exists invite_code text;
+create unique index if not exists workspaces_invite_code_idx
+  on public.workspaces (invite_code) where invite_code is not null;
+
 create table if not exists public.shared_projects (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,

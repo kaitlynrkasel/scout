@@ -396,6 +396,64 @@ async function sendInviteEmail(
   return false; // inviter has no connected mailbox — invite still stands
 }
 
+// Owner/admin: get (or generate) the shareable invite code for a workspace.
+// Anyone with the code can join as an editor — a code you send your team.
+export async function getInviteCode(uid: string, workspaceId: string) {
+  await assertRole(uid, workspaceId, "admin");
+  const { data: ws } = await db()
+    .from("workspaces")
+    .select("invite_code")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (ws?.invite_code) return { code: ws.invite_code as string };
+  // Generate a short, URL-safe, unambiguous code.
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) {
+    // security-definer-free randomness; collisions caught by the unique index.
+    code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  }
+  await db().from("workspaces").update({ invite_code: code }).eq("id", workspaceId);
+  return { code };
+}
+
+// Owner/admin: rotate the code (invalidates the old link).
+export async function resetInviteCode(uid: string, workspaceId: string) {
+  await assertRole(uid, workspaceId, "admin");
+  const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
+  let code = "";
+  for (let i = 0; i < 8; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
+  await db().from("workspaces").update({ invite_code: code }).eq("id", workspaceId);
+  return { code };
+}
+
+// Join a workspace using a shared invite code (no email needed).
+export async function joinByCode(uid: string, email: string, code: string) {
+  const c = String(code || "").trim().toLowerCase();
+  if (!c) throw new TeamError("Enter an invite code.");
+  const { data: ws } = await db()
+    .from("workspaces")
+    .select("id, name")
+    .eq("invite_code", c)
+    .maybeSingle();
+  if (!ws) throw new TeamError("That invite code isn't valid.", 404);
+  const { data: existing } = await db()
+    .from("workspace_members")
+    .select("user_id")
+    .eq("workspace_id", ws.id)
+    .eq("user_id", uid)
+    .maybeSingle();
+  if (!existing) {
+    await db()
+      .from("workspace_members")
+      .upsert(
+        { workspace_id: ws.id, user_id: uid, email: String(email || "").toLowerCase(), role: "editor" },
+        { onConflict: "workspace_id,user_id" }
+      );
+  }
+  return { joined: ws.id, name: ws.name as string };
+}
+
 // Owner/admin: cancel a pending invite (before it's accepted).
 export async function revokeInvite(uid: string, workspaceId: string, email: string) {
   await assertRole(uid, workspaceId, "admin");

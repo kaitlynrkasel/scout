@@ -1977,6 +1977,30 @@ function ScoutTool({
         setTab("profile");
         if (sh === "connected") refreshSheets();
       }
+      // Shareable invite link: ?join=<code> → join that workspace once signed in.
+      const joinCode = p.get("join");
+      if (joinCode && getToken) {
+        (async () => {
+          try {
+            const token = await getToken();
+            if (!token) return; // not signed in yet; the code stays in the URL
+            const res = await fetch("/api/team/join", {
+              method: "POST",
+              headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+              body: JSON.stringify({ code: joinCode }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (res.ok && d?.name) {
+              setTab("team");
+              const u2 = new URL(window.location.href);
+              u2.searchParams.delete("join");
+              window.history.replaceState({}, "", u2.toString());
+            }
+          } catch {
+            /* non-fatal */
+          }
+        })();
+      }
       if (g || o || sh) {
         const u = new URL(window.location.href);
         u.searchParams.delete("gmail");
@@ -12935,6 +12959,8 @@ function TeamTab({
   const [wsWebsite, setWsWebsite] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("editor");
+  const [inviteCode, setInviteCode] = useState("");
+  const [copiedLink, setCopiedLink] = useState(false);
   const [sharedProjects, setSharedProjects] = useState<any[]>([]);
   const [shareChoice, setShareChoice] = useState("");
   const [openId, setOpenId] = useState("");
@@ -13048,19 +13074,63 @@ function TeamTab({
 
   const invite = () =>
     run("invite", async () => {
-      const r = await authFetch("/api/team/invite", {
-        method: "POST",
-        body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail, role: inviteRole }),
-      });
-      const who = inviteEmail.trim();
+      // Accept several emails at once — comma / space / newline / semicolon separated.
+      const emails = Array.from(
+        new Set(
+          inviteEmail
+            .split(/[\s,;]+/)
+            .map((e) => e.trim().toLowerCase())
+            .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e))
+        )
+      );
+      if (!emails.length) {
+        setError("Enter one or more valid email addresses.");
+        return;
+      }
+      let ok = 0;
+      let emailedAny = false;
+      const failures: string[] = [];
+      for (const em of emails) {
+        try {
+          const r = await authFetch("/api/team/invite", {
+            method: "POST",
+            body: JSON.stringify({ workspaceId: workspace.id, email: em, role: inviteRole }),
+          });
+          ok++;
+          if (r?.emailed) emailedAny = true;
+        } catch (e: any) {
+          failures.push(`${em}${e?.message ? ` (${e.message})` : ""}`);
+        }
+      }
       setNote(
-        r?.emailed
-          ? `Invited ${who} as ${inviteRole} — an invite email is on its way from your inbox. They'll join automatically the next time they open Scout (whether they make a new account or already have one).`
-          : `Invited ${who} as ${inviteRole}. They'll join automatically the next time they open Scout — a new account or an existing one. (Connect Gmail or Outlook to also email them the invite.)`
+        `Invited ${ok} ${ok === 1 ? "person" : "people"} as ${inviteRole}. They join automatically the next time they open Scout.` +
+          (emailedAny ? " Invite emails are on the way from your inbox." : "") +
+          (failures.length ? ` Couldn't invite: ${failures.join(", ")}.` : "")
       );
       setInviteEmail("");
       await loadCtx();
     });
+
+  // Get (or reset) the shareable invite link — a code you can send your team.
+  const loadInviteLink = (reset = false) =>
+    run("link", async () => {
+      const r = await authFetch("/api/team/invite-code", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: workspace.id, reset }),
+      });
+      if (r?.code) setInviteCode(r.code);
+    });
+  async function copyInviteLink() {
+    if (!inviteCode) return;
+    const link = `${window.location.origin}/app?join=${inviteCode}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    } catch {
+      /* clipboard blocked — the link is still shown to copy manually */
+    }
+  }
 
   // Owner/admin: cancel a pending invite that hasn't been accepted yet.
   const revoke = (email: string) =>
@@ -13470,15 +13540,13 @@ function TeamTab({
 
             {canManage ? (
               <div className="mt-4 border-t border-warm-border pt-4">
-                <div className="flex flex-wrap gap-2">
-                  <input
+                <div className="flex flex-wrap items-start gap-2">
+                  <textarea
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && inviteEmail.trim()) invite();
-                    }}
-                    placeholder="Invite a teammate by email (inside or outside your company)"
-                    className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    rows={2}
+                    placeholder="Invite teammates by email — paste several, separated by commas, spaces, or new lines"
+                    className="min-w-[240px] flex-1 resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
                   <select
                     value={inviteRole}
@@ -13495,7 +13563,7 @@ function TeamTab({
                     disabled={!inviteEmail.trim() || !!busy}
                     className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
                   >
-                    {busy === "invite" ? "Inviting…" : "Invite"}
+                    {busy === "invite" ? "Inviting…" : "Invite all"}
                   </button>
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-body/60">
@@ -13504,6 +13572,47 @@ function TeamTab({
                   join automatically the next time they open Scout — whether they
                   sign up or already have an account.
                 </p>
+
+                {/* Shareable link — send your team one link instead of emailing
+                    each person. Works even if your mailbox isn't connected. */}
+                <div className="mt-4 rounded-2xl border border-warm-border bg-warm-bg/40 p-3">
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                    Or share one invite link
+                  </div>
+                  {inviteCode ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <code className="min-w-0 flex-1 truncate rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs text-ink">
+                        {typeof window !== "undefined" ? window.location.origin : ""}/app?join=
+                        {inviteCode}
+                      </code>
+                      <button
+                        onClick={copyInviteLink}
+                        className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-95"
+                      >
+                        {copiedLink ? "Copied!" : "Copy link"}
+                      </button>
+                      <button
+                        onClick={() => loadInviteLink(true)}
+                        disabled={busy === "link"}
+                        className="text-[11px] font-semibold text-body/50 transition hover:text-red-600"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => loadInviteLink(false)}
+                      disabled={busy === "link"}
+                      className="mt-2 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+                    >
+                      {busy === "link" ? "Creating…" : "Get invite link"}
+                    </button>
+                  )}
+                  <p className="mt-2 text-[11px] leading-relaxed text-body/60">
+                    Anyone who opens this link (signed in with any email) joins as an{" "}
+                    <b>editor</b>. Send it in Slack, a text, wherever. No email setup needed.
+                  </p>
+                </div>
               </div>
             ) : (
               <p className="mt-4 border-t border-warm-border pt-4 text-xs leading-relaxed text-body/60">
