@@ -142,6 +142,7 @@ export interface AppState {
     companyName?: string;
     companyRole?: string;
     companyContribution?: string;
+    companyExpertise?: string;
     companyAbout?: string;
     companyIndustry?: string;
     companyStage?: string;

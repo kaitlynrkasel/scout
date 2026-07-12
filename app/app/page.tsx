@@ -424,6 +424,7 @@ interface Profile {
   companyName?: string;
   companyRole?: string; // your specific role/title at the company
   companyContribution?: string; // how you serve / what you do on the company's projects
+  companyExpertise?: string; // what this person specializes in / their specific experience
   // Cached from the company's workspace record so they flow into search + drafts.
   companyAbout?: string; // what the company does / who it serves
   companyIndustry?: string; // e.g. Music
@@ -918,6 +919,8 @@ function AuthedShell() {
           if (typeof parsed.companyRole === "string") localExtras.companyRole = parsed.companyRole;
           if (typeof parsed.companyContribution === "string")
             localExtras.companyContribution = parsed.companyContribution;
+          if (typeof parsed.companyExpertise === "string")
+            localExtras.companyExpertise = parsed.companyExpertise;
           if (typeof parsed.companyWorkspaceId === "string")
             localExtras.companyWorkspaceId = parsed.companyWorkspaceId;
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
@@ -956,6 +959,8 @@ function AuthedShell() {
       if (typeof raw.companyRole === "string") mergedExtras.companyRole = raw.companyRole;
       if (typeof raw.companyContribution === "string")
         mergedExtras.companyContribution = raw.companyContribution;
+      if (typeof raw.companyExpertise === "string")
+        mergedExtras.companyExpertise = raw.companyExpertise;
       if (typeof raw.companyAbout === "string") mergedExtras.companyAbout = raw.companyAbout;
       if (typeof raw.companyIndustry === "string")
         mergedExtras.companyIndustry = raw.companyIndustry;
@@ -1520,6 +1525,7 @@ function ScoutTool({
         companyName: profile.companyName,
         companyRole: profile.companyRole,
         companyContribution: profile.companyContribution,
+        companyExpertise: profile.companyExpertise,
         companyAbout: profile.companyAbout,
         companyIndustry: profile.companyIndustry,
         companyStage: profile.companyStage,
@@ -1534,7 +1540,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -1912,9 +1918,14 @@ function ScoutTool({
         });
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
-        setCompanies(
-          (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role }))
-        );
+        const wss = (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role }));
+        setCompanies(wss);
+        // Belonging to a company makes this a COMPANY account — no personal
+        // profile, just role + specialization (invited teammates auto-become this
+        // on first load, so their profile is company-only, not individual).
+        if (wss.length && profile.accountType !== "company") {
+          patchProfile({ accountType: "company", companyWorkspaceId: wss[0].id });
+        }
       } catch {
         /* teams not configured — switcher just stays hidden */
       }
@@ -2728,6 +2739,9 @@ function ScoutTool({
             : "",
           profile.companyContribution
             ? `Their role / how they serve the company's work: ${profile.companyContribution}`
+            : "",
+          profile.companyExpertise
+            ? `Their specialization / specific experience: ${profile.companyExpertise}`
             : "",
         ]
       : [];
@@ -6087,9 +6101,11 @@ function ScoutTool({
           companyName={profile.companyName || ""}
           companyRole={profile.companyRole || ""}
           companyContribution={profile.companyContribution || ""}
+          companyExpertise={profile.companyExpertise || ""}
           onCompanyName={(v) => patchProfile({ companyName: v })}
           onCompanyRole={(v) => patchProfile({ companyRole: v })}
           onCompanyContribution={(v) => patchProfile({ companyContribution: v })}
+          onCompanyExpertise={(v) => patchProfile({ companyExpertise: v })}
           age={profile.age}
           eduStatus={profile.eduStatus || ""}
           college={profile.college || ""}
@@ -15560,9 +15576,11 @@ function ProfileTab({
   companyName,
   companyRole,
   companyContribution,
+  companyExpertise,
   onCompanyName,
   onCompanyRole,
   onCompanyContribution,
+  onCompanyExpertise,
   age,
   eduStatus,
   college,
@@ -15636,9 +15654,11 @@ function ProfileTab({
   companyName: string;
   companyRole: string;
   companyContribution: string;
+  companyExpertise: string;
   onCompanyName: (v: string) => void;
   onCompanyRole: (v: string) => void;
   onCompanyContribution: (v: string) => void;
+  onCompanyExpertise: (v: string) => void;
   age?: number;
   eduStatus: EducationStatus;
   college: string;
@@ -15848,11 +15868,20 @@ function ProfileTab({
             onCompanyName={onCompanyName}
           />
 
-          {/* This person's role on the company (personal, drives their drafts). */}
+          {/* This person's role + specialization on the company. This IS a company
+              member's whole profile — no personal fields, everything is company
+              context that grounds how Scout searches and writes for the team. */}
           <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-            <h2 className="text-base font-extrabold tracking-tight text-ink">Your role</h2>
+            {!companyRole.trim() && (
+              <div className="mb-4 rounded-2xl border border-blue-deep/25 bg-blue-tint/40 p-3 text-sm text-blue-deep">
+                Welcome to the team! Tell Scout your role and what you specialize in
+                — that&apos;s all it needs to search and write for the company as you.
+              </div>
+            )}
+            <h2 className="text-base font-extrabold tracking-tight text-ink">Your role on the team</h2>
             <p className="mt-1 text-sm leading-relaxed text-body">
-              Scout writes on behalf of the company, so this matters more than a personal resume.
+              Scout writes on behalf of {companyName || "the company"}, so this is what
+              shapes your outreach — no personal profile needed.
             </p>
             <div className="mt-4">
               <Label>Your role at the company</Label>
@@ -15861,6 +15890,16 @@ function ProfileTab({
                 onChange={(e) => onCompanyRole(e.target.value)}
                 placeholder="e.g. Head of Partnerships"
                 className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div className="mt-4">
+              <Label>What you specialize in / your specific experience</Label>
+              <textarea
+                value={companyExpertise}
+                onChange={(e) => onCompanyExpertise(e.target.value)}
+                rows={3}
+                placeholder="e.g. music licensing & sync deals; 8 yrs in A&R; relationships with indie labels. What you know best."
+                className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
               />
             </div>
             <div className="mt-4">
@@ -15993,19 +16032,18 @@ function ProfileTab({
           </div>
         </div>
 
-        {/* -------- About you: personalization Scout weaves into search + drafts.
-             For company accounts this is the PERSONAL side (the company side is
-             the "Your company role" section above), so a company admin has both
-             and can run personal projects from the same account. -------- */}
+        {/* -------- About you: personal details, INDIVIDUAL accounts only. Company
+             members have no personal profile — their whole identity is the
+             company role + specialization above. So this block is hidden for
+             company accounts (no personal use). -------- */}
+        {kind !== "company" && (
+        <>
         <div className="mt-7 rounded-2xl border border-warm-border bg-warm-bg/40 p-5">
           <div className="mb-3">
-            <h3 className="text-sm font-extrabold tracking-tight text-ink">
-              {kind === "company" ? "About you (personal side)" : "About you"}
-            </h3>
+            <h3 className="text-sm font-extrabold tracking-tight text-ink">About you</h3>
             <p className="mt-0.5 text-xs leading-relaxed text-body/70">
-              {kind === "company"
-                ? "Optional. Your personal details, separate from the company above. Scout uses these when you run personal projects from this account."
-                : "Optional. Scout uses these to match you with the right opportunities and to sound like you in outreach."}
+              Optional. Scout uses these to match you with the right opportunities and to
+              sound like you in outreach.
             </p>
           </div>
 
@@ -16214,6 +16252,8 @@ function ProfileTab({
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
+        </>
+        )}
 
         <hr className="my-7 border-warm-border" />
 
