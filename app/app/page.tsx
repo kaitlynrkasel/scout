@@ -3199,21 +3199,18 @@ function ScoutTool({
     setSheetsEmail("");
   }
 
-  // Auto-open the role-onboarding modal once: a company teammate who is on a team
-  // but hasn't set their role. Only fires after hydrate so it doesn't flash while
-  // state is still loading, and only once per session.
+  // Auto-open the role-onboarding modal once: anyone who belongs to a company but
+  // hasn't set their role. Gate on company MEMBERSHIP (companies.length), not on
+  // profile.accountType — that flag is flipped asynchronously by the companies
+  // load, so requiring it here caused the popup to miss invited teammates. Only
+  // fires after hydrate (so it doesn't flash mid-load) and once per session.
   useEffect(() => {
     if (roleOnboardShownRef.current) return;
-    if (
-      hydrated &&
-      profile.accountType === "company" &&
-      companies.length > 0 &&
-      !(profile.companyRole || "").trim()
-    ) {
+    if (hydrated && companies.length > 0 && !(profile.companyRole || "").trim()) {
       roleOnboardShownRef.current = true;
       setRoleOnboardOpen(true);
     }
-  }, [hydrated, profile.accountType, profile.companyRole, companies.length]);
+  }, [hydrated, profile.companyRole, companies.length]);
 
   // Human-readable status for the sheet's "Scout Status" column.
   const SHEET_STATUS_LABEL: Record<string, string> = {
@@ -4922,7 +4919,7 @@ function ScoutTool({
       {/* Role onboarding — auto-pops for a teammate who hasn't set their role. */}
       {roleOnboardOpen && (
         <RoleOnboardModal
-          companyName={profile.companyName || ""}
+          companyName={profile.companyName || companies[0]?.name || ""}
           initialRole={profile.companyRole || ""}
           initialExpertise={profile.companyExpertise || ""}
           initialContribution={profile.companyContribution || ""}
