@@ -10497,7 +10497,7 @@ function DashboardTab({
 
       {/* -------- Scout's pick (dark spotlight) -------- */}
       {pick && (
-        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-brown-deep p-6 shadow-soft">
+        <section className="relative mt-4 flex flex-wrap items-center gap-5 overflow-hidden rounded-2xl bg-[#43301f] p-6 shadow-soft ring-1 ring-white/10">
           <span
             className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full"
             style={{ background: "radial-gradient(circle, rgba(200,184,153,.16), transparent 70%)" }}
@@ -10507,7 +10507,7 @@ function DashboardTab({
             {initials(pick.opp.name)}
           </span>
           <div className="z-[1] min-w-0 flex-1">
-            <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-clay">
+            <div className="flex items-center gap-2 text-[10.5px] font-bold uppercase tracking-[0.13em] text-[#cbb897]">
               <img
                 src="/scout-logo.png"
                 alt=""
@@ -10537,7 +10537,7 @@ function DashboardTab({
             )}
             <button
               onClick={goFinds}
-              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-surface"
+              className="whitespace-nowrap rounded-lg bg-[#f3ede2] px-4 py-2.5 text-sm font-semibold text-[#3a2a1a] transition hover:bg-white"
             >
               Draft an intro &rarr;
             </button>
