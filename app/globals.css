@@ -137,16 +137,11 @@ h1, h2, h3, .font-display {
   line-height: 1;
 }
 
-/* Dusty-blue denim navigation rail — the always-visible left column reads clearly
-   blue against the warm cream canvas (leather + denim). Dark text stays legible on
-   the light periwinkle; a cool slate panel in dark mode. */
+/* Navigation rail — the original warm neutral surface (a full blue panel read as
+   too much). Blue stays an accent here: the active-item pill + kickers, not the
+   whole column. */
 .rail {
-  background-color: #D7E1EE;
-  border-right-color: #C3D2E4 !important;
-}
-html.dark .rail {
-  background-color: #232C34;
-  border-right-color: #313d47 !important;
+  background-color: rgb(var(--c-surface-2));
 }
 
 /* Solid denim-blue pill for the active nav item. A fixed mid-slate in both themes
