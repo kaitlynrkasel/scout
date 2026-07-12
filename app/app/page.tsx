@@ -15609,15 +15609,16 @@ function ProfileTab({
               Already reaching out somewhere else?
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-              Drop in a CSV of how you&apos;ve been tracking your contacts. Scout won&apos;t
-              resurface them and starts learning what a fit looks like for you.
+              Drop in your tracking sheet — CSV, Excel, Numbers, or OpenDocument.
+              Scout won&apos;t resurface those contacts and starts learning what a
+              fit looks like for you.
             </p>
           </div>
           <button
             onClick={onImportOutreach}
             className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
           >
-            Import a CSV
+            Import a file
           </button>
         </section>
 

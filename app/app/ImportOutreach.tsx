@@ -131,11 +131,70 @@ export default function ImportOutreach({
     if (activeProjectId) setProjectId(activeProjectId);
   }, [activeProjectId]);
 
-  function handleFile(file: File) {
+  // Populate the mapping UI from parsed headers + rows (shared by every format).
+  function ingest(heads: string[], clean: Record<string, string>[]) {
+    if (!clean.length) {
+      setError("The file has no data rows.");
+      return;
+    }
+    setRows(clean);
+    setHeaders(heads);
+    const auto: Record<string, FieldKey> = {};
+    for (const h of heads) auto[h] = guessField(h);
+    setMapping(auto);
+  }
+
+  // Spreadsheet formats (Excel, ODS, …) are read with SheetJS, which is loaded
+  // on demand so the CSV path stays light. Everything is normalized to the same
+  // { header: string, rows: Record<string,string>[] } shape as the CSV parser.
+  const SHEET_EXTS = ["xlsx", "xls", "xlsm", "xlsb", "ods", "fods", "numbers"];
+
+  async function handleFile(file: File) {
     setError("");
     setImported(null);
     setFileName(file.name);
     setBusy(true);
+    const ext = (file.name.split(".").pop() || "").toLowerCase();
+
+    if (SHEET_EXTS.includes(ext)) {
+      try {
+        const XLSX = await import("xlsx");
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(buf, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        if (!ws) throw new Error("The workbook has no sheets.");
+        // header:1 → array-of-arrays; raw:false formats dates/numbers to strings.
+        const aoa = XLSX.utils.sheet_to_json<any[]>(ws, {
+          header: 1,
+          blankrows: false,
+          defval: "",
+          raw: false,
+        });
+        setBusy(false);
+        if (!aoa.length) {
+          setError("That sheet looks empty.");
+          return;
+        }
+        const heads = (aoa[0] || []).map((h) => String(h ?? "").trim());
+        const clean = aoa
+          .slice(1)
+          .map((r) => {
+            const obj: Record<string, string> = {};
+            heads.forEach((h, i) => {
+              obj[h] = String((r as any[])[i] ?? "").trim();
+            });
+            return obj;
+          })
+          .filter((r) => Object.values(r).some((v) => v));
+        ingest(heads, clean);
+      } catch (e: any) {
+        setBusy(false);
+        setError(`Could not read that spreadsheet: ${e?.message || "unknown error"}`);
+      }
+      return;
+    }
+
+    // CSV / TSV / plain text: Papa auto-detects the delimiter.
     Papa.parse<Record<string, string>>(file, {
       header: true,
       skipEmptyLines: true,
@@ -146,19 +205,11 @@ export default function ImportOutreach({
           setError(`Could not parse the file: ${result.errors[0].message}`);
           return;
         }
-        const clean = (result.data || []).filter(
-          (r) => Object.values(r).some((v) => String(v || "").trim())
+        const clean = (result.data || []).filter((r) =>
+          Object.values(r).some((v) => String(v || "").trim())
         );
-        if (!clean.length) {
-          setError("The file has no data rows.");
-          return;
-        }
-        setRows(clean);
         const heads = (result.meta.fields || []).map((h) => h.trim());
-        setHeaders(heads);
-        const auto: Record<string, FieldKey> = {};
-        for (const h of heads) auto[h] = guessField(h);
-        setMapping(auto);
+        ingest(heads, clean);
       },
       error: (err) => {
         setBusy(false);
@@ -285,8 +336,9 @@ export default function ImportOutreach({
               Import your outreach history
             </h2>
             <p className="mt-0.5 text-xs text-body">
-              Drop a CSV of people you've already reached out to. Scout uses it to
-              avoid re-surfacing them and to learn what a fit looks like for you.
+              Drop a spreadsheet of people you've already reached out to — CSV,
+              Excel, Numbers, or OpenDocument. Scout uses it to avoid re-surfacing
+              them and to learn what a fit looks like for you.
             </p>
           </div>
           <button
@@ -310,17 +362,18 @@ export default function ImportOutreach({
               className="rounded-2xl border-2 border-dashed border-warm-border bg-white p-10 text-center"
             >
               <p className="text-sm font-semibold text-ink">
-                Drop a <code>.csv</code> file here
+                Drop a spreadsheet here
               </p>
               <p className="mt-1 text-xs text-body/70">
-                Or export from Google Sheets / Notion / LinkedIn Connections and pick
-                the file below. Scout reads the headers and matches them to its own
-                fields for you.
+                <code>.csv</code>, <code>.xlsx</code>, <code>.xls</code>,{" "}
+                <code>.ods</code>, <code>.numbers</code>, or a tab/text export from
+                Google Sheets, Notion, or LinkedIn Connections. Scout reads the
+                headers and matches them to its own fields for you.
               </p>
               <input
                 ref={inputRef}
                 type="file"
-                accept=".csv,text/csv"
+                accept=".csv,.tsv,.txt,.xlsx,.xls,.xlsm,.xlsb,.ods,.fods,.numbers,text/csv,text/tab-separated-values,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -332,7 +385,7 @@ export default function ImportOutreach({
                 disabled={busy}
                 className="mt-4 rounded-xl bg-brown px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
               >
-                {busy ? "Reading…" : "Choose a CSV"}
+                {busy ? "Reading…" : "Choose a file"}
               </button>
             </div>
           )}
