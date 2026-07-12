@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   if (!uid || !supabaseAdmin) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
-  const { url, finds } = await req.json().catch(() => ({}));
+  const { url, finds, preview, newFindsTab } = await req.json().catch(() => ({}));
   if (!url || !Array.isArray(finds) || !finds.length) {
     return NextResponse.json({ error: "Nothing to write." }, { status: 400 });
   }
@@ -37,7 +37,8 @@ export async function POST(req: NextRequest) {
         status: String(f.status || ""),
         company: f.company ? String(f.company) : "",
         role: f.role ? String(f.role) : "",
-      }))
+      })),
+      { preview: !!preview, newFindsTab: newFindsTab ? String(newFindsTab) : undefined }
     );
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {

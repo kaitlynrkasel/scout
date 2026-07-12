@@ -173,90 +173,159 @@ function colLetter(i: number): string {
   return s;
 }
 
-// Write-back: update a "Scout Status" column on rows Scout can match (by name or
-// email), and append people it discovered that aren't in the sheet yet. Matching
-// is by normalized name and/or email against the sheet's own columns.
+export interface WriteFind {
+  name: string;
+  email?: string;
+  status: string;
+  company?: string;
+  role?: string;
+}
+
+export interface WritePlan {
+  trackingTab: string; // the tab the user linked (where statuses go)
+  statusColumn: string; // the (new) column statuses are written to
+  addsStatusColumn: boolean; // true = we'll add a brand-new column (never overwrite)
+  statusUpdates: number; // rows we'll set a status on (never touches other cells)
+  newFinds: number; // people not in the sheet yet
+  newFindsTab: string; // where new finds go (a separate tab by default)
+  newTabExists: boolean; // whether that tab already exists (else we create it)
+}
+
+const norm = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+// Fixed columns for the Scout tab we manage, so appends always line up.
+const SCOUT_TAB_HEADERS = ["Name", "Email", "Company", "Role", STATUS_HEADER];
+
+// Write-back, safe by default:
+//  • statuses go into a NEW "Scout Status" column on the tab you linked (adds a
+//    column, never overwrites existing cells),
+//  • NEW finds go into a SEPARATE tab ("Scout" by default; configurable), created
+//    if missing — your existing tabs' data is never touched,
+//  • already-written finds match against both tabs, so re-running just updates
+//    the status cell instead of appending duplicates.
+// Pass { preview: true } to get the plan without writing anything.
 export async function writeBackToSheet(
   refreshToken: string,
   url: string,
-  finds: {
-    name: string;
-    email?: string;
-    status: string;
-    company?: string;
-    role?: string;
-  }[]
-): Promise<{ updated: number; appended: number }> {
+  finds: WriteFind[],
+  opts: { newFindsTab?: string; preview?: boolean } = {}
+): Promise<{ updated: number; appended: number; plan: WritePlan }> {
+  const newFindsTab = (opts.newFindsTab || "Scout").trim() || "Scout";
   const id = spreadsheetIdFromUrl(url);
-  if (!id || !finds.length) return { updated: 0, appended: 0 };
+  const empty: WritePlan = {
+    trackingTab: "",
+    statusColumn: STATUS_HEADER,
+    addsStatusColumn: false,
+    statusUpdates: 0,
+    newFinds: 0,
+    newFindsTab,
+    newTabExists: false,
+  };
+  if (!id || !finds.length) return { updated: 0, appended: 0, plan: empty };
   const at = await accessTokenFromRefresh(refreshToken);
-  const title = await sheetTitleForGid(at, id, gidFromUrl(url));
-  const grid = await readValues(at, id, title);
-  const headers = (grid[0] || []).map((h) => String(h ?? "").trim());
-  const lc = headers.map((h) => h.toLowerCase());
 
-  const nameCol = lc.findIndex((h) => /name|contact|person/.test(h));
-  const emailCol = lc.findIndex((h) => /email|e-mail/.test(h));
-  let statusCol = lc.findIndex((h) => h === STATUS_HEADER.toLowerCase());
+  // --- Tracking tab (the linked gid): where statuses on existing rows go. ---
+  const trackTitle = await sheetTitleForGid(at, id, gidFromUrl(url));
+  const trackGrid = await readValues(at, id, trackTitle);
+  const tHeaders = (trackGrid[0] || []).map((h) => String(h ?? "").trim());
+  const tLc = tHeaders.map((h) => h.toLowerCase());
+  const tNameCol = tLc.findIndex((h) => /name|contact|person/.test(h));
+  const tEmailCol = tLc.findIndex((h) => /email|e-mail/.test(h));
+  let tStatusCol = tLc.findIndex((h) => h === STATUS_HEADER.toLowerCase());
 
-  const norm = (s: string) => String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-  // Index existing rows by name + email so we can find matches.
-  const rowByKey = new Map<string, number>();
-  for (let r = 1; r < grid.length; r++) {
-    if (nameCol >= 0 && grid[r][nameCol]) rowByKey.set("n:" + norm(grid[r][nameCol]), r);
-    if (emailCol >= 0 && grid[r][emailCol]) rowByKey.set("e:" + norm(grid[r][emailCol]), r);
-  }
-
-  const requests: { range: string; values: string[][] }[] = [];
-
-  // Ensure a Scout Status column header exists (append one if missing).
-  if (statusCol < 0) {
-    statusCol = headers.length;
-    requests.push({
-      range: `${title}!${colLetter(statusCol)}1`,
-      values: [[STATUS_HEADER]],
-    });
-  }
-
-  let updated = 0;
-  const toAppend: string[][] = [];
-  for (const f of finds) {
-    const byEmail = f.email ? rowByKey.get("e:" + norm(f.email)) : undefined;
-    const rowIdx = byEmail ?? rowByKey.get("n:" + norm(f.name));
-    if (rowIdx !== undefined) {
-      requests.push({
-        range: `${title}!${colLetter(statusCol)}${rowIdx + 1}`,
-        values: [[f.status]],
-      });
-      updated++;
-    } else {
-      // New person Scout found — build a row aligned to the sheet's columns.
-      const row = new Array(Math.max(headers.length, statusCol + 1)).fill("");
-      if (nameCol >= 0) row[nameCol] = f.name;
-      if (emailCol >= 0 && f.email) row[emailCol] = f.email;
-      const companyCol = lc.findIndex((h) => /company|outlet|organization|employer/.test(h));
-      if (companyCol >= 0 && f.company) row[companyCol] = f.company;
-      const roleCol = lc.findIndex((h) => /role|title|position/.test(h));
-      if (roleCol >= 0 && f.role) row[roleCol] = f.role;
-      row[statusCol] = f.status;
-      toAppend.push(row);
+  // --- Scout tab (separate; may not exist yet). ---
+  const titles = await allSheetTitles(at, id);
+  const scoutExists = titles.some((t) => t.toLowerCase() === newFindsTab.toLowerCase());
+  let scoutGrid: string[][] = [];
+  if (scoutExists) {
+    try {
+      scoutGrid = await readValues(at, id, newFindsTab);
+    } catch {
+      /* treat as empty */
     }
   }
+  const sHeaders =
+    scoutExists && scoutGrid[0]?.length
+      ? scoutGrid[0].map((h) => String(h ?? "").trim())
+      : SCOUT_TAB_HEADERS;
+  const sLc = sHeaders.map((h) => h.toLowerCase());
+  const sNameCol = Math.max(0, sLc.findIndex((h) => /name/.test(h)));
+  const sEmailCol = sLc.findIndex((h) => /email/.test(h));
+  let sStatusCol = sLc.findIndex((h) => h === STATUS_HEADER.toLowerCase());
+  if (sStatusCol < 0) sStatusCol = SCOUT_TAB_HEADERS.indexOf(STATUS_HEADER);
 
-  // Apply cell updates in one batch.
-  if (requests.length) {
-    await api(at, `/${id}/values:batchUpdate`, {
-      method: "POST",
-      body: JSON.stringify({ valueInputOption: "RAW", data: requests }),
-    });
+  // Index existing rows across BOTH tabs so nothing is appended twice.
+  const index = new Map<string, { tab: "track" | "scout"; row: number }>();
+  for (let r = 1; r < trackGrid.length; r++) {
+    if (tNameCol >= 0 && trackGrid[r][tNameCol]) index.set("n:" + norm(trackGrid[r][tNameCol]), { tab: "track", row: r });
+    if (tEmailCol >= 0 && trackGrid[r][tEmailCol]) index.set("e:" + norm(trackGrid[r][tEmailCol]), { tab: "track", row: r });
   }
-  // Append the new rows.
-  if (toAppend.length) {
+  for (let r = 1; r < scoutGrid.length; r++) {
+    if (sNameCol >= 0 && scoutGrid[r][sNameCol]) index.set("n:" + norm(scoutGrid[r][sNameCol]), { tab: "scout", row: r });
+    if (sEmailCol >= 0 && scoutGrid[r][sEmailCol]) index.set("e:" + norm(scoutGrid[r][sEmailCol]), { tab: "scout", row: r });
+  }
+
+  const statusUpdates: { tab: "track" | "scout"; row: number; status: string }[] = [];
+  const toAppend: WriteFind[] = [];
+  for (const f of finds) {
+    const hit = (f.email ? index.get("e:" + norm(f.email)) : undefined) ?? index.get("n:" + norm(f.name));
+    if (hit) statusUpdates.push({ ...hit, status: f.status });
+    else toAppend.push(f);
+  }
+
+  const willAddStatusCol = tStatusCol < 0 && statusUpdates.some((u) => u.tab === "track");
+  const plan: WritePlan = {
+    trackingTab: trackTitle,
+    statusColumn: STATUS_HEADER,
+    addsStatusColumn: willAddStatusCol,
+    statusUpdates: statusUpdates.length,
+    newFinds: toAppend.length,
+    newFindsTab,
+    newTabExists: scoutExists,
+  };
+  if (opts.preview) return { updated: 0, appended: 0, plan };
+
+  // ---- Perform writes (safe: only a new column + a separate tab) ----
+  const cellReqs: { range: string; values: string[][] }[] = [];
+  if (willAddStatusCol) {
+    tStatusCol = tHeaders.length;
+    cellReqs.push({ range: `${trackTitle}!${colLetter(tStatusCol)}1`, values: [[STATUS_HEADER]] });
+  }
+
+  // Create the Scout tab (with headers) if we need to append and it's missing.
+  if (toAppend.length && !scoutExists) {
+    await api(at, `/${id}:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({ requests: [{ addSheet: { properties: { title: newFindsTab } } }] }),
+    });
     await api(
       at,
-      `/${id}/values/${encodeURIComponent(title)}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
-      { method: "POST", body: JSON.stringify({ values: toAppend }) }
+      `/${id}/values/${encodeURIComponent(newFindsTab)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: "POST", body: JSON.stringify({ values: [SCOUT_TAB_HEADERS] }) }
     );
   }
-  return { updated, appended: toAppend.length };
+
+  // Status cell updates (each is a single cell — never touches neighbours).
+  for (const u of statusUpdates) {
+    const title = u.tab === "track" ? trackTitle : newFindsTab;
+    const col = u.tab === "track" ? tStatusCol : sStatusCol;
+    if (col < 0) continue;
+    cellReqs.push({ range: `${title}!${colLetter(col)}${u.row + 1}`, values: [[u.status]] });
+  }
+  if (cellReqs.length) {
+    await api(at, `/${id}/values:batchUpdate`, {
+      method: "POST",
+      body: JSON.stringify({ valueInputOption: "RAW", data: cellReqs }),
+    });
+  }
+
+  // Append new finds to the Scout tab (aligned to SCOUT_TAB_HEADERS).
+  if (toAppend.length) {
+    const rows = toAppend.map((f) => [f.name, f.email || "", f.company || "", f.role || "", f.status]);
+    await api(
+      at,
+      `/${id}/values/${encodeURIComponent(newFindsTab)}!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`,
+      { method: "POST", body: JSON.stringify({ values: rows }) }
+    );
+  }
+  return { updated: statusUpdates.length, appended: toAppend.length, plan };
 }

@@ -2997,6 +2997,78 @@ function ScoutTool({
     setSyncedSheets((prev) => prev.map((s) => (s.id === id ? { ...s, allowWrite: allow } : s)));
   }
 
+  // Before enabling edits, show a PREVIEW (dry-run) of exactly what Scout will do
+  // to the sheet — nothing is written until the user confirms.
+  const [writePreview, setWritePreview] = useState<{
+    sheetId: string;
+    label: string;
+    summary: string;
+    tab: string;
+    loading: boolean;
+    error: string;
+    plan: {
+      trackingTab: string;
+      statusColumn: string;
+      addsStatusColumn: boolean;
+      statusUpdates: number;
+      newFinds: number;
+      newFindsTab: string;
+      newTabExists: boolean;
+    } | null;
+  } | null>(null);
+
+  function findsPayloadFor(projectId: string) {
+    return finds
+      .filter((f) => f.projectId === projectId)
+      .map((f) => ({
+        name: f.opp.contactName || f.opp.name || "",
+        email: f.opp.contactEmail || "",
+        status: SHEET_STATUS_LABEL[f.status] || f.status,
+        company: f.opp.outlet || "",
+        role: f.opp.contactRole || "",
+      }));
+  }
+
+  async function openWritePreview(id: string, tabOverride?: string) {
+    const sheet = syncedSheets.find((s) => s.id === id);
+    if (!sheet || !getToken) return;
+    const tab = tabOverride ?? sheet.writeTab ?? "Scout";
+    setWritePreview({
+      sheetId: id,
+      label: sheet.label || sheet.url,
+      summary: sheet.understandingSummary || "",
+      tab,
+      loading: true,
+      error: "",
+      plan: null,
+    });
+    try {
+      const token = await getToken();
+      const res = await fetch("/api/sheets/write", {
+        method: "POST",
+        headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ url: sheet.url, finds: findsPayloadFor(sheet.projectId), preview: true, newFindsTab: tab }),
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setWritePreview((p) => (p ? { ...p, loading: false, error: d?.error || "Couldn't preview." } : p));
+        return;
+      }
+      setWritePreview((p) => (p ? { ...p, loading: false, plan: d.plan || null } : p));
+    } catch {
+      setWritePreview((p) => (p ? { ...p, loading: false, error: "Couldn't preview." } : p));
+    }
+  }
+
+  function confirmWritePreview() {
+    if (!writePreview) return;
+    const { sheetId, tab } = writePreview;
+    setSyncedSheets((prev) =>
+      prev.map((s) => (s.id === sheetId ? { ...s, allowWrite: true, writeTab: tab } : s))
+    );
+    setWritePreview(null);
+  }
+
   // Re-read every linked sheet and merge new rows (dedup by deterministic id, so
   // rows you already have are skipped). Builds all finds first, then merges once,
   // so multiple sheets don't clobber each other's writes.
@@ -4753,6 +4825,122 @@ function ScoutTool({
         activeProjectId={activeId}
         getToken={getToken}
       />
+
+      {/* Write-back preview — nothing is written to the sheet until confirmed. */}
+      {writePreview && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setWritePreview(null)}
+        >
+          <div
+            className="w-full max-w-lg rounded-3xl border border-warm-border bg-surface p-6 shadow-float"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="font-display text-xl font-bold tracking-tight text-ink">
+              Before Scout edits your sheet
+            </h2>
+            <p className="mt-1 text-sm text-body">
+              Here&apos;s exactly what it will do to{" "}
+              <span className="font-semibold text-ink">{writePreview.label}</span>. Nothing is
+              written until you allow it.
+            </p>
+
+            {writePreview.summary && (
+              <div className="mt-4 rounded-2xl border border-warm-border bg-warm-bg/50 p-3">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                  What Scout learned
+                </div>
+                <p className="mt-1 text-sm leading-relaxed text-body">{writePreview.summary}</p>
+              </div>
+            )}
+
+            {writePreview.loading ? (
+              <p className="mt-4 text-sm text-body/60">Checking your sheet…</p>
+            ) : writePreview.error ? (
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+                {writePreview.error}
+              </p>
+            ) : writePreview.plan ? (
+              <div className="mt-4 space-y-2.5 text-sm">
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 text-blue-deep">✎</span>
+                  <span className="text-body">
+                    {writePreview.plan.statusUpdates > 0 ? (
+                      <>
+                        Update the status of{" "}
+                        <b className="text-ink">{writePreview.plan.statusUpdates}</b>{" "}
+                        {writePreview.plan.statusUpdates === 1 ? "contact" : "contacts"} in a{" "}
+                        {writePreview.plan.addsStatusColumn ? "new " : ""}
+                        <b className="text-ink">“{writePreview.plan.statusColumn}”</b> column on{" "}
+                        <b className="text-ink">“{writePreview.plan.trackingTab}”</b>.
+                      </>
+                    ) : (
+                      "No status updates needed yet."
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 text-blue-deep">＋</span>
+                  <span className="text-body">
+                    {writePreview.plan.newFinds > 0 ? (
+                      <>
+                        Add <b className="text-ink">{writePreview.plan.newFinds}</b> new{" "}
+                        {writePreview.plan.newFinds === 1 ? "find" : "finds"} to{" "}
+                        {writePreview.plan.newTabExists ? "the existing " : "a new "}
+                        <b className="text-ink">“{writePreview.plan.newFindsTab}”</b> tab.
+                      </>
+                    ) : (
+                      "No new finds to add right now."
+                    )}
+                  </span>
+                </div>
+                <div className="flex items-start gap-2.5">
+                  <span className="mt-0.5 text-sage-deep">🔒</span>
+                  <span className="text-body/80">
+                    Your existing tabs, columns, and cells are never overwritten — Scout only adds a
+                    column and writes to its own tab.
+                  </span>
+                </div>
+
+                <div className="mt-3 border-t border-warm-border pt-3">
+                  <Label>New finds go to this tab</Label>
+                  <div className="flex flex-wrap gap-2">
+                    <input
+                      value={writePreview.tab}
+                      onChange={(e) =>
+                        setWritePreview((p) => (p ? { ...p, tab: e.target.value } : p))
+                      }
+                      className="min-w-[160px] flex-1 rounded-xl border border-warm-border px-3 py-2 text-sm text-ink outline-none focus:border-coral"
+                    />
+                    <button
+                      onClick={() => openWritePreview(writePreview.sheetId, writePreview.tab)}
+                      className="rounded-xl border border-warm-border px-3 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                    >
+                      Re-check
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setWritePreview(null)}
+                className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmWritePreview}
+                disabled={writePreview.loading || !!writePreview.error}
+                className="rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                Allow &amp; keep in sync
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {discovering && tab !== "outreach" && (
         <GlobalScoutStatus
           startedAt={discoverStartedAt}
@@ -5830,6 +6018,7 @@ function ScoutTool({
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
           onSetSheetWrite={setSheetWrite}
+          onPreviewWrite={(id) => openWritePreview(id)}
           sheetsConnected={sheetsConnected}
           sheetsEmail={sheetsEmail}
           onConnectSheets={connectSheets}
@@ -15138,6 +15327,7 @@ function ProfileTab({
   syncedSheets,
   onRemoveSync,
   onSetSheetWrite,
+  onPreviewWrite,
   sheetsConnected,
   sheetsEmail,
   onConnectSheets,
@@ -15213,6 +15403,7 @@ function ProfileTab({
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
   onSetSheetWrite: (id: string, allow: boolean) => void;
+  onPreviewWrite: (id: string) => void;
   sheetsConnected: boolean;
   sheetsEmail: string;
   onConnectSheets: () => void;
@@ -15853,8 +16044,8 @@ function ProfileTab({
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
               {sheetsConnected
-                ? "Scout can read your private sheets (no public sharing needed). It only edits a sheet after you tick “Allow edits” on it below — then it writes a Scout Status column on matching rows and appends new finds."
-                : "Connect to link private sheets without making them public. Scout never edits a sheet unless you explicitly allow it per sheet."}
+                ? "Scout can read your private sheets (no public sharing needed). It only edits a sheet after you tick “Allow edits” and confirm a preview — then it adds a Scout Status column (never overwriting) and puts new finds in a separate “Scout” tab."
+                : "Connect to link private sheets without making them public. Scout never edits a sheet unless you allow it per sheet — and always shows a preview first."}
             </p>
           </div>
           {syncedSheets.length > 0 && (
@@ -15893,7 +16084,9 @@ function ProfileTab({
                             type="checkbox"
                             checked={!!s.allowWrite}
                             disabled={!sheetsConnected}
-                            onChange={(e) => onSetSheetWrite(s.id, e.target.checked)}
+                            onChange={(e) =>
+                              e.target.checked ? onPreviewWrite(s.id) : onSetSheetWrite(s.id, false)
+                            }
                             className="h-3.5 w-3.5 accent-brown"
                           />
                           <span className="font-semibold text-body/70">Allow edits</span>

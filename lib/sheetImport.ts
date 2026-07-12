@@ -39,6 +39,7 @@ export interface SyncedSheet {
   mapping: Record<string, FieldKey>;
   defaultStatus: ImportFindStatus;
   allowWrite?: boolean; // explicit per-sheet permission for Scout to EDIT the sheet
+  writeTab?: string; // which tab new finds go to (default "Scout")
   understanding?: number; // 0-100, how well Scout understands this document
   understandingSummary?: string; // Scout's read of the sheet (from the gate)
   understandingAnswers?: string; // the user's answers folded in during the gate
