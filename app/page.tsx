@@ -54,7 +54,7 @@ const CSS = `
        --blue = navy fills, --blue-ink = navy labels, --blue-mid = dusty blue. */
     --blue:#13273F; --blue-ink:#1E3A5C; --blue-mid:#8496B4;
     --terra:#5A4331; --terra-deep:#42301F; --olive:#536872;
-    --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#13273F;
+    --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#2A2017;
     --r:12px; --rs:9px;
   }
   .scoutland *{box-sizing:border-box;margin:0;padding:0}
@@ -194,7 +194,7 @@ const CSS = `
   .inp::placeholder{color:#9b9384}
   .form textarea{min-height:112px;resize:vertical}
   .form .send{align-self:flex-start}
-  /* The band is Mystic Navy, so the navy .btn-t would vanish — give the send
+  /* On the dark contact band the navy .btn-t would be muddy — give the send
      button the dusty-blue fill with navy text so it pops. */
   .scoutland .contact .btn-t{background:var(--blue-mid);color:#13273F}
   .contact .em{margin-top:16px;font-size:13.5px;color:#B7AB96}
