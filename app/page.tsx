@@ -48,7 +48,9 @@ export const metadata = {
 const CSS = `
   :root{
     --paper:#F5F2EB; --paper2:#EDE6D8; --ink:#241C13; --cream:#F9F5EE;
-    --terra:#B85433; --terra-deep:#9E3F1F; --olive:#5F6247;
+    /* Primary accent = brand brown (matches the app CTAs); secondary = dusty
+       slate-blue (was olive green). No orange/green — browns, tans + blue. */
+    --terra:#7C5837; --terra-deep:#5D4026; --olive:#536872;
     --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#2A2017;
     --r:12px; --rs:9px;
   }
@@ -154,7 +156,7 @@ const CSS = `
   .msg + .msg{margin-top:-16px;margin-left:44px;box-shadow:0 26px 54px -34px rgba(36,28,19,.34)}
   .msg .lbl{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
   .msg.gen{opacity:.7} .msg.gen .lbl{color:var(--muted)} .msg.gen p{color:#7a7264;text-decoration:line-through;text-decoration-color:#cfc3af}
-  .msg.you{border-left:3px solid var(--olive)} .msg.you .lbl{color:#4E5137}
+  .msg.you{border-left:3px solid var(--olive)} .msg.you .lbl{color:#536872}
   .msg p{font-size:14.5px;line-height:1.55;color:#463f33}
 
   /* TEAM */
@@ -178,8 +180,8 @@ const CSS = `
   .contact{background:var(--dark);color:#EDE6D6}
   .contact .inner{display:grid;grid-template-columns:1fr 1fr;gap:64px;align-items:center;padding:100px 0}
   .contact h2{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:54px;line-height:1.02;letter-spacing:-.015em;color:#F7F3EB;margin-top:14px}
-  .contact h2 em{font-style:normal;color:#D98A64}
-  .contact .k{color:#D98A64}
+  .contact h2 em{font-style:normal;color:#B98A57}
+  .contact .k{color:#B98A57}
   .contact p{font-size:16px;line-height:1.65;color:#C4B9A7;margin-top:18px;max-width:40ch}
   .form{display:flex;flex-direction:column;gap:14px}
   .form .two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
