@@ -21,12 +21,12 @@ function isBlockedHost(host: string): boolean {
 }
 
 // Turn a Google Sheets edit/view link into its CSV-export URL for the tab in view.
-function googleCsvUrl(url: string): string | null {
+function googleXlsxUrl(url: string): string | null {
   const m = url.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
   if (!m) return null;
-  const id = m[1];
-  const gid = url.match(/[#&?]gid=([0-9]+)/)?.[1] || "0";
-  return `https://docs.google.com/spreadsheets/d/${id}/export?format=csv&gid=${gid}`;
+  // Export the WHOLE workbook as .xlsx (all tabs) — same public access level as
+  // the CSV export, but not limited to a single gid. Parsed all-tabs client-side.
+  return `https://docs.google.com/spreadsheets/d/${m[1]}/export?format=xlsx`;
 }
 
 const NOT_PUBLIC =
@@ -51,11 +51,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "That link isn't allowed." }, { status: 400 });
   }
 
-  const gUrl = googleCsvUrl(raw);
+  const gUrl = googleXlsxUrl(raw);
 
   // Private read: if this is a Google Sheet and the user has connected Google
   // Sheets, read it through the API (works without public sharing). Falls back
-  // to the public CSV export below if not connected or the read fails.
+  // to the public whole-workbook .xlsx export below if not connected.
   if (gUrl && supabaseAdmin) {
     const { data: conn } = await supabaseAdmin
       .from("sheets_connections")
@@ -73,7 +73,9 @@ export async function POST(req: NextRequest) {
   }
 
   const fetchUrl = gUrl || raw;
-  const wantsCsv = !!gUrl || /\.csv(\?|$)/i.test(fetchUrl);
+  // Google Sheets now come back as a whole-workbook .xlsx (binary, all tabs);
+  // only a direct .csv link is treated as CSV text.
+  const wantsCsv = !gUrl && /\.csv(\?|$)/i.test(fetchUrl);
 
   let res: Response;
   try {
