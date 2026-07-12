@@ -134,6 +134,9 @@ export default function ImportOutreach({
     projectId: string;
     mapping: Record<string, FieldKey>;
     defaultStatus: FindStatus;
+    understanding?: number;
+    understandingSummary?: string;
+    understandingAnswers?: string;
   }) => void;
   projects: Project[];
   activeProjectId: string;
@@ -151,6 +154,18 @@ export default function ImportOutreach({
   const [linkUrl, setLinkUrl] = useState("");
   const [sourceUrl, setSourceUrl] = useState(""); // set when imported from a link
   const [keepSynced, setKeepSynced] = useState(true);
+  // Understanding gate: Scout reads the doc, then asks until it grasps it. The
+  // percentage is the model's honest read, raised as questions get answered.
+  const [understand, setUnderstand] = useState<{
+    understanding: number;
+    summary: string;
+    questions: { question: string; options: string[] }[];
+  } | null>(null);
+  const [uBusy, setUBusy] = useState(false);
+  const [uPicks, setUPicks] = useState<Record<number, string[]>>({});
+  const [uOther, setUOther] = useState<Record<number, string>>({});
+  const [uAsked, setUAsked] = useState<string[]>([]);
+  const [uAnswers, setUAnswers] = useState(""); // composed answers folded in so far
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -164,6 +179,12 @@ export default function ImportOutreach({
       setImported(null);
       setFileName("");
       setBusy(false);
+      setSourceUrl("");
+      setUnderstand(null);
+      setUPicks({});
+      setUOther({});
+      setUAsked([]);
+      setUAnswers("");
     }
   }, [open]);
 
@@ -182,7 +203,105 @@ export default function ImportOutreach({
     const auto: Record<string, FieldKey> = {};
     for (const h of heads) auto[h] = guessField(h);
     setMapping(auto);
+    // Kick off the understanding read on the freshly-parsed data.
+    setUnderstand(null);
+    setUPicks({});
+    setUOther({});
+    setUAsked([]);
+    setUAnswers("");
+    void runUnderstand("", [], clean, heads);
   }
+
+  // Ask Scout how well it understands this document; folds prior answers back in.
+  async function runUnderstand(
+    foldAnswers: string,
+    prevQuestions: string[],
+    rowsArg?: Record<string, string>[],
+    headsArg?: string[]
+  ) {
+    const useRows = rowsArg ?? rows;
+    const useHeads = headsArg ?? headers;
+    if (!useHeads.length) return;
+    setUBusy(true);
+    try {
+      const token = getToken ? await getToken() : null;
+      const proj = projects.find((p) => p.id === projectId);
+      const res = await fetch("/api/import/understand", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          headers: useHeads,
+          sampleRows: useRows.slice(0, 15),
+          rowCount: useRows.length,
+          useCase: proj?.useCase || "outreach",
+          answers: foldAnswers,
+          asked: prevQuestions,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      setUnderstand({
+        understanding: typeof d.understanding === "number" ? d.understanding : 100,
+        summary: String(d.summary || ""),
+        questions: Array.isArray(d.questions) ? d.questions : [],
+      });
+      setUPicks({});
+      setUOther({});
+    } catch {
+      setUnderstand({ understanding: 100, summary: "", questions: [] });
+    } finally {
+      setUBusy(false);
+    }
+  }
+
+  // Compose the currently-answered understanding questions into one string.
+  function composeUnderstandAnswers(): string {
+    if (!understand) return "";
+    return understand.questions
+      .map((q, i) => {
+        const sel = uPicks[i] || [];
+        if (!sel.length) return "";
+        const parts = sel
+          .map((s) => (s === "__other__" ? (uOther[i] || "").trim() : s))
+          .filter(Boolean);
+        return parts.length ? `${q.question} ${parts.join(", ")}` : "";
+      })
+      .filter(Boolean)
+      .join(". ");
+  }
+
+  // Fold the answers in and re-score — the new % is the model's honest re-read.
+  function recheckUnderstanding() {
+    if (!understand || uBusy) return;
+    const combined = [uAnswers, composeUnderstandAnswers()].filter(Boolean).join(". ");
+    const askedNow = [...uAsked, ...understand.questions.map((q) => q.question)];
+    setUAnswers(combined);
+    setUAsked(askedNow);
+    void runUnderstand(combined, askedNow);
+  }
+
+  // Answered-question count + live % (each answer closes a share of the gap).
+  const uAnsweredCount = understand
+    ? understand.questions.filter((_, i) => {
+        const sel = uPicks[i] || [];
+        if (!sel.length) return false;
+        if (sel.length === 1 && sel[0] === "__other__") return (uOther[i] || "").trim().length > 0;
+        return true;
+      }).length
+    : 0;
+  const liveUnderstanding = understand
+    ? Math.min(
+        100,
+        Math.round(
+          understand.understanding +
+            (understand.questions.length
+              ? (uAnsweredCount / understand.questions.length) * (100 - understand.understanding)
+              : 0)
+        )
+      )
+    : 0;
 
   // Spreadsheet formats (Excel, ODS, …) are read with SheetJS, which is loaded
   // on demand so the CSV path stays light. Everything is normalized to the same
@@ -396,7 +515,16 @@ export default function ImportOutreach({
       // If this came from a link and they opted in, remember it so Scout keeps
       // re-reading the sheet automatically.
       if (sourceUrl && keepSynced && onSaveSync) {
-        onSaveSync({ url: sourceUrl, label: fileName, projectId, mapping, defaultStatus });
+        onSaveSync({
+          url: sourceUrl,
+          label: fileName,
+          projectId,
+          mapping,
+          defaultStatus,
+          understanding: understand ? liveUnderstanding : undefined,
+          understandingSummary: understand?.summary || undefined,
+          understandingAnswers: [uAnswers, composeUnderstandAnswers()].filter(Boolean).join(". ") || undefined,
+        });
       }
       setImported(added);
     } catch (e: any) {
@@ -518,6 +646,99 @@ export default function ImportOutreach({
                   <span className="text-body/70">· {rows.length} rows</span>
                 </div>
               </div>
+
+              {/* Understanding gate — Scout reads the doc and asks until it gets it.
+                  The % is its honest read, and rises as you answer. */}
+              {(understand || uBusy) && (
+                <div className="rounded-2xl border border-warm-border bg-white p-5">
+                  <div className="flex items-center justify-between gap-3">
+                    <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                      What Scout understands
+                    </h3>
+                    <span className="text-sm font-extrabold tabular-nums text-brown">
+                      {uBusy && !understand ? "reading…" : `${liveUnderstanding}%`}
+                    </span>
+                  </div>
+                  <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-warm-bg">
+                    <div
+                      className="h-full rounded-full bg-brand-gradient transition-[width] duration-500"
+                      style={{ width: `${uBusy && !understand ? 12 : liveUnderstanding}%` }}
+                    />
+                  </div>
+                  {understand?.summary && (
+                    <p className="mt-3 text-sm leading-relaxed text-body">{understand.summary}</p>
+                  )}
+
+                  {understand && understand.questions.length > 0 && (
+                    <div className="mt-4 space-y-4">
+                      <p className="text-xs text-body/70">
+                        Answer these so Scout fully gets your sheet — the number climbs as you do.
+                      </p>
+                      {understand.questions.map((q, i) => {
+                        const sel = uPicks[i] || [];
+                        const toggle = (opt: string) =>
+                          setUPicks((prev) => {
+                            const cur = prev[i] || [];
+                            return {
+                              ...prev,
+                              [i]: cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt],
+                            };
+                          });
+                        return (
+                          <div key={i}>
+                            <div className="text-sm font-semibold text-ink">{q.question}</div>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {q.options.map((opt) => (
+                                <button
+                                  key={opt}
+                                  onClick={() => toggle(opt)}
+                                  className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                    sel.includes(opt)
+                                      ? "border-transparent bg-brand-gradient text-white"
+                                      : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                                  }`}
+                                >
+                                  {opt}
+                                </button>
+                              ))}
+                              <button
+                                onClick={() => toggle("__other__")}
+                                className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                                  sel.includes("__other__")
+                                    ? "border-transparent bg-brand-gradient text-white"
+                                    : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                                }`}
+                              >
+                                Other…
+                              </button>
+                            </div>
+                            {sel.includes("__other__") && (
+                              <input
+                                value={uOther[i] || ""}
+                                onChange={(e) => setUOther((p) => ({ ...p, [i]: e.target.value }))}
+                                placeholder="Tell Scout in your words"
+                                className="mt-1.5 w-full rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-coral"
+                              />
+                            )}
+                          </div>
+                        );
+                      })}
+                      <button
+                        onClick={recheckUnderstanding}
+                        disabled={uBusy || uAnsweredCount === 0}
+                        className="rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+                      >
+                        {uBusy ? "Re-reading…" : "I answered — re-check"}
+                      </button>
+                    </div>
+                  )}
+                  {understand && understand.questions.length === 0 && !uBusy && (
+                    <p className="mt-3 text-xs font-semibold text-sage-deep">
+                      Scout understands this sheet — you&apos;re good to import.
+                    </p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">

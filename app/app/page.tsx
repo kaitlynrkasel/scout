@@ -2992,6 +2992,10 @@ function ScoutTool({
   function removeSyncedSheet(id: string) {
     setSyncedSheets((prev) => prev.filter((s) => s.id !== id));
   }
+  // Explicit per-sheet permission for Scout to WRITE back to a sheet.
+  function setSheetWrite(id: string, allow: boolean) {
+    setSyncedSheets((prev) => prev.map((s) => (s.id === id ? { ...s, allowWrite: allow } : s)));
+  }
 
   // Re-read every linked sheet and merge new rows (dedup by deterministic id, so
   // rows you already have are skipped). Builds all finds first, then merges once,
@@ -3099,6 +3103,7 @@ function ScoutTool({
     if (!token) return;
     for (const s of syncedSheets) {
       if (!/docs\.google\.com\/spreadsheets/.test(s.url)) continue;
+      if (!s.allowWrite) continue; // Scout only edits sheets you explicitly allow
       const projFinds = finds.filter((f) => f.projectId === s.projectId);
       if (!projFinds.length) continue;
       const payload = projFinds.map((f) => ({
@@ -5824,6 +5829,7 @@ function ScoutTool({
           activeCompanyId={activeCompanyId}
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
+          onSetSheetWrite={setSheetWrite}
           sheetsConnected={sheetsConnected}
           sheetsEmail={sheetsEmail}
           onConnectSheets={connectSheets}
@@ -15131,6 +15137,7 @@ function ProfileTab({
   activeCompanyId,
   syncedSheets,
   onRemoveSync,
+  onSetSheetWrite,
   sheetsConnected,
   sheetsEmail,
   onConnectSheets,
@@ -15205,6 +15212,7 @@ function ProfileTab({
   activeCompanyId: string;
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
+  onSetSheetWrite: (id: string, allow: boolean) => void;
   sheetsConnected: boolean;
   sheetsEmail: string;
   onConnectSheets: () => void;
@@ -15845,8 +15853,8 @@ function ProfileTab({
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
               {sheetsConnected
-                ? "Scout can read your private sheets (no public sharing needed) and writes your pipeline back automatically — a Scout Status column on matching rows, plus new finds appended."
-                : "Connect to link private sheets without making them public, and let Scout write your pipeline back into the sheet automatically (status column + new finds)."}
+                ? "Scout can read your private sheets (no public sharing needed). It only edits a sheet after you tick “Allow edits” on it below — then it writes a Scout Status column on matching rows and appends new finds."
+                : "Connect to link private sheets without making them public. Scout never edits a sheet unless you explicitly allow it per sheet."}
             </p>
           </div>
           {syncedSheets.length > 0 && (
@@ -15855,26 +15863,52 @@ function ProfileTab({
                 Synced sheets
               </div>
               <div className="mt-2 space-y-1.5">
-                {syncedSheets.map((s) => (
-                  <div key={s.id} className="flex items-center gap-2.5 text-xs">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
-                    <span className="min-w-0 flex-1 truncate text-body" title={s.url}>
-                      {s.label || s.url}
-                    </span>
-                    <span className="hidden shrink-0 text-body/50 sm:inline">
-                      {s.lastSyncedAt
-                        ? `synced ${new Date(s.lastSyncedAt).toLocaleDateString()}`
-                        : "syncing…"}
-                    </span>
-                    <button
-                      onClick={() => onRemoveSync(s.id)}
-                      title="Stop syncing this sheet"
-                      className="shrink-0 rounded-md px-1.5 font-bold text-body/40 transition hover:text-red-600"
-                    >
-                      &times;
-                    </button>
-                  </div>
-                ))}
+                {syncedSheets.map((s) => {
+                  const isGoogle = /docs\.google\.com\/spreadsheets/.test(s.url);
+                  return (
+                    <div key={s.id} className="flex flex-wrap items-center gap-2.5 text-xs">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
+                      <span className="min-w-0 flex-1 truncate text-body" title={s.url}>
+                        {s.label || s.url}
+                      </span>
+                      <span className="hidden shrink-0 text-body/50 sm:inline">
+                        {s.lastSyncedAt
+                          ? `synced ${new Date(s.lastSyncedAt).toLocaleDateString()}`
+                          : "syncing…"}
+                      </span>
+                      {/* Explicit edit permission — only for Google Sheets, and only
+                          works once Google Sheets is connected. */}
+                      {isGoogle && (
+                        <label
+                          className={`flex shrink-0 cursor-pointer items-center gap-1.5 ${
+                            sheetsConnected ? "" : "opacity-50"
+                          }`}
+                          title={
+                            sheetsConnected
+                              ? "Let Scout write your pipeline back into this sheet"
+                              : "Connect Google Sheets first"
+                          }
+                        >
+                          <input
+                            type="checkbox"
+                            checked={!!s.allowWrite}
+                            disabled={!sheetsConnected}
+                            onChange={(e) => onSetSheetWrite(s.id, e.target.checked)}
+                            className="h-3.5 w-3.5 accent-brown"
+                          />
+                          <span className="font-semibold text-body/70">Allow edits</span>
+                        </label>
+                      )}
+                      <button
+                        onClick={() => onRemoveSync(s.id)}
+                        title="Stop syncing this sheet"
+                        className="shrink-0 rounded-md px-1.5 font-bold text-body/40 transition hover:text-red-600"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}

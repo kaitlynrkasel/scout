@@ -38,6 +38,10 @@ export interface SyncedSheet {
   projectId: string;
   mapping: Record<string, FieldKey>;
   defaultStatus: ImportFindStatus;
+  allowWrite?: boolean; // explicit per-sheet permission for Scout to EDIT the sheet
+  understanding?: number; // 0-100, how well Scout understands this document
+  understandingSummary?: string; // Scout's read of the sheet (from the gate)
+  understandingAnswers?: string; // the user's answers folded in during the gate
   lastSyncedAt?: number;
   lastCount?: number; // rows added on the most recent sync
 }
