@@ -1,10 +1,12 @@
 import type { Config } from "tailwindcss";
 
-// Warm-brown + cream design system (the "Scout" rebrand). Older token names
-// (coral / blush / accent / warm-*) are kept but remapped to brown tones so the
-// whole app shifts palette without touching every className; new tokens (brown /
-// cream / surface / clay …) drive the sidebar + dashboard. The palette is warm
-// but restrained — inviting browns over a bright cream, no orange/green pops.
+// Warm-brown + cream design system (the "Scout" rebrand), with a dusty
+// slate-blue secondary accent (blue / blue-deep / blue-tint / slate) drawn from
+// the linen-and-denim palette. Older token names (coral / blush / accent /
+// warm-*) are remapped to brown tones, and sage now aliases the dusty blue, so
+// the whole app shifts palette without touching every className. New tokens
+// (brown / cream / surface / clay …) drive the sidebar + dashboard. Warm browns
+// and tans ground it; the blue is the cool counterpoint, no green pops.
 const config: Config = {
   content: ["./app/**/*.{ts,tsx}", "./lib/**/*.{ts,tsx}"],
   theme: {
@@ -33,6 +35,11 @@ const config: Config = {
         danger: "rgb(var(--c-danger) / <alpha-value>)",
         sage: "rgb(var(--c-sage) / <alpha-value>)",
         "sage-deep": "rgb(var(--c-sage-deep) / <alpha-value>)",
+        // Dusty slate-blue secondary accent (pairs with the warm browns).
+        blue: "rgb(var(--c-blue) / <alpha-value>)",
+        "blue-deep": "rgb(var(--c-blue-deep) / <alpha-value>)",
+        "blue-tint": "rgb(var(--c-blue-tint) / <alpha-value>)",
+        slate: "rgb(var(--c-slate) / <alpha-value>)",
 
         cream: "rgb(var(--c-cream) / <alpha-value>)",
         surface: "rgb(var(--c-surface) / <alpha-value>)",

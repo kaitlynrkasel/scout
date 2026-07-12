@@ -22,8 +22,15 @@
   --c-success-deep: 47 92 63;
   --c-attention: 169 118 31;
   --c-danger: 176 85 63;
-  --c-sage: 140 154 118;
-  --c-sage-deep: 95 106 71;
+  /* Secondary accent is now a dusty slate-blue (was sage green) — pairs with the
+     warm browns like weathered denim on leather. sage tokens are kept as aliases
+     so ~400 existing usages flip centrally without touching every className. */
+  --c-blue: 141 160 188; /* #8DA0BC dusty blue accent */
+  --c-blue-deep: 83 104 114; /* #536872 slate, for text on tint */
+  --c-blue-tint: 197 207 225; /* #C5CFE1 periwinkle fill */
+  --c-slate: 165 176 182; /* #A5B0B6 muted blue-gray */
+  --c-sage: 141 160 188; /* alias → dusty blue */
+  --c-sage-deep: 83 104 114; /* alias → slate */
   --c-cream: 251 250 248; /* page canvas, near-white, whisper warm */
   --c-surface: 255 255 255;
   --c-surface-2: 245 243 239; /* sidebar / inset layer, warm gray */
@@ -49,8 +56,13 @@ html.dark {
   --c-success-deep: 143 192 160;
   --c-attention: 208 162 78;
   --c-danger: 212 122 99;
-  --c-sage: 154 168 134;
-  --c-sage-deep: 179 191 158;
+  /* Dusty blue lifted so it reads on the espresso dark surfaces. */
+  --c-blue: 165 184 208; /* lighter dusty blue */
+  --c-blue-deep: 197 207 225; /* periwinkle, for text on dark tint */
+  --c-blue-tint: 55 66 84; /* deep slate fill */
+  --c-slate: 138 150 160;
+  --c-sage: 165 184 208; /* alias → dusty blue */
+  --c-sage-deep: 197 207 225; /* alias → periwinkle */
   --c-cream: 26 23 18;
   --c-surface: 36 32 26;
   --c-surface-2: 31 27 21;

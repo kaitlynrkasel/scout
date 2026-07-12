@@ -10471,7 +10471,7 @@ function DashboardTab({
                     typeof f.opp.fitScore === "number"
                       ? Math.round(f.opp.fitScore * 100)
                       : null;
-                  const palette = ["#7c5837", "#8c9a76", "#a9761f", "#5d4026", "#3f7a52", "#b0553f"];
+                  const palette = ["#7c5837", "#8da0bc", "#674a3a", "#536872", "#a9761f", "#a5b0b6"];
                   const hash = (f.opp.name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0);
                   const avatar = palette[hash % palette.length];
                   const dot =
