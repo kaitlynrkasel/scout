@@ -47,8 +47,8 @@ export function isCompCode(code: string): boolean {
 
 // COMPANY promo codes: an owner redeems one to comp their WHOLE team (every
 // member gets free unlimited use). Distinct from the per-account COMP_CODES.
-// COMPANY1864! is always valid; COMPANY_COMP_CODES (comma-separated env) adds more.
-const BUILTIN_COMPANY_CODES = ["COMPANY1864!"];
+// BYLERVSDUFFERS is always valid; COMPANY_COMP_CODES (comma-separated env) adds more.
+const BUILTIN_COMPANY_CODES = ["BYLERVSDUFFERS"];
 export const COMPANY_COMP_CODES = [
   ...BUILTIN_COMPANY_CODES,
   ...(process.env.COMPANY_COMP_CODES || "")
