@@ -1297,6 +1297,10 @@ function ScoutTool({
   // Google Sheets connection (level 3: private read + write-back).
   const [sheetsConnected, setSheetsConnected] = useState(false);
   const [sheetsEmail, setSheetsEmail] = useState("");
+  // Role onboarding: a modal that auto-pops for a company teammate who hasn't
+  // told Scout their role yet (their whole profile). Dismissed once handled.
+  const [roleOnboardOpen, setRoleOnboardOpen] = useState(false);
+  const roleOnboardShownRef = useRef(false);
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindFilter>("new");
@@ -3195,6 +3199,22 @@ function ScoutTool({
     setSheetsEmail("");
   }
 
+  // Auto-open the role-onboarding modal once: a company teammate who is on a team
+  // but hasn't set their role. Only fires after hydrate so it doesn't flash while
+  // state is still loading, and only once per session.
+  useEffect(() => {
+    if (roleOnboardShownRef.current) return;
+    if (
+      hydrated &&
+      profile.accountType === "company" &&
+      companies.length > 0 &&
+      !(profile.companyRole || "").trim()
+    ) {
+      roleOnboardShownRef.current = true;
+      setRoleOnboardOpen(true);
+    }
+  }, [hydrated, profile.accountType, profile.companyRole, companies.length]);
+
   // Human-readable status for the sheet's "Scout Status" column.
   const SHEET_STATUS_LABEL: Record<string, string> = {
     new: "New",
@@ -4898,6 +4918,25 @@ function ScoutTool({
         activeProjectId={activeId}
         getToken={getToken}
       />
+
+      {/* Role onboarding — auto-pops for a teammate who hasn't set their role. */}
+      {roleOnboardOpen && (
+        <RoleOnboardModal
+          companyName={profile.companyName || ""}
+          initialRole={profile.companyRole || ""}
+          initialExpertise={profile.companyExpertise || ""}
+          initialContribution={profile.companyContribution || ""}
+          onSave={(role, expertise, contribution) => {
+            patchProfile({
+              companyRole: role,
+              companyExpertise: expertise,
+              companyContribution: contribution,
+            });
+            setRoleOnboardOpen(false);
+          }}
+          onClose={() => setRoleOnboardOpen(false)}
+        />
+      )}
 
       {/* Write-back preview — nothing is written to the sheet until confirmed. */}
       {writePreview && (
@@ -15605,6 +15644,95 @@ function CompanyDetailsEditor({
         </>
       )}
     </FadeIn>
+  );
+}
+
+/* ---------------- Role onboarding modal ----------------
+ * Auto-pops the first time a company teammate opens Scout without a role set.
+ * Their whole profile is their role + what they specialize in — asked here up
+ * front so Scout can search and write for the company as them right away. */
+function RoleOnboardModal({
+  companyName,
+  initialRole,
+  initialExpertise,
+  initialContribution,
+  onSave,
+  onClose,
+}: {
+  companyName: string;
+  initialRole: string;
+  initialExpertise: string;
+  initialContribution: string;
+  onSave: (role: string, expertise: string, contribution: string) => void;
+  onClose: () => void;
+}) {
+  const [role, setRole] = useState(initialRole);
+  const [expertise, setExpertise] = useState(initialExpertise);
+  const [contribution, setContribution] = useState(initialContribution);
+  const field =
+    "w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
+  return (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/45 p-4">
+      <div className="w-full max-w-lg rounded-3xl border border-warm-border bg-surface p-6 shadow-float sm:p-7">
+        <div className="kicker mb-2">Welcome to the team</div>
+        <h2 className="font-display text-2xl font-bold tracking-tight text-ink">
+          Tell Scout your role at {companyName || "the company"}
+        </h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-body">
+          Scout writes on behalf of the company, so this is all it needs from you —
+          no personal profile. Two minutes and it can search and draft as you.
+        </p>
+
+        <div className="mt-5 space-y-4">
+          <div>
+            <Label>Your role at the company</Label>
+            <input
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="e.g. Head of Partnerships"
+              className={field}
+              autoFocus
+            />
+          </div>
+          <div>
+            <Label>What you specialize in / your specific experience</Label>
+            <textarea
+              value={expertise}
+              onChange={(e) => setExpertise(e.target.value)}
+              rows={3}
+              placeholder="e.g. music licensing & sync deals; 8 yrs in A&R; relationships with indie labels. What you know best."
+              className={`${field} resize-y leading-relaxed`}
+            />
+          </div>
+          <div>
+            <Label>How you serve the company&apos;s work</Label>
+            <textarea
+              value={contribution}
+              onChange={(e) => setContribution(e.target.value)}
+              rows={2}
+              placeholder="What you own and drive on the company's projects."
+              className={`${field} resize-y leading-relaxed`}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Later
+          </button>
+          <button
+            onClick={() => onSave(role.trim(), expertise.trim(), contribution.trim())}
+            disabled={!role.trim()}
+            className="rounded-xl bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+          >
+            Save &amp; start
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
