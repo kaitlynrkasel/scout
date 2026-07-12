@@ -47,14 +47,14 @@ export const metadata = {
 // is the mount point for the running-dog intro animation.
 const CSS = `
   :root{
-    --paper:#F5F2EB; --paper2:#EDE6D8; --ink:#3A2A1B; --cream:#F9F5EE;
-    /* Dusty denim-blue is the ACCENT that carries interaction — CTAs, kickers,
-       the hero sticker (how a site uses an accent: on the eye-drawing action,
-       not sprinkled). Brown/tan stay the warm identity: display type, surfaces,
-       inline emphasis. --blue for fills, --blue-ink for labels + text on light. */
-    --blue:#4C6375; --blue-ink:#3B4F5E; --blue-soft:#C5CFE1;
-    --terra:#7C5837; --terra-deep:#5D4026; --olive:#536872;
-    --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#2A2017;
+    --paper:#F5F2EB; --paper2:#E9D4C3; --ink:#3A2A1B; --cream:#F9F5EE;
+    /* Pantone board — Mystic Navy (#13273F) is the deep anchor: CTAs + the dark
+       band. Dusty blue (#8496B4) is the light accent (stickers). Chocolate
+       Cremoso browns + Mother of Pearl tan (paper2) are the warm identity.
+       --blue = navy fills, --blue-ink = navy labels, --blue-mid = dusty blue. */
+    --blue:#13273F; --blue-ink:#1E3A5C; --blue-mid:#8496B4;
+    --terra:#5A4331; --terra-deep:#42301F; --olive:#536872;
+    --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#13273F;
     --r:12px; --rs:9px;
   }
   .scoutland *{box-sizing:border-box;margin:0;padding:0}
@@ -96,7 +96,7 @@ const CSS = `
   .dog .lab{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center}
   .dog .lab .t{font-size:11px;font-weight:600;letter-spacing:.08em;margin-top:10px}
   .dog .lab .s{font-size:12px;margin-top:5px;color:#A99E88}
-  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--blue);color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
+  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--blue-mid);color:#13273F;font-size:11px;font-weight:700;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
   .sticker2{position:absolute;left:548px;top:196px;z-index:8;background:var(--olive);color:#F5F2EB;font-size:11px;font-weight:600;letter-spacing:.04em;padding:8px 13px;border-radius:var(--rs)}
   .ledechip{position:absolute;left:56px;top:506px;z-index:7;width:404px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 20px 44px -30px rgba(36,28,19,.26)}
   .ledechip p{font-size:15.5px;line-height:1.55;color:#4a4336}
@@ -194,6 +194,9 @@ const CSS = `
   .inp::placeholder{color:#9b9384}
   .form textarea{min-height:112px;resize:vertical}
   .form .send{align-self:flex-start}
+  /* The band is Mystic Navy, so the navy .btn-t would vanish — give the send
+     button the dusty-blue fill with navy text so it pops. */
+  .scoutland .contact .btn-t{background:var(--blue-mid);color:#13273F}
   .contact .em{margin-top:16px;font-size:13.5px;color:#B7AB96}
   .contact .em b{color:#EDE6D6}
 

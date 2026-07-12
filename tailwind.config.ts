@@ -70,9 +70,10 @@ const config: Config = {
           "0 14px 44px -16px rgba(40, 30, 18, 0.22), 0 2px 6px -2px rgba(40, 30, 18, 0.06)",
       },
       backgroundImage: {
-        // Denim-blue primary action, matching the landing's CTA (#4C6375). Blue
-        // leads interaction across app + landing; brown stays the warm identity.
-        "brand-gradient": "linear-gradient(120deg, #536872 0%, #44586a 100%)",
+        // Mystic Navy primary action (Pantone 7546C, #13273F). Navy leads
+        // interaction across app + landing; dusty blue is the light accent, brown
+        // + cream the warm identity.
+        "brand-gradient": "linear-gradient(120deg, #1c3a5c 0%, #13273f 100%)",
         "warm-fade": "linear-gradient(180deg, #f5f2ec 0%, #ffffff 60%)",
       },
     },
