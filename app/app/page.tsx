@@ -901,9 +901,28 @@ function AuthedShell() {
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;
+    let done = false;
     setProfileLoaded(false);
+    // Watchdog: if the profile/state load hasn't resolved in 8s (network stall,
+    // Supabase unreachable), stop spinning and let the user into the app with
+    // whatever localStorage has. Without this a hung request bricks sign-in on
+    // a blank loading screen.
+    const watchdog = setTimeout(() => {
+      if (cancelled || done) return;
+      done = true;
+      console.warn("[Scout] profile/state load timed out; entering with local data.");
+      const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
+      const metaName = (
+        meta.full_name || [meta.first_name, meta.last_name].filter(Boolean).join(" ")
+      ).trim();
+      setInitial({ name: metaName, bio: "", useCase: "Networking", linkedin: "" });
+      setInitialState(null);
+      setProfileLoaded(true);
+    }, 8000);
     Promise.all([dbLoadProfile(uid), dbLoadState(uid)]).then(([p, s]) => {
-      if (cancelled) return;
+      if (cancelled || done) return;
+      done = true;
+      clearTimeout(watchdog);
       // Merge the extras from three places, prefer server state over
       // localStorage (the fallback is only for the migration from the
       // browser-only era; after this ships, the server state is the
@@ -997,9 +1016,26 @@ function AuthedShell() {
       );
       setInitialState(s);
       setProfileLoaded(true);
+    }).catch((err) => {
+      // Never strand the user on the loading screen if the profile/state load
+      // fails (transient network error, a bad row, an RLS hiccup). Fall back to
+      // sensible defaults + whatever we have in localStorage and let them in —
+      // the next save re-syncs them.
+      if (cancelled || done) return;
+      done = true;
+      clearTimeout(watchdog);
+      console.error("[Scout] profile/state load failed, entering with defaults:", err);
+      const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
+      const metaName = (
+        meta.full_name || [meta.first_name, meta.last_name].filter(Boolean).join(" ")
+      ).trim();
+      setInitial({ name: metaName, bio: "", useCase: "Networking", linkedin: "" });
+      setInitialState(null);
+      setProfileLoaded(true);
     });
     return () => {
       cancelled = true;
+      clearTimeout(watchdog);
     };
   }, [uid]);
 
