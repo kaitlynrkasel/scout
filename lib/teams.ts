@@ -3,6 +3,8 @@
 // code, since the queries run with the service-role key (which bypasses RLS).
 
 import { supabaseAdmin } from "./supabaseAdmin";
+import { gmailSendOrDraft } from "./gmail";
+import { outlookSendOrDraft } from "./outlook";
 
 export class TeamError extends Error {
   status: number;
@@ -279,7 +281,7 @@ export async function inviteToWorkspace(
   uid: string,
   workspaceId: string,
   inviteEmail: string,
-  opts: { role?: string; projectIds?: string[] } = {}
+  opts: { role?: string; projectIds?: string[]; origin?: string } = {}
 ) {
   // Admins and owners can grow the roster; editors/viewers cannot.
   const callerRole = await assertRole(uid, workspaceId, "admin");
@@ -306,7 +308,85 @@ export async function inviteToWorkspace(
       { workspace_id: workspaceId, email: em, invited_by: uid, role, project_ids: projectIds },
       { onConflict: "workspace_id,email" }
     );
-  return { invited: em, role };
+
+  // Email the invite from the inviter's own connected mailbox (that's the app's
+  // only sender — no transactional service), so it reads as a personal invite.
+  // Best-effort: the invite already exists and auto-joins on sign-in regardless.
+  const emailed = await sendInviteEmail(uid, workspaceId, em, role, opts.origin).catch(() => false);
+  return { invited: em, role, emailed };
+}
+
+// Compose + send the "you're invited" email from the inviter's Gmail/Outlook.
+// Returns true if a message actually went out. Never throws (caller ignores).
+async function sendInviteEmail(
+  inviterUid: string,
+  workspaceId: string,
+  toEmail: string,
+  role: string,
+  origin?: string
+): Promise<boolean> {
+  const base = origin || process.env.NEXT_PUBLIC_SITE_URL || "https://scout-source.com";
+  const [wsRes, meRes, gmailRes, outlookRes] = await Promise.all([
+    db().from("workspaces").select("name").eq("id", workspaceId).maybeSingle(),
+    db()
+      .from("workspace_members")
+      .select("email")
+      .eq("workspace_id", workspaceId)
+      .eq("user_id", inviterUid)
+      .maybeSingle(),
+    db()
+      .from("gmail_connections")
+      .select("email, refresh_token")
+      .eq("user_id", inviterUid)
+      .maybeSingle(),
+    db()
+      .from("outlook_connections")
+      .select("email, refresh_token")
+      .eq("user_id", inviterUid)
+      .maybeSingle(),
+  ]);
+  const workspaceName = (wsRes.data as any)?.name || "our team";
+  const inviterEmail = (meRes.data as any)?.email || "A teammate";
+  const roleLabel = role === "viewer" ? "a viewer" : role === "admin" ? "an admin" : "an editor";
+
+  const subject = `${inviterEmail} invited you to ${workspaceName} on Scout`;
+  const body = [
+    `${inviterEmail} invited you to join ${workspaceName} on Scout as ${roleLabel}.`,
+    ``,
+    `Scout finds the right people and drafts outreach in your voice — and your team`,
+    `shares one pipeline, so no two people ever chase the same contact.`,
+    ``,
+    `Get started: ${base}/app`,
+    `Sign up (or sign in) with THIS email address — ${toEmail} — and you'll join`,
+    `${workspaceName} automatically.`,
+    ``,
+    `— Sent via Scout`,
+  ].join("\n");
+
+  const gmail = gmailRes.data as any;
+  const outlook = outlookRes.data as any;
+  if (gmail?.refresh_token) {
+    await gmailSendOrDraft({
+      refreshToken: gmail.refresh_token,
+      from: gmail.email || "me",
+      to: toEmail,
+      subject,
+      body,
+      mode: "send",
+    });
+    return true;
+  }
+  if (outlook?.refresh_token) {
+    await outlookSendOrDraft({
+      refreshToken: outlook.refresh_token,
+      to: toEmail,
+      subject,
+      body,
+      mode: "send",
+    });
+    return true;
+  }
+  return false; // inviter has no connected mailbox — invite still stands
 }
 
 // Join every workspace that has a pending invite for this email, applying the

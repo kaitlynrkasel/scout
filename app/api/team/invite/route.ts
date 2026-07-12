@@ -10,9 +10,13 @@ export async function POST(req: NextRequest) {
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
     const { workspaceId, email, role, projectIds } = await req.json();
+    const host = req.headers.get("x-forwarded-host") || req.headers.get("host") || "";
+    const proto = req.headers.get("x-forwarded-proto") || (host.startsWith("localhost") ? "http" : "https");
+    const origin = process.env.NEXT_PUBLIC_SITE_URL || (host ? `${proto}://${host}` : "");
     const r = await inviteToWorkspace(u.id, String(workspaceId || ""), String(email || ""), {
       role: role ? String(role) : undefined,
       projectIds: Array.isArray(projectIds) ? projectIds.map(String) : undefined,
+      origin: origin || undefined,
     });
     return NextResponse.json(r);
   } catch (e: any) {

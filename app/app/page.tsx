@@ -12538,12 +12538,15 @@ function TeamTab({
 
   const invite = () =>
     run("invite", async () => {
-      await authFetch("/api/team/invite", {
+      const r = await authFetch("/api/team/invite", {
         method: "POST",
         body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail, role: inviteRole }),
       });
+      const who = inviteEmail.trim();
       setNote(
-        `Invited ${inviteEmail.trim()} as ${inviteRole}. They join automatically the first time they sign in.`
+        r?.emailed
+          ? `Invited ${who} as ${inviteRole} — an invite email is on its way from your inbox. They join automatically when they sign in.`
+          : `Invited ${who} as ${inviteRole}. They join automatically the first time they sign in. (Connect Gmail or Outlook to also email them the invite.)`
       );
       setInviteEmail("");
       await loadCtx();
