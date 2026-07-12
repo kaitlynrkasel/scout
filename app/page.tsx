@@ -48,8 +48,11 @@ export const metadata = {
 const CSS = `
   :root{
     --paper:#F5F2EB; --paper2:#EDE6D8; --ink:#241C13; --cream:#F9F5EE;
-    /* Primary accent = brand brown (matches the app CTAs); secondary = dusty
-       slate-blue (was olive green). No orange/green — browns, tans + blue. */
+    /* Dusty denim-blue is the ACCENT that carries interaction — CTAs, kickers,
+       the hero sticker (how a site uses an accent: on the eye-drawing action,
+       not sprinkled). Brown/tan stay the warm identity: display type, surfaces,
+       inline emphasis. --blue for fills, --blue-ink for labels + text on light. */
+    --blue:#4C6375; --blue-ink:#3B4F5E; --blue-soft:#C5CFE1;
     --terra:#7C5837; --terra-deep:#5D4026; --olive:#536872;
     --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#2A2017;
     --r:12px; --rs:9px;
@@ -60,12 +63,12 @@ const CSS = `
   .disp{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.04}
   .wrap{max-width:1180px;margin:0 auto;padding:0 40px;position:relative}
   .scoutland a{color:inherit;text-decoration:none}
-  .kicker{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--terra-deep)}
+  .kicker{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-ink)}
   .h2{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:46px;line-height:1.04;letter-spacing:-.015em;color:var(--ink);margin-top:14px}
   .h2 em{font-style:normal;color:var(--terra)}
   .lead{font-size:16.5px;line-height:1.6;color:#57503f;max-width:54ch;margin-top:14px}
   .btn{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:13px 22px;cursor:pointer;border:0;border-radius:var(--rs)}
-  .btn-t{background:var(--terra);color:#fff}
+  .btn-t{background:var(--blue);color:#fff}
   .btn-o{background:transparent;color:var(--ink);border:1px solid #cfc5b2;padding:12px 21px}
   .slot{position:relative;background:var(--paper2);border-radius:var(--r);overflow:hidden}
   .slot::after{content:"";position:absolute;inset:12px;border:1px dashed #C7BBA6;border-radius:6px}
@@ -76,12 +79,12 @@ const CSS = `
   .scoutland nav .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:19px;letter-spacing:-.01em;color:var(--ink)}
   .scoutland nav .brand img{width:26px;height:26px}
   .scoutland nav .nl{margin-left:46px;display:flex;gap:26px;font-size:14px;font-weight:500;color:#5b5344}
-  .scoutland nav .cta{margin-left:auto;background:var(--ink);color:var(--paper);font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:var(--rs)}
+  .scoutland nav .cta{margin-left:auto;background:var(--blue);color:#fff;font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:var(--rs)}
 
   /* HERO — the one loud moment */
   .hero{position:relative;height:748px;overflow:hidden}
   .herwrap{position:relative;max-width:1180px;height:100%;margin:0 auto}
-  .eyebrow{position:absolute;top:30px;left:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--terra-deep)}
+  .eyebrow{position:absolute;top:30px;left:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--blue-ink)}
   .eyebrow2{position:absolute;top:30px;right:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
   .backword{position:absolute;left:-24px;top:232px;z-index:1;font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:340px;line-height:.8;color:transparent;-webkit-text-stroke:1.5px rgba(36,28,19,.09);white-space:nowrap}
   .headline{position:absolute;left:52px;top:104px;z-index:3}
@@ -91,7 +94,7 @@ const CSS = `
   .dog .lab{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center}
   .dog .lab .t{font-size:11px;font-weight:600;letter-spacing:.08em;margin-top:10px}
   .dog .lab .s{font-size:12px;margin-top:5px;color:#A99E88}
-  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--terra);color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
+  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--blue);color:#fff;font-size:11px;font-weight:600;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
   .sticker2{position:absolute;left:548px;top:196px;z-index:8;background:var(--olive);color:#F5F2EB;font-size:11px;font-weight:600;letter-spacing:.04em;padding:8px 13px;border-radius:var(--rs)}
   .ledechip{position:absolute;left:56px;top:506px;z-index:7;width:404px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 20px 44px -30px rgba(36,28,19,.26)}
   .ledechip p{font-size:15.5px;line-height:1.55;color:#4a4336}
