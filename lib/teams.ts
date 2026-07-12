@@ -494,6 +494,42 @@ export async function redeemCompanyCode(uid: string, workspaceId: string, code: 
   return { comped: true };
 }
 
+// Owner-only: permanently delete a company and everything under it. The DB
+// cascades handle members, invites, shared projects, project-members and shared
+// finds (all FK'd with ON DELETE CASCADE off workspaces / shared_projects). We
+// only need to detach auto-searches by hand — their shared_project_id column has
+// no FK, so it would dangle otherwise. Guarded so a stray click can't nuke a
+// company: the caller must pass the exact company name to confirm.
+export async function deleteWorkspace(uid: string, workspaceId: string, confirmName: string) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (role !== "owner")
+    throw new TeamError("Only the company owner can delete the company.", 403);
+  const { data: ws } = await db()
+    .from("workspaces")
+    .select("id, name")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  if (!ws) throw new TeamError("That company no longer exists.", 404);
+  if (String(confirmName || "").trim().toLowerCase() !== String(ws.name || "").trim().toLowerCase())
+    throw new TeamError("Type the company name exactly to confirm deletion.");
+  // Detach any auto-searches that pointed their results at this company's
+  // shared projects (no FK cascade on that column).
+  const { data: projs } = await db()
+    .from("shared_projects")
+    .select("id")
+    .eq("workspace_id", workspaceId);
+  const projIds = (projs || []).map((p: any) => p.id);
+  if (projIds.length) {
+    await db()
+      .from("auto_searches")
+      .update({ shared_project_id: null })
+      .in("shared_project_id", projIds);
+  }
+  const { error } = await db().from("workspaces").delete().eq("id", workspaceId);
+  if (error) throw new TeamError(error.message, 500);
+  return { deleted: true, name: ws.name };
+}
+
 // Does this user belong to any comped workspace? (Free access flows from that.)
 export async function isMemberOfCompedWorkspace(uid: string): Promise<boolean> {
   const { data: mems } = await db()

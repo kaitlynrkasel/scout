@@ -13017,6 +13017,8 @@ function TeamTab({
   const [inviteCode, setInviteCode] = useState("");
   const [copiedLink, setCopiedLink] = useState(false);
   const [companyCode, setCompanyCode] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState("");
+  const [showDelete, setShowDelete] = useState(false);
   const [sharedProjects, setSharedProjects] = useState<any[]>([]);
   const [shareChoice, setShareChoice] = useState("");
   const [openId, setOpenId] = useState("");
@@ -13197,6 +13199,20 @@ function TeamTab({
       });
       setCompanyCode("");
       setNote("Company code redeemed — your whole team now has free unlimited use.");
+      await loadCtx();
+    });
+
+  // Owner-only: permanently delete the whole company (confirmed by name).
+  const deleteCompany = () =>
+    run("delete", async () => {
+      const r = await authFetch("/api/team/workspace", {
+        method: "DELETE",
+        body: JSON.stringify({ workspaceId: workspace.id, confirmName: deleteConfirm.trim() }),
+      });
+      setDeleteConfirm("");
+      setShowDelete(false);
+      setActiveWsId("");
+      setNote(`"${r.name}" was deleted.`);
       await loadCtx();
     });
 
@@ -13726,6 +13742,78 @@ function TeamTab({
                       current and future members. No per-person code needed.
                     </p>
                   </>
+                )}
+              </div>
+            )}
+
+            {isOwner && (
+              <div className="mt-4 border-t border-warm-border pt-4">
+                <div className="text-[11px] font-bold uppercase tracking-wider text-rose-500/80">
+                  Danger zone
+                </div>
+                {!showDelete ? (
+                  <div className="mt-2 flex flex-wrap items-center gap-3">
+                    <button
+                      onClick={() => {
+                        setShowDelete(true);
+                        setDeleteConfirm("");
+                      }}
+                      className="rounded-xl border border-rose-300 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:bg-rose-50"
+                    >
+                      Delete this company
+                    </button>
+                    <p className="text-[11px] leading-relaxed text-body/60">
+                      Removes the company and everyone's access, its members, invites,
+                      shared projects and shared finds. This can't be undone.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="mt-2 rounded-2xl border border-rose-300 bg-rose-50/60 p-4">
+                    <p className="text-sm font-semibold text-rose-700">
+                      Permanently delete “{workspace.name}”?
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-rose-700/80">
+                      This deletes the company for <b>every member</b> and erases its
+                      shared projects, finds, invites and roles. It cannot be undone. Type
+                      the company name to confirm.
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <input
+                        value={deleteConfirm}
+                        onChange={(e) => setDeleteConfirm(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (
+                            e.key === "Enter" &&
+                            deleteConfirm.trim().toLowerCase() ===
+                              String(workspace.name || "").trim().toLowerCase()
+                          )
+                            deleteCompany();
+                        }}
+                        placeholder={workspace.name}
+                        className="min-w-[180px] flex-1 rounded-xl border border-rose-300 px-3.5 py-2 text-sm text-ink outline-none transition focus:border-rose-500"
+                      />
+                      <button
+                        onClick={deleteCompany}
+                        disabled={
+                          busy === "delete" ||
+                          deleteConfirm.trim().toLowerCase() !==
+                            String(workspace.name || "").trim().toLowerCase()
+                        }
+                        className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:bg-rose-700 disabled:opacity-50"
+                      >
+                        {busy === "delete" ? "Deleting…" : "Delete company"}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setShowDelete(false);
+                          setDeleteConfirm("");
+                        }}
+                        className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

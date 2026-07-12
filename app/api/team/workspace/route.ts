@@ -4,6 +4,7 @@ import {
   createWorkspace,
   getWorkspaceContext,
   updateWorkspaceDetails,
+  deleteWorkspace,
   TeamError,
 } from "@/lib/teams";
 
@@ -37,6 +38,20 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(await getWorkspaceContext(u.id, u.email));
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "Failed." }, { status: e?.status || 500 });
+  }
+}
+
+// Owner-only: permanently delete the company (confirmed by typing its name).
+export async function DELETE(req: NextRequest) {
+  const u = await userFromReq(req);
+  if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+  try {
+    const { workspaceId, confirmName } = await req.json();
+    const r = await deleteWorkspace(u.id, String(workspaceId || ""), String(confirmName || ""));
+    return NextResponse.json(r);
+  } catch (e: any) {
+    const status = e instanceof TeamError ? e.status : 500;
+    return NextResponse.json({ error: e?.message || "Failed." }, { status });
   }
 }
 
