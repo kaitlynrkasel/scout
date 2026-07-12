@@ -37,9 +37,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Search keys not configured." }, { status: 500 });
   }
 
-  // On the free (Hobby) plan this cron fires roughly once a day, so process a
-  // batch of due searches per run — capped to stay well under maxDuration (each
-  // discover is ~30-60s). Extras drain on the next daily run.
+  // Runs every 10 min (Pro plan). Process a small batch of due searches per run —
+  // capped to stay well under maxDuration (each discover is ~30-60s). Any extras
+  // drain on the next tick a few minutes later.
   const { data: due, error } = await supabaseAdmin
     .from("auto_searches")
     .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence, email_digest")
