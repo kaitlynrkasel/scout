@@ -11,6 +11,11 @@ import { Reveal, CountUp, FadeIn } from "./motion";
 import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import ImportOutreach from "./ImportOutreach";
+import {
+  fetchSheetRows,
+  rowsToFinds,
+  type SyncedSheet,
+} from "@/lib/sheetImport";
 import ComboInput from "./ComboInput";
 import { CITY_SUGGESTIONS, SCHOOL_SUGGESTIONS } from "./suggest";
 import { fileToText } from "@/lib/fileText";
@@ -1282,6 +1287,8 @@ function ScoutTool({
   // the active lens. "" = All companies (show everything). Persisted per device.
   const [companies, setCompanies] = useState<{ id: string; name: string; role: string }[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
+  // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
+  const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindFilter>("new");
@@ -1415,6 +1422,9 @@ function ScoutTool({
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
     setFinds(Array.isArray(savedFinds) ? savedFinds : []);
+    setSyncedSheets(
+      Array.isArray((initialState as any)?.syncedSheets) ? (initialState as any).syncedSheets : []
+    );
     setCoaching(Array.isArray(coach) ? coach : []);
     setEditPairs(Array.isArray(edits) ? edits : []);
     setResumeFile(resume && resume.dataUrl ? resume : null);
@@ -1497,6 +1507,7 @@ function ScoutTool({
       editPairs,
       resumeFile,
       signature,
+      syncedSheets,
       // Ride the extras along in the JSON blob so they survive a redeploy.
       // The profiles table only has name/bio/useCase/linkedin; everything else
       // lived in localStorage before this, which meant it evaporated on any
@@ -1520,7 +1531,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -2955,6 +2966,73 @@ function ScoutTool({
     if (fresh.length) saveFinds([...fresh, ...finds]);
     return fresh.length;
   }
+
+  // ---- Level 2: linked-sheet auto-sync -------------------------------------
+  // Save (or update) a linked sheet so Scout keeps re-reading it. Keyed by URL so
+  // re-linking the same sheet updates its mapping instead of duplicating it.
+  function saveSyncedSheet(cfg: Omit<SyncedSheet, "id" | "lastSyncedAt" | "lastCount">) {
+    setSyncedSheets((prev) => {
+      const existing = prev.find((s) => s.url === cfg.url);
+      if (existing) {
+        return prev.map((s) => (s.url === cfg.url ? { ...s, ...cfg } : s));
+      }
+      return [...prev, { ...cfg, id: `sheet-${Date.now()}`, lastSyncedAt: Date.now() }];
+    });
+  }
+  function removeSyncedSheet(id: string) {
+    setSyncedSheets((prev) => prev.filter((s) => s.id !== id));
+  }
+
+  // Re-read every linked sheet and merge new rows (dedup by deterministic id, so
+  // rows you already have are skipped). Builds all finds first, then merges once,
+  // so multiple sheets don't clobber each other's writes.
+  async function syncAllSheets() {
+    if (!syncedSheets.length) return;
+    const token = getToken ? await getToken().catch(() => null) : null;
+    const all: Find[] = [];
+    const touched: Record<string, number> = {};
+    for (const s of syncedSheets) {
+      try {
+        const { rows } = await fetchSheetRows(s.url, token);
+        const built = rowsToFinds({
+          rows,
+          mapping: s.mapping,
+          defaultStatus: s.defaultStatus,
+          projectId: s.projectId,
+          sourceLabel: s.label || "Synced sheet",
+        });
+        all.push(...(built as Find[]));
+        touched[s.id] = built.length;
+      } catch {
+        /* one sheet failing (unshared, offline) shouldn't stop the others */
+      }
+    }
+    if (all.length) importFinds(all);
+    if (Object.keys(touched).length) {
+      const now = Date.now();
+      setSyncedSheets((prev) =>
+        prev.map((s) =>
+          touched[s.id] !== undefined ? { ...s, lastSyncedAt: now, lastCount: touched[s.id] } : s
+        )
+      );
+    }
+  }
+  // Keep a ref to the latest sync fn so the interval always calls fresh state.
+  const syncFnRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    syncFnRef.current = syncAllSheets;
+  });
+  // On load (and every 10 min while open), pull the latest from linked sheets.
+  useEffect(() => {
+    if (!hydrated || !syncedSheets.length) return;
+    const t = setTimeout(() => void syncFnRef.current(), 1500);
+    const iv = setInterval(() => void syncFnRef.current(), 10 * 60 * 1000);
+    return () => {
+      clearTimeout(t);
+      clearInterval(iv);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, syncedSheets.length]);
 
   // Concierge: pull any owner-seeded finds queued for this account, merge them
   // into the active project (deduped like a real search), then mark them
@@ -4568,6 +4646,7 @@ function ScoutTool({
         open={importOpen}
         onClose={() => setImportOpen(false)}
         onImport={importFinds}
+        onSaveSync={saveSyncedSheet}
         projects={projects}
         activeProjectId={activeId}
         getToken={getToken}
@@ -5646,6 +5725,8 @@ function ScoutTool({
           companyWorkspaceId={profile.companyWorkspaceId || ""}
           companies={companies}
           activeCompanyId={activeCompanyId}
+          syncedSheets={syncedSheets}
+          onRemoveSync={removeSyncedSheet}
           getToken={getToken}
           companyName={profile.companyName || ""}
           companyRole={profile.companyRole || ""}
@@ -14947,6 +15028,8 @@ function ProfileTab({
   companyWorkspaceId,
   companies,
   activeCompanyId,
+  syncedSheets,
+  onRemoveSync,
   getToken,
   companyName,
   companyRole,
@@ -15015,6 +15098,8 @@ function ProfileTab({
   companyWorkspaceId: string;
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
+  syncedSheets: SyncedSheet[];
+  onRemoveSync: (id: string) => void;
   getToken?: () => Promise<string | null>;
   companyName: string;
   companyRole: string;
@@ -15621,6 +15706,35 @@ function ProfileTab({
           >
             Import a file
           </button>
+          {syncedSheets.length > 0 && (
+            <div className="w-full border-t border-warm-border pt-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                Synced sheets
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {syncedSheets.map((s) => (
+                  <div key={s.id} className="flex items-center gap-2.5 text-xs">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
+                    <span className="min-w-0 flex-1 truncate text-body" title={s.url}>
+                      {s.label || s.url}
+                    </span>
+                    <span className="hidden shrink-0 text-body/50 sm:inline">
+                      {s.lastSyncedAt
+                        ? `synced ${new Date(s.lastSyncedAt).toLocaleDateString()}`
+                        : "syncing…"}
+                    </span>
+                    <button
+                      onClick={() => onRemoveSync(s.id)}
+                      title="Stop syncing this sheet"
+                      className="shrink-0 rounded-md px-1.5 font-bold text-body/40 transition hover:text-red-600"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
         <hr className="my-7 border-warm-border" />

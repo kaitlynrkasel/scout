@@ -120,6 +120,7 @@ export default function ImportOutreach({
   open,
   onClose,
   onImport,
+  onSaveSync,
   projects,
   activeProjectId,
   getToken,
@@ -127,6 +128,13 @@ export default function ImportOutreach({
   open: boolean;
   onClose: () => void;
   onImport: (finds: Find[]) => number;
+  onSaveSync?: (cfg: {
+    url: string;
+    label: string;
+    projectId: string;
+    mapping: Record<string, FieldKey>;
+    defaultStatus: FindStatus;
+  }) => void;
   projects: Project[];
   activeProjectId: string;
   getToken?: () => Promise<string | null>;
@@ -141,6 +149,8 @@ export default function ImportOutreach({
   const [imported, setImported] = useState<number | null>(null);
   const [fileName, setFileName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
+  const [sourceUrl, setSourceUrl] = useState(""); // set when imported from a link
+  const [keepSynced, setKeepSynced] = useState(true);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -182,6 +192,7 @@ export default function ImportOutreach({
   async function handleFile(file: File) {
     setError("");
     setImported(null);
+    setSourceUrl(""); // a dropped file has no link to keep in sync
     setFileName(file.name);
     setBusy(true);
     const ext = (file.name.split(".").pop() || "").toLowerCase();
@@ -252,6 +263,7 @@ export default function ImportOutreach({
         setError(data?.error || "Couldn't read that link.");
         return;
       }
+      setSourceUrl(u);
       setFileName(/docs\.google\.com/.test(u) ? "Linked Google Sheet" : u);
       if (data.kind === "csv") {
         const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
@@ -381,6 +393,11 @@ export default function ImportOutreach({
         return;
       }
       const added = onImport(finds);
+      // If this came from a link and they opted in, remember it so Scout keeps
+      // re-reading the sheet automatically.
+      if (sourceUrl && keepSynced && onSaveSync) {
+        onSaveSync({ url: sourceUrl, label: fileName, projectId, mapping, defaultStatus });
+      }
       setImported(added);
     } catch (e: any) {
       setError(e?.message || "Import failed.");
@@ -481,7 +498,8 @@ export default function ImportOutreach({
                 </div>
                 <p className="mt-2 text-[11px] leading-relaxed text-body/60">
                   Google Sheets need to be shared as <b>Anyone with the link &middot;
-                  Viewer</b>. (Live auto-sync and writing back to the sheet are coming
+                  Viewer</b>. After it reads, tick <b>Keep this sheet synced</b> and
+                  Scout re-reads it automatically. (Writing back to the sheet is coming
                   next.)
                 </p>
               </div>
@@ -616,6 +634,24 @@ export default function ImportOutreach({
                   </select>
                 </div>
               </div>
+
+              {/* Keep-synced — only when imported from a link (a dropped file has
+                  nothing to re-read). */}
+              {sourceUrl && onSaveSync && (
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-warm-border bg-white p-4">
+                  <input
+                    type="checkbox"
+                    checked={keepSynced}
+                    onChange={(e) => setKeepSynced(e.target.checked)}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-brown"
+                  />
+                  <span className="text-sm leading-relaxed text-body">
+                    <span className="font-semibold text-ink">Keep this sheet synced.</span>{" "}
+                    Scout re-reads the link automatically (on open and every few
+                    minutes) and pulls in new rows — you won&apos;t have to re-import.
+                  </span>
+                </label>
+              )}
 
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

@@ -133,6 +133,7 @@ export interface AppState {
   editPairs?: { before: string; after: string }[]; // learn-from-edits voice deltas
   resumeFile?: { name: string; dataUrl: string } | null; // resume to attach to emails
   signature?: string; // email signature appended to drafted emails
+  syncedSheets?: any[]; // linked spreadsheets Scout re-reads automatically
   // Extra profile fields that aren't columns on the profiles table (age,
   // education, location, company-size preference, competitiveness). Ride along
   // in the JSON blob so a redeploy or new device doesn't wipe them out.
