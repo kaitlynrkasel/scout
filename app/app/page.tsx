@@ -13130,7 +13130,11 @@ function TeamTab({
   }
 
   async function loadCtx(preferredId?: string) {
-    setLoading(true);
+    // Only show the full-screen "Loading your Team…" on the very first load.
+    // Action-triggered refreshes (invite, role change, share…) update the roster
+    // in place so the tab doesn't flash blank and feel clunky.
+    const firstLoad = ctx.workspaces.length === 0;
+    if (firstLoad) setLoading(true);
     setError("");
     try {
       const data = await authFetch("/api/team/workspace");
@@ -13144,7 +13148,7 @@ function TeamTab({
     } catch (e: any) {
       setError(e.message);
     } finally {
-      setLoading(false);
+      if (firstLoad) setLoading(false);
     }
   }
 
