@@ -474,6 +474,10 @@ interface Project {
   // When on, sending a find auto-queues one follow-up a few days later (canceled
   // automatically if they reply or the address bounces). Off by default.
   autoFollowUp?: boolean;
+  // Which company (Teams workspace) this project belongs to. Unset = "personal",
+  // shown only under "All companies". Lets one account keep several companies'
+  // projects separate and filter Outreach/Dashboard by company.
+  companyId?: string;
 }
 interface Category {
   id: string;
@@ -1274,6 +1278,10 @@ function ScoutTool({
   const [categories, setCategories] = useState<Category[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [activeId, setActiveId] = useState<string>("");
+  // The companies (Teams workspaces) this account belongs to, and which one is
+  // the active lens. "" = All companies (show everything). Persisted per device.
+  const [companies, setCompanies] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindFilter>("new");
@@ -1870,6 +1878,56 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [profile.companyWorkspaceId, profile.accountType]);
 
+  // Load the companies (Teams workspaces) this account belongs to, for the
+  // always-on company switcher. Restore the last-chosen lens from this device.
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("scout_active_company");
+      if (saved) setActiveCompanyId(saved);
+    } catch {
+      /* ignore */
+    }
+    let alive = true;
+    (async () => {
+      if (!getToken) return;
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const res = await fetch("/api/team/workspace", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!alive) return;
+        setCompanies(
+          (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role }))
+        );
+      } catch {
+        /* teams not configured — switcher just stays hidden */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getToken]);
+
+  // Switch the active company lens. Persist it, and if the current project isn't
+  // in the new company, jump to that company's first project.
+  function selectCompany(id: string) {
+    setActiveCompanyId(id);
+    try {
+      if (id) localStorage.setItem("scout_active_company", id);
+      else localStorage.removeItem("scout_active_company");
+    } catch {
+      /* ignore */
+    }
+    const inScope = (p: Project) => !id || (p.companyId || "") === id;
+    if (!projects.some((p) => p.id === activeId && inScope(p))) {
+      const first = projects.find(inScope);
+      if (first) selectProject(first.id);
+    }
+  }
+
   useEffect(() => {
     refreshGmail();
     refreshOutlook();
@@ -2260,7 +2318,14 @@ function ScoutTool({
     if (!nm) return;
     const activeProj = projects.find((p) => p.id === activeId);
     const useCase = activeProj ? activeProj.useCase : profile.useCase;
-    const proj: Project = { id: `proj-${Date.now()}`, name: nm, useCase, context: "" };
+    const proj: Project = {
+      id: `proj-${Date.now()}`,
+      name: nm,
+      useCase,
+      context: "",
+      // New projects belong to the company you're currently viewing (if any).
+      ...(activeCompanyId ? { companyId: activeCompanyId } : {}),
+    };
     saveProjects([...projects, proj]);
     const seeded = seedForProject(proj.id, useCase);
     saveCats([...categories, ...seeded]);
@@ -2585,6 +2650,12 @@ function ScoutTool({
     return scoped.length ? scoped : myTemplates;
   }
 
+  // Projects in the current company lens ("" = all). Drives the sidebar +
+  // Outreach project pickers so Company > Project > Category reads top-down.
+  const visibleProjects = activeCompanyId
+    ? projects.filter((p) => (p.companyId || "") === activeCompanyId)
+    : projects;
+  const activeCompanyName = companies.find((c) => c.id === activeCompanyId)?.name || "";
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
   const activeUseCase = activeProject ? activeProject.useCase : profile.useCase;
   const uc = ucInfo(activeUseCase);
@@ -4477,9 +4548,12 @@ function ScoutTool({
         isCompany={profile.accountType === "company"}
         billingTier={billing?.tier}
         openCommand={() => setCmdOpen(true)}
-        projects={projects}
+        projects={visibleProjects}
         activeId={activeId}
         onSelectProject={selectProject}
+        companies={companies}
+        activeCompanyId={activeCompanyId}
+        onSelectCompany={selectCompany}
         showLogout={!!showLogout}
         onLogout={onLogout}
       />
@@ -4556,6 +4630,27 @@ function ScoutTool({
             <p className="mt-1.5 text-sm text-body">
               Find your people and draft messages in your voice.
             </p>
+            {/* Company lens sits above Project + Category — pick which company
+                you're working in, then its project + category below. */}
+            {companies.length > 0 && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-body/50">
+                  Company
+                </span>
+                <select
+                  value={activeCompanyId}
+                  onChange={(e) => selectCompany(e.target.value)}
+                  className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
+                >
+                  <option value="">All companies</option>
+                  {companies.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
           </div>
 
           {/* First-run welcome: we auto-run one search so a new user sees results
@@ -6109,6 +6204,9 @@ function SideNav({
   projects,
   activeId,
   onSelectProject,
+  companies,
+  activeCompanyId,
+  onSelectCompany,
   showLogout,
   onLogout,
 }: {
@@ -6124,6 +6222,9 @@ function SideNav({
   projects: Project[];
   activeId: string;
   onSelectProject: (id: string) => void;
+  companies: { id: string; name: string; role: string }[];
+  activeCompanyId: string;
+  onSelectCompany: (id: string) => void;
   showLogout: boolean;
   onLogout?: () => void;
 }) {
@@ -6279,8 +6380,27 @@ function SideNav({
       </nav>
 
       <div className="mt-auto border-t border-warm-border pt-3">
+        {/* Company lens — always available when you belong to 1+ companies.
+            Scopes the project list (and Dashboard/Outreach) to that company. */}
+        {companies.length > 0 && (
+          <div className="mb-2">
+            <div className="kicker px-2 pb-1.5">Company</div>
+            <select
+              value={activeCompanyId}
+              onChange={(e) => onSelectCompany(e.target.value)}
+              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2.5 text-xs font-bold text-ink outline-none transition focus:border-brown"
+            >
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
         <div className="kicker px-2 pb-1.5">Active project</div>
-        {projects.length > 0 && (
+        {projects.length > 0 ? (
           <select
             value={activeId}
             onChange={(e) => onSelectProject(e.target.value)}
@@ -6292,6 +6412,10 @@ function SideNav({
               </option>
             ))}
           </select>
+        ) : (
+          <p className="px-2 text-[11px] leading-relaxed text-body/60">
+            No projects in this company yet. Start a search in Outreach to create one.
+          </p>
         )}
         {hasAccount && (
           <button
