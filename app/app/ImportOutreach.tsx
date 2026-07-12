@@ -7,6 +7,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
+import { workbookToRows } from "@/lib/sheetImport";
 import type { Opportunity } from "@/lib/types";
 
 // Local mirrors of the Find / Project / FindStatus shapes from page.tsx. The
@@ -87,33 +88,6 @@ function looksLikeReplied(v: string): boolean {
 }
 function looksLikeDenied(v: string): boolean {
   return /no|passed|rejected|ghosted|dead|declin/i.test(v);
-}
-
-// SheetJS worksheet → { header row, string-cell rows }, matching the CSV shape.
-// Shared by the file drop and the link importer. XLSX is passed in so it stays a
-// dynamic import (loaded only when a spreadsheet is actually read).
-function sheetToRows(
-  XLSX: any,
-  ws: any
-): { heads: string[]; clean: Record<string, string>[] } {
-  const aoa: any[][] = XLSX.utils.sheet_to_json(ws, {
-    header: 1,
-    blankrows: false,
-    defval: "",
-    raw: false,
-  });
-  const heads = (aoa[0] || []).map((h: any) => String(h ?? "").trim());
-  const clean = aoa
-    .slice(1)
-    .map((r) => {
-      const obj: Record<string, string> = {};
-      heads.forEach((h, i) => {
-        obj[h] = String(r[i] ?? "").trim();
-      });
-      return obj;
-    })
-    .filter((r) => Object.values(r).some((v) => v));
-  return { heads, clean };
 }
 
 export default function ImportOutreach({
@@ -321,11 +295,11 @@ export default function ImportOutreach({
         const XLSX = await import("xlsx");
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
         setBusy(false);
-        if (!ws) throw new Error("The workbook has no sheets.");
-        const { heads, clean } = sheetToRows(XLSX, ws);
-        ingest(heads, clean);
+        if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
+        // Read every tab, not just the first.
+        const { headers, rows } = workbookToRows(XLSX, wb);
+        ingest(headers, rows);
       } catch (e: any) {
         setBusy(false);
         setError(`Could not read that spreadsheet: ${e?.message || "unknown error"}`);
@@ -402,14 +376,13 @@ export default function ImportOutreach({
         const bytes = new Uint8Array(bin.length);
         for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         const wb = XLSX.read(bytes, { type: "array" });
-        const ws = wb.Sheets[wb.SheetNames[0]];
         setBusy(false);
-        if (!ws) {
+        if (!wb.SheetNames?.length) {
           setError("The workbook has no sheets.");
           return;
         }
-        const { heads, clean } = sheetToRows(XLSX, ws);
-        ingest(heads, clean);
+        const { headers, rows } = workbookToRows(XLSX, wb);
+        ingest(headers, rows);
       }
     } catch (e: any) {
       setBusy(false);

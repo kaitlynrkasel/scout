@@ -89,6 +89,14 @@ export async function sheetTitleForGid(
   return (match || sheets[0])?.properties?.title || "Sheet1";
 }
 
+// Every tab title in the workbook (so we can read them all).
+async function allSheetTitles(accessToken: string, spreadsheetId: string): Promise<string[]> {
+  const meta = await api(accessToken, `/${spreadsheetId}?fields=sheets.properties`);
+  return (meta.sheets || [])
+    .map((s: any) => String(s.properties?.title || ""))
+    .filter(Boolean);
+}
+
 // Whole-tab values as a string grid (first row = headers).
 export async function readValues(
   accessToken: string,
@@ -102,16 +110,7 @@ export async function readValues(
   return (data.values || []).map((row: any[]) => row.map((c) => String(c ?? "")));
 }
 
-// Read a private sheet by URL into { headers, rows } (same shape as CSV import).
-export async function readSheetByUrl(
-  refreshToken: string,
-  url: string
-): Promise<{ headers: string[]; rows: Record<string, string>[]; title: string }> {
-  const id = spreadsheetIdFromUrl(url);
-  if (!id) throw new Error("Not a Google Sheets URL.");
-  const at = await accessTokenFromRefresh(refreshToken);
-  const title = await sheetTitleForGid(at, id, gidFromUrl(url));
-  const grid = await readValues(at, id, title);
+function gridToHeaderRows(grid: string[][]): { headers: string[]; rows: Record<string, string>[] } {
   const headers = (grid[0] || []).map((h) => String(h ?? "").trim());
   const rows = grid
     .slice(1)
@@ -121,8 +120,46 @@ export async function readSheetByUrl(
       return obj;
     })
     .filter((r) => Object.values(r).some((v) => v));
-  return { headers, rows, title };
+  return { headers, rows };
 }
+
+// Read a private sheet by URL into { headers, rows } — reads EVERY tab in the
+// workbook and combines them (union of columns), so a multi-tab tracking sheet
+// isn't missed. Same shape as the CSV import.
+export async function readSheetByUrl(
+  refreshToken: string,
+  url: string
+): Promise<{ headers: string[]; rows: Record<string, string>[]; title: string }> {
+  const id = spreadsheetIdFromUrl(url);
+  if (!id) throw new Error("Not a Google Sheets URL.");
+  const at = await accessTokenFromRefresh(refreshToken);
+  const titles = await allSheetTitles(at, id);
+  if (!titles.length) throw new Error("The workbook has no tabs.");
+
+  const headerSet: string[] = [];
+  const seen = new Set<string>();
+  const rows: Record<string, string>[] = [];
+  for (const title of titles) {
+    let grid: string[][] = [];
+    try {
+      grid = await readValues(at, id, title);
+    } catch {
+      continue; // skip an unreadable tab rather than fail the whole read
+    }
+    const part = gridToHeaderRows(grid);
+    for (const h of part.headers) {
+      const k = h.toLowerCase();
+      if (h && !seen.has(k)) {
+        seen.add(k);
+        headerSet.push(h);
+      }
+    }
+    rows.push(...part.rows);
+  }
+  return { headers: headerSet, rows, title: titles.join(", ") };
+}
+
+// Write-back always targets the tab in the link (gid) — see writeBackToSheet.
 
 const A = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 function colLetter(i: number): string {

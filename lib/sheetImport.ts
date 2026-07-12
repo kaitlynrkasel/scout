@@ -112,6 +112,31 @@ function sheetToRows(XLSX: any, ws: any): { headers: string[]; rows: Record<stri
   return { headers, rows };
 }
 
+// Read EVERY tab in a workbook and combine (union of columns), so a multi-tab
+// tracking sheet is fully read, not just the first tab.
+export function workbookToRows(
+  XLSX: any,
+  wb: any
+): { headers: string[]; rows: Record<string, string>[] } {
+  const headers: string[] = [];
+  const seen = new Set<string>();
+  const rows: Record<string, string>[] = [];
+  for (const name of wb.SheetNames || []) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const part = sheetToRows(XLSX, ws);
+    for (const h of part.headers) {
+      const k = h.toLowerCase();
+      if (h && !seen.has(k)) {
+        seen.add(k);
+        headers.push(h);
+      }
+    }
+    rows.push(...part.rows);
+  }
+  return { headers, rows };
+}
+
 // Fetch a linked sheet through the server route and parse it to { headers, rows }.
 export async function fetchSheetRows(
   url: string,
@@ -153,9 +178,8 @@ export async function fetchSheetRows(
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   const wb = XLSX.read(bytes, { type: "array" });
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  if (!ws) throw new Error("The workbook has no sheets.");
-  return sheetToRows(XLSX, ws);
+  if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
+  return workbookToRows(XLSX, wb);
 }
 
 // Turn mapped rows into Find records (deterministic ids, so re-syncing the same
