@@ -2410,6 +2410,38 @@ function ScoutTool({
     if (activeId === id) selectProject(nextProjects[0].id);
   }
 
+  // A company was deleted — wipe every local project that belonged to it, plus
+  // that project's finds and categories, so the user's app no longer shows any
+  // of that company's work. Never leaves the app with zero projects (seeds a
+  // blank one if the company owned them all), and clears the company lens.
+  function purgeCompanyData(workspaceId: string) {
+    if (!workspaceId) return;
+    const removedIds = new Set(
+      projects.filter((p) => (p.companyId || "") === workspaceId).map((p) => p.id)
+    );
+    if (removedIds.size) {
+      let nextProjects = projects.filter((p) => !removedIds.has(p.id));
+      let nextCats = categories.filter((c) => !removedIds.has(c.projectId));
+      const nextFinds = finds.filter((f) => !removedIds.has(f.projectId));
+      if (!nextProjects.length) {
+        const def: Project = {
+          id: `proj-${Date.now()}`,
+          name: "Untitled project",
+          useCase: "",
+          context: "",
+        };
+        nextProjects = [def];
+        nextCats = [...nextCats, ...seedForProject(def.id, def.useCase)];
+      }
+      saveProjects(nextProjects);
+      saveCats(nextCats);
+      saveFinds(nextFinds);
+      if (removedIds.has(activeId)) selectProject(nextProjects[0].id);
+    }
+    // Drop the company switcher lens if it was pointed at the deleted company.
+    if (activeCompanyId === workspaceId) selectCompany("");
+  }
+
   function setProjectContext(id: string, context: string) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, context } : p)));
   }
@@ -6084,6 +6116,7 @@ function ScoutTool({
           accountEmail={accountEmail || ""}
           projects={projects}
           finds={finds}
+          onCompanyDeleted={purgeCompanyData}
         />
       )}
 
@@ -12989,11 +13022,13 @@ function TeamTab({
   accountEmail,
   projects,
   finds,
+  onCompanyDeleted,
 }: {
   getToken?: () => Promise<string | null>;
   accountEmail: string;
   projects: Project[];
   finds: Find[];
+  onCompanyDeleted?: (workspaceId: string) => void;
 }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -13202,14 +13237,17 @@ function TeamTab({
   // Owner-only: permanently delete the whole company (confirmed by name).
   const deleteCompany = () =>
     run("delete", async () => {
+      const deletedId = workspace.id;
       const r = await authFetch("/api/team/workspace", {
         method: "DELETE",
-        body: JSON.stringify({ workspaceId: workspace.id, confirmName: deleteConfirm.trim() }),
+        body: JSON.stringify({ workspaceId: deletedId, confirmName: deleteConfirm.trim() }),
       });
       setDeleteConfirm("");
       setShowDelete(false);
       setActiveWsId("");
-      setNote(`"${r.name}" was deleted.`);
+      // Wipe this company's local projects, finds and categories from the app.
+      onCompanyDeleted?.(deletedId);
+      setNote(`"${r.name}" was deleted, along with its projects and finds.`);
       await loadCtx();
     });
 
