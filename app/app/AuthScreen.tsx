@@ -98,7 +98,17 @@ export default function AuthScreen({
       const { error: uErr } = await supabase.auth.updateUser({ password });
       if (uErr) throw uErr;
       setNotice("Your password is updated. Taking you in…");
-      // verifyOtp created a session; the parent's auth listener signs them in.
+      // verifyOtp created a persisted session. Don't rely on the parent's auth
+      // listener to route us in (this AuthScreen instance has no onRecoveryDone
+      // and the event doesn't always advance the gate) — reload so getSession()
+      // finds the fresh session and drops us straight into the app.
+      setTimeout(() => {
+        try {
+          window.location.assign("/app");
+        } catch {
+          onRecoveryDone?.();
+        }
+      }, 800);
     } catch (e: any) {
       setError(e?.message || "That code didn't work. Check it and try again.");
     } finally {
