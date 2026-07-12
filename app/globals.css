@@ -117,6 +117,50 @@ html.theme-transition *::after {
   -webkit-text-fill-color: transparent;
 }
 
+/* ---- Editorial type: share the landing's Bricolage display voice ----
+   Headings and .font-display render in Bricolage Grotesque with tight tracking;
+   the body copy stays Inter. This is what makes the app read like the landing. */
+h1, h2, h3, .font-display {
+  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Kicker eyebrow — the landing's small uppercase label, in dusty slate-blue.
+   Used above section headers so structure reads editorial and blue-forward. */
+.kicker {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: rgb(var(--c-blue-deep));
+  line-height: 1;
+}
+
+/* Dusty-blue denim navigation rail — the always-visible left column reads clearly
+   blue against the warm cream canvas (leather + denim). Dark text stays legible on
+   the light periwinkle; a cool slate panel in dark mode. */
+.rail {
+  background-color: #D7E1EE;
+  border-right-color: #C3D2E4 !important;
+}
+html.dark .rail {
+  background-color: #232C34;
+  border-right-color: #313d47 !important;
+}
+
+/* Solid denim-blue pill for the active nav item. A fixed mid-slate in both themes
+   (the blue tokens are light tints that flip for dark, so they can't carry white
+   text) — white text reads cleanly on both. */
+.nav-active {
+  background-color: #4F6474;
+  color: #fff;
+}
+html.dark .nav-active {
+  background-color: #3B5060;
+  color: #fff;
+}
+
 /* ---- Card + tab helpers (clean/flat) ---- */
 
 /* Minimal, flat elevation for cards, leans on hairline borders, not depth. */

@@ -4551,8 +4551,9 @@ function ScoutTool({
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
           <div className="mb-6">
-            <h1 className="text-2xl font-semibold tracking-tight text-ink">Outreach</h1>
-            <p className="mt-1 text-sm text-body">
+            <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
+            <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Outreach</h1>
+            <p className="mt-1.5 text-sm text-body">
               Find your people and draft messages in your voice.
             </p>
           </div>
@@ -6238,8 +6239,8 @@ function SideNav({
               onClick={() => setTab(it.key)}
               className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-[14px] transition ${
                 active
-                  ? "bg-brown-tint font-medium text-brown-deep"
-                  : "font-normal text-body hover:bg-warm-bg"
+                  ? "nav-active font-medium shadow-card"
+                  : "font-normal text-body hover:bg-white/50 dark:hover:bg-white/5"
               }`}
             >
               <svg
@@ -6259,7 +6260,7 @@ function SideNav({
               {typeof it.badge === "number" && it.badge > 0 && (
                 <span
                   className={`ml-auto rounded-full px-2 py-0.5 text-[11px] font-extrabold ${
-                    active ? "bg-white/20 text-white" : "bg-brown-tint text-brown-deep"
+                    active ? "bg-white/20 text-white" : "bg-blue-tint text-blue-deep"
                   }`}
                 >
                   {it.badge}
@@ -6268,7 +6269,7 @@ function SideNav({
               {it.dot && (
                 <span
                   className={`ml-auto h-1.5 w-1.5 rounded-full ${
-                    active ? "bg-surface" : "bg-brown"
+                    active ? "bg-surface" : "bg-blue-deep"
                   }`}
                 />
               )}
@@ -6278,9 +6279,7 @@ function SideNav({
       </nav>
 
       <div className="mt-auto border-t border-warm-border pt-3">
-        <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
-          Active project
-        </div>
+        <div className="kicker px-2 pb-1.5">Active project</div>
         {projects.length > 0 && (
           <select
             value={activeId}
@@ -6426,14 +6425,14 @@ function SideNav({
             className="absolute inset-0 bg-ink/40"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto border-r border-warm-border bg-surface-2 p-2.5 shadow-xl">
+          <aside className="rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto border-r border-warm-border p-2.5 shadow-xl">
             {navContent}
           </aside>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <aside className="sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 border-r border-warm-border bg-surface-2 p-2.5 md:flex">
+      <aside className="rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 border-r border-warm-border p-2.5 md:flex">
         {navContent}
       </aside>
     </>
@@ -10195,7 +10194,10 @@ function DashboardTab({
       {/* -------- Header: greeting + tab switcher -------- */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          <div className="kicker mb-2">
+            {dashTab === "you" ? "Your outreach, fetched" : "Across everyone on Scout"}
+          </div>
+          <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
             {dashTab === "you"
               ? firstName
                 ? `Good ${partOfDay}, ${firstName}`
@@ -10244,7 +10246,7 @@ function DashboardTab({
         aria-label="Ask Scout, open the command palette"
         className="mt-6 flex w-full items-center gap-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5 text-left shadow-float transition hover:border-clay"
       >
-        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown">
+        <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep">
           <circle cx="11" cy="11" r="7" />
           <path d="m21 21-4.3-4.3" />
         </svg>
@@ -10443,11 +10445,14 @@ function DashboardTab({
 
       {/* -------- Recent finds -------- */}
       <section className="mt-8">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-ink">Recent finds</h2>
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="kicker mb-1.5">Fresh off the scout</div>
+            <h2 className="font-display text-[22px] font-bold tracking-[-0.02em] text-ink">Recent finds</h2>
+          </div>
           <button
             onClick={goFinds}
-            className="text-sm font-medium text-brown transition hover:text-brown-deep"
+            className="text-sm font-semibold text-blue-deep transition hover:text-ink"
           >
             View all &rarr;
           </button>

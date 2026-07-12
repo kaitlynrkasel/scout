@@ -13,6 +13,8 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+        // Bricolage Grotesque display face, shared with the landing page.
+        display: ["var(--font-display)", "var(--font-sans)", "system-ui", "sans-serif"],
       },
       colors: {
         // Every token references a CSS variable (space-separated RGB triplet)
