@@ -4570,6 +4570,7 @@ function ScoutTool({
         onImport={importFinds}
         projects={projects}
         activeProjectId={activeId}
+        getToken={getToken}
       />
       {discovering && tab !== "outreach" && (
         <GlobalScoutStatus

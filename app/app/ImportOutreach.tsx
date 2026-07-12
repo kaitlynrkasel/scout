@@ -89,18 +89,47 @@ function looksLikeDenied(v: string): boolean {
   return /no|passed|rejected|ghosted|dead|declin/i.test(v);
 }
 
+// SheetJS worksheet → { header row, string-cell rows }, matching the CSV shape.
+// Shared by the file drop and the link importer. XLSX is passed in so it stays a
+// dynamic import (loaded only when a spreadsheet is actually read).
+function sheetToRows(
+  XLSX: any,
+  ws: any
+): { heads: string[]; clean: Record<string, string>[] } {
+  const aoa: any[][] = XLSX.utils.sheet_to_json(ws, {
+    header: 1,
+    blankrows: false,
+    defval: "",
+    raw: false,
+  });
+  const heads = (aoa[0] || []).map((h: any) => String(h ?? "").trim());
+  const clean = aoa
+    .slice(1)
+    .map((r) => {
+      const obj: Record<string, string> = {};
+      heads.forEach((h, i) => {
+        obj[h] = String(r[i] ?? "").trim();
+      });
+      return obj;
+    })
+    .filter((r) => Object.values(r).some((v) => v));
+  return { heads, clean };
+}
+
 export default function ImportOutreach({
   open,
   onClose,
   onImport,
   projects,
   activeProjectId,
+  getToken,
 }: {
   open: boolean;
   onClose: () => void;
   onImport: (finds: Find[]) => number;
   projects: Project[];
   activeProjectId: string;
+  getToken?: () => Promise<string | null>;
 }) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -111,6 +140,7 @@ export default function ImportOutreach({
   const [error, setError] = useState("");
   const [imported, setImported] = useState<number | null>(null);
   const [fileName, setFileName] = useState("");
+  const [linkUrl, setLinkUrl] = useState("");
   const inputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -162,30 +192,9 @@ export default function ImportOutreach({
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(buf, { type: "array" });
         const ws = wb.Sheets[wb.SheetNames[0]];
-        if (!ws) throw new Error("The workbook has no sheets.");
-        // header:1 → array-of-arrays; raw:false formats dates/numbers to strings.
-        const aoa = XLSX.utils.sheet_to_json<any[]>(ws, {
-          header: 1,
-          blankrows: false,
-          defval: "",
-          raw: false,
-        });
         setBusy(false);
-        if (!aoa.length) {
-          setError("That sheet looks empty.");
-          return;
-        }
-        const heads = (aoa[0] || []).map((h) => String(h ?? "").trim());
-        const clean = aoa
-          .slice(1)
-          .map((r) => {
-            const obj: Record<string, string> = {};
-            heads.forEach((h, i) => {
-              obj[h] = String((r as any[])[i] ?? "").trim();
-            });
-            return obj;
-          })
-          .filter((r) => Object.values(r).some((v) => v));
+        if (!ws) throw new Error("The workbook has no sheets.");
+        const { heads, clean } = sheetToRows(XLSX, ws);
         ingest(heads, clean);
       } catch (e: any) {
         setBusy(false);
@@ -216,6 +225,65 @@ export default function ImportOutreach({
         setError(`Could not read the file: ${err.message}`);
       },
     });
+  }
+
+  // Import from a link (Google Sheet share link or a public .csv/.xlsx URL). The
+  // server fetches it (CORS + SSRF safe) and returns CSV text or spreadsheet
+  // bytes, which we parse with the same code as a dropped file.
+  async function handleUrl() {
+    const u = linkUrl.trim();
+    if (!u) return;
+    setError("");
+    setImported(null);
+    setBusy(true);
+    try {
+      const token = getToken ? await getToken() : null;
+      const res = await fetch("/api/import/sheet", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ url: u }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setBusy(false);
+        setError(data?.error || "Couldn't read that link.");
+        return;
+      }
+      setFileName(/docs\.google\.com/.test(u) ? "Linked Google Sheet" : u);
+      if (data.kind === "csv") {
+        const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
+          header: true,
+          skipEmptyLines: true,
+          transformHeader: (h) => h.trim(),
+        });
+        setBusy(false);
+        const clean = (result.data || []).filter((r) =>
+          Object.values(r).some((v) => String(v || "").trim())
+        );
+        const heads = (result.meta.fields || []).map((h) => h.trim());
+        ingest(heads, clean);
+      } else {
+        const XLSX = await import("xlsx");
+        const bin = atob(String(data.b64 || ""));
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const wb = XLSX.read(bytes, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        setBusy(false);
+        if (!ws) {
+          setError("The workbook has no sheets.");
+          return;
+        }
+        const { heads, clean } = sheetToRows(XLSX, ws);
+        ingest(heads, clean);
+      }
+    } catch (e: any) {
+      setBusy(false);
+      setError(e?.message || "Couldn't import from that link.");
+    }
   }
 
   // Which columns are already assigned to a Scout field. Used to disable the
@@ -387,6 +455,36 @@ export default function ImportOutreach({
               >
                 {busy ? "Reading…" : "Choose a file"}
               </button>
+
+              {/* Or import straight from a link (Google Sheet / public URL). */}
+              <div className="mx-auto mt-6 max-w-xl border-t border-warm-border pt-5">
+                <div className="text-xs font-bold uppercase tracking-wider text-body/50">
+                  Or paste a link
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input
+                    value={linkUrl}
+                    onChange={(e) => setLinkUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && linkUrl.trim()) handleUrl();
+                    }}
+                    placeholder="https://docs.google.com/spreadsheets/…"
+                    className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  />
+                  <button
+                    onClick={handleUrl}
+                    disabled={busy || !linkUrl.trim()}
+                    className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                  >
+                    {busy ? "Reading…" : "Read link"}
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-body/60">
+                  Google Sheets need to be shared as <b>Anyone with the link &middot;
+                  Viewer</b>. (Live auto-sync and writing back to the sheet are coming
+                  next.)
+                </p>
+              </div>
             </div>
           )}
 
