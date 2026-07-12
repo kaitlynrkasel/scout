@@ -124,6 +124,14 @@ export async function fetchSheetRows(
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data?.error || "Couldn't read that link.");
 
+  // Private read via the Sheets API returns parsed rows straight away.
+  if (data.kind === "rows") {
+    return {
+      headers: Array.isArray(data.headers) ? data.headers : [],
+      rows: Array.isArray(data.rows) ? data.rows : [],
+    };
+  }
+
   if (data.kind === "csv") {
     const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
       header: true,

@@ -1289,6 +1289,9 @@ function ScoutTool({
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
   const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
+  // Google Sheets connection (level 3: private read + write-back).
+  const [sheetsConnected, setSheetsConnected] = useState(false);
+  const [sheetsEmail, setSheetsEmail] = useState("");
   const [activity, setActivity] = useState<Activity>(ZERO_ACTIVITY);
   const [finds, setFinds] = useState<Find[]>([]);
   const [findFilter, setFindFilter] = useState<FindFilter>("new");
@@ -1943,6 +1946,7 @@ function ScoutTool({
     refreshGmail();
     refreshOutlook();
     refreshCommunity();
+    refreshSheets();
     // Handle the return from Google's / Microsoft's consent screen.
     try {
       const p = new URLSearchParams(window.location.search);
@@ -1968,10 +1972,16 @@ function ScoutTool({
             : "Couldn't connect Outlook. Please try again."
         );
       }
-      if (g || o) {
+      const sh = p.get("sheets");
+      if (sh) {
+        setTab("profile");
+        if (sh === "connected") refreshSheets();
+      }
+      if (g || o || sh) {
         const u = new URL(window.location.href);
         u.searchParams.delete("gmail");
         u.searchParams.delete("outlook");
+        u.searchParams.delete("sheets");
         window.history.replaceState({}, "", u.toString());
       }
     } catch {}
@@ -3033,6 +3043,93 @@ function ScoutTool({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, syncedSheets.length]);
+
+  // ---- Google Sheets connection (level 3) ----
+  async function refreshSheets() {
+    if (!getToken) return;
+    try {
+      const t = await getToken();
+      if (!t) return;
+      const res = await fetch("/api/sheets/status", { headers: { authorization: `Bearer ${t}` } });
+      const d = await res.json().catch(() => ({}));
+      setSheetsConnected(!!d.connected);
+      setSheetsEmail(d.email || "");
+    } catch {
+      /* non-fatal */
+    }
+  }
+  async function connectSheets() {
+    if (!getToken) return;
+    const t = await getToken();
+    if (!t) return;
+    const res = await fetch("/api/sheets/auth", {
+      method: "POST",
+      headers: { authorization: `Bearer ${t}` },
+    });
+    const d = await res.json().catch(() => ({}));
+    if (d.url) window.location.href = d.url;
+  }
+  async function disconnectSheets() {
+    if (!getToken) return;
+    const t = await getToken();
+    if (!t) return;
+    await fetch("/api/sheets/disconnect", {
+      method: "POST",
+      headers: { authorization: `Bearer ${t}` },
+    });
+    setSheetsConnected(false);
+    setSheetsEmail("");
+  }
+
+  // Human-readable status for the sheet's "Scout Status" column.
+  const SHEET_STATUS_LABEL: Record<string, string> = {
+    new: "New",
+    drafted: "Drafted",
+    sent: "Sent",
+    replied: "Replied",
+    denied: "Passed",
+  };
+
+  // Automatic write-back: mirror each linked Google Sheet's project pipeline back
+  // into the sheet (status column on matching rows, append new finds). Only
+  // Google Sheets are writable; public CSV links are read-only.
+  async function writeBackToSheets() {
+    if (!sheetsConnected || !getToken || !syncedSheets.length) return;
+    const token = await getToken().catch(() => null);
+    if (!token) return;
+    for (const s of syncedSheets) {
+      if (!/docs\.google\.com\/spreadsheets/.test(s.url)) continue;
+      const projFinds = finds.filter((f) => f.projectId === s.projectId);
+      if (!projFinds.length) continue;
+      const payload = projFinds.map((f) => ({
+        name: f.opp.contactName || f.opp.name || "",
+        email: f.opp.contactEmail || "",
+        status: SHEET_STATUS_LABEL[f.status] || f.status,
+        company: f.opp.outlet || "",
+        role: f.opp.contactRole || "",
+      }));
+      try {
+        await fetch("/api/sheets/write", {
+          method: "POST",
+          headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+          body: JSON.stringify({ url: s.url, finds: payload }),
+        });
+      } catch {
+        /* best-effort */
+      }
+    }
+  }
+  const writeFnRef = useRef<() => Promise<void>>(async () => {});
+  useEffect(() => {
+    writeFnRef.current = writeBackToSheets;
+  });
+  // Debounced: push to the sheet a few seconds after the pipeline settles.
+  useEffect(() => {
+    if (!hydrated || !sheetsConnected || !syncedSheets.length) return;
+    const t = setTimeout(() => void writeFnRef.current(), 6000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, sheetsConnected, syncedSheets.length, finds]);
 
   // Concierge: pull any owner-seeded finds queued for this account, merge them
   // into the active project (deduped like a real search), then mark them
@@ -5727,6 +5824,10 @@ function ScoutTool({
           activeCompanyId={activeCompanyId}
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
+          sheetsConnected={sheetsConnected}
+          sheetsEmail={sheetsEmail}
+          onConnectSheets={connectSheets}
+          onDisconnectSheets={disconnectSheets}
           getToken={getToken}
           companyName={profile.companyName || ""}
           companyRole={profile.companyRole || ""}
@@ -15030,6 +15131,10 @@ function ProfileTab({
   activeCompanyId,
   syncedSheets,
   onRemoveSync,
+  sheetsConnected,
+  sheetsEmail,
+  onConnectSheets,
+  onDisconnectSheets,
   getToken,
   companyName,
   companyRole,
@@ -15100,6 +15205,10 @@ function ProfileTab({
   activeCompanyId: string;
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
+  sheetsConnected: boolean;
+  sheetsEmail: string;
+  onConnectSheets: () => void;
+  onDisconnectSheets: () => void;
   getToken?: () => Promise<string | null>;
   companyName: string;
   companyRole: string;
@@ -15706,6 +15815,40 @@ function ProfileTab({
           >
             Import a file
           </button>
+          {/* Level 3: connect Google Sheets for private reads + write-back. */}
+          <div className="w-full border-t border-warm-border pt-3">
+            <div className="flex flex-wrap items-center gap-2">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></svg>
+              <span className="text-xs font-bold text-ink">Google Sheets</span>
+              {sheetsConnected ? (
+                <span className="rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+                  Connected{sheetsEmail ? ` · ${sheetsEmail}` : ""}
+                </span>
+              ) : (
+                <span className="text-[11px] text-body/50">Not connected</span>
+              )}
+              {sheetsConnected ? (
+                <button
+                  onClick={onDisconnectSheets}
+                  className="ml-auto text-[11px] font-semibold text-body/50 transition hover:text-red-600"
+                >
+                  Disconnect
+                </button>
+              ) : (
+                <button
+                  onClick={onConnectSheets}
+                  className="ml-auto rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-soft transition hover:opacity-95"
+                >
+                  Connect Google Sheets
+                </button>
+              )}
+            </div>
+            <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
+              {sheetsConnected
+                ? "Scout can read your private sheets (no public sharing needed) and writes your pipeline back automatically — a Scout Status column on matching rows, plus new finds appended."
+                : "Connect to link private sheets without making them public, and let Scout write your pipeline back into the sheet automatically (status column + new finds)."}
+            </p>
+          </div>
           {syncedSheets.length > 0 && (
             <div className="w-full border-t border-warm-border pt-3">
               <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { userIdFromReq } from "@/lib/supabaseAdmin";
+import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
+import { readSheetByUrl } from "@/lib/googleSheets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +52,26 @@ export async function POST(req: NextRequest) {
   }
 
   const gUrl = googleCsvUrl(raw);
+
+  // Private read: if this is a Google Sheet and the user has connected Google
+  // Sheets, read it through the API (works without public sharing). Falls back
+  // to the public CSV export below if not connected or the read fails.
+  if (gUrl && supabaseAdmin) {
+    const { data: conn } = await supabaseAdmin
+      .from("sheets_connections")
+      .select("refresh_token")
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (conn?.refresh_token) {
+      try {
+        const { headers, rows } = await readSheetByUrl(conn.refresh_token as string, raw);
+        return NextResponse.json({ kind: "rows", headers, rows });
+      } catch {
+        /* fall through to the public export path */
+      }
+    }
+  }
+
   const fetchUrl = gUrl || raw;
   const wantsCsv = !!gUrl || /\.csv(\?|$)/i.test(fetchUrl);
 
