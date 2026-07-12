@@ -12569,6 +12569,16 @@ function TeamTab({
       await loadCtx();
     });
 
+  // Owner/admin: cancel a pending invite that hasn't been accepted yet.
+  const revoke = (email: string) =>
+    run("revoke-" + email, async () => {
+      await authFetch("/api/team/invite", {
+        method: "DELETE",
+        body: JSON.stringify({ workspaceId: workspace.id, email }),
+      });
+      await loadCtx();
+    });
+
   // Owner/admin: change a teammate's role (admin | editor | viewer).
   const setRole = (targetUserId: string, role: string) =>
     run("role-" + targetUserId, async () => {
@@ -12840,6 +12850,9 @@ function TeamTab({
               <span className="text-xs font-semibold text-body/60">
                 {workspace.members?.length || 1}{" "}
                 {(workspace.members?.length || 1) === 1 ? "member" : "members"}
+                {(workspace.pending || []).length > 0
+                  ? ` · ${workspace.pending.length} pending`
+                  : ""}
               </span>
             </div>
             <div className="mt-3 space-y-1.5">
@@ -12883,6 +12896,44 @@ function TeamTab({
                 );
               })}
             </div>
+
+            {/* Invited but not yet joined — so the roster is complete. They become
+                full members automatically the next time they open Scout. */}
+            {(workspace.pending || []).length > 0 && (
+              <div className="mt-4 border-t border-warm-border pt-4">
+                <div className="text-xs font-bold uppercase tracking-wider text-body/50">
+                  Pending invites
+                </div>
+                <div className="mt-2 space-y-1.5">
+                  {(workspace.pending || []).map((p: any) => (
+                    <div key={p.id} className="flex items-center gap-2.5 text-sm">
+                      <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full border border-dashed border-warm-border text-[10px] font-bold text-body/50">
+                        {emailShort(p.email).charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-body" title={p.email}>
+                        {p.email}
+                      </span>
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-body/60">
+                        {p.role || "editor"}
+                      </span>
+                      <span className="hidden text-[11px] text-body/50 sm:inline">
+                        hasn&apos;t joined yet
+                      </span>
+                      {canManage && (
+                        <button
+                          onClick={() => revoke(p.email)}
+                          disabled={busy === "revoke-" + p.email}
+                          title="Cancel this invite"
+                          className="shrink-0 rounded-md px-1.5 text-body/40 transition hover:text-red-600"
+                        >
+                          &times;
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Owner-only: weight how much each member's decisions count in team
                 learning. Default is 1 for everyone (equal). */}

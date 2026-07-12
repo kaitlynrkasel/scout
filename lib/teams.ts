@@ -253,10 +253,17 @@ export async function getWorkspaceContext(uid: string, email: string) {
       .from("workspace_members")
       .select("workspace_id, user_id, email, role, weight")
       .in("workspace_id", wsIds);
+    // Outgoing invites that haven't been accepted yet, so the roster can show
+    // "invited — hasn't joined yet" alongside the people who are already in.
+    const { data: pendingRows } = await db()
+      .from("workspace_invites")
+      .select("id, workspace_id, email, role, created_at")
+      .in("workspace_id", wsIds);
     workspaces = (wsRows || []).map((w: any) => ({
       ...w,
       role: (memberships || []).find((m: any) => m.workspace_id === w.id)?.role || "editor",
       members: (memberRows || []).filter((m: any) => m.workspace_id === w.id),
+      pending: (pendingRows || []).filter((p: any) => p.workspace_id === w.id),
     }));
   }
 
@@ -387,6 +394,18 @@ async function sendInviteEmail(
     return true;
   }
   return false; // inviter has no connected mailbox — invite still stands
+}
+
+// Owner/admin: cancel a pending invite (before it's accepted).
+export async function revokeInvite(uid: string, workspaceId: string, email: string) {
+  await assertRole(uid, workspaceId, "admin");
+  const em = String(email || "").trim().toLowerCase();
+  await db()
+    .from("workspace_invites")
+    .delete()
+    .eq("workspace_id", workspaceId)
+    .eq("email", em);
+  return { revoked: em };
 }
 
 // Join every workspace that has a pending invite for this email, applying the
