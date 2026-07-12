@@ -36,7 +36,12 @@ create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   user_id uuid not null,
   email text not null,
-  role text not null default 'member', -- 'owner' | 'member'
+  -- Role hierarchy (increasing power): 'viewer' < 'editor' < 'admin' < 'owner'.
+  --   owner  = created the company; full control, one per workspace.
+  --   admin  = invite/remove people, set roles + project assignments, edit company.
+  --   editor = work finds (search, draft, send, claim, change status).
+  --   viewer = read-only: sees the shared pipeline, cannot change it.
+  role text not null default 'editor',
   weight int not null default 1,        -- how much this member's decisions count in team learning (owner-set)
   created_at timestamptz not null default now(),
   primary key (workspace_id, user_id)
@@ -45,15 +50,25 @@ create table if not exists public.workspace_members (
 -- Team-learning weight per member (default 1 = equal). Added via ALTER so
 -- re-running upgrades an existing workspace_members table.
 alter table public.workspace_members add column if not exists weight int not null default 1;
+-- Migrate the old two-tier model ('member') onto the new four-tier one.
+update public.workspace_members set role = 'editor' where role = 'member';
 
 create table if not exists public.workspace_invites (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
   email text not null, -- invited email, lowercased
   invited_by uuid not null,
+  role text not null default 'editor',        -- role granted when they accept
+  project_ids uuid[] not null default '{}',   -- shared projects to auto-add them to on accept
   created_at timestamptz not null default now(),
   unique (workspace_id, email)
 );
+
+-- Invites carry the role + pre-assigned projects so accepting (auto, on first
+-- sign-in) drops the new teammate straight into the right seats. Added via ALTER
+-- so re-running upgrades an existing table.
+alter table public.workspace_invites add column if not exists role text not null default 'editor';
+alter table public.workspace_invites add column if not exists project_ids uuid[] not null default '{}';
 
 create table if not exists public.shared_projects (
   id uuid primary key default gen_random_uuid(),

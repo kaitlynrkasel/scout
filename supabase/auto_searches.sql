@@ -40,6 +40,10 @@ create table if not exists auto_finds (
 alter table auto_searches add column if not exists email_digest boolean not null default true;
 -- For installs that predate Phase 2 auto-drafting.
 alter table auto_finds add column if not exists draft jsonb;
+-- Team dedup: when set, this auto-search targets a shared project — the cron
+-- excludes prospects already in that team's pipeline and writes new ones back to
+-- it, so each teammate's daily email carries a DIFFERENT slice (no overlap).
+alter table auto_searches add column if not exists shared_project_id uuid;
 
 create index if not exists idx_auto_searches_due
   on auto_searches (next_run_at)

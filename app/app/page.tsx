@@ -12310,6 +12310,7 @@ function TeamTab({
   });
   const [wsName, setWsName] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("editor");
   const [sharedProjects, setSharedProjects] = useState<any[]>([]);
   const [shareChoice, setShareChoice] = useState("");
   const [openId, setOpenId] = useState("");
@@ -12385,10 +12386,22 @@ function TeamTab({
     run("invite", async () => {
       await authFetch("/api/team/invite", {
         method: "POST",
-        body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail }),
+        body: JSON.stringify({ workspaceId: workspace.id, email: inviteEmail, role: inviteRole }),
       });
-      setNote(`Invited ${inviteEmail.trim()}. They'll see it when they sign in.`);
+      setNote(
+        `Invited ${inviteEmail.trim()} as ${inviteRole}. They join automatically the first time they sign in.`
+      );
       setInviteEmail("");
+      await loadCtx();
+    });
+
+  // Owner/admin: change a teammate's role (admin | editor | viewer).
+  const setRole = (targetUserId: string, role: string) =>
+    run("role-" + targetUserId, async () => {
+      await authFetch("/api/team/member-role", {
+        method: "POST",
+        body: JSON.stringify({ workspaceId: workspace.id, userId: targetUserId, role }),
+      });
       await loadCtx();
     });
 
@@ -12411,6 +12424,8 @@ function TeamTab({
       await loadCtx();
     });
   const isOwner = workspace?.role === "owner";
+  // Owner + admin can manage the roster (invite, set roles, weights).
+  const canManage = workspace?.role === "owner" || workspace?.role === "admin";
 
   // Share a local project (with its current finds) into the workspace.
   const shareProject = () =>
@@ -12565,33 +12580,57 @@ function TeamTab({
                 {(workspace.members?.length || 1) === 1 ? "member" : "members"}
               </span>
             </div>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {(workspace.members || []).map((m: any) => (
-                <span
-                  key={m.user_id}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-warm-border bg-warm-bg px-3 py-1 text-xs font-medium text-ink"
-                  title={m.email}
-                >
-                  <span className="grid h-4 w-4 place-items-center rounded-full bg-brand-gradient text-[9px] font-bold text-white">
-                    {emailShort(m.email).charAt(0).toUpperCase()}
-                  </span>
-                  {m.email === accountEmail ? "You" : emailShort(m.email)}
-                  <span className="text-[9px] font-bold uppercase text-body/50">
-                    {m.role === "owner" ? "admin" : "team member"}
-                  </span>
-                </span>
-              ))}
+            <div className="mt-3 space-y-1.5">
+              {(workspace.members || []).map((m: any) => {
+                // Managers can change roles, but never the owner's, and only the
+                // owner can touch admins (mirrors the server guard).
+                const editableRole =
+                  canManage &&
+                  m.role !== "owner" &&
+                  m.user_id !== undefined &&
+                  (isOwner || m.role !== "admin");
+                return (
+                  <div key={m.user_id} className="flex items-center gap-2.5 text-sm">
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-brand-gradient text-[10px] font-bold text-white">
+                      {emailShort(m.email).charAt(0).toUpperCase()}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-ink" title={m.email}>
+                      {m.email === accountEmail ? "You" : emailShort(m.email)}
+                    </span>
+                    {editableRole ? (
+                      <select
+                        value={["admin", "editor", "viewer"].includes(m.role) ? m.role : "editor"}
+                        onChange={(e) => setRole(m.user_id, e.target.value)}
+                        disabled={busy === "role-" + m.user_id}
+                        className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1 text-xs font-semibold text-ink outline-none transition focus:border-coral disabled:opacity-50"
+                      >
+                        {(isOwner ? ["admin", "editor", "viewer"] : ["editor", "viewer"]).map(
+                          (r) => (
+                            <option key={r} value={r}>
+                              {r[0].toUpperCase() + r.slice(1)}
+                            </option>
+                          )
+                        )}
+                      </select>
+                    ) : (
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-body/60">
+                        {m.role || "editor"}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             {/* Owner-only: weight how much each member's decisions count in team
                 learning. Default is 1 for everyone (equal). */}
-            {isOwner && (workspace.members || []).length > 1 && (
+            {canManage && (workspace.members || []).length > 1 && (
               <div className="mt-4 border-t border-warm-border pt-4">
                 <div className="text-xs font-bold uppercase tracking-wider text-body/50">
                   Team-learning weight
                 </div>
                 <p className="mt-0.5 text-xs leading-relaxed text-body/70">
-                  Everyone counts equally (1) by default. As the owner, you can weigh a
+                  Everyone counts equally (1) by default. Owners and admins can weigh a
                   member&apos;s keeps and passes more or less in what the team learns.
                 </p>
                 <div className="mt-3 space-y-1.5">
@@ -12623,28 +12662,45 @@ function TeamTab({
               </div>
             )}
 
-            {isOwner ? (
-              <div className="mt-4 flex flex-wrap gap-2 border-t border-warm-border pt-4">
-                <input
-                  value={inviteEmail}
-                  onChange={(e) => setInviteEmail(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && inviteEmail.trim()) invite();
-                  }}
-                  placeholder="Invite a teammate by email (inside or outside your company)"
-                  className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                />
-                <button
-                  onClick={invite}
-                  disabled={!inviteEmail.trim() || !!busy}
-                  className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
-                >
-                  {busy === "invite" ? "Inviting…" : "Invite"}
-                </button>
+            {canManage ? (
+              <div className="mt-4 border-t border-warm-border pt-4">
+                <div className="flex flex-wrap gap-2">
+                  <input
+                    value={inviteEmail}
+                    onChange={(e) => setInviteEmail(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && inviteEmail.trim()) invite();
+                    }}
+                    placeholder="Invite a teammate by email (inside or outside your company)"
+                    className="min-w-[240px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  />
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value)}
+                    title="What they'll be able to do"
+                    className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-coral"
+                  >
+                    {isOwner && <option value="admin">Admin</option>}
+                    <option value="editor">Editor</option>
+                    <option value="viewer">Viewer</option>
+                  </select>
+                  <button
+                    onClick={invite}
+                    disabled={!inviteEmail.trim() || !!busy}
+                    className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-bold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+                  >
+                    {busy === "invite" ? "Inviting…" : "Invite"}
+                  </button>
+                </div>
+                <p className="mt-2 text-[11px] leading-relaxed text-body/60">
+                  <b>Admin</b> manages the team &middot; <b>Editor</b> works finds
+                  (search, draft, send) &middot; <b>Viewer</b> can only look. They
+                  join automatically the first time they sign in.
+                </p>
               </div>
             ) : (
               <p className="mt-4 border-t border-warm-border pt-4 text-xs leading-relaxed text-body/60">
-                Only a company admin can invite or remove members. Ask your admin to add
+                Only an owner or admin can invite or manage members. Ask them to add
                 someone.
               </p>
             )}

@@ -6,6 +6,7 @@ import { outlookSendOrDraft } from "@/lib/outlook";
 import { signAction, nextRunAt } from "@/lib/autoSearch";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
 import { draftFor } from "@/lib/draft";
+import { sharedPipelineExclusions, addSharedFinds } from "@/lib/teams";
 import type { Opportunity } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -42,7 +43,7 @@ export async function GET(req: NextRequest) {
   // drain on the next tick a few minutes later.
   const { data: due, error } = await supabaseAdmin
     .from("auto_searches")
-    .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence, email_digest")
+    .select("id, user_id, email, goal, use_case, about, label, max_finds, cadence, email_digest, shared_project_id")
     .eq("active", true)
     .lte("next_run_at", new Date().toISOString())
     .order("next_run_at", { ascending: true })
@@ -88,11 +89,29 @@ export async function GET(req: NextRequest) {
     ran++;
 
     try {
+      // Team dedup: if this auto-search targets a shared project, skip everyone
+      // already in the team's pipeline so this teammate's email carries a
+      // DIFFERENT slice than the others. New finds are written back to the pool
+      // (below), so the pool grows and the next run naturally avoids them.
+      const sharedProjectId = (s as any).shared_project_id as string | null;
+      let feedback: any = undefined;
+      if (sharedProjectId) {
+        try {
+          const { names } = await sharedPipelineExclusions(sharedProjectId);
+          if (names.length)
+            feedback = {
+              avoid: names.map((n) => ({ name: n, reason: "already in your team's shared pipeline" })),
+            };
+        } catch {
+          /* if the pool can't be read, run without exclusions rather than skip */
+        }
+      }
       const result = await discover(
         String(s.goal),
         String(s.about || ""),
         String(s.use_case || "networking"),
-        Math.min(Number(s.max_finds) || 5, 10)
+        Math.min(Number(s.max_finds) || 5, 10),
+        feedback
       );
       // Running the engine spent a search — meter it against their plan.
       try {
@@ -107,6 +126,21 @@ export async function GET(req: NextRequest) {
       if (!opps.length) {
         results.push({ id, finds: 0 });
         continue;
+      }
+
+      // Team dedup: add this run's finds to the shared pipeline so the pool
+      // grows and every teammate's future run (and email) skips them.
+      if (sharedProjectId) {
+        try {
+          await addSharedFinds(
+            String(s.user_id),
+            String(s.email || ""),
+            sharedProjectId,
+            opps.map((opp) => ({ opp, status: "new" }))
+          );
+        } catch {
+          /* best-effort — the personal digest below still goes out */
+        }
       }
 
       // Store the finds so the approve/deny links have rows to act on.

@@ -1,19 +1,21 @@
 import { NextRequest, NextResponse } from "next/server";
 import { userFromReq } from "@/lib/supabaseAdmin";
-import { inviteToWorkspace, TeamError } from "@/lib/teams";
+import { setMemberRole, TeamError } from "@/lib/teams";
 
 export const runtime = "nodejs";
 
-// Invite someone to a workspace by email (they can be outside your company).
+// Owner/admin: change a teammate's role (admin | editor | viewer).
 export async function POST(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    const { workspaceId, email, role, projectIds } = await req.json();
-    const r = await inviteToWorkspace(u.id, String(workspaceId || ""), String(email || ""), {
-      role: role ? String(role) : undefined,
-      projectIds: Array.isArray(projectIds) ? projectIds.map(String) : undefined,
-    });
+    const { workspaceId, userId, role } = await req.json();
+    const r = await setMemberRole(
+      u.id,
+      String(workspaceId || ""),
+      String(userId || ""),
+      String(role || "")
+    );
     return NextResponse.json(r);
   } catch (e: any) {
     const status = e instanceof TeamError ? e.status : 500;

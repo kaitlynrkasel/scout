@@ -39,6 +39,10 @@ export async function POST(req: NextRequest) {
   const cadence = body?.cadence === "weekly" ? "weekly" : "daily";
   const emailDigest = body?.emailDigest !== false; // default on ("auto emails")
   const maxFinds = Math.min(Math.max(Number(body?.maxFinds) || 5, 1), 10);
+  // Optional: tie this auto-search to a shared team project. When set, the cron
+  // dedups against (and contributes to) that team's pipeline, so each teammate's
+  // daily email carries a different slice.
+  const sharedProjectId = body?.sharedProjectId ? String(body.sharedProjectId) : null;
 
   // Require a connected mailbox — that's how the digest reaches them.
   const [gmail, outlook] = await Promise.all([
@@ -53,21 +57,40 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const insert: Record<string, any> = {
+    user_id: me.id,
+    email: String(mailbox || me.email || "").toLowerCase(),
+    goal,
+    use_case: String(body?.useCase || "").slice(0, 120),
+    about: String(body?.about || "").slice(0, 2000),
+    label: String(body?.label || "").slice(0, 120),
+    max_finds: maxFinds,
+    cadence,
+    email_digest: emailDigest,
+    // First run in ~2 minutes, so the user sees it work without waiting a day.
+    next_run_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
+  };
+  // Only touch the newer team column when actually linking a shared project, so
+  // personal auto-searches keep working on DBs that predate the teams migration.
+  if (sharedProjectId) {
+    // Guard: you must be on the shared project to dedup against / feed its pool.
+    const { data: mem } = await supabaseAdmin
+      .from("shared_project_members")
+      .select("user_id")
+      .eq("shared_project_id", sharedProjectId)
+      .eq("user_id", me.id)
+      .maybeSingle();
+    if (!mem) {
+      return NextResponse.json(
+        { error: "You're not on that shared project." },
+        { status: 403 }
+      );
+    }
+    insert.shared_project_id = sharedProjectId;
+  }
   const { data, error } = await supabaseAdmin
     .from("auto_searches")
-    .insert({
-      user_id: me.id,
-      email: String(mailbox || me.email || "").toLowerCase(),
-      goal,
-      use_case: String(body?.useCase || "").slice(0, 120),
-      about: String(body?.about || "").slice(0, 2000),
-      label: String(body?.label || "").slice(0, 120),
-      max_finds: maxFinds,
-      cadence,
-      email_digest: emailDigest,
-      // First run in ~2 minutes, so the user sees it work without waiting a day.
-      next_run_at: new Date(Date.now() + 2 * 60 * 1000).toISOString(),
-    })
+    .insert(insert)
     .select("id")
     .single();
   if (error) {

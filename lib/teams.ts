@@ -40,6 +40,43 @@ async function assertProjectMember(uid: string, sharedProjectId: string) {
   if (!data) throw new TeamError("You do not have access to this shared project.", 403);
 }
 
+// ---- Roles ----
+// Increasing power: viewer < editor < admin < owner. Unknown/legacy roles read
+// as editor so nobody is accidentally locked out mid-migration.
+export const ROLE_RANK: Record<string, number> = { viewer: 0, editor: 1, admin: 2, owner: 3 };
+export const ASSIGNABLE_ROLES = ["admin", "editor", "viewer"] as const;
+function rankOf(role: string | null | undefined): number {
+  return ROLE_RANK[String(role || "")] ?? ROLE_RANK.editor;
+}
+
+// Assert the caller is a workspace member of at least `min` power; returns role.
+async function assertRole(uid: string, workspaceId: string, min: keyof typeof ROLE_RANK) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (rankOf(role) < ROLE_RANK[min])
+    throw new TeamError(`This needs the ${min} role or higher.`, 403);
+  return role;
+}
+
+// The caller's workspace role for the workspace that owns a shared project.
+// Asserts project membership too. Viewers get read access; editor+ can change.
+async function projectWorkspaceRole(uid: string, sharedProjectId: string) {
+  await assertProjectMember(uid, sharedProjectId);
+  const { data: proj } = await db()
+    .from("shared_projects")
+    .select("workspace_id, owner_user_id")
+    .eq("id", sharedProjectId)
+    .maybeSingle();
+  if (!proj) throw new TeamError("Shared project not found.", 404);
+  const role = await assertWorkspaceMember(uid, proj.workspace_id);
+  return { role, workspaceId: proj.workspace_id, ownerUserId: proj.owner_user_id };
+}
+async function assertProjectEditor(uid: string, sharedProjectId: string) {
+  const { role } = await projectWorkspaceRole(uid, sharedProjectId);
+  if (rankOf(role) < ROLE_RANK.editor)
+    throw new TeamError("Viewers can see the shared pipeline but can't change it.", 403);
+  return role;
+}
+
 // ---- Workspaces ----
 
 export async function createWorkspace(
@@ -129,9 +166,7 @@ export async function updateWorkspaceDetails(
   workspaceId: string,
   patch: { name?: string; about?: string; website?: string; industry?: string; stage?: string }
 ) {
-  const role = await assertWorkspaceMember(uid, workspaceId);
-  if (role !== "owner")
-    throw new TeamError("Only the company owner can edit the company details.", 403);
+  await assertRole(uid, workspaceId, "admin");
   const update: Record<string, any> = {};
   if (typeof patch.name === "string") {
     const nm = patch.name.trim();
@@ -161,9 +196,7 @@ export async function setMemberWeight(
   targetUserId: string,
   weight: number
 ) {
-  const role = await assertWorkspaceMember(uid, workspaceId);
-  if (role !== "owner")
-    throw new TeamError("Only the company owner can set member weights.", 403);
+  await assertRole(uid, workspaceId, "admin");
   const w = Math.max(1, Math.min(5, Math.round(Number(weight) || 1)));
   const { error } = await db()
     .from("workspace_members")
@@ -195,6 +228,13 @@ export async function joinWorkspace(uid: string, email: string, workspaceId: str
 // The caller's workspace context: the workspaces they belong to (each with its
 // members), plus any pending invites addressed to their email.
 export async function getWorkspaceContext(uid: string, email: string) {
+  // Auto-join: the first time an invitee loads the app, silently accept any
+  // invites addressed to them (role + project assignments come from the invite).
+  try {
+    await acceptAllPendingInvites(uid, email);
+  } catch {
+    /* non-fatal — they can still be shown the pending invite to accept manually */
+  }
   const { data: memberships } = await db()
     .from("workspace_members")
     .select("workspace_id, role")
@@ -213,7 +253,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
       .in("workspace_id", wsIds);
     workspaces = (wsRows || []).map((w: any) => ({
       ...w,
-      role: (memberships || []).find((m: any) => m.workspace_id === w.id)?.role || "member",
+      role: (memberships || []).find((m: any) => m.workspace_id === w.id)?.role || "editor",
       members: (memberRows || []).filter((m: any) => m.workspace_id === w.id),
     }));
   }
@@ -238,15 +278,20 @@ export async function getWorkspaceContext(uid: string, email: string) {
 export async function inviteToWorkspace(
   uid: string,
   workspaceId: string,
-  inviteEmail: string
+  inviteEmail: string,
+  opts: { role?: string; projectIds?: string[] } = {}
 ) {
-  // Admins (workspace owners) only — team members can't grow the roster.
-  const role = await assertWorkspaceMember(uid, workspaceId);
-  if (role !== "owner")
-    throw new TeamError("Only a company admin can invite people.", 403);
+  // Admins and owners can grow the roster; editors/viewers cannot.
+  const callerRole = await assertRole(uid, workspaceId, "admin");
   const em = String(inviteEmail || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em))
     throw new TeamError("Enter a valid email address.");
+  let role = String(opts.role || "editor");
+  if (!ASSIGNABLE_ROLES.includes(role as any)) role = "editor";
+  // Only the owner can mint another admin.
+  if (role === "admin" && callerRole !== "owner")
+    throw new TeamError("Only the company owner can invite someone as an admin.", 403);
+  const projectIds = (opts.projectIds || []).filter(Boolean);
   // Already a member? (match by email on existing members)
   const { data: existing } = await db()
     .from("workspace_members")
@@ -258,28 +303,85 @@ export async function inviteToWorkspace(
   await db()
     .from("workspace_invites")
     .upsert(
-      { workspace_id: workspaceId, email: em, invited_by: uid },
+      { workspace_id: workspaceId, email: em, invited_by: uid, role, project_ids: projectIds },
       { onConflict: "workspace_id,email" }
     );
-  return { invited: em };
+  return { invited: em, role };
+}
+
+// Join every workspace that has a pending invite for this email, applying the
+// invite's role and pre-assigned projects. Called automatically the first time
+// the invitee opens the app (via getWorkspaceContext), so signing up = joining.
+export async function acceptAllPendingInvites(uid: string, email: string) {
+  const em = String(email || "").trim().toLowerCase();
+  if (!em) return { joined: 0 };
+  const { data: invites } = await db()
+    .from("workspace_invites")
+    .select("id, workspace_id, role, project_ids")
+    .eq("email", em);
+  if (!invites?.length) return { joined: 0 };
+  for (const inv of invites) {
+    const { data: existing } = await db()
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", inv.workspace_id)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (!existing) {
+      const role = ASSIGNABLE_ROLES.includes(inv.role as any) ? inv.role : "editor";
+      await db()
+        .from("workspace_members")
+        .upsert(
+          { workspace_id: inv.workspace_id, user_id: uid, email: em, role },
+          { onConflict: "workspace_id,user_id" }
+        );
+    }
+    const pids: string[] = Array.isArray(inv.project_ids) ? inv.project_ids : [];
+    if (pids.length) {
+      const rows = pids.map((pid) => ({ shared_project_id: pid, user_id: uid, email: em }));
+      await db()
+        .from("shared_project_members")
+        .upsert(rows, { onConflict: "shared_project_id,user_id" });
+    }
+    await db().from("workspace_invites").delete().eq("id", inv.id);
+  }
+  return { joined: invites.length };
 }
 
 export async function acceptInvite(uid: string, email: string, workspaceId: string) {
-  const { data: invite } = await db()
-    .from("workspace_invites")
-    .select("id")
+  await acceptAllPendingInvites(uid, email);
+  return { joined: workspaceId };
+}
+
+// Owner/admin: change a member's role. Guards keep admins from touching the
+// owner or minting/removing other admins (only the owner can do that).
+export async function setMemberRole(
+  uid: string,
+  workspaceId: string,
+  targetUserId: string,
+  role: string
+) {
+  const callerRole = await assertRole(uid, workspaceId, "admin");
+  if (!ASSIGNABLE_ROLES.includes(role as any))
+    throw new TeamError("Pick admin, editor, or viewer.");
+  const { data: target } = await db()
+    .from("workspace_members")
+    .select("role")
     .eq("workspace_id", workspaceId)
-    .eq("email", email)
+    .eq("user_id", targetUserId)
     .maybeSingle();
-  if (!invite) throw new TeamError("No invite found for you in this workspace.", 404);
+  if (!target) throw new TeamError("That person is not on this team.", 404);
+  if (target.role === "owner")
+    throw new TeamError("The company owner's role can't be changed.", 403);
+  // Only the owner can grant admin or change someone who is currently an admin.
+  if ((role === "admin" || target.role === "admin") && callerRole !== "owner")
+    throw new TeamError("Only the company owner can manage admins.", 403);
   await db()
     .from("workspace_members")
-    .upsert(
-      { workspace_id: workspaceId, user_id: uid, email, role: "member" },
-      { onConflict: "workspace_id,user_id" }
-    );
-  await db().from("workspace_invites").delete().eq("id", invite.id);
-  return { joined: workspaceId };
+    .update({ role })
+    .eq("workspace_id", workspaceId)
+    .eq("user_id", targetUserId);
+  return { role };
 }
 
 // ---- Shared projects ----
@@ -296,7 +398,7 @@ export async function shareProject(
     finds?: any[];
   }
 ) {
-  await assertWorkspaceMember(uid, opts.workspaceId);
+  await assertRole(uid, opts.workspaceId, "editor");
   const nm = String(opts.name || "").trim();
   if (!nm) throw new TeamError("The project needs a name.");
   const { data: proj, error } = await db()
@@ -387,7 +489,11 @@ export async function setProjectMembers(
   uid: string,
   opts: { sharedProjectId: string; addUserIds?: string[]; removeUserIds?: string[] }
 ) {
-  await assertProjectMember(uid, opts.sharedProjectId);
+  // Assigning teammates to a project is an admin action (or the project's own
+  // creator managing their project).
+  const { role, ownerUserId } = await projectWorkspaceRole(uid, opts.sharedProjectId);
+  if (rankOf(role) < ROLE_RANK.admin && uid !== ownerUserId)
+    throw new TeamError("Only an admin or the project's creator can change who's on it.", 403);
   const { data: proj } = await db()
     .from("shared_projects")
     .select("workspace_id, owner_user_id")
@@ -433,13 +539,31 @@ export async function listSharedFinds(uid: string, sharedProjectId: string) {
   return data || [];
 }
 
+// The prospects already in a team's shared pipeline, so a member's search (live
+// or scheduled) can skip them and nobody re-finds the same person. Internal —
+// callers validate project access before invoking.
+export async function sharedPipelineExclusions(sharedProjectId: string) {
+  const { data } = await db()
+    .from("shared_finds")
+    .select("dedup_key, opp")
+    .eq("shared_project_id", sharedProjectId);
+  const keys = new Set<string>();
+  const names: string[] = [];
+  for (const r of data || []) {
+    if (r.dedup_key) keys.add(String(r.dedup_key));
+    const n = (r.opp as any)?.name;
+    if (n) names.push(String(n));
+  }
+  return { keys: [...keys], names };
+}
+
 export async function addSharedFinds(
   uid: string,
   email: string,
   sharedProjectId: string,
   finds: any[]
 ) {
-  await assertProjectMember(uid, sharedProjectId);
+  await assertProjectEditor(uid, sharedProjectId);
   const rows = (finds || [])
     .filter((f) => f && f.opp)
     .map((f) => ({
@@ -485,7 +609,7 @@ export async function updateSharedFind(
     .eq("id", findId)
     .maybeSingle();
   if (!row) throw new TeamError("That find no longer exists.", 404);
-  await assertProjectMember(uid, row.shared_project_id);
+  await assertProjectEditor(uid, row.shared_project_id);
 
   const update: Record<string, any> = {
     updated_by: uid,
