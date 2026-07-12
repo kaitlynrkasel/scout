@@ -5643,6 +5643,8 @@ function ScoutTool({
           useCase={profile.useCase}
           accountType={profile.accountType || ""}
           companyWorkspaceId={profile.companyWorkspaceId || ""}
+          companies={companies}
+          activeCompanyId={activeCompanyId}
           getToken={getToken}
           companyName={profile.companyName || ""}
           companyRole={profile.companyRole || ""}
@@ -12433,6 +12435,11 @@ function TeamTab({
     invites: [],
   });
   const [wsName, setWsName] = useState("");
+  // Full company-onboarding fields for the "new company" form (same as initial setup).
+  const [wsIndustry, setWsIndustry] = useState("");
+  const [wsStage, setWsStage] = useState("");
+  const [wsAbout, setWsAbout] = useState("");
+  const [wsWebsite, setWsWebsite] = useState("");
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("editor");
   const [sharedProjects, setSharedProjects] = useState<any[]>([]);
@@ -12529,9 +12536,19 @@ function TeamTab({
     run("create", async () => {
       const r = await authFetch("/api/team/workspace", {
         method: "POST",
-        body: JSON.stringify({ name: wsName }),
+        body: JSON.stringify({
+          name: wsName,
+          industry: wsIndustry,
+          stage: wsStage,
+          about: wsAbout,
+          website: wsWebsite,
+        }),
       });
       setWsName("");
+      setWsIndustry("");
+      setWsStage("");
+      setWsAbout("");
+      setWsWebsite("");
       setShowCreate(false);
       await loadCtx(r?.workspace?.id);
     });
@@ -12746,27 +12763,71 @@ function TeamTab({
                   ? "Adding one starts a second subscription."
                   : "Give it a name, then invite teammates and share projects with them."}
               </p>
-          <div className="mt-4">
-            <Label>Company name</Label>
-            <div className="flex flex-wrap gap-2">
-              <input
-                value={wsName}
-                onChange={(e) => setWsName(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && wsName.trim()) createWorkspace();
-                }}
-                placeholder="e.g. Acme Studio, or the marketing team"
-                className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
+              {/* Same questions as the initial company setup, so a second company
+                  is grounded just as well as the first. */}
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div>
+                  <Label>Company name</Label>
+                  <input
+                    value={wsName}
+                    onChange={(e) => setWsName(e.target.value)}
+                    placeholder="e.g. Acme Studio"
+                    className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  />
+                </div>
+                <div>
+                  <Label>Industry</Label>
+                  <input
+                    value={wsIndustry}
+                    onChange={(e) => setWsIndustry(e.target.value)}
+                    placeholder="e.g. Music"
+                    className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
+                <Label>Company stage</Label>
+                <select
+                  value={wsStage}
+                  onChange={(e) => setWsStage(e.target.value)}
+                  className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral"
+                >
+                  <option value="">Select a stage…</option>
+                  {["Pre-seed", "Startup", "Growth", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+                    (s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    )
+                  )}
+                </select>
+              </div>
+              <div className="mt-4">
+                <Label>What does the company do?</Label>
+                <textarea
+                  value={wsAbout}
+                  onChange={(e) => setWsAbout(e.target.value)}
+                  rows={2}
+                  placeholder="What the company does, who it serves."
+                  className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+              </div>
+              <div className="mt-4">
+                <Label>Website</Label>
+                <input
+                  value={wsWebsite}
+                  onChange={(e) => setWsWebsite(e.target.value)}
+                  placeholder="e.g. cedarco.com"
+                  className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                />
+              </div>
               <button
                 onClick={createWorkspace}
                 disabled={!wsName.trim() || !!busy}
-                className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                className="mt-4 rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
               >
                 {busy === "create" ? "Creating…" : "Create company"}
               </button>
-            </div>
-          </div>
             </section>
           )}
 
@@ -14596,14 +14657,28 @@ function MailboxCard({
 function CompanyDetailsEditor({
   getToken,
   workspaceId,
+  companies,
+  activeCompanyId,
   companyName,
   onCompanyName,
 }: {
   getToken?: () => Promise<string | null>;
   workspaceId: string;
+  companies: { id: string; name: string; role: string }[];
+  activeCompanyId: string;
   companyName: string;
   onCompanyName: (v: string) => void;
 }) {
+  // Which company these details are for. Defaults to the one you're viewing in
+  // the sidebar lens, else your primary, else the first — so with several
+  // companies it's always clear (and editable) which one you're describing.
+  const [selectedWsId, setSelectedWsId] = useState(
+    activeCompanyId || workspaceId || companies[0]?.id || ""
+  );
+  useEffect(() => {
+    if (activeCompanyId && activeCompanyId !== selectedWsId) setSelectedWsId(activeCompanyId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeCompanyId]);
   const [loading, setLoading] = useState(true);
   const [found, setFound] = useState(false); // did we load a real workspace record?
   const [role, setRole] = useState("");
@@ -14617,8 +14692,11 @@ function CompanyDetailsEditor({
 
   useEffect(() => {
     let alive = true;
+    setLoading(true);
+    setFound(false);
+    setNote(null);
     (async () => {
-      if (!workspaceId || !getToken) {
+      if (!selectedWsId || !getToken) {
         setLoading(false);
         return;
       }
@@ -14628,7 +14706,7 @@ function CompanyDetailsEditor({
           headers: token ? { authorization: `Bearer ${token}` } : {},
         });
         const data = await res.json().catch(() => ({}));
-        const ws = (data.workspaces || []).find((w: any) => w.id === workspaceId);
+        const ws = (data.workspaces || []).find((w: any) => w.id === selectedWsId);
         if (alive && ws) {
           setFound(true);
           setRole(ws.role || "member");
@@ -14648,9 +14726,10 @@ function CompanyDetailsEditor({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId]);
+  }, [selectedWsId]);
 
   const isOwner = role === "owner";
+  const isPrimary = selectedWsId === workspaceId;
   const inputCls =
     "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
 
@@ -14670,11 +14749,13 @@ function CompanyDetailsEditor({
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ workspaceId, name, about, website, industry, stage }),
+        body: JSON.stringify({ workspaceId: selectedWsId, name, about, website, industry, stage }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        onCompanyName(name.trim()); // keep the profile in sync
+        // Only mirror into the profile cache when editing the PRIMARY company —
+        // that's the one your searches are grounded in.
+        if (isPrimary) onCompanyName(name.trim());
         setNote({ ok: true, text: "Saved. Your whole team sees these updates." });
       } else {
         setNote({ ok: false, text: data?.error || "Couldn't save." });
@@ -14708,15 +14789,38 @@ function CompanyDetailsEditor({
   return (
     <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-extrabold tracking-tight text-ink">Your company</h2>
+        <h2 className="text-base font-extrabold tracking-tight text-ink">
+          Your company
+          {companies.length <= 1 && name ? (
+            <span className="text-body/50"> &middot; {name}</span>
+          ) : null}
+        </h2>
         <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
           {isOwner ? "You're the admin" : "Shared, admin-managed"}
         </span>
       </div>
-      <p className="mt-1 text-sm leading-relaxed text-body">
+      {/* With several companies, make it unmistakable which one you're editing —
+          a picker that mirrors the sidebar lens. */}
+      {companies.length > 1 && (
+        <div className="mt-3">
+          <Label>Which company</Label>
+          <select
+            value={selectedWsId}
+            onChange={(e) => setSelectedWsId(e.target.value)}
+            className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-bold text-ink outline-none transition focus:border-coral sm:max-w-xs"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
+      <p className="mt-2 text-sm leading-relaxed text-body">
         {isOwner
-          ? "Your answers from setup. Change them anytime, your whole team sees the updates."
-          : "Your company's details, managed by the admin."}
+          ? "These answers ground how Scout searches and writes for this company. Change them anytime — your whole team sees the updates."
+          : "This company's details, managed by the admin."}
       </p>
       {loading ? (
         <div className="mt-4 h-5 w-40 animate-pulse rounded bg-warm-bg" />
@@ -14788,6 +14892,8 @@ function ProfileTab({
   useCase,
   accountType,
   companyWorkspaceId,
+  companies,
+  activeCompanyId,
   getToken,
   companyName,
   companyRole,
@@ -14854,6 +14960,8 @@ function ProfileTab({
   useCase: string;
   accountType: AccountType;
   companyWorkspaceId: string;
+  companies: { id: string; name: string; role: string }[];
+  activeCompanyId: string;
   getToken?: () => Promise<string | null>;
   companyName: string;
   companyRole: string;
@@ -15064,6 +15172,8 @@ function ProfileTab({
           <CompanyDetailsEditor
             getToken={getToken}
             workspaceId={companyWorkspaceId}
+            companies={companies}
+            activeCompanyId={activeCompanyId}
             companyName={companyName}
             onCompanyName={onCompanyName}
           />
