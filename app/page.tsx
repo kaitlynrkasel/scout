@@ -68,7 +68,9 @@ const CSS = `
   .h2 em{font-style:normal;color:var(--terra)}
   .lead{font-size:16.5px;line-height:1.6;color:#57503f;max-width:54ch;margin-top:14px}
   .btn{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:600;padding:13px 22px;cursor:pointer;border:0;border-radius:var(--rs)}
-  .btn-t{background:var(--blue);color:#fff}
+  /* Higher specificity than the .scoutland a color:inherit rule so the label
+     stays white on the blue fill (a plain .btn-t rule loses to the anchor). */
+  .scoutland a.btn-t,.scoutland .btn-t{background:var(--blue);color:#fff}
   .btn-o{background:transparent;color:var(--ink);border:1px solid #cfc5b2;padding:12px 21px}
   .slot{position:relative;background:var(--paper2);border-radius:var(--r);overflow:hidden}
   .slot::after{content:"";position:absolute;inset:12px;border:1px dashed #C7BBA6;border-radius:6px}
@@ -261,7 +263,7 @@ const BODY = `
   <div class="sticker">Fetch · Track · Find</div>
   <div class="ledechip">
     <p>Scout hunts down the mentors, recruiters, and alumni who fit your goal, then drafts a warm intro in your own voice.</p>
-    <div class="row"><a class="btn btn-t" href="/app">Start finding →</a><a class="btn btn-o" href="#how">How it works</a></div>
+    <div class="row"><a class="btn btn-t" href="/app">Start scouting →</a><a class="btn btn-o" href="#how">How it works</a></div>
   </div>
 </div></section>
 
