@@ -247,7 +247,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
   if (wsIds.length) {
     const { data: wsRows } = await db()
       .from("workspaces")
-      .select("id, name, about, website, industry, stage, created_by, created_at")
+      .select("id, name, about, website, industry, stage, created_by, created_at, comped")
       .in("id", wsIds);
     const { data: memberRows } = await db()
       .from("workspace_members")
@@ -427,9 +427,12 @@ export async function resetInviteCode(uid: string, workspaceId: string) {
   return { code };
 }
 
-// Join a workspace using a shared invite code (no email needed).
+// Join a workspace using a shared invite code — but ONLY if this email is on the
+// team's approved list (i.e. the owner/admin invited it). So the link is safe to
+// share: strangers who open it can't get in unless you added their email.
 export async function joinByCode(uid: string, email: string, code: string) {
   const c = String(code || "").trim().toLowerCase();
+  const em = String(email || "").trim().toLowerCase();
   if (!c) throw new TeamError("Enter an invite code.");
   const { data: ws } = await db()
     .from("workspaces")
@@ -437,21 +440,75 @@ export async function joinByCode(uid: string, email: string, code: string) {
     .eq("invite_code", c)
     .maybeSingle();
   if (!ws) throw new TeamError("That invite code isn't valid.", 404);
+
+  // Already a member? Done.
   const { data: existing } = await db()
     .from("workspace_members")
     .select("user_id")
     .eq("workspace_id", ws.id)
     .eq("user_id", uid)
     .maybeSingle();
-  if (!existing) {
-    await db()
-      .from("workspace_members")
-      .upsert(
-        { workspace_id: ws.id, user_id: uid, email: String(email || "").toLowerCase(), role: "editor" },
-        { onConflict: "workspace_id,user_id" }
-      );
+  if (existing) return { joined: ws.id, name: ws.name as string };
+
+  // Otherwise the email must be on the approved list (an invite for it exists).
+  const { data: invite } = await db()
+    .from("workspace_invites")
+    .select("id, role, project_ids")
+    .eq("workspace_id", ws.id)
+    .eq("email", em)
+    .maybeSingle();
+  if (!invite) {
+    throw new TeamError(
+      "Your email isn't on this team's approved list. Ask the admin to add it, then use the link again.",
+      403
+    );
   }
+  const role = ASSIGNABLE_ROLES.includes((invite as any).role) ? (invite as any).role : "editor";
+  await db()
+    .from("workspace_members")
+    .upsert(
+      { workspace_id: ws.id, user_id: uid, email: em, role },
+      { onConflict: "workspace_id,user_id" }
+    );
+  const pids: string[] = Array.isArray((invite as any).project_ids) ? (invite as any).project_ids : [];
+  if (pids.length) {
+    await db()
+      .from("shared_project_members")
+      .upsert(pids.map((pid) => ({ shared_project_id: pid, user_id: uid, email: em })), {
+        onConflict: "shared_project_id,user_id",
+      });
+  }
+  await db().from("workspace_invites").delete().eq("id", (invite as any).id);
   return { joined: ws.id, name: ws.name as string };
+}
+
+// Owner: redeem a company promo code to comp the WHOLE team — every member
+// (current and future) gets free unlimited use.
+export async function redeemCompanyCode(uid: string, workspaceId: string, code: string) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  if (role !== "owner")
+    throw new TeamError("Only the company owner can redeem a company code.", 403);
+  const { isCompanyCompCode } = await import("./stripe");
+  if (!isCompanyCompCode(code)) throw new TeamError("That company code isn't valid.");
+  await db().from("workspaces").update({ comped: true }).eq("id", workspaceId);
+  return { comped: true };
+}
+
+// Does this user belong to any comped workspace? (Free access flows from that.)
+export async function isMemberOfCompedWorkspace(uid: string): Promise<boolean> {
+  const { data: mems } = await db()
+    .from("workspace_members")
+    .select("workspace_id")
+    .eq("user_id", uid);
+  const ids = (mems || []).map((m: any) => m.workspace_id);
+  if (!ids.length) return false;
+  const { data: comped } = await db()
+    .from("workspaces")
+    .select("id")
+    .in("id", ids)
+    .eq("comped", true)
+    .limit(1);
+  return !!(comped && comped.length);
 }
 
 // Owner/admin: cancel a pending invite (before it's accepted).

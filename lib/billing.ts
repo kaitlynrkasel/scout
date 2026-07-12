@@ -50,8 +50,46 @@ const FREE_ENTITLEMENT = (customerId: string | null = null): Entitlement => ({
 
 // Read the user's current plan + usage. Defaults to the free tier when no row
 // exists yet or Supabase isn't configured.
+// Company comp: any member of a comped workspace gets free unlimited use.
+// Inlined here (not imported from lib/teams) to avoid a circular dependency.
+async function memberOfCompedWorkspace(uid: string): Promise<boolean> {
+  if (!supabaseAdmin) return false;
+  try {
+    const { data: mems } = await supabaseAdmin
+      .from("workspace_members")
+      .select("workspace_id")
+      .eq("user_id", uid);
+    const ids = (mems || []).map((m: any) => m.workspace_id);
+    if (!ids.length) return false;
+    const { data } = await supabaseAdmin
+      .from("workspaces")
+      .select("id")
+      .in("id", ids)
+      .eq("comped", true)
+      .limit(1);
+    return !!(data && data.length);
+  } catch {
+    return false; // teams tables not present yet — no company comp
+  }
+}
+
 export async function getEntitlement(uid: string): Promise<Entitlement> {
   if (!supabaseAdmin) return FREE_ENTITLEMENT();
+  // Free-for-the-whole-company if their workspace has been comped.
+  if (await memberOfCompedWorkspace(uid)) {
+    return {
+      tier: "pro",
+      status: "active",
+      comp: true,
+      searchLimit: COMP_LIMIT,
+      searchesUsed: 0,
+      freeLimit: FREE_LIMIT,
+      freeUsed: 0,
+      periodEnd: null,
+      freeResetsAt: null,
+      stripeCustomerId: null,
+    };
+  }
   const { data } = await supabaseAdmin
     .from("subscriptions")
     .select(

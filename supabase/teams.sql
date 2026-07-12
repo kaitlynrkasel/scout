@@ -76,6 +76,10 @@ alter table public.workspaces add column if not exists invite_code text;
 create unique index if not exists workspaces_invite_code_idx
   on public.workspaces (invite_code) where invite_code is not null;
 
+-- Company-wide comp: when true, EVERY member of this workspace gets free
+-- unlimited use (the owner redeemed a company promo code). Set via the app.
+alter table public.workspaces add column if not exists comped boolean not null default false;
+
 create table if not exists public.shared_projects (
   id uuid primary key default gen_random_uuid(),
   workspace_id uuid not null references public.workspaces(id) on delete cascade,

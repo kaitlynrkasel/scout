@@ -45,6 +45,22 @@ export function isCompCode(code: string): boolean {
   return !!norm && COMP_CODES.some((c) => c.toLowerCase() === norm);
 }
 
+// COMPANY promo codes: an owner redeems one to comp their WHOLE team (every
+// member gets free unlimited use). Distinct from the per-account COMP_CODES.
+// COMPANY1864! is always valid; COMPANY_COMP_CODES (comma-separated env) adds more.
+const BUILTIN_COMPANY_CODES = ["COMPANY1864!"];
+export const COMPANY_COMP_CODES = [
+  ...BUILTIN_COMPANY_CODES,
+  ...(process.env.COMPANY_COMP_CODES || "")
+    .split(",")
+    .map((c) => c.trim())
+    .filter(Boolean),
+];
+export function isCompanyCompCode(code: string): boolean {
+  const norm = (code || "").trim().toLowerCase();
+  return !!norm && COMPANY_COMP_CODES.some((c) => c.toLowerCase() === norm);
+}
+
 // A comped account is stored as a 'pro' subscription whose subscription id is
 // tagged 'comp:' so we can tell it apart from a real Stripe subscription (and
 // show "unlimited" rather than a giant number in the UI).
