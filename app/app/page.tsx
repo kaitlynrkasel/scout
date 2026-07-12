@@ -12562,8 +12562,8 @@ function TeamTab({
       const who = inviteEmail.trim();
       setNote(
         r?.emailed
-          ? `Invited ${who} as ${inviteRole} — an invite email is on its way from your inbox. They join automatically when they sign in.`
-          : `Invited ${who} as ${inviteRole}. They join automatically the first time they sign in. (Connect Gmail or Outlook to also email them the invite.)`
+          ? `Invited ${who} as ${inviteRole} — an invite email is on its way from your inbox. They'll join automatically the next time they open Scout (whether they make a new account or already have one).`
+          : `Invited ${who} as ${inviteRole}. They'll join automatically the next time they open Scout — a new account or an existing one. (Connect Gmail or Outlook to also email them the invite.)`
       );
       setInviteEmail("");
       await loadCtx();
@@ -12957,7 +12957,8 @@ function TeamTab({
                 <p className="mt-2 text-[11px] leading-relaxed text-body/60">
                   <b>Admin</b> manages the team &middot; <b>Editor</b> works finds
                   (search, draft, send) &middot; <b>Viewer</b> can only look. They
-                  join automatically the first time they sign in.
+                  join automatically the next time they open Scout — whether they
+                  sign up or already have an account.
                 </p>
               </div>
             ) : (
