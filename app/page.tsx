@@ -71,7 +71,8 @@ const CSS = `
   /* Higher specificity than the .scoutland a color:inherit rule so the label
      stays white on the blue fill (a plain .btn-t rule loses to the anchor). */
   .scoutland a.btn-t,.scoutland .btn-t{background:var(--blue);color:#fff}
-  .btn-o{background:transparent;color:var(--ink);border:1px solid #cfc5b2;padding:12px 21px}
+  .btn-o{background:transparent;color:var(--ink);border:1px solid #cfc5b2;padding:12px 21px;transition:background .15s ease,color .15s ease,border-color .15s ease}
+  .btn-o:hover{background:var(--blue);color:#fff;border-color:var(--blue)}
   .slot{position:relative;background:var(--paper2);border-radius:var(--r);overflow:hidden}
   .slot::after{content:"";position:absolute;inset:12px;border:1px dashed #C7BBA6;border-radius:6px}
   .slot .t{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;color:var(--muted);font-size:11px;font-weight:600;letter-spacing:.06em}

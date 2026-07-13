@@ -2785,9 +2785,21 @@ function ScoutTool({
 
   // Projects in the current company lens ("" = all). Drives the sidebar +
   // Outreach project pickers so Company > Project > Category reads top-down.
+  // Projects made before the company system (or before this company existed)
+  // have no companyId — treat those as belonging to your PRIMARY company so they
+  // don't vanish under every lens (which read "No projects in this company yet"
+  // even though you had projects). A new company you switch to correctly shows
+  // none until you search under it.
+  const primaryCompanyId = profile.companyWorkspaceId || companies[0]?.id || "";
   const visibleProjects = activeCompanyId
-    ? projects.filter((p) => (p.companyId || "") === activeCompanyId)
+    ? projects.filter((p) => (p.companyId || primaryCompanyId) === activeCompanyId)
     : projects;
+  // Templates shown under the current company lens: global templates (no project)
+  // always apply; project-scoped ones show only when their project is in view.
+  const visibleProjectIdSet = new Set(visibleProjects.map((p) => p.id));
+  const visibleTemplates = activeCompanyId
+    ? myTemplates.filter((t) => !t.projectId || visibleProjectIdSet.has(t.projectId))
+    : myTemplates;
   const activeCompanyName = companies.find((c) => c.id === activeCompanyId)?.name || "";
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
   const activeUseCase = activeProject ? activeProject.useCase : profile.useCase;
@@ -6181,10 +6193,10 @@ function ScoutTool({
           text={mtText}
           setText={setMtText}
           add={addTemplate}
-          list={myTemplates}
+          list={visibleTemplates}
           remove={(id) => saveTpls(myTemplates.filter((s) => s.id !== id))}
           onUpdate={updateTemplate}
-          projects={projects}
+          projects={visibleProjects}
           categories={categories}
           scopeProjectId={mtProjectId}
           scopeCategoryId={mtCategoryId}
