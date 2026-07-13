@@ -222,13 +222,25 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-espresso: #6a4d34; /* the sidebar rail — a warm brown that meshes with the tan band */
   --su-terra: #b85433; /* terracotta accent */
   --su-terra-deep: #9e3f1f;
   --su-tan: #ecddc9; /* lighter tan stat band */
   --su-tan-line: #dbc9b4;
   --su-ghost: rgba(36, 28, 19, 0.06); /* ghost outline-word stroke */
   --su-idx: rgba(184, 84, 51, 0.5); /* index-number stroke */
+
+  /* Sidebar rail — a soft tan just a shade darker than the page canvas, so the
+     chrome reads monotone rather than as a heavy colored panel. Dark text on the
+     light tan; a quiet brown pill marks the active item (no loud accent). */
+  --su-rail-bg: #ece5d6;
+  --su-rail-fg: #6d6150; /* inactive nav text */
+  --su-rail-fg-strong: #40331f; /* logo, hovered / active-ish text */
+  --su-rail-muted: #9c8e78; /* kicker, search placeholder, counts */
+  --su-rail-line: rgba(58, 42, 27, 0.1);
+  --su-rail-hover: rgba(58, 42, 27, 0.05);
+  --su-rail-inset: rgba(58, 42, 27, 0.045);
+  --su-rail-active-bg: #6b5340; /* monotone brown active pill */
+  --su-rail-active-fg: #f6efe3;
 }
 html.dark {
   --su-terra: #cc6a45;
@@ -237,6 +249,16 @@ html.dark {
   --su-tan-line: #3a352c;
   --su-ghost: rgba(245, 239, 228, 0.05);
   --su-idx: rgba(204, 106, 69, 0.45);
+
+  --su-rail-bg: #201b14; /* a hair off the espresso canvas, still monotone */
+  --su-rail-fg: #b6a992;
+  --su-rail-fg-strong: #f2ece0;
+  --su-rail-muted: #8f8069;
+  --su-rail-line: rgba(255, 255, 255, 0.08);
+  --su-rail-hover: rgba(255, 255, 255, 0.06);
+  --su-rail-inset: rgba(255, 255, 255, 0.05);
+  --su-rail-active-bg: #7a6047;
+  --su-rail-active-fg: #ffffff;
 }
 
 .font-anton {
@@ -245,99 +267,104 @@ html.dark {
   text-transform: uppercase;
 }
 
-/* ---- Espresso rail ---- */
+/* ---- Rail (soft tan, monotone) ---- */
 .su-rail {
-  background: var(--su-espresso);
-  color: #cfc1ac;
+  background: var(--su-rail-bg);
+  color: var(--su-rail-fg);
+  border-right: 1px solid var(--su-rail-line);
 }
 .su-rail .su-logo b {
-  color: #f5efe4;
+  color: var(--su-rail-fg-strong);
 }
 .su-rail .su-logo img {
+  opacity: 0.95;
+}
+html.dark .su-rail .su-logo img {
   filter: brightness(0) invert(1);
   opacity: 0.92;
 }
 .su-rail .kicker {
-  color: #8f8069;
+  color: var(--su-rail-muted);
 }
 .su-search {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--su-rail-inset);
+  border: 1px solid var(--su-rail-line);
   border-radius: 9px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   font-size: 12px;
-  color: #b3a48c;
+  color: var(--su-rail-muted);
   transition: background 0.15s ease;
 }
 .su-search:hover {
-  background: rgba(255, 255, 255, 0.09);
+  background: var(--su-rail-hover);
 }
 .su-navitem {
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 6px 10px;
+  gap: 8px;
+  padding: 5px 9px;
   border-radius: 8px;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 600;
   letter-spacing: 0.02em;
-  color: #cbbba2;
+  color: var(--su-rail-fg);
   text-transform: uppercase;
   transition: background 0.15s ease, color 0.15s ease;
 }
 .su-navitem svg {
-  opacity: 0.82;
+  opacity: 0.75;
 }
 .su-navitem:hover {
-  background: rgba(255, 255, 255, 0.06);
-  color: #efe7d9;
+  background: var(--su-rail-hover);
+  color: var(--su-rail-fg-strong);
 }
 .su-navitem .su-ct {
   margin-left: auto;
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 700;
-  color: #9c8b70;
+  color: var(--su-rail-muted);
 }
 .su-navitem .su-dot {
   margin-left: auto;
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--su-terra);
+  background: var(--su-rail-active-bg);
 }
 .su-navitem.su-active {
-  background: var(--su-terra);
-  color: #fff;
+  background: var(--su-rail-active-bg);
+  color: var(--su-rail-active-fg);
   font-weight: 700;
 }
 .su-navitem.su-active svg {
   opacity: 1;
 }
 .su-navitem.su-active .su-ct {
-  color: #ffd9c6;
+  color: var(--su-rail-active-fg);
+  opacity: 0.75;
 }
 .su-navitem.su-active .su-dot {
-  background: #ffd9c6;
+  background: var(--su-rail-active-fg);
 }
 .su-rail .su-foot {
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--su-rail-line);
 }
 .su-rail select.su-projsel {
   appearance: none;
   width: 100%;
-  background-color: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background-color: var(--su-rail-inset);
+  border: 1px solid var(--su-rail-line);
   border-radius: 8px;
-  padding: 7px 10px;
+  padding: 6px 10px;
   padding-right: 2rem;
   font-size: 12px;
   font-weight: 600;
-  color: #efe7d9;
+  color: var(--su-rail-fg-strong);
   outline: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239c8b70' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239c8e78' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 0.6rem center;
 }
@@ -346,19 +373,34 @@ html.dark {
 }
 .su-up {
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  color: #ead9c6;
+  border: 1px solid var(--su-rail-line);
+  color: var(--su-rail-fg);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 11.5px;
   text-align: center;
-  padding: 10px;
+  padding: 9px;
   border-radius: 9px;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   transition: background 0.15s ease;
 }
 .su-up:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--su-rail-hover);
+  color: var(--su-rail-fg-strong);
+}
+.su-logout {
+  width: 100%;
+  border: 1px solid var(--su-rail-line);
+  color: var(--su-rail-fg);
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.su-logout:hover {
+  background: var(--su-rail-hover);
+  color: var(--su-rail-fg-strong);
 }
 
 /* ---- Dashboard hero ---- */

@@ -7023,7 +7023,7 @@ function SideNav({
             ))}
           </select>
         ) : (
-          <p className="px-2 text-[11px] leading-relaxed text-[#a3927a]">
+          <p className="px-2 text-[11px] leading-relaxed text-[color:var(--su-rail-muted)]">
             No projects in this company yet. Start a search in Outreach to create one.
           </p>
         )}
@@ -7068,10 +7068,7 @@ function SideNav({
           </button>
         )}
         {showLogout && (
-          <button
-            onClick={onLogout}
-            className="mt-2 w-full rounded-lg border border-white/15 px-3 py-2 text-xs font-semibold text-[#ead9c6] transition hover:bg-white/10"
-          >
+          <button onClick={onLogout} className="su-logout mt-2">
             Log out
           </button>
         )}
