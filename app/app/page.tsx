@@ -2487,6 +2487,18 @@ function ScoutTool({
   function setProjectContext(id: string, context: string) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, context } : p)));
   }
+  // Move a project (with its categories + finds, which follow by projectId) to a
+  // different company. Its finds and shared state ride along automatically since
+  // they reference the project, not the company. Jump the lens if the project
+  // left the company you're viewing.
+  function setProjectCompany(id: string, companyId: string) {
+    saveProjects(
+      projects.map((p) => (p.id === id ? { ...p, companyId: companyId || undefined } : p))
+    );
+    if (activeCompanyId && activeId === id && (companyId || primaryCompanyId) !== activeCompanyId) {
+      selectCompany(companyId || "");
+    }
+  }
   // Toggle whether this project's searches read your Profile + cross-project history.
   function setProjectUsesProfile(id: string, usesProfile: boolean) {
     saveProjects(projects.map((p) => (p.id === id ? { ...p, usesProfile } : p)));
@@ -6290,6 +6302,8 @@ function ScoutTool({
           onSetProjectContext={setProjectContext}
           onSetProjectUsesProfile={setProjectUsesProfile}
           onSetProjectUsesCompany={setProjectUsesCompany}
+          onSetProjectCompany={setProjectCompany}
+          primaryCompanyId={primaryCompanyId}
           onImportOutreach={() => setImportOpen(true)}
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
@@ -15816,6 +15830,8 @@ function ProfileTab({
   onSetProjectContext,
   onSetProjectUsesProfile,
   onSetProjectUsesCompany,
+  onSetProjectCompany,
+  primaryCompanyId,
   onImportOutreach,
   resumeFileName,
   onResumeFile,
@@ -15907,6 +15923,8 @@ function ProfileTab({
   onSetProjectContext: (id: string, context: string) => void;
   onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
   onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
+  onSetProjectCompany: (id: string, companyId: string) => void;
+  primaryCompanyId: string;
   onImportOutreach: () => void;
   resumeFileName: string;
   onResumeFile: (file: File) => void;
@@ -16627,6 +16645,9 @@ function ProfileTab({
           onSetProjectContext={onSetProjectContext}
           onSetProjectUsesProfile={onSetProjectUsesProfile}
           onSetProjectUsesCompany={onSetProjectUsesCompany}
+          onSetProjectCompany={onSetProjectCompany}
+          companies={companies}
+          primaryCompanyId={primaryCompanyId}
           isCompany={accountType === "company"}
         />
 
@@ -17185,6 +17206,9 @@ function ProjectsCategoriesEditor({
   onSetProjectContext,
   onSetProjectUsesProfile,
   onSetProjectUsesCompany,
+  onSetProjectCompany,
+  companies,
+  primaryCompanyId,
   isCompany,
 }: {
   projects: Project[];
@@ -17201,6 +17225,9 @@ function ProjectsCategoriesEditor({
   onSetProjectContext: (id: string, context: string) => void;
   onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
   onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
+  onSetProjectCompany: (id: string, companyId: string) => void;
+  companies: { id: string; name: string; role: string }[];
+  primaryCompanyId: string;
   isCompany: boolean;
 }) {
   const [newProject, setNewProject] = useState("");
@@ -17311,6 +17338,27 @@ function ProjectsCategoriesEditor({
                       so you can pitch as the company only, as just yourself, both, or neither.
                     </span>
                   </label>
+                )}
+                {/* Move this project (its categories + finds ride along) to another
+                    company. Only when you belong to more than one. */}
+                {isCompany && companies.length > 1 && (
+                  <div className="mt-2.5">
+                    <Label className="mb-1">Company this project belongs to</Label>
+                    <select
+                      value={p.companyId || primaryCompanyId}
+                      onChange={(e) => onSetProjectCompany(p.id, e.target.value)}
+                      className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-semibold text-ink outline-none transition focus:border-coral sm:max-w-xs"
+                    >
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="mt-1 text-[11px] leading-relaxed text-body/60">
+                      Its categories and saved finds move with it.
+                    </p>
+                  </div>
                 )}
               </div>
 
