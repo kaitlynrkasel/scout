@@ -1197,6 +1197,18 @@ function ScoutTool({
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
   const [discovering, setDiscovering] = useState(false);
+  // Scroll the "Scout is searching" indicator into view when a search kicks off,
+  // so it's obvious something's happening without scrolling down (task #9).
+  const searchingRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (discovering) {
+      const t = setTimeout(
+        () => searchingRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }),
+        60
+      );
+      return () => clearTimeout(t);
+    }
+  }, [discovering]);
   // Live count of finds streamed in so far this search (for the "Stop" button).
   const [liveCount, setLiveCount] = useState(0);
   // Pre-search "understanding" gate: when Scout has real gaps, this holds the
@@ -2670,7 +2682,13 @@ function ScoutTool({
       goal: goal || "",
       projectId,
     };
-    saveCats([...categories, c]);
+    // Seeded example categories (id "sug-…") are just placeholders. The moment
+    // the user adds a real one of their own, drop this project's examples so they
+    // don't clutter (task #50).
+    const withoutExamples = categories.filter(
+      (x) => !(x.projectId === projectId && x.id.startsWith("sug-"))
+    );
+    saveCats([...withoutExamples, c]);
   }
 
   // Reorder a project's categories to match the given id order (drag and drop).
@@ -5783,7 +5801,7 @@ function ScoutTool({
               ))}
 
             {discovering && (
-              <div className="mt-8 flex items-start gap-3">
+              <div ref={searchingRef} className="mt-8 flex items-start gap-3 scroll-mt-24">
                 <Avatar />
                 <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-surface px-4 py-3.5 shadow-card">
                   <Tail side="left" />
