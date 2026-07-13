@@ -384,7 +384,7 @@ const BODY = `
 <footer><div class="wrap"><div class="foot">
   <div class="brand"><img src="/scout-logo.png">Scout</div>
   <span>Reach the right people, in your own voice.</span>
-  <div class="links"><a href="#uses">Uses</a><a href="#steps">Get started</a><a href="#contact">Contact</a></div>
+  <div class="links"><a href="#uses">Uses</a><a href="#steps">Get started</a><a href="#contact">Contact</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a></div>
 </div></div></footer>
 
 `;

@@ -54,9 +54,15 @@ export function Footer() {
           <span className="brand-text">Scout</span>
         </span>
         <span className="text-body/50">Reach the right people, in your own voice.</span>
-        <nav className="ml-auto flex gap-5 font-semibold text-body">
+        <nav className="ml-auto flex flex-wrap gap-5 font-semibold text-body">
           <a href="/analytics" className="hover:text-ink">
             Proof
+          </a>
+          <a href="/privacy" className="hover:text-ink">
+            Privacy
+          </a>
+          <a href="/terms" className="hover:text-ink">
+            Terms
           </a>
           <a href="/app" className="hover:text-ink">
             Open Scout

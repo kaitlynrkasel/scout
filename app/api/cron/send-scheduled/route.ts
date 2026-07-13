@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, gmailThreadsWithReplies } from "@/lib/gmail";
 import { outlookSendOrDraft, outlookConversationsWithReplies } from "@/lib/outlook";
+import { signUnsub } from "@/lib/unsubscribe";
+
+// Public base URL for one-click unsubscribe links from the cron (no request
+// origin available here). Falls back to the production domain.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || process.env.APP_URL || "https://scout-source.com";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -103,16 +108,54 @@ export async function GET(req: NextRequest) {
         }
       }
 
+      const recipient = String(row.to_addr || "").trim().toLowerCase();
+
+      // Honor opt-outs: cancel the row instead of messaging someone who
+      // unsubscribed. Fail open if the table isn't set up yet.
+      try {
+        const { data: sup } = await supabaseAdmin
+          .from("unsubscribes")
+          .select("email")
+          .eq("user_id", row.user_id)
+          .eq("email", recipient)
+          .maybeSingle();
+        if (sup) {
+          await supabaseAdmin
+            .from("scheduled_sends")
+            .update({ status: "cancelled", sent_at: new Date().toISOString() })
+            .eq("id", id);
+          continue;
+        }
+      } catch {
+        /* table not present yet — allow the send */
+      }
+
+      // First contact (not a follow-up) is cold outreach: attach a standard
+      // opt-out (visible footer for both providers; List-Unsubscribe header for
+      // Gmail). Follow-ups inside an existing thread don't need one.
+      const fromAddr = (conn.data.email as string) || "me";
+      let outBody = (row.body as string) || "";
+      let listUnsubscribe: string | undefined;
+      if (!row.is_followup) {
+        const url = `${SITE_URL}/api/unsubscribe?t=${encodeURIComponent(
+          signUnsub(String(row.user_id), recipient)
+        )}`;
+        listUnsubscribe = `<${url}>, <mailto:${fromAddr}?subject=unsubscribe>`;
+        outBody =
+          outBody.replace(/\s+$/, "") +
+          `\n\n—\nNot the right time? You can unsubscribe and I won't reach out again: ${url}`;
+      }
+
       const opts = {
         refreshToken: conn.data.refresh_token as string,
-        from: (conn.data.email as string) || "me",
+        from: fromAddr,
         to: row.to_addr as string,
         subject: (row.subject as string) || "",
-        body: (row.body as string) || "",
+        body: outBody,
         mode: "send" as const,
         attachment: att,
       };
-      if (provider === "gmail") await gmailSendOrDraft(opts);
+      if (provider === "gmail") await gmailSendOrDraft({ ...opts, listUnsubscribe });
       else await outlookSendOrDraft(opts);
 
       await supabaseAdmin

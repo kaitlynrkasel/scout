@@ -140,7 +140,8 @@ function buildRaw(
   to: string,
   subject: string,
   body: string,
-  attachment?: MailAttachment
+  attachment?: MailAttachment,
+  listUnsubscribe?: string
 ): string {
   const baseHeaders = [
     `From: ${from}`,
@@ -148,6 +149,15 @@ function buildRaw(
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",
   ];
+  // RFC 2369 / RFC 8058: a standard opt-out mail clients surface as a one-click
+  // "Unsubscribe" control. Present only on first-contact outreach (callers pass
+  // this for cold sends, not for replies inside an existing thread).
+  if (listUnsubscribe) {
+    baseHeaders.push(`List-Unsubscribe: ${listUnsubscribe}`);
+    if (/^<https/i.test(listUnsubscribe)) {
+      baseHeaders.push("List-Unsubscribe-Post: List-Unsubscribe=One-Click");
+    }
+  }
 
   // No attachment: a plain-text message, as before.
   if (!attachment) {
@@ -193,9 +203,17 @@ export async function gmailSendOrDraft(opts: {
   mode: "send" | "draft";
   threadId?: string; // when set, the message is placed in that existing thread
   attachment?: MailAttachment; // optional file (e.g. the user's resume)
+  listUnsubscribe?: string; // RFC 2369 List-Unsubscribe value for cold outreach
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
-  const raw = buildRaw(opts.from, opts.to, opts.subject, opts.body, opts.attachment);
+  const raw = buildRaw(
+    opts.from,
+    opts.to,
+    opts.subject,
+    opts.body,
+    opts.attachment,
+    opts.listUnsubscribe
+  );
   const url =
     opts.mode === "send"
       ? "https://gmail.googleapis.com/gmail/v1/users/me/messages/send"
