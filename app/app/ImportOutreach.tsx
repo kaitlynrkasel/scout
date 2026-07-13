@@ -713,6 +713,15 @@ export default function ImportOutreach({
                 </div>
               )}
 
+              {/* Column mapping, preview and config only appear once Scout has
+                  finished its FIRST read — otherwise users are tempted to edit a
+                  half-understood sheet. While reading, only the progress shows. */}
+              {!understand ? (
+                <div className="rounded-2xl border border-dashed border-warm-border bg-white/60 p-5 text-center text-sm text-body/70">
+                  Scout is reading your sheet… the column mapping opens once it&apos;s done.
+                </div>
+              ) : (
+              <>
               <div>
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                   Column mapping
@@ -846,6 +855,8 @@ export default function ImportOutreach({
                   </span>
                 </label>
               )}
+              </>
+              )}
 
               {error && (
                 <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -874,7 +885,7 @@ export default function ImportOutreach({
           )}
         </div>
 
-        {rows.length > 0 && imported === null && (
+        {rows.length > 0 && imported === null && understand && (
           <div className="flex items-center gap-3 border-t border-warm-border bg-white px-6 py-4">
             <span className="text-xs text-body/70">
               {rows.length} rows ready. Duplicates you already have are skipped.
