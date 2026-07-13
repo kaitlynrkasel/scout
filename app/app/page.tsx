@@ -13651,7 +13651,7 @@ function TeamTab({
                   className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral"
                 >
                   <option value="">Select a stage…</option>
-                  {["Pre-seed", "Startup", "Growth", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+                  {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
                     (s) => (
                       <option key={s} value={s}>
                         {s}
@@ -15883,7 +15883,7 @@ function CompanyDetailsEditor({
               className={`scout-select ${inputCls} disabled:opacity-70`}
             >
               <option value="">Select a stage…</option>
-              {["Pre-seed", "Startup", "Growth", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+              {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
                 (s) => (
                   <option key={s} value={s}>
                     {s}
@@ -16549,23 +16549,8 @@ function ProfileTab({
             </p>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <Label>Age</Label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={13}
-                max={100}
-                value={age ?? ""}
-                onChange={(e) => {
-                  const v = e.target.value.trim();
-                  onAge(v === "" ? undefined : Number(v));
-                }}
-                placeholder="e.g. 20"
-                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-              />
-            </div>
+          {/* Age removed — not needed (task #48). */}
+          <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <Label>School or education</Label>
               <ComboInput
@@ -17566,20 +17551,24 @@ function ProjectsCategoriesEditor({
                   placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                   className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                 />
-                <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
-                  <input
-                    type="checkbox"
-                    checked={p.usesProfile !== false}
-                    onChange={(e) => onSetProjectUsesProfile(p.id, e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                  />
-                  <span className="text-xs leading-relaxed text-body/80">
-                    <span className="font-semibold text-ink">Use my personal profile for this project</span>
-                    <br />
-                    On, searches match your own field and learn from your other projects. Turn
-                    it off when this project isn&apos;t about you personally.
-                  </span>
-                </label>
+                {/* Companies pitch as the company, not a person — the personal
+                    profile toggle is noise for them (task #51). */}
+                {!isCompany && (
+                  <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={p.usesProfile !== false}
+                      onChange={(e) => onSetProjectUsesProfile(p.id, e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
+                    />
+                    <span className="text-xs leading-relaxed text-body/80">
+                      <span className="font-semibold text-ink">Use my personal profile for this project</span>
+                      <br />
+                      On, searches match your own field and learn from your other projects. Turn
+                      it off when this project isn&apos;t about you personally.
+                    </span>
+                  </label>
+                )}
                 {isCompany && (
                   <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
                     <input
