@@ -52,7 +52,7 @@ export default function LandingMotion() {
       gsap.to(big, { xPercent: -50, duration: dur, ease: "none", repeat: -1 });
     }
 
-    // ---- Run band: the dog runs left → right, off-screen, once every 30s ----
+    // ---- Run band: the dog runs left → right, off-screen, once every 10s ----
     const dog = q(".run .dogrun");
     if (dog) {
       const band = dog.closest(".run") as HTMLElement | null;
@@ -68,7 +68,7 @@ export default function LandingMotion() {
         duration: cross,
         ease: "none",
         repeat: -1,
-        repeatDelay: Math.max(0, 30 - cross), // hold off-screen so each run is 30s apart
+        repeatDelay: Math.max(0, 10 - cross), // hold off-screen so each run is 10s apart
       });
     }
 
