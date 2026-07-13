@@ -4987,8 +4987,10 @@ function ScoutTool({
             if (!done) {
               firstSearchPending.current = true;
               setFirstSearchBanner(true);
-              setTab("outreach");
             }
+            // First stop after making an account is your Profile, so Scout knows
+            // who it's searching for before you search (task #47).
+            setTab("profile");
           }}
           listCompanies={listCompanies}
           createCompany={createCompany}
@@ -5998,9 +6000,20 @@ function ScoutTool({
                   </div>
                 </div>
 
-                <h2 className="mb-4 text-lg font-bold text-ink">
+                <h2 className="mb-1 text-lg font-bold text-ink">
                   Messages ({drafts.length})
                 </h2>
+                {/* Tell users where their drafts live so they don't wonder (task #56). */}
+                <p className="mb-4 text-xs text-body/60">
+                  Saved automatically — reach them anytime under{" "}
+                  <button
+                    onClick={() => setTab("finds")}
+                    className="font-semibold text-accent hover:underline"
+                  >
+                    Finds → Drafted
+                  </button>
+                  .
+                </p>
                 <div className="space-y-4">
                   {drafts.map((d, i) => {
                     const opp = opps.find((o) => o.id === d.opportunityId);
@@ -13645,20 +13658,20 @@ function TeamTab({
               </div>
               <div className="mt-4">
                 <Label>Company stage</Label>
-                <select
+                <input
                   value={wsStage}
                   onChange={(e) => setWsStage(e.target.value)}
-                  className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral"
-                >
-                  <option value="">Select a stage…</option>
-                  {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+                  list="company-stages"
+                  placeholder="Pick one or type your own…"
+                  className="w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral"
+                />
+                <datalist id="company-stages">
+                  {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business"].map(
                     (s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
+                      <option key={s} value={s} />
                     )
                   )}
-                </select>
+                </datalist>
               </div>
               <div className="mt-4">
                 <Label>What does the company do?</Label>
@@ -15876,21 +15889,21 @@ function CompanyDetailsEditor({
           </div>
           <div className="mt-4">
             <Label>Company stage</Label>
-            <select
+            <input
               value={stage}
               onChange={(e) => setStage(e.target.value)}
               disabled={!isOwner}
-              className={`scout-select ${inputCls} disabled:opacity-70`}
-            >
-              <option value="">Select a stage…</option>
-              {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business", "Other"].map(
+              list="company-stages-edit"
+              placeholder="Pick one or type your own…"
+              className={`${inputCls} disabled:opacity-70`}
+            />
+            <datalist id="company-stages-edit">
+              {["Pre-seed", "Startup", "Growth", "Established", "Enterprise", "Agency", "Nonprofit", "Small business"].map(
                 (s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
+                  <option key={s} value={s} />
                 )
               )}
-            </select>
+            </datalist>
           </div>
           <div className="mt-4">
             <Label>What does the company do?</Label>
