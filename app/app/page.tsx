@@ -8674,6 +8674,90 @@ function FindsTab({
     website?: string;
   };
 }) {
+  // ---- Comprehensive filters (collapsible panel below the status tabs) ----
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [q, setQ] = useState(""); // free-text search over name/notes/contact
+  const [channelSel, setChannelSel] = useState<Set<string>>(new Set());
+  const [catSel, setCatSel] = useState<Set<string>>(new Set());
+  const [contactReq, setContactReq] = useState<"any" | "email" | "handle" | "has" | "none">("any");
+  const [pinnedOnly, setPinnedOnly] = useState(false);
+  const [draftReq, setDraftReq] = useState<"any" | "has" | "none">("any");
+  const [sortBy, setSortBy] = useState<"activity" | "oldest" | "newest" | "name" | "fit">("activity");
+
+  const catNameOf = (f: Find) =>
+    categories.find((c) => c.id === f.categoryId)?.name || "";
+  // Options come from the finds actually present, so the menus only show what's real.
+  const channelOptions = Array.from(
+    new Set(finds.map((f) => (f.opp.channel || "").trim()).filter(Boolean))
+  ).sort();
+  const catOptions = Array.from(
+    new Set(finds.map(catNameOf).filter(Boolean))
+  ).sort();
+  const activeFilterCount =
+    (q.trim() ? 1 : 0) +
+    channelSel.size +
+    catSel.size +
+    (contactReq !== "any" ? 1 : 0) +
+    (draftReq !== "any" ? 1 : 0) +
+    (pinnedOnly ? 1 : 0) +
+    (sortBy !== "activity" ? 1 : 0);
+  const clearFilters = () => {
+    setQ("");
+    setChannelSel(new Set());
+    setCatSel(new Set());
+    setContactReq("any");
+    setDraftReq("any");
+    setPinnedOnly(false);
+    setSortBy("activity");
+  };
+  const toggleFrom = (
+    set: Set<string>,
+    setter: (s: Set<string>) => void,
+    v: string
+  ) => {
+    const next = new Set(set);
+    if (next.has(v)) next.delete(v);
+    else next.add(v);
+    setter(next);
+  };
+  const matchesFilters = (f: Find) => {
+    if (q.trim()) {
+      const hay = [
+        f.opp.name,
+        f.opp.outlet,
+        f.opp.whyItFits,
+        f.opp.contactEmail,
+        f.opp.contactHandle,
+        f.opp.location,
+        catNameOf(f),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q.trim().toLowerCase())) return false;
+    }
+    if (channelSel.size && !channelSel.has((f.opp.channel || "").trim())) return false;
+    if (catSel.size && !catSel.has(catNameOf(f))) return false;
+    const hasEmail = !!f.opp.contactEmail;
+    const hasHandle = !!f.opp.contactHandle;
+    if (contactReq === "email" && !hasEmail) return false;
+    if (contactReq === "handle" && !hasHandle) return false;
+    if (contactReq === "has" && !(hasEmail || hasHandle)) return false;
+    if (contactReq === "none" && (hasEmail || hasHandle)) return false;
+    const hasDraft = !!f.draft?.body;
+    if (draftReq === "has" && !hasDraft) return false;
+    if (draftReq === "none" && hasDraft) return false;
+    if (pinnedOnly && !f.pinned) return false;
+    return true;
+  };
+  const sortFns: Record<string, (a: Find, b: Find) => number> = {
+    activity: (a, b) =>
+      lastActivityAt(b) - lastActivityAt(a) || (b.opp.fitScore || 0) - (a.opp.fitScore || 0),
+    newest: (a, b) => (b.addedAt || 0) - (a.addedAt || 0),
+    oldest: (a, b) => (a.addedAt || 0) - (b.addedAt || 0),
+    name: (a, b) => (a.opp.name || "").localeCompare(b.opp.name || ""),
+    fit: (a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0),
+  };
+
   // Pinned finds live in their own tab and are excluded from the status/all
   // lists, so status counts count only the un-pinned ones.
   const counts: Record<string, number> = {
@@ -8697,14 +8781,9 @@ function FindsTab({
           ? !f.pinned
           : f.status === filter && !f.pinned
     )
+    .filter(matchesFilters)
     .slice()
-    // Newest ACTIVITY first: the latest of found / drafted / sent bubbles a find to
-    // the top, so the thing you just drafted leads. Fit only breaks exact ties.
-    .sort(
-      (a, b) =>
-        lastActivityAt(b) - lastActivityAt(a) ||
-        (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
-    );
+    .sort(sortFns[sortBy] || sortFns.activity);
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
@@ -8845,6 +8924,173 @@ function FindsTab({
         })}
       </div>
 
+      {/* ---- Collapsible comprehensive filters ---- */}
+      <div className="mt-4">
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="inline-flex items-center gap-2 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+          </svg>
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-brand-gradient px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+          <svg
+            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+            className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`}
+            aria-hidden
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {activeFilterCount > 0 && !filtersOpen && (
+          <button
+            onClick={clearFilters}
+            className="ml-2 text-xs font-semibold text-body/50 transition hover:text-red-500"
+          >
+            Clear
+          </button>
+        )}
+
+        {filtersOpen && (
+          <div className="mt-3 space-y-4 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+            {/* Search */}
+            <div>
+              <Label className="mb-1">Search</Label>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Name, notes, email, handle, location…"
+                className="w-full rounded-xl border border-warm-border bg-white px-3.5 py-2 text-sm text-ink outline-none transition focus:border-coral"
+              />
+            </div>
+
+            {/* Channel */}
+            {channelOptions.length > 0 && (
+              <div>
+                <Label className="mb-1.5">Channel</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {channelOptions.map((ch) => {
+                    const on = channelSel.has(ch);
+                    return (
+                      <button
+                        key={ch}
+                        onClick={() => toggleFrom(channelSel, setChannelSel, ch)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                          on
+                            ? "border-transparent bg-brand-gradient text-white"
+                            : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                        }`}
+                      >
+                        {ch}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Category */}
+            {catOptions.length > 0 && (
+              <div>
+                <Label className="mb-1.5">Category</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {catOptions.map((c) => {
+                    const on = catSel.has(c);
+                    return (
+                      <button
+                        key={c}
+                        onClick={() => toggleFrom(catSel, setCatSel, c)}
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                          on
+                            ? "border-transparent bg-brand-gradient text-white"
+                            : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                        }`}
+                      >
+                        {c}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            <div className="grid gap-4 sm:grid-cols-3">
+              {/* Contact info */}
+              <div>
+                <Label className="mb-1">Contact info</Label>
+                <select
+                  value={contactReq}
+                  onChange={(e) => setContactReq(e.target.value as typeof contactReq)}
+                  className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                >
+                  <option value="any">Any</option>
+                  <option value="has">Has a contact</option>
+                  <option value="email">Has an email</option>
+                  <option value="handle">Has a handle</option>
+                  <option value="none">No contact yet</option>
+                </select>
+              </div>
+              {/* Draft */}
+              <div>
+                <Label className="mb-1">Draft</Label>
+                <select
+                  value={draftReq}
+                  onChange={(e) => setDraftReq(e.target.value as typeof draftReq)}
+                  className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                >
+                  <option value="any">Any</option>
+                  <option value="has">Has a draft</option>
+                  <option value="none">No draft yet</option>
+                </select>
+              </div>
+              {/* Sort */}
+              <div>
+                <Label className="mb-1">Sort by</Label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                >
+                  <option value="activity">Recent activity</option>
+                  <option value="newest">Newest added</option>
+                  <option value="oldest">Oldest added</option>
+                  <option value="name">Name A–Z</option>
+                  <option value="fit">Best fit</option>
+                </select>
+              </div>
+            </div>
+
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-body">
+              <input
+                type="checkbox"
+                checked={pinnedOnly}
+                onChange={(e) => setPinnedOnly(e.target.checked)}
+                className="h-4 w-4 accent-brown"
+              />
+              Pinned only
+            </label>
+
+            <div className="flex items-center justify-between border-t border-warm-border pt-3">
+              <span className="text-xs text-body/60">
+                Showing {shown.length} of {finds.length}
+              </span>
+              <button
+                onClick={clearFilters}
+                disabled={activeFilterCount === 0}
+                className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-40"
+              >
+                Clear all
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* Select toggle — turns the list into a multi-select for bulk actions. */}
       {shown.length > 0 && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
@@ -8892,6 +9138,13 @@ function FindsTab({
                 Outreach
               </button>{" "}
               tab and everyone Scout finds lands here.
+            </>
+          ) : activeFilterCount > 0 ? (
+            <>
+              No finds match your filters.{" "}
+              <button onClick={clearFilters} className="font-semibold text-accent hover:underline">
+                Clear filters
+              </button>
             </>
           ) : filter === "pinned" ? (
             "No pinned finds yet. Pin a find to move it here as your working shortlist."
