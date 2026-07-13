@@ -4,8 +4,9 @@ import { useRef } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { ScrollToPlugin } from "gsap/ScrollToPlugin";
 
-gsap.registerPlugin(useGSAP, ScrollTrigger);
+gsap.registerPlugin(useGSAP, ScrollTrigger, ScrollToPlugin);
 
 /**
  * Text/entrance animations for the landing page. The markup is server-rendered
@@ -117,6 +118,31 @@ export default function LandingMotion() {
     reveal(".member", { y: 34, stagger: 0.1 });
     reveal(".packrow .p", { y: 20, stagger: 0.08 });
     reveal(".form", {});
+
+    // ---- Smooth-scroll in-page nav / anchor links instead of jumping ----
+    // Nav ("How it works", "Uses", "Get started", "Team", "Contact"), the hero
+    // + footer buttons — anything pointing at a #section — glides there with a
+    // quick eased tween. Left after the reduced-motion guard on purpose, so
+    // those users keep the instant native jump.
+    const onAnchorClick = (e: Event) => {
+      const a = e.currentTarget as HTMLAnchorElement;
+      const hash = a.getAttribute("href") || "";
+      if (!hash.startsWith("#") || hash === "#") return;
+      const target = root.querySelector<HTMLElement>(hash);
+      if (!target) return;
+      e.preventDefault();
+      gsap.to(window, {
+        duration: 0.8,
+        ease: "power2.inOut",
+        scrollTo: { y: target, offsetY: 24, autoKill: true },
+      });
+    };
+    const anchors = qa('a[href^="#"]');
+    anchors.forEach((a) => a.addEventListener("click", onAnchorClick));
+
+    // useGSAP treats a returned function as its cleanup, remove the listeners
+    // when the landing unmounts.
+    return () => anchors.forEach((a) => a.removeEventListener("click", onAnchorClick));
   });
 
   // Invisible marker; the component renders nothing meaningful itself.

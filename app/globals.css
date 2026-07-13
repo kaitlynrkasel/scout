@@ -25,12 +25,12 @@
   /* Pantone board: dusty blue (#8496B4) as the light accent, Mystic Navy
      (#13273F) as the deep anchor for labels/links/text-on-tint. sage tokens stay
      aliased so ~400 existing usages flip centrally without touching classNames. */
-  --c-blue: 132 150 180; /* #8496B4 dusty blue accent */
-  --c-blue-deep: 19 39 63; /* #13273F Mystic Navy — labels, links, text on tint */
-  --c-blue-tint: 211 220 234; /* soft periwinkle fill */
-  --c-slate: 132 150 180; /* dusty blue */
-  --c-sage: 132 150 180; /* alias → dusty blue */
-  --c-sage-deep: 19 39 63; /* alias → navy */
+  --c-blue: 113 128 155; /* #71809B muted denim — warmer, less cyan, sits with the brown */
+  --c-blue-deep: 45 59 78; /* #2D3B4E warm slate navy — labels, links, text on tint */
+  --c-blue-tint: 212 217 226; /* #D4D9E2 soft warm periwinkle fill */
+  --c-slate: 113 128 155; /* denim */
+  --c-sage: 113 128 155; /* alias → denim */
+  --c-sage-deep: 45 59 78; /* alias → slate navy */
   --c-cream: 251 250 248; /* page canvas, near-white, whisper warm */
   --c-surface: 255 255 255;
   --c-surface-2: 245 243 239; /* sidebar / inset layer, warm gray */
@@ -57,12 +57,12 @@ html.dark {
   --c-attention: 208 162 78;
   --c-danger: 212 122 99;
   /* Dusty blue + periwinkle lifted so they read on the espresso dark surfaces. */
-  --c-blue: 165 182 206; /* lighter dusty blue */
-  --c-blue-deep: 200 213 233; /* periwinkle, for text on dark tint */
-  --c-blue-tint: 34 50 74; /* deep navy fill */
-  --c-slate: 150 165 185;
-  --c-sage: 165 182 206; /* alias → dusty blue */
-  --c-sage-deep: 200 213 233; /* alias → periwinkle */
+  --c-blue: 158 170 190; /* warmer, grayer denim on dark surfaces */
+  --c-blue-deep: 206 214 226; /* soft warm periwinkle, for text on dark tint */
+  --c-blue-tint: 56 62 76; /* deep warm slate fill */
+  --c-slate: 150 162 182;
+  --c-sage: 158 170 190; /* alias → denim */
+  --c-sage-deep: 206 214 226; /* alias → periwinkle */
   --c-cream: 26 23 18;
   --c-surface: 36 32 26;
   --c-surface-2: 31 27 21;
@@ -222,7 +222,7 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-espresso: #3d3227; /* the sidebar rail — a soft warm coffee, dark in both themes */
+  --su-espresso: #6a4d34; /* the sidebar rail — a warm brown that meshes with the tan band */
   --su-terra: #b85433; /* terracotta accent */
   --su-terra-deep: #9e3f1f;
   --su-tan: #ecddc9; /* lighter tan stat band */
@@ -263,12 +263,12 @@ html.dark {
 .su-search {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 8px;
   background: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
-  padding: 9px 11px;
-  font-size: 13px;
+  border-radius: 9px;
+  padding: 7px 10px;
+  font-size: 12px;
   color: #b3a48c;
   transition: background 0.15s ease;
 }
@@ -278,10 +278,10 @@ html.dark {
 .su-navitem {
   display: flex;
   align-items: center;
-  gap: 11px;
-  padding: 9px 11px;
-  border-radius: 9px;
-  font-size: 13px;
+  gap: 9px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.02em;
   color: #cbbba2;
@@ -330,10 +330,10 @@ html.dark {
   width: 100%;
   background-color: rgba(255, 255, 255, 0.05);
   border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 9px;
-  padding: 9px 11px;
-  padding-right: 2.1rem;
-  font-size: 13px;
+  border-radius: 8px;
+  padding: 7px 10px;
+  padding-right: 2rem;
+  font-size: 12px;
   font-weight: 600;
   color: #efe7d9;
   outline: none;

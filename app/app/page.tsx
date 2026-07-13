@@ -6939,8 +6939,8 @@ function SideNav({
       className={`su-navitem ${opts.active ? "su-active" : ""}`}
     >
       <svg
-        width="16"
-        height="16"
+        width="15"
+        height="15"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"
@@ -6965,14 +6965,14 @@ function SideNav({
         href="/"
         aria-label="Scout home"
         title="Back to homepage"
-        className="su-logo flex items-center gap-2.5 px-2 pb-4 pt-1.5 transition hover:opacity-80"
+        className="su-logo flex items-center gap-2.5 px-2 pb-3 pt-1 transition hover:opacity-80"
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/scout-logo.png" alt="Scout" width={24} height={24} className="h-6 w-6" />
-        <b className="text-[17px] font-bold tracking-tight">Scout</b>
+        <img src="/scout-logo.png" alt="Scout" width={22} height={22} className="h-[22px] w-[22px]" />
+        <b className="text-[16px] font-bold tracking-tight">Scout</b>
       </a>
 
-      <button onClick={openCommand} className="su-search mb-3.5">
+      <button onClick={openCommand} className="su-search mb-2.5">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
         Search
         <span className="ml-auto text-[10px] text-[#8f8069]">⌘K</span>
@@ -11033,10 +11033,10 @@ function DashboardTab({
                   {firstName ? (
                     <>
                       <br />
-                      <span className="su-o">{firstName}.</span>
+                      <span className="su-o">{firstName}!</span>
                     </>
                   ) : (
-                    "."
+                    "!"
                   )}
                 </h1>
                 <p className="mt-3.5 max-w-[46ch] text-[15px] text-muted">

@@ -280,7 +280,7 @@ const BODY = `
 <section class="sec" id="how"><div class="wrap how">
   <div>
     <div class="kicker">How it works</div>
-    <h2 class="h2">Scout does the <em>hunting</em>.</h2>
+    <h2 class="h2">Scout does the <em style="color:#8A5A34">hunting</em>.</h2>
     <p class="lead">No database of stale leads. It reads the live public web the moment you ask, then hands you real people and a message worth sending.</p>
     <a class="btn btn-o" style="margin-top:22px" href="#steps">See how to start →</a>
   </div>
