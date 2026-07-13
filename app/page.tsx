@@ -137,7 +137,6 @@ const CSS = `
   .c1{left:0;top:0;z-index:3}
   .c2{left:300px;top:150px;z-index:4;box-shadow:0 34px 66px -36px rgba(36,28,19,.36)}
   .c3{left:640px;top:44px;z-index:2}
-  .fit{position:absolute;left:566px;top:508px;z-index:6;background:var(--olive);color:#fff;font-size:11px;font-weight:600;letter-spacing:.04em;padding:8px 12px;border-radius:var(--rs)}
   .exlist{margin-top:28px;border-top:1px solid var(--border)}
   .exrow{display:flex;align-items:center;gap:16px;padding:13px 4px;border-bottom:1px solid var(--line)}
   .exrow svg{color:var(--terra);flex:0 0 auto}
@@ -224,7 +223,6 @@ const CSS = `
     .how{grid-template-columns:1fr;gap:26px}
     .stack{height:auto;display:flex;flex-direction:column;gap:16px;margin-top:24px}
     .card{position:static;width:auto}
-    .fit{display:none}
     .steps{grid-template-columns:1fr;gap:0}
     .step{border-top:none;border-bottom:1px solid var(--line);padding:18px 0}
     .voicegrid{grid-template-columns:1fr;gap:26px}
@@ -300,7 +298,6 @@ const BODY = `
     <div class="card c1"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For students</div><h3>Coffee chats &amp; alumni</h3><p>Alumni in your field, opened with a note that doesn't read like a cold email.</p></div></div>
     <div class="card c2"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For job seekers</div><h3>Recruiters &amp; referrals</h3><p>The people hiring right now, with a warm intro ready to send.</p></div></div>
     <div class="card c3"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For founders</div><h3>Partners &amp; press</h3><p>Point the whole team at one pipeline of real contacts.</p></div></div>
-    <span class="fit">92% fit</span>
   </div>
   <div class="exlist">
     <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Job seeker</span><span class="q">Recruiters hiring remote UX designers</span></div>
