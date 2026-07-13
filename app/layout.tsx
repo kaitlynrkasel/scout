@@ -24,6 +24,15 @@ const display = localFont({
   ],
 });
 
+// Anton — the landing's loud, condensed poster face. Loaded app-wide as
+// --font-anton so the dashboard's greeting headline and big stat numbers carry
+// the same editorial punch as the landing hero.
+const poster = localFont({
+  variable: "--font-anton",
+  display: "swap",
+  src: [{ path: "./fonts/anton.woff2", weight: "400", style: "normal" }],
+});
+
 export const metadata: Metadata = {
   metadataBase: new URL("https://scout-source.com"),
   title: "Scout | Find Your People",
@@ -37,7 +46,11 @@ const themeScript = `(function(){try{if(localStorage.getItem('scout_theme')==='d
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${sans.variable} ${display.variable}`} suppressHydrationWarning>
+    <html
+      lang="en"
+      className={`${sans.variable} ${display.variable} ${poster.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>

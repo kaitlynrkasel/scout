@@ -212,3 +212,437 @@ select.scout-select-light {
   color: #fff;
   padding-right: 1.9rem;
 }
+
+/* ============================================================================
+   Edgy app dashboard + espresso rail (shares the landing's collision voice:
+   Anton headlines, ghost outline words, terracotta accents on a warm canvas).
+   Namespaced `.su-*` so it never collides with the existing warm UI. Colors are
+   driven off the theme tokens where possible; a couple of edgy-only accents
+   (terracotta, the tan stat band, the espresso rail) get their own vars with a
+   dark-mode override so the whole thing follows the theme.
+   ========================================================================== */
+:root {
+  --su-espresso: #221a11; /* the dark sidebar rail — dark in both themes */
+  --su-terra: #b85433; /* terracotta accent */
+  --su-terra-deep: #9e3f1f;
+  --su-tan: #ecddc9; /* lighter tan stat band */
+  --su-tan-line: #dbc9b4;
+  --su-ghost: rgba(36, 28, 19, 0.06); /* ghost outline-word stroke */
+  --su-idx: rgba(184, 84, 51, 0.5); /* index-number stroke */
+}
+html.dark {
+  --su-terra: #cc6a45;
+  --su-terra-deep: #d98763;
+  --su-tan: #2c2418;
+  --su-tan-line: #3a352c;
+  --su-ghost: rgba(245, 239, 228, 0.05);
+  --su-idx: rgba(204, 106, 69, 0.45);
+}
+
+.font-anton {
+  font-family: var(--font-anton), Impact, "Arial Narrow", sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+}
+
+/* ---- Espresso rail ---- */
+.su-rail {
+  background: var(--su-espresso);
+  color: #cfc1ac;
+}
+.su-rail .su-logo b {
+  color: #f5efe4;
+}
+.su-rail .su-logo img {
+  filter: brightness(0) invert(1);
+  opacity: 0.92;
+}
+.su-rail .kicker {
+  color: #8f8069;
+}
+.su-search {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 9px 11px;
+  font-size: 13px;
+  color: #b3a48c;
+  transition: background 0.15s ease;
+}
+.su-search:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+.su-navitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #cbbba2;
+  text-transform: uppercase;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.su-navitem svg {
+  opacity: 0.82;
+}
+.su-navitem:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #efe7d9;
+}
+.su-navitem .su-ct {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 700;
+  color: #9c8b70;
+}
+.su-navitem .su-dot {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--su-terra);
+}
+.su-navitem.su-active {
+  background: var(--su-terra);
+  color: #fff;
+  font-weight: 700;
+}
+.su-navitem.su-active svg {
+  opacity: 1;
+}
+.su-navitem.su-active .su-ct {
+  color: #ffd9c6;
+}
+.su-navitem.su-active .su-dot {
+  background: #ffd9c6;
+}
+.su-rail .su-foot {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.su-rail select.su-projsel {
+  appearance: none;
+  width: 100%;
+  background-color: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  border-radius: 9px;
+  padding: 9px 11px;
+  padding-right: 2.1rem;
+  font-size: 13px;
+  font-weight: 600;
+  color: #efe7d9;
+  outline: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%239c8b70' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.6rem center;
+}
+.su-rail select.su-projsel option {
+  color: #241c13;
+}
+.su-up {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  color: #ead9c6;
+  font-weight: 700;
+  font-size: 12px;
+  text-align: center;
+  padding: 10px;
+  border-radius: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  transition: background 0.15s ease;
+}
+.su-up:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ---- Dashboard hero ---- */
+.su-hero {
+  position: relative;
+  overflow: hidden;
+  padding: 34px 34px 26px;
+}
+.su-ghost {
+  position: absolute;
+  right: -30px;
+  top: -6px;
+  z-index: 0;
+  font-family: var(--font-display), sans-serif;
+  font-weight: 800;
+  font-size: 190px;
+  line-height: 0.8;
+  color: transparent;
+  -webkit-text-stroke: 2px var(--su-ghost);
+  white-space: nowrap;
+  pointer-events: none;
+  user-select: none;
+}
+.su-bighead {
+  font-size: 88px;
+  line-height: 0.86;
+  color: rgb(var(--c-ink));
+  letter-spacing: 0.5px;
+}
+.su-bighead .su-o {
+  color: transparent;
+  -webkit-text-stroke: 2px var(--su-terra);
+}
+@media (max-width: 640px) {
+  .su-hero {
+    padding: 26px 20px 20px;
+  }
+  .su-bighead {
+    font-size: 54px;
+  }
+  .su-ghost {
+    font-size: 120px;
+  }
+  .su-band,
+  .su-sec {
+    margin-left: 20px;
+    margin-right: 20px;
+    padding-left: 20px;
+    padding-right: 20px;
+  }
+}
+
+/* ---- Stat band (lighter tan, inset — never touches the rail) ---- */
+.su-band {
+  margin: 22px 34px 6px;
+  background: var(--su-tan);
+  border: 1px solid var(--su-tan-line);
+  border-radius: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  overflow: hidden;
+}
+.su-band .su-st {
+  padding: 20px 28px;
+  border-left: 1px solid var(--su-tan-line);
+}
+.su-band .su-st:first-child {
+  border-left: 0;
+}
+.su-band .su-n {
+  font-family: var(--font-anton), Impact, sans-serif;
+  font-weight: 400;
+  font-size: 48px;
+  line-height: 0.9;
+  color: rgb(var(--c-ink));
+  letter-spacing: 0.5px;
+}
+.su-band .su-l {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(var(--c-muted));
+  margin-top: 8px;
+}
+
+/* ---- Editorial sections ---- */
+.su-sec {
+  padding: 26px 34px;
+}
+.su-secttl {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  border-bottom: 2px solid rgb(var(--c-ink));
+  padding-bottom: 10px;
+}
+.su-secttl .su-k {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgb(var(--c-ink));
+}
+.su-secttl a {
+  font-size: 12.5px;
+  color: var(--su-terra-deep);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* ---- Top match (feature row) ---- */
+.su-feature {
+  display: flex;
+  gap: 16px;
+  padding: 20px 0 8px;
+}
+.su-feature .su-idxn {
+  font-family: var(--font-anton), Impact, sans-serif;
+  font-weight: 400;
+  font-size: 40px;
+  color: transparent;
+  -webkit-text-stroke: 1.5px var(--su-idx);
+  line-height: 1;
+}
+.su-feature .su-nm {
+  font-family: var(--font-display), sans-serif;
+  font-weight: 700;
+  font-size: 24px;
+  color: rgb(var(--c-ink));
+  letter-spacing: -0.02em;
+}
+.su-feature .su-rl {
+  font-size: 13px;
+  color: rgb(var(--c-muted));
+  margin-top: 2px;
+}
+.su-feature .su-quote {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: rgb(var(--c-body));
+  margin-top: 12px;
+  max-width: 64ch;
+  border-left: 3px solid var(--su-terra);
+  padding: 2px 0 2px 14px;
+}
+.su-feature .su-act {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+/* ---- More matches (numbered list rows) ---- */
+.su-find {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 15px 4px;
+  border-bottom: 1px solid rgb(var(--c-warm-border));
+  width: 100%;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+.su-find:hover {
+  background: rgb(var(--c-warm-bg) / 0.6);
+}
+.su-find .su-fn {
+  font-family: var(--font-anton), Impact, sans-serif;
+  font-weight: 400;
+  font-size: 18px;
+  color: rgb(var(--c-muted));
+  width: 26px;
+  flex: 0 0 auto;
+}
+.su-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  color: #fff;
+  font-weight: 800;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+.su-find .su-who .su-wnm {
+  font-size: 15px;
+  font-weight: 700;
+  color: rgb(var(--c-ink));
+}
+.su-find .su-who .su-wrl {
+  font-size: 12.5px;
+  color: rgb(var(--c-muted));
+  margin-top: 1px;
+}
+.su-find .su-fit {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  font-weight: 700;
+  color: rgb(var(--c-ink));
+  flex: 0 0 auto;
+}
+.su-fitbar {
+  width: 60px;
+  height: 6px;
+  border-radius: 3px;
+  background: rgb(var(--c-warm-bg));
+  overflow: hidden;
+}
+.su-fitbar i {
+  display: block;
+  height: 100%;
+  background: var(--su-terra);
+}
+.su-find .su-go {
+  width: 108px;
+  text-align: right;
+  font-size: 12.5px;
+  color: var(--su-terra-deep);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex: 0 0 auto;
+}
+
+/* ---- Buttons + tags shared by the edgy dashboard ---- */
+.su-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 12px 18px;
+  border: 0;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.su-btn-t {
+  background: var(--su-terra);
+  color: #fff;
+}
+.su-btn-t:hover {
+  opacity: 0.92;
+}
+.su-btn-ghost {
+  background: transparent;
+  color: rgb(var(--c-ink));
+  border: 1px solid rgb(var(--c-warm-border));
+}
+.su-btn-ghost:hover {
+  background: rgb(var(--c-warm-bg) / 0.6);
+}
+.su-tagfit {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 10px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  /* Fixed dark chip in both themes — driving it off --c-ink made it a light
+     box with light text in dark mode. */
+  background: #2a2018;
+  color: #f0e5d6;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  vertical-align: middle;
+}
+.su-uav {
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: var(--su-tan);
+  color: rgb(var(--c-brown-deep));
+  font-weight: 800;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
