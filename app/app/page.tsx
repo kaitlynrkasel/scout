@@ -15577,24 +15577,8 @@ function CompanyDetailsEditor({
           {isOwner ? "You're the admin" : "Shared, admin-managed"}
         </span>
       </div>
-      {/* With several companies, make it unmistakable which one you're editing —
-          a picker that mirrors the sidebar lens. */}
-      {companies.length > 1 && (
-        <div className="mt-3">
-          <Label>Which company</Label>
-          <select
-            value={selectedWsId}
-            onChange={(e) => setSelectedWsId(e.target.value)}
-            className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-bold text-ink outline-none transition focus:border-coral sm:max-w-xs"
-          >
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Company selection lives in ONE place — the switcher at the top of the
+          page (and the sidebar), which drives selectedWsId. No second picker here. */}
       <p className="mt-2 text-sm leading-relaxed text-body">
         {isOwner
           ? "These answers ground how Scout searches and writes for this company. Change them anytime — your whole team sees the updates."
