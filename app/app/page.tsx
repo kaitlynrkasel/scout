@@ -2813,6 +2813,11 @@ function ScoutTool({
   const visibleTemplates = activeCompanyId
     ? myTemplates.filter((t) => !t.projectId || visibleProjectIdSet.has(t.projectId))
     : myTemplates;
+  // Finds under the current company lens — so the Dashboard's top match / counts
+  // reflect the company you're on, not a find from another company's project.
+  const visibleFinds = activeCompanyId
+    ? finds.filter((f) => visibleProjectIdSet.has(f.projectId))
+    : finds;
   const activeCompanyName = companies.find((c) => c.id === activeCompanyId)?.name || "";
   const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
   const activeUseCase = activeProject ? activeProject.useCase : profile.useCase;
@@ -5076,7 +5081,7 @@ function ScoutTool({
             {writePreview.loading ? (
               <p className="mt-4 text-sm text-body/60">Checking your sheet…</p>
             ) : writePreview.error ? (
-              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-700">
+              <p className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-danger">
                 {writePreview.error}
               </p>
             ) : writePreview.plan ? (
@@ -5770,7 +5775,7 @@ function ScoutTool({
                   </div>
                 </div>
               ) : (
-                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                <div className="mt-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-danger">
                   {error}
                 </div>
               ))}
@@ -6161,7 +6166,7 @@ function ScoutTool({
           templates={myTemplates}
           projects={projects}
           categoriesCount={categories.length}
-          finds={finds}
+          finds={visibleFinds}
           community={community}
           coaching={coaching}
           dismissedAdvice={dismissedAdvice}
@@ -8033,7 +8038,7 @@ function FindDetailModal({
                 else onClose();
               }}
               title="Mark this find as not a fit"
-              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-red-300 hover:bg-red-50 hover:text-red-700"
+              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
             >
               Not a fit
             </button>
@@ -9713,7 +9718,7 @@ function FindCard({
         {find.bounced && (
           <span
             title="This address bounced, the email didn't get delivered. Try scanning for another contact."
-            className="rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700"
+            className="rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-danger"
           >
             Bounced
           </span>
@@ -11941,7 +11946,7 @@ function DashboardTab({
           {learned.keptFit != null &&
             learned.deniedFit != null &&
             learned.keptFit - learned.deniedFit < 0.1 && (
-              <p className="mt-3 rounded-xl border border-amber-300/60 bg-amber-50 p-2.5 text-xs leading-relaxed text-amber-900">
+              <p className="mt-3 rounded-xl border border-attention/40 bg-attention/10 p-2.5 text-xs leading-relaxed text-attention">
                 Kept and denied fit scores are only{" "}
                 {Math.round((learned.keptFit - learned.deniedFit) * 100)} points apart, 
                 fit_score isn&apos;t discriminating well and the extract() rubric in
@@ -12006,7 +12011,7 @@ function DashboardTab({
             </span>
           </div>
           {tuningErr && (
-            <p className="mt-2.5 text-xs font-semibold text-red-700">{tuningErr}</p>
+            <p className="mt-2.5 text-xs font-semibold text-danger">{tuningErr}</p>
           )}
           {tuningPrompt && (
             <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
@@ -12052,7 +12057,7 @@ function DashboardTab({
             {autoTuneLogOpen && (
               <div className="mt-3 space-y-3">
                 {autoTuneLogErr && (
-                  <p className="text-xs font-semibold text-red-700">{autoTuneLogErr}</p>
+                  <p className="text-xs font-semibold text-danger">{autoTuneLogErr}</p>
                 )}
                 {autoTuneEntries === null ? (
                   <p className="text-xs text-body/50">Loading…</p>
@@ -12351,7 +12356,7 @@ function AutoSearchPanel({
           </>
         )}
 
-        {err && <p className="text-xs font-semibold text-red-700">{err}</p>}
+        {err && <p className="text-xs font-semibold text-danger">{err}</p>}
         {msg && <p className="text-xs font-semibold text-sage-deep">{msg}</p>}
 
         {items.length > 0 && (

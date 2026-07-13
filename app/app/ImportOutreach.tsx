@@ -464,12 +464,18 @@ export default function ImportOutreach({
       // Don't drop a row just because the Name cell is blank — if we have ANY
       // identifier (email, handle, outlet, or any non-empty cell) use it as the
       // name so real contacts aren't silently lost on import.
+      const rawName =
+        (cols.name && String(row[cols.name] || "").trim()) || fallbackNameFromRow(row) || "";
+      // A "name" that's really a sentence/description (long, many words) makes an
+      // ugly card title. Prefer a short identifier (handle/outlet/email) as the
+      // title when the mapped name looks like a description; keep the description
+      // as notes so nothing is lost.
+      const descLike = (s: string) => s.length > 55 || s.split(/\s+/).length > 8;
+      const identifier = handleEarly || outletEarly || emailEarly || "";
       const name =
-        (cols.name && String(row[cols.name] || "").trim()) ||
-        fallbackNameFromRow(row) ||
-        emailEarly ||
-        outletEarly ||
-        handleEarly ||
+        (rawName && !descLike(rawName) ? rawName : "") ||
+        identifier ||
+        rawName ||
         firstNonEmptyCell(row) ||
         "";
       if (!name) {
@@ -481,7 +487,12 @@ export default function ImportOutreach({
       const role = cols.role ? String(row[cols.role] || "").trim() : "";
       const url = cols.url ? String(row[cols.url] || "").trim() : "";
       const handle = handleEarly;
-      const notes = cols.notes ? String(row[cols.notes] || "").trim() : "";
+      const notes0 = cols.notes ? String(row[cols.notes] || "").trim() : "";
+      // If the raw name was a description we set aside, preserve it as context.
+      const notes =
+        rawName && descLike(rawName) && name !== rawName
+          ? [notes0, rawName].filter(Boolean).join(" — ")
+          : notes0;
       const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
       let status: FindStatus = defaultStatus;
       if (statusStr) {
