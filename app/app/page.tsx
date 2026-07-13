@@ -425,6 +425,7 @@ interface Profile {
   companyRole?: string; // your specific role/title at the company
   companyContribution?: string; // how you serve / what you do on the company's projects
   companyExpertise?: string; // what this person specializes in / their specific experience
+  useExpertise?: boolean; // include your specialization when Scout searches & writes (default true)
   // Cached from the company's workspace record so they flow into search + drafts.
   companyAbout?: string; // what the company does / who it serves
   companyIndustry?: string; // e.g. Music
@@ -940,6 +941,8 @@ function AuthedShell() {
             localExtras.companyContribution = parsed.companyContribution;
           if (typeof parsed.companyExpertise === "string")
             localExtras.companyExpertise = parsed.companyExpertise;
+          if (typeof parsed.useExpertise === "boolean")
+            localExtras.useExpertise = parsed.useExpertise;
           if (typeof parsed.companyWorkspaceId === "string")
             localExtras.companyWorkspaceId = parsed.companyWorkspaceId;
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
@@ -980,6 +983,7 @@ function AuthedShell() {
         mergedExtras.companyContribution = raw.companyContribution;
       if (typeof raw.companyExpertise === "string")
         mergedExtras.companyExpertise = raw.companyExpertise;
+      if (typeof raw.useExpertise === "boolean") mergedExtras.useExpertise = raw.useExpertise;
       if (typeof raw.companyAbout === "string") mergedExtras.companyAbout = raw.companyAbout;
       if (typeof raw.companyIndustry === "string")
         mergedExtras.companyIndustry = raw.companyIndustry;
@@ -1566,6 +1570,7 @@ function ScoutTool({
         companyRole: profile.companyRole,
         companyContribution: profile.companyContribution,
         companyExpertise: profile.companyExpertise,
+        useExpertise: profile.useExpertise,
         companyAbout: profile.companyAbout,
         companyIndustry: profile.companyIndustry,
         companyStage: profile.companyStage,
@@ -1580,7 +1585,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -2812,7 +2817,7 @@ function ScoutTool({
           profile.companyContribution
             ? `Their role / how they serve the company's work: ${profile.companyContribution}`
             : "",
-          profile.companyExpertise
+          profile.companyExpertise && profile.useExpertise !== false
             ? `Their specialization / specific experience: ${profile.companyExpertise}`
             : "",
         ]
@@ -6206,6 +6211,7 @@ function ScoutTool({
           companyWorkspaceId={profile.companyWorkspaceId || ""}
           companies={companies}
           activeCompanyId={activeCompanyId}
+          onSelectCompany={selectCompany}
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
           onSetSheetWrite={setSheetWrite}
@@ -6219,6 +6225,8 @@ function ScoutTool({
           companyRole={profile.companyRole || ""}
           companyContribution={profile.companyContribution || ""}
           companyExpertise={profile.companyExpertise || ""}
+          useExpertise={profile.useExpertise !== false}
+          onUseExpertise={(v) => patchProfile({ useExpertise: v })}
           onCompanyName={(v) => patchProfile({ companyName: v })}
           onCompanyRole={(v) => patchProfile({ companyRole: v })}
           onCompanyContribution={(v) => patchProfile({ companyContribution: v })}
@@ -15921,6 +15929,7 @@ function ProfileTab({
   companyWorkspaceId,
   companies,
   activeCompanyId,
+  onSelectCompany,
   syncedSheets,
   onRemoveSync,
   onSetSheetWrite,
@@ -15934,6 +15943,8 @@ function ProfileTab({
   companyRole,
   companyContribution,
   companyExpertise,
+  useExpertise,
+  onUseExpertise,
   onCompanyName,
   onCompanyRole,
   onCompanyContribution,
@@ -15999,6 +16010,7 @@ function ProfileTab({
   companyWorkspaceId: string;
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
+  onSelectCompany: (id: string) => void;
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
   onSetSheetWrite: (id: string, allow: boolean) => void;
@@ -16012,6 +16024,8 @@ function ProfileTab({
   companyRole: string;
   companyContribution: string;
   companyExpertise: string;
+  useExpertise: boolean;
+  onUseExpertise: (v: boolean) => void;
   onCompanyName: (v: string) => void;
   onCompanyRole: (v: string) => void;
   onCompanyContribution: (v: string) => void;
@@ -16203,10 +16217,41 @@ function ProfileTab({
         Your <span className="text-brown">profile</span>
       </h1>
       <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Drop in your resume, LinkedIn, or company website and Scout fills the rest
-        for you. Everything stays editable, and it shapes who we find and how your
-        messages sound.
+        {kind === "company"
+          ? "Everything here grounds how Scout searches and writes for your company. Pick the company below — the whole page follows your choice."
+          : "Drop in your resume, LinkedIn, or company website and Scout fills the rest for you. Everything stays editable, and it shapes who we find and how your messages sound."}
       </p>
+
+      {/* Company accounts: a prominent switcher at the very top, so it's obvious the
+          entire page (company details, your role, projects) reflects the company
+          you pick here — it drives the same lens as the sidebar. */}
+      {kind === "company" && companies.length > 0 && (
+        <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-blue-deep/25 bg-blue-tint/30 px-4 py-3">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-deep">
+            Company
+          </span>
+          {companies.length > 1 ? (
+            <select
+              value={activeCompanyId || companies[0].id}
+              onChange={(e) => onSelectCompany(e.target.value)}
+              className="scout-select rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-bold text-ink outline-none transition focus:border-coral"
+            >
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span className="rounded-lg bg-surface px-3 py-1.5 text-sm font-bold text-ink shadow-card">
+              {companies[0].name}
+            </span>
+          )}
+          <span className="text-xs leading-snug text-body/70">
+            This whole page — company details, your role, projects — is for this company.
+          </span>
+        </div>
+      )}
 
       {/* Mailbox connection moved to the Account tab ("Send from your email"). */}
 
@@ -16250,14 +16295,44 @@ function ProfileTab({
               />
             </div>
             <div className="mt-4">
-              <Label>What you specialize in / your specific experience</Label>
+              <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                <Label className="mb-0">What you specialize in / your specific experience</Label>
+                {/* Toggle whether this personal expertise is fed into who Scout finds
+                    and how it writes. Off = search/write purely as the company. */}
+                <label className="flex cursor-pointer items-center gap-1.5 text-[11px] font-semibold text-body/70">
+                  <input
+                    type="checkbox"
+                    checked={useExpertise}
+                    onChange={(e) => onUseExpertise(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-blue-deep"
+                  />
+                  Use in searches &amp; drafts
+                </label>
+              </div>
               <textarea
                 value={companyExpertise}
                 onChange={(e) => onCompanyExpertise(e.target.value)}
                 rows={3}
                 placeholder="e.g. music licensing & sync deals; 8 yrs in A&R; relationships with indie labels. What you know best."
-                className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                className={`w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 ${
+                  useExpertise ? "" : "opacity-60"
+                }`}
               />
+              {/* Drop a resume to fill this in — Scout reads it into your experience. */}
+              <div className="mt-2">
+                <FileDrop
+                  label="Or drop your resume/CV here to fill this in"
+                  accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
+                  hint="PDF, image, Word, HTML, or text — we read it into your experience above"
+                  onText={(t) => onCompanyExpertise(String(t || "").trim().slice(0, 1500))}
+                />
+              </div>
+              {!useExpertise && (
+                <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
+                  Off — Scout searches and writes purely as {companyName || "the company"},
+                  ignoring your personal experience above.
+                </p>
+              )}
             </div>
             <div className="mt-4">
               <Label>How you serve the company&apos;s work</Label>
@@ -16274,46 +16349,24 @@ function ProfileTab({
       )}
 
       <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        <Label>
-          {kind === "company"
-            ? "Start with your website"
-            : "Start with your resume or LinkedIn"}
-        </Label>
-
-        {kind === "company" ? (
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={website}
-              onChange={(e) => setWebsite(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault();
-                  readWebsite();
-                }
-              }}
-              placeholder="yourcompany.com"
-              className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        {/* Company accounts get their website + "what the company does" in the
+            company card above — no second website here. Individuals start from a
+            resume/LinkedIn. */}
+        {kind !== "company" && (
+          <>
+            <Label>Start with your resume or LinkedIn</Label>
+            <FileDrop
+              label={
+                parsing
+                  ? "Reading and filling in your Profile…"
+                  : "Drop your resume or LinkedIn here, or click to upload"
+              }
+              accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
+              hint="PDF, image (JPG/PNG), Word (.docx), HTML, or text"
+              onText={(t) => readAndFill(t)}
+              onFile={(f) => onResumeFile(f)}
             />
-            <button
-              onClick={readWebsite}
-              disabled={parsing || !website.trim()}
-              className="rounded-xl bg-brand-gradient px-5 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-            >
-              {parsing ? "Reading…" : "Read my website"}
-            </button>
-          </div>
-        ) : (
-          <FileDrop
-            label={
-              parsing
-                ? "Reading and filling in your Profile…"
-                : "Drop your resume or LinkedIn here, or click to upload"
-            }
-            accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
-            hint="PDF, image (JPG/PNG), Word (.docx), HTML, or text"
-            onText={(t) => readAndFill(t)}
-            onFile={(f) => onResumeFile(f)}
-          />
+          </>
         )}
 
         {/* Resume kept for email attachments */}
@@ -16331,24 +16384,16 @@ function ProfileTab({
           </div>
         )}
 
-        <p className="mt-2 text-xs leading-relaxed text-body/70">
-          {kind === "company" ? (
-            <>
-              Scout reads your site and fills in your company name, what you do, and
-              your background below. You can still paste anything into the box lower
-              down.
-            </>
-          ) : (
-            <>
-              Scout reads it and fills in your name, use case, and background below.{" "}
-              <span className="font-semibold text-body">From LinkedIn:</span> open your
-              profile, tap{" "}
-              <span className="font-semibold text-body">More → Save to PDF</span>, and
-              drop that file here. (LinkedIn blocks apps from reading your profile from
-              just a link, so this is the reliable way in.)
-            </>
-          )}
-        </p>
+        {kind !== "company" && (
+          <p className="mt-2 text-xs leading-relaxed text-body/70">
+            Scout reads it and fills in your name, use case, and background below.{" "}
+            <span className="font-semibold text-body">From LinkedIn:</span> open your
+            profile, tap{" "}
+            <span className="font-semibold text-body">More → Save to PDF</span>, and
+            drop that file here. (LinkedIn blocks apps from reading your profile from
+            just a link, so this is the reliable way in.)
+          </p>
+        )}
         {parsing && (
           <div className="mt-3 flex items-center gap-2 text-xs font-semibold text-accent">
             <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-warm-border border-t-coral" />
@@ -16367,7 +16412,7 @@ function ProfileTab({
           </div>
         )}
 
-        <hr className="my-7 border-warm-border" />
+        {kind !== "company" && <hr className="my-7 border-warm-border" />}
 
         <Label>What are you using Scout for?</Label>
         <UseCaseCombo value={useCase} onChange={onUseCase} />
@@ -16377,17 +16422,21 @@ function ProfileTab({
           will figure out who to look for. Manage your categories in the editor below.
         </p>
 
-        <div className="mt-6">
-          <div className="sm:max-w-md">
-            <Label>{kind === "company" ? "Your company name" : "Your name"}</Label>
-            <input
-              value={name}
-              onChange={(e) => onName(e.target.value)}
-              placeholder={kind === "company" ? "e.g. Acme Studio" : "e.g. Alex Rivera"}
-              className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
+        {/* Individuals name themselves here; a company's name lives in the company
+            card above, so this field is redundant (and confusing) for company. */}
+        {kind !== "company" && (
+          <div className="mt-6">
+            <div className="sm:max-w-md">
+              <Label>Your name</Label>
+              <input
+                value={name}
+                onChange={(e) => onName(e.target.value)}
+                placeholder="e.g. Alex Rivera"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
           </div>
-        </div>
+        )}
 
         {/* -------- About you: personal details, INDIVIDUAL accounts only. Company
              members have no personal profile — their whole identity is the
