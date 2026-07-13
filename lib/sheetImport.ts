@@ -115,6 +115,33 @@ function sheetToRows(XLSX: any, ws: any): { headers: string[]; rows: Record<stri
 
 // Read EVERY tab in a workbook and combine (union of columns), so a multi-tab
 // tracking sheet is fully read, not just the first tab.
+// A tab is a workbook sheet kept SEPARATE (its own headers + rows), so a
+// multi-tab workbook where each tab is a different entity (Opportunities vs
+// Senders vs Config) isn't blindly merged into one mess.
+export type SheetTab = { name: string; headers: string[]; rows: Record<string, string>[] };
+
+// Read every tab in a workbook, kept separate. Empty tabs are dropped.
+export function workbookToTabs(XLSX: any, wb: any): SheetTab[] {
+  const tabs: SheetTab[] = [];
+  for (const name of wb.SheetNames || []) {
+    const ws = wb.Sheets[name];
+    if (!ws) continue;
+    const part = sheetToRows(XLSX, ws);
+    if (part.rows.length) tabs.push({ name, headers: part.headers, rows: part.rows });
+  }
+  return tabs;
+}
+
+// Heuristic: does this tab look like a list of outreach targets (finds)? Used to
+// pre-select the right tabs and skip Senders / Config / Coach-style tabs.
+export function tabLooksLikeFinds(tab: SheetTab): boolean {
+  const h = tab.headers.map((x) => x.toLowerCase());
+  const hasName = h.some((x) => /name|artist|contact|outlet|company|title|handle/.test(x)) || tab.headers[0] === "";
+  const isConfigLike = /sender|config|setting|coach|instruction|template|readme|about|key|value/i.test(tab.name);
+  // A finds tab has several rows and isn't an obvious config/sender sheet.
+  return tab.rows.length >= 2 && hasName && !isConfigLike;
+}
+
 export function workbookToRows(
   XLSX: any,
   wb: any
@@ -181,6 +208,73 @@ export async function fetchSheetRows(
   const wb = XLSX.read(bytes, { type: "array" });
   if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
   return workbookToRows(XLSX, wb);
+}
+
+// Like fetchSheetRows, but keeps each tab SEPARATE so the user can choose which
+// tab(s) hold the finds. The public whole-workbook (.xlsx) path yields many
+// tabs; the private-API / CSV paths are single-tab and return one entry.
+export async function fetchSheetTabs(
+  url: string,
+  token: string | null
+): Promise<SheetTab[]> {
+  const res = await fetch("/api/import/sheet", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || "Couldn't read that link.");
+
+  if (data.kind === "rows") {
+    return [
+      {
+        name: "Sheet",
+        headers: Array.isArray(data.headers) ? data.headers : [],
+        rows: Array.isArray(data.rows) ? data.rows : [],
+      },
+    ];
+  }
+  if (data.kind === "csv") {
+    const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
+      header: true,
+      skipEmptyLines: true,
+      transformHeader: (h) => h.trim(),
+    });
+    const rows = (result.data || []).filter((r) =>
+      Object.values(r).some((v) => String(v || "").trim())
+    );
+    const headers = (result.meta.fields || []).map((h) => h.trim());
+    return [{ name: "Sheet", headers, rows }];
+  }
+  const XLSX = await import("xlsx");
+  const bin = atob(String(data.b64 || ""));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const wb = XLSX.read(bytes, { type: "array" });
+  if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
+  return workbookToTabs(XLSX, wb);
+}
+
+// Union a set of tabs into one { headers, rows } for mapping/import. Only tabs
+// that share the finds schema should be combined (the picker enforces that).
+export function unionTabs(tabs: SheetTab[]): { headers: string[]; rows: Record<string, string>[] } {
+  const headers: string[] = [];
+  const seen = new Set<string>();
+  const rows: Record<string, string>[] = [];
+  for (const t of tabs) {
+    for (const h of t.headers) {
+      const k = h.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        headers.push(h);
+      }
+    }
+    rows.push(...t.rows);
+  }
+  return { headers, rows };
 }
 
 // Turn mapped rows into Find records (deterministic ids, so re-syncing the same

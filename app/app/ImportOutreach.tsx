@@ -7,7 +7,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import { workbookToRows } from "@/lib/sheetImport";
+import {
+  workbookToTabs,
+  fetchSheetTabs,
+  unionTabs,
+  tabLooksLikeFinds,
+  type SheetTab,
+} from "@/lib/sheetImport";
 import type { Opportunity } from "@/lib/types";
 import { MicButton, joinSpoken } from "./dictate";
 
@@ -131,6 +137,10 @@ export default function ImportOutreach({
 }) {
   const [rows, setRows] = useState<Record<string, string>[]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
+  // Multi-tab workbooks: keep every tab, and let the user choose which hold the
+  // finds (so a Senders/Config tab doesn't hijack the import).
+  const [tabs, setTabs] = useState<SheetTab[]>([]);
+  const [selectedTabs, setSelectedTabs] = useState<Set<string>>(new Set());
   const [mapping, setMapping] = useState<Record<string, FieldKey>>({});
   const [projectId, setProjectId] = useState(activeProjectId || projects[0]?.id || "");
   const [defaultStatus, setDefaultStatus] = useState<FindStatus>("sent");
@@ -170,6 +180,10 @@ export default function ImportOutreach({
       // remember stale headers from a previous file.
       setRows([]);
       setHeaders([]);
+      setTabs([]);
+      setSelectedTabs(new Set());
+      setImportStats(null);
+      setShowMapping(false);
       setMapping({});
       setError("");
       setImported(null);
@@ -206,6 +220,34 @@ export default function ImportOutreach({
     setUAsked([]);
     setUAnswers("");
     void runUnderstand("", [], clean, heads);
+  }
+
+  // Receive a workbook's tabs: store them, pre-select the ones that look like
+  // finds (skipping Senders/Config/Coach), and ingest the union of the selected.
+  function ingestTabs(tabList: SheetTab[]) {
+    const nonEmpty = tabList.filter((t) => t.rows.length);
+    if (!nonEmpty.length) {
+      setError("The file has no data rows.");
+      return;
+    }
+    setTabs(nonEmpty);
+    const findsTabs = nonEmpty.filter(tabLooksLikeFinds);
+    // Default: the finds-like tabs, or all tabs if the heuristic found none.
+    const picked = (findsTabs.length ? findsTabs : nonEmpty).map((t) => t.name);
+    setSelectedTabs(new Set(picked));
+    const chosen = nonEmpty.filter((t) => picked.includes(t.name));
+    const { headers: h, rows: r } = unionTabs(chosen);
+    ingest(h, r);
+  }
+
+  // Re-ingest whenever the user changes which tabs are selected. Keep at least
+  // one tab selected so the picker (and the rest of the panel) stays on screen.
+  function applyTabSelection(next: Set<string>) {
+    if (next.size === 0) return; // ignore unchecking the last tab
+    setSelectedTabs(next);
+    const chosen = tabs.filter((t) => next.has(t.name));
+    const { headers: h, rows: r } = unionTabs(chosen);
+    ingest(h, r);
   }
 
   // Ask Scout how well it understands this document; folds prior answers back in.
@@ -330,9 +372,8 @@ export default function ImportOutreach({
         const wb = XLSX.read(buf, { type: "array" });
         setBusy(false);
         if (!wb.SheetNames?.length) throw new Error("The workbook has no sheets.");
-        // Read every tab, not just the first.
-        const { headers, rows } = workbookToRows(XLSX, wb);
-        ingest(headers, rows);
+        // Read every tab separately so the user can pick which hold the finds.
+        ingestTabs(workbookToTabs(XLSX, wb));
       } catch (e: any) {
         setBusy(false);
         setError(`Could not read that spreadsheet: ${e?.message || "unknown error"}`);
@@ -375,48 +416,11 @@ export default function ImportOutreach({
     setBusy(true);
     try {
       const token = getToken ? await getToken() : null;
-      const res = await fetch("/api/import/sheet", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ url: u }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setBusy(false);
-        setError(data?.error || "Couldn't read that link.");
-        return;
-      }
+      const tabList = await fetchSheetTabs(u, token);
+      setBusy(false);
       setSourceUrl(u);
       setFileName(/docs\.google\.com/.test(u) ? "Linked Google Sheet" : u);
-      if (data.kind === "csv") {
-        const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
-          header: true,
-          skipEmptyLines: true,
-          transformHeader: (h) => h.trim(),
-        });
-        setBusy(false);
-        const clean = (result.data || []).filter((r) =>
-          Object.values(r).some((v) => String(v || "").trim())
-        );
-        const heads = (result.meta.fields || []).map((h) => h.trim());
-        ingest(heads, clean);
-      } else {
-        const XLSX = await import("xlsx");
-        const bin = atob(String(data.b64 || ""));
-        const bytes = new Uint8Array(bin.length);
-        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        const wb = XLSX.read(bytes, { type: "array" });
-        setBusy(false);
-        if (!wb.SheetNames?.length) {
-          setError("The workbook has no sheets.");
-          return;
-        }
-        const { headers, rows } = workbookToRows(XLSX, wb);
-        ingest(headers, rows);
-      }
+      ingestTabs(tabList);
     } catch (e: any) {
       setBusy(false);
       setError(e?.message || "Couldn't import from that link.");
@@ -684,6 +688,49 @@ export default function ImportOutreach({
                   <span className="text-body/70">· {rows.length} rows</span>
                 </div>
               </div>
+
+              {/* Tab picker — this workbook has several tabs (Opportunities,
+                  Senders, Config…). Only import the ones that hold your finds so a
+                  Senders/Config tab doesn't hijack the import. */}
+              {tabs.length > 1 && (
+                <div className="rounded-2xl border border-warm-border bg-white p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-body/60">
+                    Which tabs hold your contacts?
+                  </div>
+                  <p className="mt-1 text-xs text-body/70">
+                    This sheet has {tabs.length} tabs. Scout pre-picked the ones that
+                    look like lists of people/opportunities — uncheck any that aren&apos;t
+                    (like Senders or Config).
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {tabs.map((t) => {
+                      const on = selectedTabs.has(t.name);
+                      return (
+                        <button
+                          key={t.name}
+                          onClick={() => {
+                            const next = new Set(selectedTabs);
+                            if (on) next.delete(t.name);
+                            else next.add(t.name);
+                            applyTabSelection(next);
+                          }}
+                          className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                            on
+                              ? "border-transparent bg-brand-gradient text-white"
+                              : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                          }`}
+                        >
+                          {on ? "✓ " : ""}
+                          {t.name}{" "}
+                          <span className={on ? "text-white/70" : "text-body/50"}>
+                            ({t.rows.length})
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
 
               {/* Understanding gate — Scout reads the doc and asks until it gets it.
                   The % is its honest read, and rises as you answer. */}
