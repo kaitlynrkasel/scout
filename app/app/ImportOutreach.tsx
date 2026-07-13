@@ -9,6 +9,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import { workbookToRows } from "@/lib/sheetImport";
 import type { Opportunity } from "@/lib/types";
+import { MicButton, joinSpoken } from "./dictate";
 
 // Local mirrors of the Find / Project / FindStatus shapes from page.tsx. The
 // component just needs enough to build records and drop them back in via the
@@ -111,6 +112,8 @@ export default function ImportOutreach({
     understanding?: number;
     understandingSummary?: string;
     understandingAnswers?: string;
+    allowWrite?: boolean;
+    writeTab?: string;
   }) => void;
   projects: Project[];
   activeProjectId: string;
@@ -128,6 +131,9 @@ export default function ImportOutreach({
   const [linkUrl, setLinkUrl] = useState("");
   const [sourceUrl, setSourceUrl] = useState(""); // set when imported from a link
   const [keepSynced, setKeepSynced] = useState(true);
+  const [showMapping, setShowMapping] = useState(false); // column mapping is advanced; hidden by default
+  const [writeBack, setWriteBack] = useState(false); // let Scout write the pipeline back into the synced sheet
+  const [writeTab, setWriteTab] = useState("Scout"); // which tab Scout writes into
   // Understanding gate: Scout reads the doc, then asks until it grasps it. The
   // percentage is the model's honest read, raised as questions get answered.
   const [understand, setUnderstand] = useState<{
@@ -277,6 +283,17 @@ export default function ImportOutreach({
       )
     : 0;
 
+  // Auto-fold answers into a deeper re-read shortly after you answer — no button.
+  // Scout just keeps improving its understanding as you go. Debounced so a burst
+  // of picks (or typing an "Other") folds in once, not per keystroke. Terminates
+  // naturally: a re-read clears the picks, so it won't loop until you answer more.
+  useEffect(() => {
+    if (!understand || uBusy || uAnsweredCount === 0) return;
+    const t = setTimeout(() => recheckUnderstanding(), 1400);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uPicks, uOther, understand, uBusy, uAnsweredCount]);
+
   // Spreadsheet formats (Excel, ODS, …) are read with SheetJS, which is loaded
   // on demand so the CSV path stays light. Everything is normalized to the same
   // { header: string, rows: Record<string,string>[] } shape as the CSV parser.
@@ -404,6 +421,9 @@ export default function ImportOutreach({
   );
 
   const preview = rows.slice(0, 5);
+  // Write-back is only possible for a linked Google Sheet (a dropped file / public
+  // CSV has nothing to write into).
+  const isGoogleSheet = /docs\.google\.com\/spreadsheets/.test(sourceUrl);
 
   function buildFinds(): Find[] {
     if (!projectId) throw new Error("Pick a project first.");
@@ -497,6 +517,8 @@ export default function ImportOutreach({
           understanding: understand ? liveUnderstanding : undefined,
           understandingSummary: understand?.summary || undefined,
           understandingAnswers: [uAnswers, composeUnderstandAnswers()].filter(Boolean).join(". ") || undefined,
+          allowWrite: isGoogleSheet && writeBack,
+          writeTab: isGoogleSheet && writeBack ? writeTab.trim() || "Scout" : undefined,
         });
       }
       setImported(added);
@@ -686,23 +708,35 @@ export default function ImportOutreach({
                               </button>
                             </div>
                             {sel.includes("__other__") && (
-                              <input
-                                value={uOther[i] || ""}
-                                onChange={(e) => setUOther((p) => ({ ...p, [i]: e.target.value }))}
-                                placeholder="Tell Scout in your words"
-                                className="mt-1.5 w-full rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-coral"
-                              />
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <input
+                                  value={uOther[i] || ""}
+                                  onChange={(e) => setUOther((p) => ({ ...p, [i]: e.target.value }))}
+                                  placeholder="Tell Scout in your words"
+                                  className="w-full rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-coral"
+                                />
+                                <MicButton
+                                  onAppend={(t) =>
+                                    setUOther((p) => ({ ...p, [i]: joinSpoken(p[i] || "", t) }))
+                                  }
+                                />
+                              </div>
                             )}
                           </div>
                         );
                       })}
-                      <button
-                        onClick={recheckUnderstanding}
-                        disabled={uBusy || uAnsweredCount === 0}
-                        className="rounded-xl bg-brown px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
-                      >
-                        {uBusy ? "Re-reading…" : "I answered — re-check"}
-                      </button>
+                      {uBusy ? (
+                        <div className="flex items-center gap-2 text-xs font-semibold text-brown">
+                          <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-brown" />
+                          Folding your answers in…
+                        </div>
+                      ) : (
+                        uAnsweredCount > 0 && (
+                          <div className="text-xs font-medium text-body/60">
+                            Scout updates its understanding as you answer.
+                          </div>
+                        )
+                      )}
                     </div>
                   )}
                   {understand && understand.questions.length === 0 && !uBusy && (
@@ -722,14 +756,25 @@ export default function ImportOutreach({
                 </div>
               ) : (
               <>
-              <div>
-                <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
-                  Column mapping
-                </h3>
-                <p className="mt-1 text-xs text-body/70">
-                  Scout guessed what each column is. Fix anything wrong, the Name
-                  column is required.
-                </p>
+              <div className="rounded-2xl border border-warm-border bg-white p-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                      Columns matched
+                    </h3>
+                    <p className="mt-1 text-xs text-body/70">
+                      Scout already figured out what each column is — you don&apos;t need to
+                      do anything here. Open it only if a column looks wrong.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowMapping((v) => !v)}
+                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    {showMapping ? "Hide" : "Review columns"}
+                  </button>
+                </div>
+                {showMapping && (
                 <div className="mt-3 grid gap-2 sm:grid-cols-2">
                   {headers.map((h) => (
                     <div
@@ -765,6 +810,7 @@ export default function ImportOutreach({
                     </div>
                   ))}
                 </div>
+                )}
               </div>
 
               <div>
@@ -841,19 +887,61 @@ export default function ImportOutreach({
               {/* Keep-synced — only when imported from a link (a dropped file has
                   nothing to re-read). */}
               {sourceUrl && onSaveSync && (
-                <label className="flex cursor-pointer items-start gap-2.5 rounded-2xl border border-warm-border bg-white p-4">
-                  <input
-                    type="checkbox"
-                    checked={keepSynced}
-                    onChange={(e) => setKeepSynced(e.target.checked)}
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-brown"
-                  />
-                  <span className="text-sm leading-relaxed text-body">
-                    <span className="font-semibold text-ink">Keep this sheet synced.</span>{" "}
-                    Scout re-reads the link automatically (on open and every few
-                    minutes) and pulls in new rows — you won&apos;t have to re-import.
-                  </span>
-                </label>
+                <div className="rounded-2xl border border-warm-border bg-white p-4">
+                  <label className="flex cursor-pointer items-start gap-2.5">
+                    <input
+                      type="checkbox"
+                      checked={keepSynced}
+                      onChange={(e) => setKeepSynced(e.target.checked)}
+                      className="mt-0.5 h-4 w-4 shrink-0 accent-brown"
+                    />
+                    <span className="text-sm leading-relaxed text-body">
+                      <span className="font-semibold text-ink">Keep this sheet synced.</span>{" "}
+                      Scout re-reads the link automatically (on open and every few
+                      minutes) and pulls in new rows — you won&apos;t have to re-import.
+                    </span>
+                  </label>
+
+                  {/* When synced, offer to write the pipeline back — and ask WHERE, so
+                      Scout never touches your existing tabs. Google Sheets only. */}
+                  {keepSynced && isGoogleSheet && (
+                    <div className="mt-3 border-t border-warm-border pt-3">
+                      <label className="flex cursor-pointer items-start gap-2.5">
+                        <input
+                          type="checkbox"
+                          checked={writeBack}
+                          onChange={(e) => setWriteBack(e.target.checked)}
+                          className="mt-0.5 h-4 w-4 shrink-0 accent-brown"
+                        />
+                        <span className="text-sm leading-relaxed text-body">
+                          <span className="font-semibold text-ink">
+                            Let Scout write the rows back into this sheet.
+                          </span>{" "}
+                          It adds a status/notes for each contact — never overwriting your
+                          existing columns.
+                        </span>
+                      </label>
+                      {writeBack && (
+                        <div className="mt-3 pl-7">
+                          <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/60">
+                            Which tab should Scout write into?
+                          </div>
+                          <input
+                            value={writeTab}
+                            onChange={(e) => setWriteTab(e.target.value)}
+                            placeholder="Scout"
+                            className="w-full max-w-xs rounded-xl border border-warm-border bg-white px-3 py-2 text-sm text-ink outline-none focus:border-coral"
+                          />
+                          <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
+                            Scout creates this tab if it doesn&apos;t exist and writes there,
+                            so your other tabs are left untouched. Default: a new
+                            &ldquo;Scout&rdquo; tab.
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
               </>
               )}
