@@ -255,7 +255,7 @@ const BODY = `
 <!-- HERO -->
 <section class="hero"><div class="herwrap">
   <div class="eyebrow">Professional networking, fetched</div>
-  <div class="eyebrow2">Est. for the ambitious</div>
+  <div class="eyebrow2">Dont waste time.</div>
   <div class="backword">Scout</div>
   <div class="headline anton"><span class="l">Find</span><span class="l">Your</span><span class="l">People</span></div>
   <div class="dog"><div class="lab">
