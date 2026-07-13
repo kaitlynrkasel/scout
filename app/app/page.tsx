@@ -3248,12 +3248,24 @@ function ScoutTool({
     if (!getToken) return;
     const t = await getToken();
     if (!t) return;
-    const res = await fetch("/api/sheets/auth", {
-      method: "POST",
-      headers: { authorization: `Bearer ${t}` },
-    });
-    const d = await res.json().catch(() => ({}));
-    if (d.url) window.location.href = d.url;
+    try {
+      const res = await fetch("/api/sheets/auth", {
+        method: "POST",
+        headers: { authorization: `Bearer ${t}` },
+      });
+      const d = await res.json().catch(() => ({}));
+      if (d.url) {
+        window.location.href = d.url;
+        return;
+      }
+      // OAuth for private sheets isn't available (not configured / returned no
+      // URL). Don't dead-end — open the link importer so the user can still add
+      // a sheet by pasting its (public) link. This is the "give me a spot to
+      // insert the link" path.
+      setImportOpen(true);
+    } catch {
+      setImportOpen(true);
+    }
   }
   async function disconnectSheets() {
     if (!getToken) return;
@@ -16635,26 +16647,37 @@ function ProfileTab({
               ) : (
                 <span className="text-[11px] text-body/50">Not connected</span>
               )}
-              {sheetsConnected ? (
+              <div className="ml-auto flex items-center gap-2">
+                {/* Primary path most people want: paste a sheet link. Opens the
+                    importer where the link box lives. Works for public sheets
+                    without connecting; private sheets need the OAuth connect. */}
                 <button
-                  onClick={onDisconnectSheets}
-                  className="ml-auto text-[11px] font-semibold text-body/50 transition hover:text-red-600"
+                  onClick={onImportOutreach}
+                  className="rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-soft transition hover:opacity-95"
                 >
-                  Disconnect
+                  Paste a sheet link
                 </button>
-              ) : (
-                <button
-                  onClick={onConnectSheets}
-                  className="ml-auto rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-soft transition hover:opacity-95"
-                >
-                  Connect Google Sheets
-                </button>
-              )}
+                {sheetsConnected ? (
+                  <button
+                    onClick={onDisconnectSheets}
+                    className="text-[11px] font-semibold text-body/50 transition hover:text-red-600"
+                  >
+                    Disconnect
+                  </button>
+                ) : (
+                  <button
+                    onClick={onConnectSheets}
+                    className="rounded-lg border border-warm-border px-3 py-1.5 text-[11px] font-bold text-ink transition hover:bg-warm-bg"
+                  >
+                    Connect for private sheets
+                  </button>
+                )}
+              </div>
             </div>
             <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
               {sheetsConnected
-                ? "Scout can read your private sheets (no public sharing needed). It only edits a sheet after you tick “Allow edits” and confirm a preview — then it adds a Scout Status column (never overwriting) and puts new finds in a separate “Scout” tab."
-                : "Connect to link private sheets without making them public. Scout never edits a sheet unless you allow it per sheet — and always shows a preview first."}
+                ? "Paste a sheet link to add one. Scout can read your private sheets (no public sharing needed), and only edits a sheet after you tick “Allow edits” and confirm a preview — then it adds a Scout Status column (never overwriting) and puts new finds in a separate “Scout” tab."
+                : "Paste a link to add a Google Sheet — public sheets (Anyone with the link · Viewer) work right away. To pull in private sheets without sharing them publicly, connect Google Sheets first. Scout never edits a sheet unless you allow it per sheet, and always shows a preview."}
             </p>
           </div>
           {syncedSheets.length > 0 && (
