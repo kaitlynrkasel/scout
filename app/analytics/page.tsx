@@ -59,7 +59,7 @@ export default function Analytics() {
             <Bar label="Generic mass cold email" value={2} display="~1-3%" tone="muted" />
             <Bar label="Cold email with a name dropped in" value={6} display="~5-8%" tone="muted" />
             <Bar
-              label="Targeted + personalized (what Scout writes)"
+              label="Targeted + personalized (the kind Scout writes)"
               value={20}
               display="~12-25%"
               tone="brand"
@@ -81,20 +81,20 @@ export default function Analytics() {
         {/* Sample output */}
         <Section
           eyebrow="See the quality"
-          title="Real example: find people, then draft for them"
-          sub="This is the actual kind of output Scout produces, contacts and a personal draft."
+          title="Illustrative example: find people, then draft for them"
+          sub="A sample of the kind of output Scout produces — an illustrative contact and draft, not a real person."
         >
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Finds */}
             <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
               <div className="mb-3 text-xs font-bold uppercase tracking-wider text-body/60">
-                What Scout found
+                What Scout finds (sample)
               </div>
               <div className="space-y-3">
                 <FindCard
                   name="Maria Chen"
                   meta="Head of Partnerships · Brooklyn, NY"
-                  contact="maria@acmestudio.com"
+                  contact="maria@example.com"
                   why="Just launched two collaborations with sustainability brands."
                   fit={92}
                   channel="Email"
@@ -120,7 +120,7 @@ export default function Analytics() {
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-[11px] font-semibold text-white">
                     email
                   </span>
-                  <span className="text-xs text-body/70">→ maria@acmestudio.com</span>
+                  <span className="text-xs text-body/70">→ maria@example.com</span>
                 </div>
                 <div className="border-b border-warm-border pb-2 text-sm font-semibold text-ink">
                   Loved your recent collabs, quick hello

@@ -14309,7 +14309,9 @@ function BillingTab({
   const tier = billing?.tier || "free";
   const paid = tier === "starter" || tier === "pro";
   const used = paid ? billing?.searchesUsed ?? 0 : billing?.freeUsed ?? 0;
-  const limit = paid ? billing?.searchLimit ?? 0 : billing?.freeLimit ?? 5;
+  // Fallback must match FREE_LIMIT (3) so the plan panel never flashes a stale
+  // "5 searches a month" before billing loads.
+  const limit = paid ? billing?.searchLimit ?? 0 : billing?.freeLimit ?? 3;
   const resets = paid ? billing?.periodEnd ?? null : billing?.freeResetsAt ?? null;
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
 
@@ -14488,8 +14490,8 @@ function BillingTab({
 
       {!comp && (
         <p className="mt-4 text-center text-xs text-muted">
-          Secure checkout by Stripe. Cancel anytime, you keep your searches until the
-          period ends.
+          Secure checkout by Stripe. Your plan renews automatically each month until you
+          cancel. Cancel anytime, you keep your searches until the period ends.
         </p>
       )}
     </main>
@@ -15097,7 +15099,7 @@ function TemplatesTab({
             value={signature}
             onChange={(e) => onSignature(e.target.value)}
             rows={4}
-            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@acmestudio.com · (555) 010-0142"}
+            placeholder={"e.g.\nAlex Rivera\nMarketing Manager, Acme Studio\nalex@example.com · (555) 010-0142"}
             className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
           <p className="mt-1.5 text-xs leading-relaxed text-body/70">

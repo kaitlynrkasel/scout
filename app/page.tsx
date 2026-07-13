@@ -286,7 +286,7 @@ const BODY = `
   </div>
   <div class="howlist">
     <div class="howrow"><div class="rn">01</div><div><h3>Search the open web</h3><p>Describe who you want in plain language. Scout scours public pages, not a recycled list.</p></div></div>
-    <div class="howrow"><div class="rn">02</div><div><h3>Pull real contacts</h3><p>It extracts real names, roles, and emails, and scores each match against your goal.</p></div></div>
+    <div class="howrow"><div class="rn">02</div><div><h3>Pull contacts</h3><p>It extracts names, roles, and emails from those pages, and scores each match against your goal.</p></div></div>
     <div class="howrow"><div class="rn">03</div><div><h3>Draft in your voice</h3><p>Every message is written to sound like you, formatted for the right channel.</p></div></div>
   </div>
 </div></section>
@@ -331,7 +331,7 @@ const BODY = `
     </div>
     <div>
       <div class="msg gen"><div class="lbl">Generic</div><p>Hi, I came across your profile and wanted to connect regarding potential opportunities at your company.</p></div>
-      <div class="msg you"><div class="lbl">In your voice</div><p>Hey Rina — saw Northwind hit #1 on Product Hunt. I'm deep in growth right now and would love 15 minutes on how you found your first 1k users.</p></div>
+      <div class="msg you"><div class="lbl">In your voice · illustrative</div><p>Hey Rina — saw Northwind's launch went really well last week. I'm deep in growth right now and would love 15 minutes on how you found your first 1k users.</p></div>
     </div>
   </div>
 </div></section>
@@ -360,9 +360,9 @@ const BODY = `
 <section class="sec" id="help" style="background:#EFE7D6"><div class="wrap">
   <div style="max-width:640px"><div class="kicker">Why it matters</div><h2 class="h2">Outreach that actually lands.</h2></div>
   <div class="statstrip">
-    <div class="st"><div class="n">10×</div><h3>More replies</h3><p>Personal, specific messages beat generic blasts, every time.</p></div>
+    <div class="st"><div class="n">Higher</div><h3>Reply rates</h3><p>Personalised, specific messages tend to beat generic blasts.</p></div>
     <div class="st"><div class="n">~1 min</div><h3>Per person</h3><p>Find, research, and draft in about a minute, not an afternoon.</p></div>
-    <div class="st"><div class="n">Zero</div><h3>Fake contacts</h3><p>Every name is real and pulled from the public web. Never invented.</p></div>
+    <div class="st"><div class="n">Real</div><h3>Contacts</h3><p>Names and details are pulled from live public pages, not a recycled list of stale leads.</p></div>
   </div>
 </div></section>
 

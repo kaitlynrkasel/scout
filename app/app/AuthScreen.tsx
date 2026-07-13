@@ -155,7 +155,7 @@ export default function AuthScreen({
       // New accounts are remembered by default; they can change it next sign-in.
       setRememberMe(true);
       const { data, error } = await supabase.auth.signUp({
-        email,
+        email: email.trim(),
         password,
         options: {
           data: {
@@ -181,7 +181,7 @@ export default function AuthScreen({
       // If the project confirms email (recommended), there's no session yet,
       // send the user to the code step. If confirmation is off, we're already in.
       if (!data.session) {
-        setNotice(`We sent a 6-digit code to ${email}. Enter it below to finish.`);
+        setNotice(`We sent a 6-digit code to ${email.trim()}. Enter it below to finish.`);
         setMode("verify");
       }
     } catch (e: any) {
@@ -198,7 +198,7 @@ export default function AuthScreen({
     setBusy(true);
     try {
       const { error } = await supabase.auth.verifyOtp({
-        email,
+        email: email.trim(),
         token: code.trim(),
         type: "signup",
       });
