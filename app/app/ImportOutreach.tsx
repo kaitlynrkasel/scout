@@ -79,6 +79,16 @@ function fallbackNameFromRow(row: Record<string, string>): string {
   return combined;
 }
 
+// Last-resort name: the first non-empty cell in the row, so a row with data but
+// no obvious name column still imports instead of being silently dropped.
+function firstNonEmptyCell(row: Record<string, string>): string {
+  for (const v of Object.values(row)) {
+    const s = String(v || "").trim();
+    if (s) return s.slice(0, 120);
+  }
+  return "";
+}
+
 function urlHost(u: string): string {
   const m = String(u || "").match(/^https?:\/\/([^/?#]+)/i);
   return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
@@ -127,6 +137,12 @@ export default function ImportOutreach({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [imported, setImported] = useState<number | null>(null);
+  const [importStats, setImportStats] = useState<{
+    total: number;
+    skippedNoName: number;
+    dupWithin: number;
+    alreadyHad: number;
+  } | null>(null);
   const [fileName, setFileName] = useState("");
   const [linkUrl, setLinkUrl] = useState("");
   const [sourceUrl, setSourceUrl] = useState(""); // set when imported from a link
@@ -425,7 +441,7 @@ export default function ImportOutreach({
   // CSV has nothing to write into).
   const isGoogleSheet = /docs\.google\.com\/spreadsheets/.test(sourceUrl);
 
-  function buildFinds(): Find[] {
+  function buildFinds(): { finds: Find[]; skippedNoName: number; dupWithin: number } {
     if (!projectId) throw new Error("Pick a project first.");
     const cols: Partial<Record<Exclude<FieldKey, "">, string>> = {};
     for (const [col, field] of Object.entries(mapping)) {
@@ -435,17 +451,32 @@ export default function ImportOutreach({
     const finds: Find[] = [];
     const now = Date.now();
     let idx = 0;
+    let skippedNoName = 0;
+    let dupWithin = 0;
     for (const row of rows) {
+      const emailEarly = cols.email ? String(row[cols.email] || "").trim() : "";
+      const handleEarly = cols.handle ? String(row[cols.handle] || "").trim() : "";
+      const outletEarly = cols.outlet ? String(row[cols.outlet] || "").trim() : "";
+      // Don't drop a row just because the Name cell is blank — if we have ANY
+      // identifier (email, handle, outlet, or any non-empty cell) use it as the
+      // name so real contacts aren't silently lost on import.
       const name =
         (cols.name && String(row[cols.name] || "").trim()) ||
         fallbackNameFromRow(row) ||
+        emailEarly ||
+        outletEarly ||
+        handleEarly ||
+        firstNonEmptyCell(row) ||
         "";
-      if (!name) continue; // no name = nothing to dedup against, skip
-      const email = cols.email ? String(row[cols.email] || "").trim() : "";
-      const outlet = cols.outlet ? String(row[cols.outlet] || "").trim() : "";
+      if (!name) {
+        skippedNoName++;
+        continue; // genuinely empty row
+      }
+      const email = emailEarly;
+      const outlet = outletEarly;
       const role = cols.role ? String(row[cols.role] || "").trim() : "";
       const url = cols.url ? String(row[cols.url] || "").trim() : "";
-      const handle = cols.handle ? String(row[cols.handle] || "").trim() : "";
+      const handle = handleEarly;
       const notes = cols.notes ? String(row[cols.notes] || "").trim() : "";
       const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
       let status: FindStatus = defaultStatus;
@@ -471,12 +502,18 @@ export default function ImportOutreach({
         sourceTitle: fileName,
         sourceSnippet: notes.slice(0, 220),
       };
-      const nm = name
-        .toLowerCase()
-        .replace(/[^a-z0-9]/g, "");
+      const nm = name.toLowerCase().replace(/[^a-z0-9]/g, "");
       const host = urlHost(opp.url || "");
-      const id = `${projectId}::${nm}::${host}`;
-      if (seen.has(id)) continue;
+      // Dedup by the actual CONTACT, not just the display name: two rows that
+      // share a name but have different emails/handles are different people and
+      // both should import. Only a true repeat (same name + same email/handle +
+      // same host) is dropped.
+      const contactKey = (email || handle).toLowerCase().replace(/[^a-z0-9@._-]/g, "");
+      const id = `${projectId}::${nm}::${host}::${contactKey}`;
+      if (seen.has(id)) {
+        dupWithin++;
+        continue;
+      }
       seen.add(id);
       finds.push({
         id,
@@ -488,7 +525,7 @@ export default function ImportOutreach({
         sentAt: status === "sent" || status === "replied" ? now : undefined,
       });
     }
-    return finds;
+    return { finds, skippedNoName, dupWithin };
   }
 
   function runImport() {
@@ -499,12 +536,18 @@ export default function ImportOutreach({
       return;
     }
     try {
-      const finds = buildFinds();
+      const { finds, skippedNoName, dupWithin } = buildFinds();
       if (!finds.length) {
-        setError("No importable rows, every row was missing a name.");
+        setError("No importable rows — every row was completely empty.");
         return;
       }
       const added = onImport(finds);
+      setImportStats({
+        total: rows.length,
+        skippedNoName,
+        dupWithin,
+        alreadyHad: finds.length - added,
+      });
       // If this came from a link and they opted in, remember it so Scout keeps
       // re-reading the sheet automatically.
       if (sourceUrl && keepSynced && onSaveSync) {
@@ -963,6 +1006,25 @@ export default function ImportOutreach({
               <p className="mt-1 text-sm text-body">
                 They're in your Finds now. Future searches won't surface them again.
               </p>
+              {/* Full accounting of the sheet so nothing looks "missed" silently:
+                  where every row went. */}
+              {importStats && (
+                <div className="mx-auto mt-4 max-w-sm rounded-xl border border-warm-border bg-white/70 px-4 py-3 text-left text-xs text-body">
+                  <div className="mb-1 font-bold uppercase tracking-wider text-body/60">
+                    From {importStats.total.toLocaleString()} rows
+                  </div>
+                  <div className="flex justify-between"><span>Imported</span><span className="font-semibold text-ink">{imported}</span></div>
+                  {importStats.alreadyHad > 0 && (
+                    <div className="flex justify-between"><span>Already in your Finds</span><span>{importStats.alreadyHad}</span></div>
+                  )}
+                  {importStats.dupWithin > 0 && (
+                    <div className="flex justify-between"><span>Repeat rows in the sheet</span><span>{importStats.dupWithin}</span></div>
+                  )}
+                  {importStats.skippedNoName > 0 && (
+                    <div className="flex justify-between"><span>Empty rows skipped</span><span>{importStats.skippedNoName}</span></div>
+                  )}
+                </div>
+              )}
               <button
                 onClick={onClose}
                 className="mt-4 rounded-xl bg-brown px-4 py-2 text-sm font-bold text-white shadow-soft"

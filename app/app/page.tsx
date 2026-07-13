@@ -10265,12 +10265,16 @@ function FindWorkflow({
             Not a fit
           </button>
         )}
-        {denied && (
+        {/* A plain delete, always available (except mid deny-reason). Unlike
+            "Not a fit", this removes the find WITHOUT any deny/learning signal —
+            it doesn't train Scout or change what future searches surface. */}
+        {!denying && (
           <button
             onClick={onRemove}
-            className="text-xs font-semibold text-body/40 transition hover:text-accent"
+            title="Delete this find. It won't train Scout or change future searches."
+            className="text-xs font-semibold text-body/40 transition hover:text-red-500"
           >
-            Remove
+            Delete
           </button>
         )}
       </div>
