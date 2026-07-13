@@ -232,7 +232,7 @@ select.scout-select-light {
   /* Sidebar rail — a soft tan just a shade darker than the page canvas, so the
      chrome reads monotone rather than as a heavy colored panel. Dark text on the
      light tan; a quiet brown pill marks the active item (no loud accent). */
-  --su-rail-bg: #ece5d6;
+  --su-rail-bg: #ecddc9; /* exactly the tan stat band (--su-tan) — one palette */
   --su-rail-fg: #6d6150; /* inactive nav text */
   --su-rail-fg-strong: #40331f; /* logo, hovered / active-ish text */
   --su-rail-muted: #9c8e78; /* kicker, search placeholder, counts */
@@ -250,7 +250,7 @@ html.dark {
   --su-ghost: rgba(245, 239, 228, 0.05);
   --su-idx: rgba(204, 106, 69, 0.45);
 
-  --su-rail-bg: #201b14; /* a hair off the espresso canvas, still monotone */
+  --su-rail-bg: #2c2418; /* exactly the tan stat band (--su-tan) — one palette */
   --su-rail-fg: #b6a992;
   --su-rail-fg-strong: #f2ece0;
   --su-rail-muted: #8f8069;
