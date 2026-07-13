@@ -222,7 +222,7 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-espresso: #221a11; /* the dark sidebar rail — dark in both themes */
+  --su-espresso: #3d3227; /* the sidebar rail — a soft warm coffee, dark in both themes */
   --su-terra: #b85433; /* terracotta accent */
   --su-terra-deep: #9e3f1f;
   --su-tan: #ecddc9; /* lighter tan stat band */
@@ -383,8 +383,8 @@ html.dark {
   user-select: none;
 }
 .su-bighead {
-  font-size: 88px;
-  line-height: 0.86;
+  font-size: 58px;
+  line-height: 0.9;
   color: rgb(var(--c-ink));
   letter-spacing: 0.5px;
 }
@@ -397,7 +397,7 @@ html.dark {
     padding: 26px 20px 20px;
   }
   .su-bighead {
-    font-size: 54px;
+    font-size: 40px;
   }
   .su-ghost {
     font-size: 120px;
