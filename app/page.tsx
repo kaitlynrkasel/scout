@@ -138,10 +138,16 @@ const CSS = `
   .c2{left:300px;top:150px;z-index:4;box-shadow:0 34px 66px -36px rgba(36,28,19,.36)}
   .c3{left:640px;top:44px;z-index:2}
   .exlist{margin-top:28px;border-top:1px solid var(--border)}
-  .exrow{display:flex;align-items:center;gap:16px;padding:13px 4px;border-bottom:1px solid var(--line)}
+  .exrow{display:flex;align-items:center;gap:16px;padding:13px 4px;border-bottom:1px solid var(--line);flex-wrap:wrap;cursor:default;transition:background .15s ease}
+  .exrow:hover{background:rgba(90,67,49,.045)}
   .exrow svg{color:var(--terra);flex:0 0 auto}
   .exrow .who{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);width:140px;flex:0 0 auto}
   .exrow .q{font-family:var(--font-bric),system-ui,sans-serif;font-size:18px;color:var(--ink)}
+  /* Hover a use case to see the kind of message Scout would draft for it. */
+  .exrow .exo{flex-basis:100%;margin:0 0 0 172px;font-size:13.5px;line-height:1.55;color:#57503f;max-height:0;opacity:0;overflow:hidden;transition:max-height .28s ease,opacity .2s ease,margin-top .2s ease}
+  .exrow .exo b{color:var(--terra);font-weight:700}
+  .exrow:hover .exo{max-height:140px;opacity:1;margin-top:8px}
+  @media(max-width:640px){.exrow .exo{margin-left:0}.exrow:hover .exo{max-height:200px}}
 
   /* 3 STEPS */
   .steps{display:grid;grid-template-columns:repeat(3,1fr);gap:34px;margin-top:36px}
@@ -300,10 +306,10 @@ const BODY = `
     <div class="card c3"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For founders</div><h3>Partners &amp; press</h3><p>Point the whole team at one pipeline of real contacts.</p></div></div>
   </div>
   <div class="exlist">
-    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Job seeker</span><span class="q">Recruiters hiring remote UX designers</span></div>
-    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Founder</span><span class="q">Heads of growth at Series A SaaS companies</span></div>
-    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Musician</span><span class="q">Playlist curators for indie bedroom-pop</span></div>
-    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Nonprofit</span><span class="q">Local businesses to sponsor our charity 5K</span></div>
+    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Job seeker</span><span class="q">Recruiters hiring remote UX designers</span><span class="exo"><b>Scout drafts:</b> "Hi Maya — saw Lattice is hiring remote UX designers. I just shipped a design-system overhaul that cut onboarding 30%, and I'd love to throw my hat in."</span></div>
+    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Founder</span><span class="q">Heads of growth at Series A SaaS companies</span><span class="exo"><b>Scout drafts:</b> "Hey Dev — your growth team's scaling fast at Rippling. We're pre-Series A and I'd love 15 minutes on how you structured your first paid-acquisition experiments."</span></div>
+    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Musician</span><span class="q">Playlist curators for indie bedroom-pop</span><span class="exo"><b>Scout drafts:</b> "Hi Sam — your 'Bedroom Pop Sundays' playlist is exactly where my new single lives. Mind if I send it over for a listen?"</span></div>
+    <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Nonprofit</span><span class="q">Local businesses to sponsor our charity 5K</span><span class="exo"><b>Scout drafts:</b> "Hi Jordan — Cedar Coffee's community focus is why I'm reaching out: we're lining up sponsors for our charity 5K and I'd love to tell you about it."</span></div>
   </div>
 </div></section>
 
