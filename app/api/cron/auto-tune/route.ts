@@ -211,20 +211,34 @@ async function notifyOwner(
   commitUrl: string
 ) {
   if (!ownerEmail) return;
-  const subject = `Scout auto-tuned itself: ${label}`;
+  // Plain-English email: lead with what this means for the user's results, keep
+  // the raw before/after clauses as fine print at the bottom for the curious.
+  const denyPct = Math.round((signal.topBucket?.share || 0) * 100);
+  const reason = signal.topBucket?.label || "a recurring pattern";
+  const subject = `Scout learned from your feedback: stricter on "${reason.toLowerCase()}"`;
   const body =
-    `Scout's search algorithm just tuned itself, no review, straight to production.\n\n` +
-    `WHAT CHANGED, ${label}\n\n` +
-    `BEFORE:\n${oldClause}\n\n` +
-    `AFTER:\n${newClause}\n\n` +
-    `WHY: of ${signal.decided} decided finds, "${signal.topBucket?.label}" was ${Math.round((signal.topBucket?.share || 0) * 100)}% of denials ` +
-    `(${signal.topBucket?.count} instances).${
+    `Hi!\n\n` +
+    `Scout noticed a pattern in the finds you've been passing on and adjusted itself to match.\n\n` +
+    `WHAT IT LEARNED\n` +
+    `Out of your last ${signal.decided} decisions, "${reason}" was the reason behind ${denyPct}% of the finds you said no to` +
+    ` (${signal.topBucket?.count} of them). So Scout tightened how it scores that — matches with that problem will now rank much lower, ` +
+    `and you should see fewer of them in your results.${
       signal.keptFit != null && signal.deniedFit != null
-        ? ` Kept/denied avg fit: ${Math.round(signal.keptFit * 100)}% / ${Math.round(signal.deniedFit * 100)}%.`
+        ? `\n\n(For the curious: finds you kept were averaging ${Math.round(signal.keptFit * 100)}% fit vs ${Math.round(
+            signal.deniedFit * 100
+          )}% for ones you denied — too close together, which is what this fixes.)`
         : ""
     }\n\n` +
-    `Commit: ${commitUrl}\n\n` +
-    `Full history is in the app under Dashboard → Tune the search algorithm → Change log.`;
+    `NOTHING YOU NEED TO DO\n` +
+    `This is automatic — just keep approving and passing on finds and Scout keeps calibrating to your taste. ` +
+    `If results ever feel too strict or too loose, tell us and we'll adjust.\n\n` +
+    `See every change Scout has made: open Scout → Dashboard → "Tune the search algorithm" → Change log.\n` +
+    `Technical commit: ${commitUrl}\n\n` +
+    `— Scout\n\n` +
+    `----------------------------------------\n` +
+    `FINE PRINT (the exact rule that changed: ${label})\n\n` +
+    `Before:\n${oldClause}\n\n` +
+    `After:\n${newClause}`;
 
   try {
     const gmail = await supabaseAdmin!
