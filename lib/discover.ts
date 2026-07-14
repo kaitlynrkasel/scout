@@ -312,7 +312,11 @@ const DECOMPOSE_SYS =
   "remote/anywhere/any location; do NOT ask the user's own field, role, seniority, or what they do when ABOUT THE " +
   "USER states it; do NOT ask what they're offering or their use case when the goal already makes it clear. It is " +
   "BETTER to return an EMPTY array than to ask one thing that is already answered — a well-specified inquiry needs " +
-  "zero questions, and understanding should be HIGH in that case. Ask AT MOST 3, each a DISTINCT, decision-changing " +
+  "zero questions, and understanding should be HIGH in that case. CONTRADICTIONS: if the GOAL contains an apparent " +
+  "internal contradiction (e.g. 'remote-only roles at an office I can go into daily', 'small startups with 10,000 " +
+  "employees'), resolve it with the most plausible interpretation in the plan — but make your FIRST " +
+  "confidence_question confirm that interpretation, with the plausible readings as its options; never silently pick " +
+  "one and ask about unrelated dimensions instead. Ask AT MOST 3, each a DISTINCT, decision-changing " +
   "dimension that is truly unstated. Each is an OBJECT {question, options}: question is a short, plain " +
   "question; options is 2–5 concrete, mutually-exclusive answers the user can pick with one tap (real values like " +
   "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
@@ -628,7 +632,9 @@ async function planQueries(
       "closely fit THIS user's exact sub-field, city, genre, stage and angle. Deliberately AVOID the handful of biggest, " +
       "most-famous, most-submitted-to names everyone already contacts; go for the long tail of smaller, genuinely-matching, " +
       "more responsive contacts. Make each query hyper-specific (sub-genre, neighborhood/city, company size, seniority) " +
-      "rather than broad. ";
+      "rather than broad. EXCEPTION — THE GOAL WINS: if the GOAL explicitly asks for the biggest, most famous, top, major, " +
+      "or best-known targets, honor that exactly — drop this long-tail push for this search and write queries that surface " +
+      "precisely those big names instead. ";
   const broadenClause = broaden
     ? " BROADEN MODE: a narrower version of this search just returned NO results, so widen the net now. DROP the niche / " +
       "long-tail / hyper-specific push above. Use simpler, broader queries with FEWER combined constraints, relax location, " +
@@ -644,12 +650,25 @@ async function planQueries(
       "search dimensions (don't cluster on one), weave in its opportunity signals so recently-active targets surface, and " +
       "never target anyone on its EXCLUDE list. "
     : "";
+  // Date-anchored evidence for goals with a TIME WINDOW ("in March", "spring
+  // 2026", "the week of the 12th", "during SXSW"): the right sources are dated
+  // calendars and lineups, and a query without the dates returns evergreen
+  // pages that can't confirm presence in the window.
+  const timeWindowClause =
+    " TIME WINDOW: if the GOAL names a time window (a month, date range, season, semester, or a named event's dates), " +
+    "anchor MOST queries to it explicitly — put the month/year or event name IN the query text (e.g. 'Nashville concert " +
+    "calendar March 2026', '{city} festival lineup {month} {year}', 'conferences in {city} {month} {year} speakers', " +
+    "'{venue} upcoming shows {month} {year}', 'artists touring through {city} {month} {year}'). Prefer sources that are " +
+    "dated by nature — venue calendars, event/ticketing listings (Songkick, Bandsintown, Eventbrite, city event guides), " +
+    "festival and conference lineups, tour-date pages — over undated directories or bio pages, because only dated sources " +
+    "can prove someone will actually be there during the window. If the goal has no time window, ignore this. ";
   const sys =
     anchor +
     guidance +
     longTail +
     broadenClause +
     evidenceClause +
+    timeWindowClause +
     (salt
       ? `Variation seed "${salt}": use it to choose DIFFERENT valid sub-angles and segments than a generic run would, so ` +
         "two people with a similar goal get different, equally-relevant results instead of the same list. "
