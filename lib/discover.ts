@@ -371,10 +371,29 @@ export async function decomposeGoal(
           .filter((f: RankingFactor) => f.factor)
           .slice(0, 8)
       : [];
-    const understanding = Math.max(
-      0,
-      Math.min(100, Math.round(Number(parsed.understanding)) || 0)
-    );
+    // The model occasionally OMITS `understanding` on a rich, complex plan. A
+    // bare `|| 0` then reads as "Scout is totally lost" — showing 0% and firing
+    // needless clarifying questions on a goal it actually grasped (observed on a
+    // fully-decomposed "musicians in Nashville in March" plan). When it's missing
+    // or non-numeric, infer it from how completely the plan came back instead of
+    // defaulting to zero.
+    const rawU = Math.round(Number(parsed.understanding));
+    let understanding: number;
+    if (Number.isFinite(rawU)) {
+      understanding = Math.max(0, Math.min(100, rawU));
+    } else {
+      const filled =
+        (Array.isArray(parsed.required) && parsed.required.length ? 1 : 0) +
+        (Array.isArray(parsed.hard_constraints) && parsed.hard_constraints.length ? 1 : 0) +
+        (Array.isArray(parsed.evidence_needed) && parsed.evidence_needed.length ? 1 : 0) +
+        (parsed.target_type && String(parsed.target_type).trim() ? 1 : 0);
+      const qCount = Array.isArray(parsed.confidence_questions)
+        ? parsed.confidence_questions.length
+        : 0;
+      // A well-populated plan with few open questions is well-understood; a thin
+      // one isn't. Never 0 when a real plan came back.
+      understanding = filled >= 3 ? Math.max(55, 80 - qCount * 8) : 45;
+    }
     // Questions may come back as {question,options} objects (new) or bare
     // strings (older prompts / fallback). Normalize both to the object shape.
     const questions: ConfidenceQuestion[] = Array.isArray(parsed.confidence_questions)
