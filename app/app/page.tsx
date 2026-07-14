@@ -5046,7 +5046,7 @@ function ScoutTool({
         onClose={() => setImportOpen(false)}
         onImport={importFinds}
         onSaveSync={saveSyncedSheet}
-        projects={projects}
+        projects={visibleProjects}
         activeProjectId={activeId}
         getToken={getToken}
       />
@@ -5358,7 +5358,7 @@ function ScoutTool({
                         onChange={(e) => selectProject(e.target.value)}
                         className="scout-select min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none transition focus:border-coral"
                       >
-                        {projects.map((p) => (
+                        {visibleProjects.map((p) => (
                           <option key={p.id} value={p.id}>
                             {p.name}
                           </option>
@@ -6133,7 +6133,7 @@ function ScoutTool({
           finds={myFinds}
           categories={categories}
           projectName={activeProject?.name || "this project"}
-          projects={projects}
+          projects={visibleProjects}
           activeProjectId={activeId}
           onSelectProject={selectProject}
           voiceRefreshAvailable={voiceRefreshAvailable}
@@ -6195,7 +6195,7 @@ function ScoutTool({
           about={aboutText}
           useCase={activeUseCase}
           templates={myTemplates}
-          projects={projects}
+          projects={visibleProjects}
           categoriesCount={categories.length}
           finds={visibleFinds}
           community={community}
@@ -6228,7 +6228,7 @@ function ScoutTool({
         <TeamTab
           getToken={getToken}
           accountEmail={accountEmail || ""}
-          projects={projects}
+          projects={visibleProjects}
           finds={finds}
           onCompanyDeleted={purgeCompanyData}
         />
@@ -6324,7 +6324,7 @@ function ScoutTool({
           onConnectOutlook={connectOutlook}
           onDisconnectOutlook={disconnectOutlook}
           onOutlookMode={setOutlookMode}
-          projects={projects}
+          projects={visibleProjects}
           categories={categories}
           onAddProject={addProject}
           onRenameProject={renameProject}
