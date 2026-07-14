@@ -1041,6 +1041,12 @@ async function extract(
     `PREFER THE ACTUAL EMPLOYER over a job-board aggregator: a specific company's own site is much better than a ` +
     `ZipRecruiter / Indeed / LinkedIn-Jobs / Glassdoor / BuiltIn search or aggregate listing page (which is a list of many ` +
     `jobs, not one reachable employer), give those aggregate list pages a low fit_score. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
+    `NAMED EMPLOYER OVERRIDE: if the GOAL names a specific company or organization (e.g. "openings at Universal"), the user ` +
+    `has chosen that employer deliberately — a real opening at that company or any of its divisions/subsidiaries/imprints is ` +
+    `exactly what they asked for. For those results, IGNORE the accessibility-over-prestige preference and do NOT penalize ` +
+    `size, fame, or selectivity; and unless the GOAL also names a location, treat a location mismatch as SOFT (moderate ` +
+    `fit_score, mention the location in why_it_fits) instead of applying the hard location ceiling above — the user asked ` +
+    `for this employer's openings, not openings near them. Results at OTHER companies remain subject to all the usual rules. ` +
     `fit_score: 0.7+ for an on-industry, accessible employer with a contact route; lower it for big/ultra-competitive names ` +
     `when the user wants accessible ones, for aggregator list pages, and for results missing any contact route; below 0.3 ` +
     `only when clearly off-industry.`;
