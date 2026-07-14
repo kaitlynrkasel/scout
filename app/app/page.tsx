@@ -8794,6 +8794,66 @@ function FindsTab({
     fit: (a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0),
   };
 
+  // Export EVERYTHING to one .xlsx workbook: a Dashboard tab (pipeline summary +
+  // per-project breakdown) and a Finds tab (every find, all columns). Uses the
+  // already-bundled SheetJS; loaded on demand so the Finds tab stays light.
+  const [exporting, setExporting] = useState(false);
+  async function exportXlsx() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
+      const fmtDate = (t?: number) => (t ? new Date(t).toISOString().slice(0, 10) : "");
+      const findsRows = finds.map((f) => ({
+        Name: f.opp.name || "",
+        "Company / Outlet": f.opp.outlet || "",
+        Status: f.status,
+        Project: projName(f.projectId),
+        Category: catNameOf(f),
+        Channel: f.opp.channel || "",
+        Email: f.opp.contactEmail || "",
+        Handle: f.opp.contactHandle || "",
+        Website: f.opp.url || "",
+        Location: f.opp.location || "",
+        "Fit %": f.opp.fitScore != null ? Math.round((f.opp.fitScore || 0) * 100) : "",
+        "Why it fits": f.opp.whyItFits || "",
+        Added: fmtDate(f.addedAt),
+        Sent: fmtDate(f.sentAt),
+        Pinned: f.pinned ? "Yes" : "",
+        "Deny reason": f.denyReason || "",
+      }));
+      const statuses: FindStatus[] = ["new", "undecided", "drafted", "sent", "replied", "denied"];
+      const dash: Record<string, string | number>[] = [
+        { Metric: "Total finds", Value: finds.length },
+        ...statuses.map((s) => ({
+          Metric: `Status: ${s}`,
+          Value: finds.filter((f) => f.status === s).length,
+        })),
+        { Metric: "Pinned", Value: finds.filter((f) => f.pinned).length },
+        {
+          Metric: "Reply rate (replied / sent+replied)",
+          Value: (() => {
+            const sent = finds.filter((f) => f.status === "sent" || f.status === "replied").length;
+            const rep = finds.filter((f) => f.status === "replied").length;
+            return sent ? `${Math.round((rep / sent) * 100)}%` : "—";
+          })(),
+        },
+        { Metric: "", Value: "" },
+        ...projects.map((p) => ({
+          Metric: `Project: ${p.name}`,
+          Value: finds.filter((f) => f.projectId === p.id).length,
+        })),
+      ];
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dash), "Dashboard");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(findsRows), "Finds");
+      XLSX.writeFile(wb, `scout-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   // Pinned finds live in their own tab and are excluded from the status/all
   // lists, so status counts count only the un-pinned ones.
   const counts: Record<string, number> = {
@@ -8989,6 +9049,20 @@ function FindsTab({
             className="ml-2 text-xs font-semibold text-body/50 transition hover:text-red-500"
           >
             Clear
+          </button>
+        )}
+        {/* Everything → one Excel workbook (Dashboard summary + all finds). */}
+        {finds.length > 0 && (
+          <button
+            onClick={exportXlsx}
+            disabled={exporting}
+            title="Download your dashboard summary and every find as an Excel workbook"
+            className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+            </svg>
+            {exporting ? "Exporting…" : "Export to Excel"}
           </button>
         )}
 
