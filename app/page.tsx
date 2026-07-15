@@ -60,7 +60,7 @@ const CSS = `
   .scoutland *{box-sizing:border-box;margin:0;padding:0}
   .scoutland{min-height:100vh;background:var(--paper);color:#4a4336;font-family:var(--font-inter),system-ui,sans-serif;-webkit-font-smoothing:antialiased;overflow-x:hidden}
   .anton{font-family:var(--font-anton),Impact,sans-serif;font-weight:400;text-transform:uppercase}
-  .headfont{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;text-transform:uppercase}
+  .headfont{font-family:var(--font-inter),system-ui,sans-serif;font-weight:800;text-transform:uppercase}
   .disp{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.04}
   .wrap{max-width:1180px;margin:0 auto;padding:0 40px;position:relative}
   .scoutland a{color:inherit;text-decoration:none}
