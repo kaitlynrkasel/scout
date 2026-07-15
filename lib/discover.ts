@@ -322,7 +322,18 @@ const DECOMPOSE_SYS =
   "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
   "Infer likely options from the goal and the user's field; keep each option under ~4 words. Do NOT add an " +
   "'Other'/'Not sure' option — the UI supplies its own write-in. Never ask two questions about the same attribute " +
-  "(e.g. don't ask both 'what company size' and 'what employee count'). Think in evidence and investigations, not keywords or Google " +
+  "(e.g. don't ask both 'what company size' and 'what employee count'). " +
+  "PRIVATE INDIVIDUALS: when the goal targets private individuals in a personal-life moment (brides/engaged couples, " +
+  "new parents, patients, grieving families, homebuyers), do NOT plan to mine social groups, forums, or personal posts " +
+  "for those individuals — that is invasive and produces unreachable, unwelcome outreach. Reframe the plan toward the " +
+  "PROFESSIONAL INTERMEDIARIES and public-facing channels that reach them (e.g. for brides: wedding planners, venues, " +
+  "photographers for referral partnerships, bridal expos, preferred-vendor lists), state that reframe in the goal field, " +
+  "and make the first confidence_question confirm it. Public-facing professionals and creators are always fine to target. " +
+  "PROVING A NEGATIVE: a requirement that something has NEVER happened (e.g. 'podcasts that never had a musician on') " +
+  "cannot be verified from search results. Restate it as a soft signal — 'no evidence of X in what is visible' — " +
+  "targeting adjacent categories where X is naturally rare, and never plan evidence that requires exhaustively " +
+  "auditing someone's full history. " +
+  "Think in evidence and investigations, not keywords or Google " +
   "searches. Always infer hidden constraints, opportunities, timing, reachability, and likelihood of response. " +
   "Keep each array CONCISE: at most 10 items, each a short phrase (not a paragraph). Return ONLY the JSON object, " +
   "nothing before or after it.";
@@ -1023,7 +1034,10 @@ async function extract(
     `is_relevant to false. For a "person" the source must EITHER be about them OR give a direct contact channel ` +
     `(email or LinkedIn URL / handle). ` +
     `PODCASTS / VIDEO CLIPS: an episode or video where the person is just a guest, with no contact channel, is not reachable; ` +
-    `set is_relevant false. `;
+    `set is_relevant false. ` +
+    `PRIVATE INDIVIDUALS: never extract a private person in a personal-life moment (a bride/engaged couple, new parent, ` +
+    `patient, homebuyer) found via social groups, forums, or personal posts — that is not a legitimate outreach target; ` +
+    `set is_relevant false. Professionals, businesses, organizations, and public-facing creators are valid targets. `;
 
   // Fit / alignment section, this is the part that differs by mode.
   const jobsRules =
