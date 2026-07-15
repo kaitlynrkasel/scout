@@ -62,7 +62,7 @@ const CSS = `
   .anton{font-family:var(--font-anton),Impact,sans-serif;font-weight:400;text-transform:uppercase}
   .headfont{font-family:var(--font-inter),system-ui,sans-serif;font-weight:800;text-transform:uppercase}
   .disp{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;color:var(--ink);letter-spacing:-.02em;line-height:1.04}
-  .wrap{max-width:1180px;margin:0 auto;padding:0 40px;position:relative}
+  .wrap{max-width:1280px;margin:0 auto;padding:0 40px;position:relative}
   .scoutland a{color:inherit;text-decoration:none}
   .kicker{font-size:12px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:var(--blue-ink)}
   .h2{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:46px;line-height:1.04;letter-spacing:-.015em;color:var(--ink);margin-top:14px}
@@ -87,7 +87,7 @@ const CSS = `
 
   /* HERO — the one loud moment */
   .hero{position:relative;height:748px;overflow:hidden}
-  .herwrap{position:relative;max-width:1180px;height:748px;margin:0 auto}
+  .herwrap{position:relative;max-width:1280px;height:748px;margin:0 auto}
   .eyebrow{position:absolute;top:30px;left:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--blue-ink)}
   .eyebrow2{position:absolute;top:30px;right:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
   .backword{position:absolute;left:-24px;top:232px;z-index:1;font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:340px;line-height:.8;color:transparent;-webkit-text-stroke:1.5px rgba(36,28,19,.09);white-space:nowrap}
