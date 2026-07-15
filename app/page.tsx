@@ -87,7 +87,7 @@ const CSS = `
 
   /* HERO — the one loud moment */
   .hero{position:relative;height:748px;overflow:hidden}
-  .herwrap{position:relative;max-width:1180px;height:100%;margin:0 auto}
+  .herwrap{position:relative;max-width:1180px;height:748px;margin:0 auto}
   .eyebrow{position:absolute;top:30px;left:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--blue-ink)}
   .eyebrow2{position:absolute;top:30px;right:40px;z-index:20;font-size:11px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--muted)}
   .backword{position:absolute;left:-24px;top:232px;z-index:1;font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:340px;line-height:.8;color:transparent;-webkit-text-stroke:1.5px rgba(36,28,19,.09);white-space:nowrap}
@@ -206,6 +206,31 @@ const CSS = `
   .foot .brand{display:flex;align-items:center;gap:9px;font-weight:700;color:var(--ink)}
   .foot .brand img{width:20px;height:20px}
   .foot .links{margin-left:auto;display:flex;gap:22px;font-weight:500;color:#5b5344}
+
+  /* Large screens: the hero is a fixed-px composition, so on wide monitors it
+     otherwise floats as a small island in the centre. Scale the whole hero up
+     and widen the nav/section container to match, so the top fills the space.
+     (Laptops ~<=1440px and mobile are left untouched.) */
+  @media (min-width: 1536px){
+    .scoutland .wrap{max-width:1320px}
+    .hero{height:830px}
+    .herwrap{transform:scale(1.11);transform-origin:top center}
+  }
+  @media (min-width: 1920px){
+    .scoutland .wrap{max-width:1480px}
+    .hero{height:935px}
+    .herwrap{transform:scale(1.25)}
+  }
+  @media (min-width: 2560px){
+    .scoutland .wrap{max-width:1640px}
+    .hero{height:1040px}
+    .herwrap{transform:scale(1.39)}
+  }
+  @media (min-width: 3200px){
+    .scoutland .wrap{max-width:1800px}
+    .hero{height:1137px}
+    .herwrap{transform:scale(1.52)}
+  }
 
   /* responsive */
   @media (max-width: 980px){
