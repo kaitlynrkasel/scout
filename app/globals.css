@@ -120,8 +120,10 @@ html.theme-transition *::after {
 /* ---- Editorial type: share the landing's Bricolage display voice ----
    Headings and .font-display render in Bricolage Grotesque with tight tracking;
    the body copy stays Inter. This is what makes the app read like the landing. */
+/* App titles use Inter — the same face as the Scout wordmark + landing hero —
+   so headings and the brand mark read as one typeface. */
 h1, h2, h3, .font-display {
-  font-family: var(--font-display), var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-sans), system-ui, sans-serif;
   letter-spacing: -0.02em;
 }
 
@@ -425,10 +427,12 @@ html.dark .su-rail .su-logo img {
   user-select: none;
 }
 .su-bighead {
+  font-family: var(--font-sans), system-ui, sans-serif;
+  font-weight: 800;
   font-size: 58px;
-  line-height: 0.9;
+  line-height: 0.95;
   color: rgb(var(--c-ink));
-  letter-spacing: 0.5px;
+  letter-spacing: -0.02em;
 }
 .su-bighead .su-o {
   color: transparent;

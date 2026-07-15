@@ -11392,7 +11392,7 @@ function DashboardTab({
 
             {dashTab === "you" ? (
               <>
-                <h1 className="su-bighead font-anton mt-3">
+                <h1 className="su-bighead mt-3">
                   Good {partOfDay},
                   {firstName ? (
                     <>
@@ -11421,7 +11421,7 @@ function DashboardTab({
               </>
             ) : (
               <>
-                <h1 className="su-bighead font-anton mt-3">Scout-wide</h1>
+                <h1 className="su-bighead mt-3">Scout-wide</h1>
                 <p className="mt-3.5 max-w-[46ch] text-[15px] text-muted">
                   How Scout is doing across everyone using it.
                 </p>
