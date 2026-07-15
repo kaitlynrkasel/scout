@@ -2004,7 +2004,9 @@ function ScoutTool({
     } catch {
       /* ignore */
     }
-    const inScope = (p: Project) => !id || (p.companyId || "") === id;
+    // Same semantics as visibleProjects: un-tagged projects default to the
+    // primary company; "personal" is an explicit tag (its own lens option).
+    const inScope = (p: Project) => !id || (p.companyId || primaryCompanyId) === id;
     if (!projects.some((p) => p.id === activeId && inScope(p))) {
       const first = projects.find(inScope);
       if (first) selectProject(first.id);
@@ -5257,6 +5259,7 @@ function ScoutTool({
                   className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
                 >
                   <option value="">All companies</option>
+                  <option value="personal">Personal</option>
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -7037,6 +7040,7 @@ function SideNav({
               className="su-projsel"
             >
               <option value="">All companies</option>
+              <option value="personal">Personal</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -16431,23 +16435,18 @@ function ProfileTab({
           <span className="text-[11px] font-bold uppercase tracking-wider text-blue-deep">
             Company
           </span>
-          {companies.length > 1 ? (
-            <select
-              value={activeCompanyId || companies[0].id}
-              onChange={(e) => onSelectCompany(e.target.value)}
-              className="scout-select rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-bold text-ink outline-none transition focus:border-coral"
-            >
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="rounded-lg bg-surface px-3 py-1.5 text-sm font-bold text-ink shadow-card">
-              {companies[0].name}
-            </span>
-          )}
+          <select
+            value={activeCompanyId || companies[0].id}
+            onChange={(e) => onSelectCompany(e.target.value)}
+            className="scout-select rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-bold text-ink outline-none transition focus:border-coral"
+          >
+            {companies.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+            <option value="personal">Personal</option>
+          </select>
           <span className="text-xs leading-snug text-body/70">
             This whole page — company details, your role, projects — is for this company.
           </span>
@@ -17691,10 +17690,10 @@ function ProjectsCategoriesEditor({
                   </label>
                 )}
                 {/* Move this project (its categories + finds ride along) to another
-                    company. Only when you belong to more than one. */}
-                {isCompany && companies.length > 1 && (
+                    company — or make it Personal (outside every company lens). */}
+                {isCompany && companies.length > 0 && (
                   <div className="mt-2.5">
-                    <Label className="mb-1">Company this project belongs to</Label>
+                    <Label className="mb-1">This project belongs to</Label>
                     <select
                       value={p.companyId || primaryCompanyId}
                       onChange={(e) => onSetProjectCompany(p.id, e.target.value)}
@@ -17705,9 +17704,11 @@ function ProjectsCategoriesEditor({
                           {c.name}
                         </option>
                       ))}
+                      <option value="personal">Personal (no company)</option>
                     </select>
                     <p className="mt-1 text-[11px] leading-relaxed text-body/60">
-                      Its categories and saved finds move with it.
+                      Its categories and saved finds move with it. Personal projects
+                      only show under the &ldquo;Personal&rdquo; lens.
                     </p>
                   </div>
                 )}
