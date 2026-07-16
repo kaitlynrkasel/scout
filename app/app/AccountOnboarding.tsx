@@ -292,7 +292,7 @@ export default function AccountOnboarding({
             <div className="mt-6 space-y-4">
               {/* Shortcut: paste the website and let Scout fill the rest. */}
               <div className="rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
-                <label className={labelCls}>Have a website? Let Scout fill this in</label>
+                <label className={labelCls}>Have a website or social page? Let Scout fill this in</label>
                 <div className="flex flex-wrap items-center gap-2">
                   <input
                     value={companyWebsite}
@@ -306,7 +306,7 @@ export default function AccountOnboarding({
                         scanWebsite();
                       }
                     }}
-                    placeholder="e.g. cedarco.com"
+                    placeholder="e.g. cedarco.com or instagram.com/cedarco"
                     className={`${inputCls} flex-1`}
                   />
                   <button
@@ -320,7 +320,7 @@ export default function AccountOnboarding({
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-body/70">
                   {scanNote ||
-                    "Scout reads your site to learn what your company does, then fills the questions below. No website? Just fill them in yourself, it's not required."}
+                    "Scout reads your site — or an Instagram / TikTok / LinkedIn / Facebook page — to learn what your company does, then fills the questions below. No web presence? Just fill them in yourself, it's not required."}
                 </p>
               </div>
 
