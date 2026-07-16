@@ -2832,6 +2832,17 @@ function ScoutTool({
   // even though you had projects). A new company you switch to correctly shows
   // none until you search under it.
   const primaryCompanyId = profile.companyWorkspaceId || companies[0]?.id || "";
+  // Company accounts don't get an ambient "Personal" lens — it only appears
+  // once a personal project actually exists (created via the project mover's
+  // explicit "Personal (no company)" option).
+  const hasPersonalProjects = projects.some((p) => p.companyId === "personal");
+  // If the last personal project moves to a company while the Personal lens is
+  // active, the option disappears — reset the lens so the select never holds a
+  // value it no longer offers.
+  useEffect(() => {
+    if (activeCompanyId === "personal" && !hasPersonalProjects) selectCompany("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasPersonalProjects, activeCompanyId]);
   const visibleProjects = activeCompanyId
     ? projects.filter((p) => (p.companyId || primaryCompanyId) === activeCompanyId)
     : projects;
@@ -5118,6 +5129,7 @@ function ScoutTool({
         billingTier={billing?.tier}
         openCommand={() => setCmdOpen(true)}
         projects={visibleProjects}
+        hasPersonal={hasPersonalProjects}
         activeId={activeId}
         onSelectProject={selectProject}
         companies={companies}
@@ -5349,7 +5361,7 @@ function ScoutTool({
                   className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
                 >
                   <option value="">All companies</option>
-                  <option value="personal">Personal</option>
+                  {hasPersonalProjects && <option value="personal">Personal</option>}
                   {companies.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -6390,6 +6402,7 @@ function ScoutTool({
           companies={companies}
           activeCompanyId={activeCompanyId}
           onSelectCompany={selectCompany}
+          hasPersonalProjects={hasPersonalProjects}
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
           onSetSheetWrite={setSheetWrite}
@@ -6967,6 +6980,7 @@ function SideNav({
   onSelectProject,
   companies,
   activeCompanyId,
+  hasPersonal,
   onSelectCompany,
   showLogout,
   onLogout,
@@ -6985,6 +6999,7 @@ function SideNav({
   onSelectProject: (id: string) => void;
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
+  hasPersonal: boolean;
   onSelectCompany: (id: string) => void;
   showLogout: boolean;
   onLogout?: () => void;
@@ -7154,7 +7169,7 @@ function SideNav({
               className="su-projsel"
             >
               <option value="">All companies</option>
-              <option value="personal">Personal</option>
+              {hasPersonal && <option value="personal">Personal</option>}
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
@@ -16245,6 +16260,7 @@ function ProfileTab({
   companies,
   activeCompanyId,
   onSelectCompany,
+  hasPersonalProjects,
   syncedSheets,
   onRemoveSync,
   onSetSheetWrite,
@@ -16328,6 +16344,7 @@ function ProfileTab({
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
   onSelectCompany: (id: string) => void;
+  hasPersonalProjects: boolean;
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
   onSetSheetWrite: (id: string, allow: boolean) => void;
@@ -16559,7 +16576,7 @@ function ProfileTab({
                 {c.name}
               </option>
             ))}
-            <option value="personal">Personal</option>
+            {hasPersonalProjects && <option value="personal">Personal</option>}
           </select>
           <span className="text-xs leading-snug text-body/70">
             This whole page — company details, your role, projects — is for this company.
