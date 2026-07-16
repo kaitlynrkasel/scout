@@ -1218,7 +1218,14 @@ async function extractMultiplePeople(
   cand: TavilyResult,
   goal: string,
   about: string,
-  useCase: string
+  useCase: string,
+  // "creators": social-roundup articles (original behavior; members need a
+  // handle/email to be worth keeping since socials are the only route in).
+  // "container": the INVESTIGATOR HOP (Phase 2) — lineups, speaker lists,
+  // rosters, schedules. Members are kept even with NO contact route, because
+  // the page itself is the evidence ("appearing at X on date Y") and the
+  // downstream contact-enrichment hop chases their emails afterwards.
+  mode: "creators" | "container" = "creators"
 ): Promise<
   Array<{
     name: string;
@@ -1232,8 +1239,21 @@ async function extractMultiplePeople(
     channel: string;
   }>
 > {
-  const sys =
-    `You are a research assistant reading a curated ROUNDUP article that lists multiple real social creators / ` +
+  const sys = mode === "container"
+    ? `You are a research assistant reading a CONTAINER page that lists multiple real people — a festival lineup, ` +
+      `conference speaker list, event schedule, panel, artist roster, or member directory. Extract the people on it ` +
+      `who genuinely fit the user's GOAL — up to 8, best matches first, never filler. Return ONLY a JSON object with ` +
+      `a "people" array, no prose. Each element: {name (the person's real name), handle (a social/profile URL or ` +
+      `@handle ONLY if shown on the page; empty otherwise — do not invent), email (only if listed verbatim; empty ` +
+      `otherwise), role (who they are: "indie-folk artist", "A&R at X", "keynote speaker"), outlet (their band, ` +
+      `company, or affiliation if shown), location (if mentioned), why_it_fits (cite the CONTAINER EVIDENCE — what ` +
+      `this page proves about them, e.g. "performing at Riverfront Fest March 14" or "speaking on the sync-licensing ` +
+      `panel", plus any detail about the person; this evidence is exactly why they match), fit_score (0..1 against ` +
+      `the GOAL: presence on this page is strong evidence when the page itself matches the goal's event/place/time), ` +
+      `channel (one of "Email", "Instagram", "TikTok", "YouTube", "X", "LinkedIn", "Website Form", "Unknown" — ` +
+      `"Unknown" is fine, contacts are chased separately)}. A person with no contact on the page is still a KEEPER ` +
+      `here. Skip organizers/venues/staff unless the goal wants them; skip anyone the goal's constraints exclude.`
+    : `You are a research assistant reading a curated ROUNDUP article that lists multiple real social creators / ` +
     `influencers. Extract EVERY named creator from the article that fits the user's GOAL. Return ONLY a JSON ` +
     `object with a "people" array, no prose. Each element: {name (their real name or handle if that's all shown), ` +
     `handle (their @handle or full social URL, e.g. instagram.com/example, tiktok.com/@example, ` +
@@ -1266,9 +1286,12 @@ async function extractMultiplePeople(
     for (const p of arr) {
       const name = String(p?.name || "").trim();
       const handle = String(p?.handle || "").trim();
-      // A creator needs at least a name AND some way to reach them (handle or
-      // email). Skip pure name mentions.
-      if (!name || (!handle && !String(p?.email || "").trim())) continue;
+      // Creators need at least a name AND some way to reach them (handle or
+      // email) — socials are the only route in. CONTAINER members are kept on
+      // name alone: the page itself is the evidence, and the contact-enrichment
+      // hop chases a route afterwards.
+      if (!name) continue;
+      if (mode === "creators" && !handle && !String(p?.email || "").trim()) continue;
       const fitRaw = p?.fit_score;
       const fit =
         typeof fitRaw === "number"
@@ -1467,6 +1490,27 @@ export async function discover(
   // use-case label doesn't say so.
   const isListicle = (c: TavilyResult) => creatorSearch && looksLikeListicle(c.title);
 
+  // ---- Investigator hop (Phase 2) ----
+  // A CONTAINER page (lineup, speaker list, roster, schedule) is often the best
+  // evidence a person-seeking goal will ever get — but the single extractor
+  // turns it into one mediocre find. Fan it out instead: pull the members who
+  // fit the goal (contact or not; enrichment chases contacts afterwards).
+  // Budgeted: at most 3 container pages per run so a directory-heavy result set
+  // can't eat the whole time budget.
+  const personSeeking =
+    /person|artist|creator|founder|speaker|journalist|investor|host|professor|musician|expert|author/i.test(
+      plan?.target_type || ""
+    ) || isNetworkingUseCase(useCase);
+  const looksLikeContainer = (title: string) =>
+    /\b(line-?up|speakers?|performers?|panelists?|roster|exhibitors?|schedule|program|artists (announced|list|playing)|who'?s (playing|speaking)|guest list|directory of)\b/i.test(
+      title || ""
+    );
+  let containerBudget = 3;
+  const isContainer = (c: TavilyResult) => {
+    if (creatorSearch || !personSeeking || containerBudget <= 0) return false;
+    return looksLikeContainer(c.title || "");
+  };
+
   // Extract in small parallel batches so the spike is reasonably fast. Wrapped
   // as a function taking a start index so a broadening retry can process only
   // the freshly-gathered candidates instead of re-extracting the first pass.
@@ -1479,6 +1523,14 @@ export async function discover(
       batch.map(async (c) => {
         if (isListicle(c)) {
           const people = await extractMultiplePeople(c, goal, about, useCase);
+          return { multi: true as const, people, cand: c };
+        }
+        if (isContainer(c)) {
+          containerBudget--;
+          emit(`Opening the list on "${String(c.title || "").slice(0, 60)}"…`);
+          const people = await extractMultiplePeople(c, goal, about, useCase, "container");
+          if (people.length)
+            emit(`Pulled ${people.length} ${people.length === 1 ? "person" : "people"} from that list`);
           return { multi: true as const, people, cand: c };
         }
         const rec = await extract(c, goal, about, useCase, feedback, personalOverride, plan);
@@ -1508,9 +1560,14 @@ export async function discover(
       for (const p of r.people) {
         // Downstream reads raw snake_case fields off the extracted record;
         // mirror that shape so the multi-person path drops in cleanly.
+        // __member marks a multi-extracted person: their "host" is the shared
+        // roundup/lineup page, which is EVIDENCE, not identity — so they're
+        // exempt from host-dedup (otherwise every member after the first gets
+        // dropped as "another find already on {host}").
         flat.push({
           rec: {
             isRelevant: true,
+            __member: true,
           } as any,
           cand: r.cand,
         });
@@ -1661,13 +1718,17 @@ export async function discover(
         );
         continue;
       }
-      if (host && knownHosts.has(host)) {
+      const isMember = !!(r as any).__member;
+      if (!isMember && host && knownHosts.has(host)) {
         skippedDupes++;
         logSkip(cand.title, cand.url, `another find already on ${host}`);
         continue;
       }
       if (nm) knownNames.add(nm);
-      if (host) knownHosts.add(host);
+      // Members share their source page's host as evidence, not identity — don't
+      // claim it, or the page's remaining members (and its own single-extract
+      // result) would be dropped as duplicates.
+      if (host && !isMember) knownHosts.add(host);
 
       let fit = typeof r.fit_score === "number" ? r.fit_score : parseFloat(r.fit_score);
       if (isNaN(fit)) fit = null as any;
