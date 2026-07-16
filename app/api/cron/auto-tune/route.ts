@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { diffNumbers, renderTuneEmailHtml } from "@/lib/tuneEmail";
 import { claudeJson } from "@/lib/claude";
 import { githubConfigured, getFile, putFile } from "@/lib/github";
 import { gmailSendOrDraft } from "@/lib/gmail";
@@ -228,40 +229,50 @@ async function notifyOwner(
   commitUrl: string
 ) {
   if (!ownerEmail) return;
-  // Plain-English email: lead with what this means for the user's results, keep
-  // the raw before/after clauses as fine print at the bottom for the curious.
   const denyPct = Math.round((signal.topBucket?.share || 0) * 100);
   const reason = signal.topBucket?.label || "a recurring pattern";
   const subject = `Scout learned from your feedback: stricter on "${reason.toLowerCase()}"`;
+  const learned =
+    `Out of your last ${signal.decided} decisions, "${reason}" was the reason behind ${denyPct}% of the finds you ` +
+    `said no to (${signal.topBucket?.count} of them). Scout tightened how it scores that — matches with that ` +
+    `problem now rank much lower, so you should see fewer of them.`;
+  const aside =
+    signal.keptFit != null && signal.deniedFit != null
+      ? `Finds you kept were averaging ${Math.round(signal.keptFit * 100)}% fit vs ${Math.round(
+          signal.deniedFit * 100
+        )}% for ones you denied — too close together, which is what this fixes.`
+      : "";
+  // The tuner mostly moves NUMBERS inside a long clause — show just those, not
+  // two near-identical walls of text. The full rule lives in the change log.
+  const pairs = diffNumbers(oldClause, newClause);
   const body =
-    `Hi!\n\n` +
-    `Scout noticed a pattern in the finds you've been passing on and adjusted itself to match.\n\n` +
-    `WHAT IT LEARNED\n` +
-    `Out of your last ${signal.decided} decisions, "${reason}" was the reason behind ${denyPct}% of the finds you said no to` +
-    ` (${signal.topBucket?.count} of them). So Scout tightened how it scores that — matches with that problem will now rank much lower, ` +
-    `and you should see fewer of them in your results.${
-      signal.keptFit != null && signal.deniedFit != null
-        ? `\n\n(For the curious: finds you kept were averaging ${Math.round(signal.keptFit * 100)}% fit vs ${Math.round(
-            signal.deniedFit * 100
-          )}% for ones you denied — too close together, which is what this fixes.)`
-        : ""
-    }\n\n` +
-    `NOTHING YOU NEED TO DO\n` +
-    `This is automatic — just keep approving and passing on finds and Scout keeps calibrating to your taste. ` +
-    `If results ever feel too strict or too loose, tell us and we'll adjust.\n\n` +
-    `See every change Scout has made: open Scout → Dashboard → "Tune the search algorithm" → Change log.\n` +
-    `Technical commit: ${commitUrl}\n\n` +
-    `— Scout\n\n` +
-    `----------------------------------------\n` +
-    `FINE PRINT (the exact rule that changed: ${label})\n\n` +
-    `Before:\n${oldClause}\n\n` +
-    `After:\n${newClause}`;
+    `Hi!\n\nScout noticed a pattern in the finds you've been passing on and adjusted itself to match.\n\n` +
+    `WHAT IT LEARNED\n${learned}\n${aside ? `\n(${aside})\n` : ""}\n` +
+    (pairs.length ? `WHAT ACTUALLY CHANGED (${label})\n${pairs.join(" · ")}\n\n` : "") +
+    `Nothing you need to do — keep approving and passing on finds and Scout keeps calibrating.\n\n` +
+    `Every change (with the full rule text): Scout → Dashboard → "Tune the search algorithm" → Change log.\n` +
+    `Commit: ${commitUrl}\n\n— Scout`;
+  const html = renderTuneEmailHtml({
+    positive: false,
+    title: `Stricter on “${reason.toLowerCase()}”`,
+    learned,
+    aside,
+    ruleLabel: label,
+    pairs,
+    commitUrl,
+  });
 
-  await sendOwnerEmail(userId, ownerEmail, subject, body);
+  await sendOwnerEmail(userId, ownerEmail, subject, body, html);
 }
 
 // Best-effort delivery through whichever mailbox the owner connected.
-async function sendOwnerEmail(userId: string, ownerEmail: string, subject: string, body: string) {
+async function sendOwnerEmail(
+  userId: string,
+  ownerEmail: string,
+  subject: string,
+  body: string,
+  html?: string
+) {
   try {
     const gmail = await supabaseAdmin!
       .from("gmail_connections")
@@ -275,6 +286,7 @@ async function sendOwnerEmail(userId: string, ownerEmail: string, subject: strin
         to: ownerEmail,
         subject,
         body,
+        html,
         mode: "send",
       });
       return;
@@ -290,6 +302,7 @@ async function sendOwnerEmail(userId: string, ownerEmail: string, subject: strin
         to: ownerEmail,
         subject,
         body,
+        html,
         mode: "send",
       });
     }
@@ -338,20 +351,34 @@ async function applyReplyNudge(
     });
 
     const subject = `Scout learned from your replies: leaning into ${nudge.key}`;
+    const learned = `Across ${nudge.replied} real replies, ${nudge.evidence}. Scout now weighs ${nudge.key} more heavily when ranking your finds — expect more results with that going for them near the top.`;
+    // Per-key weight diff ("reachability 0.2 → 0.25") instead of raw JSON walls.
+    const pairs: string[] = (() => {
+      try {
+        const a = JSON.parse(current);
+        const b = JSON.parse(next);
+        return Object.keys(a)
+          .filter((k) => a[k] !== b[k])
+          .map((k) => `${k} ${a[k]} → ${b[k]}`);
+      } catch {
+        return [];
+      }
+    })();
     const body =
-      `Hi!\n\n` +
-      `Good news this time — Scout noticed what's actually getting you replies and adjusted itself to chase more of it.\n\n` +
-      `WHAT IT LEARNED\n` +
-      `Across ${nudge.replied} real replies, ${nudge.evidence}. So Scout now weighs ${nudge.key} more heavily when ` +
-      `ranking your finds — expect more results with that going for them near the top.\n\n` +
-      `NOTHING YOU NEED TO DO\n` +
-      `Keep sending and replying as usual; Scout keeps calibrating toward what works.\n\n` +
-      `See every change: open Scout → Dashboard → "Tune the search algorithm" → Change log.\n` +
-      `Technical commit: ${commitUrl}\n\n` +
-      `— Scout\n\n` +
-      `----------------------------------------\n` +
-      `FINE PRINT (rank weights)\n\nBefore: ${current}\nAfter:  ${next}`;
-    await sendOwnerEmail(userId, ownerEmail, subject, body);
+      `Hi!\n\nGood news this time — Scout noticed what's actually getting you replies and adjusted to chase more of it.\n\n` +
+      `WHAT IT LEARNED\n${learned}\n\n` +
+      (pairs.length ? `WHAT ACTUALLY CHANGED (rank weights)\n${pairs.join(" · ")}\n\n` : "") +
+      `Nothing you need to do — keep sending and replying as usual.\n\n` +
+      `Every change: Scout → Dashboard → "Tune the search algorithm" → Change log.\nCommit: ${commitUrl}\n\n— Scout`;
+    const html = renderTuneEmailHtml({
+      positive: true,
+      title: `Leaning into ${nudge.key}`,
+      learned,
+      ruleLabel: "Headline rank weights",
+      pairs,
+      commitUrl,
+    });
+    await sendOwnerEmail(userId, ownerEmail, subject, body, html);
 
     return { userId, applied: true, slot: SLOT, signal, newClause: next, commitUrl };
   } catch (e) {

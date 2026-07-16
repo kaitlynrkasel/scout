@@ -141,7 +141,8 @@ function buildRaw(
   subject: string,
   body: string,
   attachment?: MailAttachment,
-  listUnsubscribe?: string
+  listUnsubscribe?: string,
+  html?: string // when set (and no attachment), send text/html instead of plain
 ): string {
   const baseHeaders = [
     `From: ${from}`,
@@ -159,12 +160,16 @@ function buildRaw(
     }
   }
 
-  // No attachment: a plain-text message, as before.
+  // No attachment: a single-part message — HTML when the caller supplied a
+  // rendered body (e.g. Scout's own notification emails), plain text otherwise.
   if (!attachment) {
     const msg =
-      [...baseHeaders, 'Content-Type: text/plain; charset="UTF-8"'].join("\r\n") +
+      [
+        ...baseHeaders,
+        html ? 'Content-Type: text/html; charset="UTF-8"' : 'Content-Type: text/plain; charset="UTF-8"',
+      ].join("\r\n") +
       "\r\n\r\n" +
-      body;
+      (html || body);
     return Buffer.from(msg).toString("base64url");
   }
 
@@ -204,6 +209,7 @@ export async function gmailSendOrDraft(opts: {
   threadId?: string; // when set, the message is placed in that existing thread
   attachment?: MailAttachment; // optional file (e.g. the user's resume)
   listUnsubscribe?: string; // RFC 2369 List-Unsubscribe value for cold outreach
+  html?: string; // rendered HTML body (notifications); body stays the text fallback
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   const raw = buildRaw(
@@ -212,7 +218,8 @@ export async function gmailSendOrDraft(opts: {
     opts.subject,
     opts.body,
     opts.attachment,
-    opts.listUnsubscribe
+    opts.listUnsubscribe,
+    opts.html
   );
   const url =
     opts.mode === "send"

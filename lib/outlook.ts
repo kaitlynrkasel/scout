@@ -133,10 +133,12 @@ export function emailFromIdToken(idToken: string): string {
   }
 }
 
-function buildMessage(to: string, subject: string, body: string) {
+function buildMessage(to: string, subject: string, body: string, html?: string) {
   return {
     subject,
-    body: { contentType: "Text", content: body },
+    body: html
+      ? { contentType: "HTML", content: html }
+      : { contentType: "Text", content: body },
     toRecipients: [{ emailAddress: { address: to } }],
   };
 }
@@ -149,6 +151,7 @@ export async function outlookSendOrDraft(opts: {
   subject: string;
   body: string;
   mode: "send" | "draft";
+  html?: string; // rendered HTML body (notifications); body stays the text fallback
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   // Always create the draft first (gives us id + conversationId), then send it
@@ -156,7 +159,7 @@ export async function outlookSendOrDraft(opts: {
   const create = await fetch(`${GRAPH}/me/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body)),
+    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html)),
   });
   if (!create.ok) throw new Error("graph draft failed: " + (await create.text()));
   const msg = await create.json();
