@@ -142,12 +142,19 @@ async function runForUser(userId: string, ownerEmail: string, thresholds: Tuning
     return { userId, applied: false, reason: `couldn't locate ${slot.constName} in ${DISCOVER_PATH}` };
   }
 
-  const sys =
-    `You tighten ONE instructional clause inside an outreach-discovery engine's fit-scoring prompt, based on real deny ` +
-    `data. Return ONLY the revised clause text, no backticks, no code, no markdown, no preamble, one paragraph, same ` +
-    `ALL-CAPS label prefix style as the original (e.g. "LOCATION ALIGNMENT: ..."). Make it more specific and stricter ` +
-    `about the failure mode the data shows, without changing what it's fundamentally judging. Keep it roughly the same ` +
-    `length as the original.`;
+  const isJsonSlot = /^\s*\{[\s\S]*\}\s*$/.test(currentClause);
+  const sys = isJsonSlot
+    ? `You adjust ONE numeric weights object inside an outreach-discovery engine's ranking formula, based on real deny ` +
+      `data. The current value is a JSON object of component weights. Return ONLY a revised JSON object with EXACTLY the ` +
+      `same keys — no backticks, no markdown, no prose, no new keys. Shift weight TOWARD the component responsible for ` +
+      `the dominant deny reason (e.g. "Wrong timing" → raise timing; "No way to contact" → raise reachability) and take ` +
+      `it from the others proportionally. Move at most 0.10 total per revision, keep every weight between 0.05 and 0.60, ` +
+      `and keep the values summing to roughly 1.`
+    : `You tighten ONE instructional clause inside an outreach-discovery engine's fit-scoring prompt, based on real deny ` +
+      `data. Return ONLY the revised clause text, no backticks, no code, no markdown, no preamble, one paragraph, same ` +
+      `ALL-CAPS label prefix style as the original (e.g. "LOCATION ALIGNMENT: ..."). Make it more specific and stricter ` +
+      `about the failure mode the data shows, without changing what it's fundamentally judging. Keep it roughly the same ` +
+      `length as the original.`;
   const user =
     `CURRENT CLAUSE:\n${currentClause}\n\n` +
     `DATA: of ${signal.decided} decided finds, ${signal.denied} were denied. The dominant deny reason is ` +

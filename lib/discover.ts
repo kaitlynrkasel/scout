@@ -31,6 +31,36 @@ export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
 export const TRANSIENT_PRESENCE_CLAUSE =
   ` TRANSIENT / EVENT PRESENCE OVERRIDE: this applies ONLY when the GOAL is about a person being physically present at a place for an event, appearance, tour stop, festival, conference, residency, or visit during a time window (e.g. "artists who will be in Nashville in March", "founders coming to Austin for SXSW", "a speaker in town the week of the 12th"). For such goals, location compatibility is about WHERE THE PERSON WILL BE during that window, NOT where they are based or headquartered — and the residence-based LOCATION ALIGNMENT ceiling above does NOT apply. A person based anywhere who has a confirmed appearance, booked show, tour date, festival slot, or scheduled visit at the goal's location within the window is a STRONG location match: do not penalize them for living elsewhere. Conversely, a local resident who is clearly touring/away during the window is a WEAKER match. Capture the specific appearance/tour date in why_it_fits when the source states it, and raise fit_score when that date falls inside the requested window; lower it (or set is_relevant false) only when the source explicitly shows the person will NOT be there in the window. When you cannot confirm the date but the person is a plausible fit for the event, treat it as an ambiguous timing case (moderate fit_score) rather than a hard location mismatch. If the goal is NOT about transient presence, ignore this override entirely.`;
 
+// Tunable rank weights (Phase 1 of the opportunity-intelligence architecture).
+// The headline fit shown to users is now COMPUTED: a weighted blend of the
+// extractor's per-component reads (relevance/timing/momentum) and the
+// mechanically-computed reachability — instead of one opaque model number.
+// Backtick-string format so lib/autotune.ts's slot machinery can adjust these
+// NUMBERS from real deny data instead of escalating prose clauses. Values are
+// re-normalized at parse time, and any malformed edit falls back to defaults,
+// so a bad auto-edit can never break ranking. Must stay valid JSON.
+export const TUNABLE_RANK_WEIGHTS = `{"relevance":0.45,"reachability":0.20,"timing":0.20,"momentum":0.15}`;
+
+const DEFAULT_RANK_WEIGHTS = { relevance: 0.45, reachability: 0.2, timing: 0.2, momentum: 0.15 };
+function rankWeights(): typeof DEFAULT_RANK_WEIGHTS {
+  try {
+    const w = JSON.parse(TUNABLE_RANK_WEIGHTS);
+    const keys = ["relevance", "reachability", "timing", "momentum"] as const;
+    const vals = keys.map((k) => Number(w[k]));
+    if (vals.some((v) => !Number.isFinite(v) || v < 0)) return DEFAULT_RANK_WEIGHTS;
+    const sum = vals.reduce((a, b) => a + b, 0);
+    if (sum <= 0) return DEFAULT_RANK_WEIGHTS;
+    return {
+      relevance: vals[0] / sum,
+      reachability: vals[1] / sum,
+      timing: vals[2] / sum,
+      momentum: vals[3] / sum,
+    };
+  } catch {
+    return DEFAULT_RANK_WEIGHTS;
+  }
+}
+
 // What the user has taught Scout by denying / keeping past finds. Fed into query
 // planning and extraction so the search learns their taste over time.
 export interface DiscoverFeedback {
@@ -1150,7 +1180,8 @@ async function extract(
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
     `components (an object grading WHY this is a good opportunity, each 0 to 1: {relevance = how squarely they match the ` +
-    `goal/target profile; timing = whether NOW is a good moment to reach out based on recent/upcoming events (funding, ` +
+    `goal/target profile — apply every fit-scoring rule above, INCLUDING any hard ceilings, to relevance exactly as you ` +
+    `do to fit_score; timing = whether NOW is a good moment to reach out based on recent/upcoming events (funding, ` +
     `hiring, a launch/release, a tour stop, a conference, a new role) — 0.5 when neutral/unknown; momentum = how active ` +
     `and in-motion they are right now (recent press, posts, growth, output)}), ` +
     `signals (an array of up to 5 SHORT concrete evidence phrases that justify the scores and answer "why now / why them", ` +
@@ -1640,6 +1671,32 @@ export async function discover(
 
       let fit = typeof r.fit_score === "number" ? r.fit_score : parseFloat(r.fit_score);
       if (isNaN(fit)) fit = null as any;
+
+      // ---- Computed headline rank (Phase 1: opportunity intelligence) ----
+      // Blend the extractor's per-component reads with computed reachability
+      // using the tunable weights, instead of trusting one opaque number.
+      // Guardrails keep the rules-based behavior the deny data has earned:
+      //  - relevance carries every hard rule/ceiling (the prompt says so), and
+      //    the headline can never exceed relevance by more than a nudge, so
+      //    great timing/reachability can sweeten a match but never rescue a
+      //    rule-violating one;
+      //  - when the model's rules-based fit is a near-veto (≤0.15), respect it
+      //    outright — that's a ceiling clause firing (e.g. wrong location).
+      const compRelevance = clamp01(r.components?.relevance);
+      const compTiming = clamp01(r.components?.timing);
+      const compMomentum = clamp01(r.components?.momentum);
+      const compReach = reachabilityFrom(r.contact_email, r.contact_handle, r.contact_phone);
+      if (compRelevance != null) {
+        const w = rankWeights();
+        const weighted =
+          w.relevance * compRelevance +
+          w.reachability * compReach +
+          w.timing * (compTiming ?? 0.5) +
+          w.momentum * (compMomentum ?? 0.5);
+        let headline = Math.min(weighted, compRelevance + 0.2);
+        if (fit != null && fit <= 0.15) headline = Math.min(headline, fit);
+        fit = Math.round(Math.max(0, Math.min(1, headline)) * 100) / 100;
+      }
 
       // Trust the LLM's URL only when we can verify it isn't hallucinated:
       // its host must appear in the source page's content, OR it must sit on

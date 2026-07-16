@@ -65,6 +65,18 @@ export const TUNABLE_SLOTS: TunableSlot[] = [
     label: "Location alignment penalty (non-prospecting fitRules)",
     reasonBuckets: ["Wrong location"],
   },
+  {
+    // NUMERIC slot, not prose: the headline rank is computed from weighted
+    // components (see TUNABLE_RANK_WEIGHTS in lib/discover.ts). When timing- or
+    // contact-driven denials dominate, the right fix is shifting WEIGHT toward
+    // that component, not another prose clause. The value must stay a valid
+    // JSON object with keys relevance/reachability/timing/momentum (weights are
+    // re-normalized and fall back to defaults if malformed, so a bad edit can't
+    // break ranking).
+    constName: "TUNABLE_RANK_WEIGHTS",
+    label: "Headline rank weights (relevance/reachability/timing/momentum)",
+    reasonBuckets: ["Wrong timing", "No way to contact"],
+  },
 ];
 
 // ---- Signal computation (server-side twin of learnedFromFinds in page.tsx,
