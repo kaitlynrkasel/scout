@@ -6,6 +6,8 @@ import { gmailSendOrDraft } from "@/lib/gmail";
 import { outlookSendOrDraft } from "@/lib/outlook";
 import {
   computeTuningSignal,
+  computeReplyNudge,
+  nudgeWeights,
   meetsThreshold,
   slotForSignal,
   extractSlotValue,
@@ -13,6 +15,7 @@ import {
   sanityCheck,
   tuningThresholds,
   type TuningThresholds,
+  type ReplyNudge,
 } from "@/lib/autotune";
 
 export const runtime = "nodejs";
@@ -118,7 +121,12 @@ async function runForUser(userId: string, ownerEmail: string, thresholds: Tuning
   const finds = Array.isArray(row?.data?.finds) ? row!.data.finds : [];
 
   const signal = computeTuningSignal(finds);
+  // Phase 4: positive learning. When the deny-driven path has nothing to do,
+  // real replies can still teach — a deterministic weight nudge, no LLM.
+  const replyNudge = computeReplyNudge(finds);
   if (!meetsThreshold(signal, thresholds)) {
+    const nudged = replyNudge && (await applyReplyNudge(userId, ownerEmail, replyNudge, signal));
+    if (nudged) return nudged;
     return {
       userId,
       applied: false,
@@ -128,6 +136,8 @@ async function runForUser(userId: string, ownerEmail: string, thresholds: Tuning
   }
   const slot = slotForSignal(signal);
   if (!slot) {
+    const nudged = replyNudge && (await applyReplyNudge(userId, ownerEmail, replyNudge, signal));
+    if (nudged) return nudged;
     return {
       userId,
       applied: false,
@@ -247,6 +257,11 @@ async function notifyOwner(
     `Before:\n${oldClause}\n\n` +
     `After:\n${newClause}`;
 
+  await sendOwnerEmail(userId, ownerEmail, subject, body);
+}
+
+// Best-effort delivery through whichever mailbox the owner connected.
+async function sendOwnerEmail(userId: string, ownerEmail: string, subject: string, body: string) {
   try {
     const gmail = await supabaseAdmin!
       .from("gmail_connections")
@@ -280,5 +295,67 @@ async function notifyOwner(
     }
   } catch (e) {
     console.warn("auto-tune notification email failed (log entry still saved):", e);
+  }
+}
+
+// ---- Phase 4: reply-driven weight nudge (positive learning) ----
+// Deterministic: shifts TUNABLE_RANK_WEIGHTS toward the component the user's
+// real replies vindicate. No LLM writes code here — pure arithmetic, committed
+// through the same audited path as the deny-driven edits.
+async function applyReplyNudge(
+  userId: string,
+  ownerEmail: string,
+  nudge: ReplyNudge,
+  signal: ReturnType<typeof computeTuningSignal>
+) {
+  const SLOT = "TUNABLE_RANK_WEIGHTS";
+  try {
+    const { content: fileText, sha } = await getFile(DISCOVER_PATH);
+    const current = extractSlotValue(fileText, SLOT);
+    if (!current) return null;
+    const next = nudgeWeights(current, nudge.key);
+    if (!next || next === current) return null; // unparseable or saturated
+    const revised = replaceSlotValue(fileText, SLOT, next);
+    if (!revised) return null;
+    const check = sanityCheck(fileText, revised);
+    if (!check.ok) return null;
+
+    const label = "Headline rank weights (reply-driven)";
+    const commitMessage =
+      `Auto-tune (positive): rank weights toward ${nudge.key}\n\n` +
+      `${nudge.replied} real replies — ${nudge.evidence}. Deterministic nudge, no LLM.\n\n` +
+      `Autonomous edit, see computeReplyNudge/nudgeWeights in lib/autotune.ts.`;
+    const { commitUrl } = await putFile(DISCOVER_PATH, revised, sha, commitMessage);
+
+    await supabaseAdmin!.from("auto_tune_log").insert({
+      user_id: userId,
+      slot: SLOT,
+      label,
+      old_clause: current,
+      new_clause: next,
+      commit_url: commitUrl,
+      signal: { ...signal, replyNudge: nudge },
+    });
+
+    const subject = `Scout learned from your replies: leaning into ${nudge.key}`;
+    const body =
+      `Hi!\n\n` +
+      `Good news this time — Scout noticed what's actually getting you replies and adjusted itself to chase more of it.\n\n` +
+      `WHAT IT LEARNED\n` +
+      `Across ${nudge.replied} real replies, ${nudge.evidence}. So Scout now weighs ${nudge.key} more heavily when ` +
+      `ranking your finds — expect more results with that going for them near the top.\n\n` +
+      `NOTHING YOU NEED TO DO\n` +
+      `Keep sending and replying as usual; Scout keeps calibrating toward what works.\n\n` +
+      `See every change: open Scout → Dashboard → "Tune the search algorithm" → Change log.\n` +
+      `Technical commit: ${commitUrl}\n\n` +
+      `— Scout\n\n` +
+      `----------------------------------------\n` +
+      `FINE PRINT (rank weights)\n\nBefore: ${current}\nAfter:  ${next}`;
+    await sendOwnerEmail(userId, ownerEmail, subject, body);
+
+    return { userId, applied: true, slot: SLOT, signal, newClause: next, commitUrl };
+  } catch (e) {
+    console.warn("reply-nudge failed (skipping, deny-path result stands):", e);
+    return null;
   }
 }

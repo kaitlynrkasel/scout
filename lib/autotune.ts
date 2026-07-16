@@ -85,7 +85,13 @@ export const TUNABLE_SLOTS: TunableSlot[] = [
 interface MinimalFind {
   status: string;
   denyReason?: string;
-  opp?: { fitScore?: number | null; channel?: string };
+  sentAt?: number;
+  opp?: {
+    fitScore?: number | null;
+    channel?: string;
+    contactEmail?: string;
+    scores?: { timing?: number; momentum?: number; reachability?: number };
+  };
 }
 
 const CONCEPT_BUCKETS: { label: string; test: RegExp }[] = [
@@ -165,6 +171,99 @@ export function slotForSignal(signal: TuningSignal): TunableSlot | null {
   return (
     TUNABLE_SLOTS.find((s) => s.reasonBuckets.includes(signal.topBucket!.label)) || null
   );
+}
+
+// ---- Phase 4: reply-driven positive learning ----
+// The deny-driven tuner above only ever gets STRICTER (it learns exclusively
+// from rejections). This is the counterweight: when a user's real REPLIES show
+// a pattern — replies cluster on personal-email contacts, or on candidates with
+// hot timing — nudge the corresponding rank weight UP, deterministically (no
+// LLM involved; arithmetic on TUNABLE_RANK_WEIGHTS).
+export interface ReplyNudge {
+  key: "reachability" | "timing";
+  replied: number;
+  evidence: string; // human-readable "what the replies showed"
+}
+
+const PERSONAL_EMAIL_RE =
+  /^(careers?|jobs?|hr|recruit|talent|info|hello|contact|apply|admin|support|team|press|media|sales)@/i;
+const REPLY_NUDGE_MIN_REPLIES = 5;
+
+export function computeReplyNudge(finds: MinimalFind[]): ReplyNudge | null {
+  const WEEK = 7 * 86400000;
+  const now = Date.now();
+  const replied = finds.filter((f) => f.status === "replied");
+  if (replied.length < REPLY_NUDGE_MIN_REPLIES) return null;
+  const silent = finds.filter(
+    (f) => f.status === "sent" && f.sentAt && now - f.sentAt > WEEK
+  );
+  const personal = (f: MinimalFind) => {
+    const e = String(f.opp?.contactEmail || "").trim();
+    return !!e && !PERSONAL_EMAIL_RE.test(e);
+  };
+  const share = (arr: MinimalFind[]) =>
+    arr.length ? arr.filter(personal).length / arr.length : null;
+
+  const rShare = share(replied)!;
+  const sShare = share(silent);
+  if (rShare >= 0.7 && (sShare == null || rShare - sShare >= 0.2)) {
+    return {
+      key: "reachability",
+      replied: replied.length,
+      evidence: `${Math.round(rShare * 100)}% of replies came from contacts with a personal email address`,
+    };
+  }
+
+  const avgTiming = (arr: MinimalFind[]) => {
+    const vals = arr
+      .map((f) => f.opp?.scores?.timing)
+      .filter((v): v is number => typeof v === "number");
+    return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+  };
+  const rT = avgTiming(replied);
+  const sT = avgTiming(silent);
+  if (rT != null && rT >= 0.6 && (sT == null || rT - sT >= 0.15)) {
+    return {
+      key: "timing",
+      replied: replied.length,
+      evidence: `replies clustered on candidates with strong timing signals (avg ${Math.round(rT * 100)}% vs ${
+        sT != null ? Math.round(sT * 100) + "%" : "n/a"
+      } for unanswered outreach)`,
+    };
+  }
+  return null;
+}
+
+// Deterministically shift TUNABLE_RANK_WEIGHTS toward `key`: +delta to the
+// winning component, taken proportionally from the others, everything clamped
+// to [0.05, 0.60] and re-normalized to sum 1. Returns the new JSON string, or
+// null when the current value is unparseable or the weight is saturated.
+export function nudgeWeights(
+  currentJson: string,
+  key: "relevance" | "reachability" | "timing" | "momentum",
+  delta = 0.05
+): string | null {
+  let w: Record<string, number>;
+  try {
+    w = JSON.parse(currentJson);
+  } catch {
+    return null;
+  }
+  const keys = ["relevance", "reachability", "timing", "momentum"] as const;
+  if (keys.some((k) => !Number.isFinite(Number(w[k])))) return null;
+  if (Number(w[key]) >= 0.6) return null; // saturated — nothing to learn further
+  const next: Record<string, number> = {};
+  const othersMass = keys.filter((k) => k !== key).reduce((a, k) => a + Number(w[k]), 0);
+  for (const k of keys) {
+    next[k] =
+      k === key
+        ? Number(w[k]) + delta
+        : Number(w[k]) - delta * (Number(w[k]) / (othersMass || 1));
+  }
+  for (const k of keys) next[k] = Math.min(0.6, Math.max(0.05, next[k]));
+  const sum = keys.reduce((a, k) => a + next[k], 0);
+  for (const k of keys) next[k] = Math.round((next[k] / sum) * 1000) / 1000;
+  return JSON.stringify(next);
 }
 
 // ---- Individual calibration (personal, not committed to code) ----
