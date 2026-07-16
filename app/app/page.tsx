@@ -4340,6 +4340,54 @@ function ScoutTool({
       // Normal finish: use the fully processed set (sorted, capped, enriched).
       // Cancelled finish: keep the raw finds already streamed in.
       const finalOpps: Opportunity[] = done?.opportunities || live;
+
+      // ---- Phase 3: auto deep-scan (missing-info follow-up) ----
+      // Strong candidates that STILL lack any contact route after the server's
+      // enrichment get their own site read automatically — the same deep-scan
+      // the manual "Scan for contact" button runs, no click required. Bounded
+      // to 3 so it adds a few seconds, not a second search.
+      const needScan = finalOpps
+        .filter((o) => o.url && !o.contactEmail && !o.contactHandle && !o.contactPhone)
+        .slice(0, 3);
+      if (needScan.length && !controller.signal.aborted) {
+        setSearchLog((prev) => [
+          ...prev,
+          `Reading ${needScan.length} ${needScan.length === 1 ? "site" : "sites"} for contact info…`,
+        ]);
+        await Promise.all(
+          needScan.map(async (o) => {
+            try {
+              const res = await fetch("/api/deep-scan", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ url: o.url, name: o.name, outlet: o.outlet, goal, useCase: activeUseCase }),
+              });
+              const j = await parseApiResponse(res);
+              if (!res.ok || j?.error) return;
+              const c = j.contact || {};
+              if (c.email && !o.contactEmail) o.contactEmail = c.email;
+              if (c.name && !o.contactName) o.contactName = c.name;
+              if (c.role && !o.contactRole) o.contactRole = c.role;
+              if (c.handle && !o.contactHandle) o.contactHandle = c.handle;
+              if (c.email && (!o.channel || /unknown/i.test(o.channel))) o.channel = "Email";
+              // Reflect the found route in the score breakdown + headline
+              // (mirrors the server: reachability carries 0.20 of the rank).
+              const newReach = o.contactEmail ? 0.9 : o.contactPhone ? 0.7 : o.contactHandle ? 0.6 : 0;
+              if (o.scores) {
+                const oldReach = o.scores.reachability ?? 0;
+                if (newReach > oldReach) {
+                  o.scores.reachability = newReach;
+                  if (typeof o.fitScore === "number")
+                    o.fitScore = Math.round(Math.min(1, o.fitScore + 0.2 * (newReach - oldReach)) * 100) / 100;
+                }
+              }
+            } catch {
+              /* best-effort — the manual scan button still exists */
+            }
+          })
+        );
+      }
+
       setOpps(finalOpps);
       setSelected({}); // nothing pre-approved, you approve who you want to reach
       setSkipped(done && Array.isArray(done.skipped) ? done.skipped : []);
