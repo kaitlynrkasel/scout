@@ -491,6 +491,10 @@ interface Category {
   id: string;
   name: string;
   goal: string;
+  // Optional exemplars the user pasted (links, names, companies "like this").
+  // Fed to the search as TYPE/QUALITY exemplars, never as scope filters — an
+  // explicit "any industry" in the goal always beats the examples' industry.
+  examples?: string;
   projectId: string; // categories belong to a project
   // Which contact channels this search should try to come back with (values
   // from CONTACT_CHANNELS below, e.g. ["email","phone"]). Empty/undefined =
@@ -1196,6 +1200,10 @@ function ScoutTool({
   const [editingCats, setEditingCats] = useState(false); // category manager open?
   const [editingProjects, setEditingProjects] = useState(false); // project manager open?
   const [goal, setGoal] = useState("");
+  // Optional exemplars for the current search (links, names, companies "like
+  // this"). Loaded from the active category, persisted back to it (debounced),
+  // and folded into the goal sent to the engine as exemplars-not-filters.
+  const [examples, setExamples] = useState("");
   const [discovering, setDiscovering] = useState(false);
   // Scroll the "Scout is searching" indicator into view when a search kicks off,
   // so it's obvious something's happening without scrolling down (task #9).
@@ -3009,6 +3017,36 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [goal, catId, categories]);
 
+  // The exemplars block appended to the goal for planning + searching. The
+  // guard matters: examples steer TYPE and QUALITY, and must never shrink an
+  // explicitly broad scope (an "any industry" goal keeps all industries).
+  const examplesBlock = () =>
+    examples.trim()
+      ? `\n\nEXAMPLES from the user (optional exemplars — links, names, or companies LIKE what they want): ${examples.trim()}\n` +
+        `IMPORTANT: these examples illustrate the TYPE and QUALITY wanted; they are NOT filters. If the goal or ` +
+        `context states a broader scope (e.g. any/all industries, anywhere), keep the full breadth — never narrow ` +
+        `results to the examples' own industry, location, or size. Do favor targets that resemble the examples in ` +
+        `kind, caliber, and vibe.`
+      : "";
+
+  // Examples travel with the category: load when the selected category changes
+  // (covers every switch path without touching each setGoal site)…
+  useEffect(() => {
+    setExamples(categories.find((c) => c.id === catId)?.examples || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [catId]);
+  // …and persist edits back onto it, debounced like the goal above.
+  useEffect(() => {
+    if (!catId) return;
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat || examples === (cat.examples || "")) return;
+    const t = setTimeout(() => {
+      saveCats(categories.map((c) => (c.id === catId ? { ...c, examples } : c)));
+    }, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [examples, catId, categories]);
+
   // Same auto-save, for which contact channels this search should prioritize.
   // Immediate (not debounced) since it's discrete toggle clicks, not typing.
   function toggleWantedChannel(key: string) {
@@ -4242,7 +4280,9 @@ function ScoutTool({
         ? `\n\nMore detail from me: ${clarifyText.trim()}`
         : "";
       const goalForApi =
-        (extras.length ? `${goal}\n\n${extras.join(" ")}` : goal) + clarifyBlock;
+        (extras.length ? `${goal}\n\n${extras.join(" ")}` : goal) +
+        clarifyBlock +
+        examplesBlock();
       // Per-project "read my profile" setting (default on). When OFF, the search
       // ignores your Profile and your cross-project history, using only who this
       // project is for — so representing someone outside your world doesn't bias
@@ -4503,7 +4543,9 @@ function ScoutTool({
     const g =
       (clarifyText.trim()
         ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}`
-        : goal) + denyHint;
+        : goal) +
+      denyHint +
+      examplesBlock();
     const token = getToken ? await getToken() : null;
     try {
       const res = await fetch("/api/plan", {
@@ -5629,6 +5671,30 @@ function ScoutTool({
                   <p className="mt-1.5 text-xs text-body/70">
                     Tip: add your industry, genre, or city to sharpen the results.
                   </p>
+
+                  {/* Optional exemplars: links / names / companies "like this".
+                      Fed to the engine as type-and-quality exemplars, never as
+                      scope filters — an explicit "any industry" goal still wins. */}
+                  <div className="mt-4">
+                    <div className="mb-1 flex items-center gap-2">
+                      <Label className="mb-0">Examples of what you want</Label>
+                      <span className="rounded-full bg-warm-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                        Optional
+                      </span>
+                    </div>
+                    <textarea
+                      value={examples}
+                      onChange={(e) => setExamples(e.target.value)}
+                      rows={2}
+                      placeholder="Links, names, or companies like the ones you want — e.g. https://example.com/their-page, Jane Doe at Sub Pop, “something like Daytrotter”"
+                      className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                    />
+                    <p className="mt-1 text-[11px] leading-relaxed text-body/60">
+                      Scout uses these as examples of the <b>type</b> you want — they
+                      won&apos;t narrow your search. If your goal says any industry,
+                      you&apos;ll still get all industries.
+                    </p>
+                  </div>
 
                   {!aboutText && (
                     <button
