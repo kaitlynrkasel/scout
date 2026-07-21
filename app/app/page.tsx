@@ -34,6 +34,10 @@ import {
   saveProfile as dbSaveProfile,
   loadState as dbLoadState,
   saveState as dbSaveState,
+  rememberAccount,
+  listSavedAccounts,
+  switchAccount,
+  forgetAccount,
   type AppState,
 } from "@/lib/supabase";
 
@@ -896,6 +900,17 @@ function AuthedShell() {
       setSession(s);
       setChecked(true);
       if (!s) setProfileLoaded(false);
+      // Keep the multi-account switcher registry current: every sign-in and
+      // token refresh stores this account's latest session, so switching back
+      // later is one click (see lib/supabase rememberAccount/switchAccount).
+      if (s?.user?.email && s.refresh_token) {
+        rememberAccount(
+          s.user.email,
+          s.access_token || "",
+          s.refresh_token,
+          (s.user.user_metadata as any)?.full_name || ""
+        );
+      }
       // Arriving from a reset-password email link: force the set-new-password
       // screen regardless of the session the link established.
       if (event === "PASSWORD_RECOVERY") setRecovery(true);
@@ -1107,7 +1122,11 @@ function AuthedShell() {
           });
         }, 250);
       }}
-      onLogout={() => supabase?.auth.signOut()}
+      onLogout={() => {
+        // A real log-out also removes this account from the quick-switcher.
+        if (session?.user?.email) forgetAccount(session.user.email);
+        supabase?.auth.signOut();
+      }}
       showLogout
       getToken={async () => {
         const { data } = await supabase!.auth.getSession();
@@ -5137,6 +5156,22 @@ function ScoutTool({
         onSelectCompany={selectCompany}
         showLogout={!!showLogout}
         onLogout={onLogout}
+        accountEmail={accountEmail || ""}
+        onSwitchAccount={async (email: string) => {
+          const err = await switchAccount(email);
+          if (err) {
+            alert(err);
+            await supabase?.auth.signOut({ scope: "local" });
+          }
+          // Reload either way so every piece of per-account state reinitializes.
+          window.location.reload();
+        }}
+        onAddAccount={async () => {
+          // Local-only sign-out: keeps this account's saved session valid so
+          // switching back is still one click after the new sign-in.
+          await supabase?.auth.signOut({ scope: "local" });
+          window.location.reload();
+        }}
       />
       <Tutorial
         open={tourOpen}
@@ -6984,6 +7019,9 @@ function SideNav({
   onSelectCompany,
   showLogout,
   onLogout,
+  accountEmail,
+  onSwitchAccount,
+  onAddAccount,
 }: {
   tab: string;
   setTab: (t: any) => void;
@@ -7003,7 +7041,13 @@ function SideNav({
   onSelectCompany: (id: string) => void;
   showLogout: boolean;
   onLogout?: () => void;
+  accountEmail?: string;
+  onSwitchAccount?: (email: string) => void;
+  onAddAccount?: () => void;
 }) {
+  // Account switcher menu (loaded from the local registry when opened).
+  const [acctOpen, setAcctOpen] = useState(false);
+  const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
   const items: {
     key: string;
     label: string;
@@ -7237,9 +7281,53 @@ function SideNav({
           </button>
         )}
         {showLogout && (
-          <button onClick={onLogout} className="su-logout mt-2">
-            Log out
-          </button>
+          <div className="mt-2">
+            {/* Account switcher: tap your email to see every signed-in account
+                on this device and hop between them in one click. */}
+            <button
+              onClick={() => {
+                setSavedAccts(listSavedAccounts().map((a) => ({ email: a.email, name: a.name })));
+                setAcctOpen((v) => !v);
+              }}
+              className="su-logout w-full"
+              title="Switch account"
+            >
+              <span className="block truncate">{accountEmail || "Account"} {acctOpen ? "▴" : "▾"}</span>
+            </button>
+            {acctOpen && (
+              <div className="mt-1.5 flex flex-col gap-0.5 rounded-xl border border-warm-border bg-surface p-1.5">
+                {savedAccts.map((a) => {
+                  const current = a.email === accountEmail;
+                  return (
+                    <button
+                      key={a.email}
+                      onClick={() => (current ? setAcctOpen(false) : onSwitchAccount?.(a.email))}
+                      className={`truncate rounded-lg px-2.5 py-1.5 text-left text-xs transition ${
+                        current
+                          ? "font-bold text-ink"
+                          : "text-body/80 hover:bg-warm-bg"
+                      }`}
+                      title={current ? "Current account" : `Switch to ${a.email}`}
+                    >
+                      {current ? "✓ " : ""}{a.email}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={onAddAccount}
+                  className="rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-accent transition hover:bg-warm-bg"
+                >
+                  + Add another account
+                </button>
+                <button
+                  onClick={onLogout}
+                  className="rounded-lg px-2.5 py-1.5 text-left text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-red-500"
+                >
+                  Log out
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
     </>

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { supabase, setRememberMe } from "@/lib/supabase";
+import { useEffect, useState } from "react";
+import { supabase, setRememberMe, listSavedAccounts, switchAccount } from "@/lib/supabase";
 
 /**
  * Account screen. Sign up collects first name, last name, email, and password,
@@ -41,6 +41,23 @@ export default function AuthScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  // Accounts previously signed in on this device — one-tap continue.
+  const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
+  const [switching, setSwitching] = useState("");
+  useEffect(() => {
+    setSavedAccts(listSavedAccounts().map((a) => ({ email: a.email, name: a.name })));
+  }, []);
+  async function continueAs(email: string) {
+    setSwitching(email);
+    setError("");
+    const err = await switchAccount(email);
+    if (err) {
+      setSwitching("");
+      setSavedAccts(listSavedAccounts().map((a) => ({ email: a.email, name: a.name })));
+      setError(err);
+    }
+    // On success the parent's auth listener signs us straight in.
+  }
 
   const reset = (m: Mode) => {
     setMode(m);
@@ -280,6 +297,35 @@ export default function AuthScreen({
               ? "Choose a new password for your account."
               : `Enter the 6-digit code we sent to ${email}.`}
           </p>
+
+          {/* One-tap continue for accounts already signed in on this device. */}
+          {mode === "in" && savedAccts.length > 0 && (
+            <div className="mt-5 space-y-2">
+              {savedAccts.map((a) => (
+                <button
+                  key={a.email}
+                  onClick={() => continueAs(a.email)}
+                  disabled={!!switching}
+                  className="flex w-full items-center gap-3 rounded-xl border border-warm-border px-3.5 py-2.5 text-left transition hover:border-coral/50 hover:bg-warm-bg disabled:opacity-60"
+                >
+                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-brand-gradient text-sm font-bold text-white">
+                    {(a.name || a.email).charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold text-ink">
+                      {switching === a.email ? "Signing in…" : `Continue as ${a.name || a.email.split("@")[0]}`}
+                    </span>
+                    <span className="block truncate text-xs text-body/60">{a.email}</span>
+                  </span>
+                </button>
+              ))}
+              <div className="flex items-center gap-3 py-1">
+                <span className="h-px flex-1 bg-warm-border" />
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-body/50">or sign in</span>
+                <span className="h-px flex-1 bg-warm-border" />
+              </div>
+            </div>
+          )}
 
           {/* ---------- Sign in ---------- */}
           {mode === "in" && (

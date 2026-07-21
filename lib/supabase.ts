@@ -186,3 +186,57 @@ export async function saveState(
   }
   return null;
 }
+
+// ---- Multi-account switcher ------------------------------------------------
+// The signed-in accounts this browser knows, so switching is one click instead
+// of log-out-and-retype. Each entry stores the account's latest session tokens;
+// same storage risk class as Supabase's own persisted session (already in
+// localStorage). The active account's tokens are refreshed on every
+// TOKEN_REFRESHED event; an inactive account's refresh token stays valid until
+// used (Supabase rotates on use, not on time).
+const ACCOUNTS_KEY = "scout_accounts";
+export interface SavedAccount {
+  email: string;
+  at: string; // access token (may be expired; setSession refreshes)
+  rt: string; // refresh token
+  name?: string;
+}
+export function listSavedAccounts(): SavedAccount[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(ACCOUNTS_KEY) || "[]");
+    return Array.isArray(a) ? a.filter((x) => x && x.email && x.rt) : [];
+  } catch {
+    return [];
+  }
+}
+export function rememberAccount(email: string, at: string, rt: string, name?: string) {
+  if (!email || !rt) return;
+  try {
+    const list = listSavedAccounts().filter((a) => a.email !== email);
+    list.unshift({ email, at, rt, name });
+    localStorage.setItem(ACCOUNTS_KEY, JSON.stringify(list.slice(0, 6)));
+  } catch {}
+}
+export function forgetAccount(email: string) {
+  try {
+    localStorage.setItem(
+      ACCOUNTS_KEY,
+      JSON.stringify(listSavedAccounts().filter((a) => a.email !== email))
+    );
+  } catch {}
+}
+// Swap the live session to a saved account. Returns an error message, or null
+// on success (caller should reload so all state reinitializes cleanly).
+export async function switchAccount(email: string): Promise<string | null> {
+  const acc = listSavedAccounts().find((a) => a.email === email);
+  if (!acc || !supabase) return "No saved session for that account.";
+  const { error } = await supabase.auth.setSession({
+    access_token: acc.at,
+    refresh_token: acc.rt,
+  });
+  if (error) {
+    forgetAccount(email); // stale — make them sign in once to re-link
+    return "That saved session expired. Sign in once and it'll be one click from then on.";
+  }
+  return null;
+}
