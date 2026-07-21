@@ -839,6 +839,14 @@ export async function addSharedFinds(
   return { added: (data || []).length };
 }
 
+// How many teammates must independently deny a shared find before it goes
+// denied for the whole team (hidden from the default view and excluded from
+// future team searches). Below this, a deny is just a flag — "Denied by
+// Brooke" — because one person may simply not see why it's a fit.
+export function denyThreshold(memberCount: number): number {
+  return Math.max(1, Math.ceil(memberCount * 0.6));
+}
+
 export async function updateSharedFind(
   uid: string,
   email: string,
@@ -855,7 +863,7 @@ export async function updateSharedFind(
   // Find the row's project so we can check membership.
   const { data: row } = await db()
     .from("shared_finds")
-    .select("id, shared_project_id")
+    .select("id, shared_project_id, status, deny_votes")
     .eq("id", findId)
     .maybeSingle();
   if (!row) throw new TeamError("That find no longer exists.", 404);
@@ -871,6 +879,41 @@ export async function updateSharedFind(
   if (patch.requirements !== undefined) update.requirements = patch.requirements;
   if (patch.denyReason !== undefined) update.deny_reason = patch.denyReason;
   if (patch.gmailThreadId !== undefined) update.gmail_thread_id = patch.gmailThreadId;
+
+  // Denying is a VOTE, not a unilateral kill. One teammate's "denied" records
+  // their vote and flags the find for everyone else; the shared status only
+  // flips to denied once denyThreshold() of the project's members agree.
+  // Choosing any other status withdraws your own deny vote.
+  if (patch.status !== undefined) {
+    const votes: any[] = Array.isArray(row.deny_votes) ? row.deny_votes : [];
+    if (patch.status === "denied") {
+      const next = votes.filter((v) => v && v.uid !== uid);
+      next.push({
+        uid,
+        email,
+        reason: (patch.denyReason || "").trim(),
+        at: new Date().toISOString(),
+      });
+      update.deny_votes = next;
+      const { count } = await db()
+        .from("shared_project_members")
+        .select("user_id", { count: "exact", head: true })
+        .eq("shared_project_id", row.shared_project_id);
+      const members = Math.max(1, count || 1);
+      if (next.length >= denyThreshold(members)) {
+        update.deny_reason =
+          (patch.denyReason || "").trim() ||
+          next.map((v) => String(v.reason || "").trim()).find(Boolean) ||
+          `denied by ${next.length} of ${members} teammates`;
+      } else {
+        // Below threshold: keep the find live for the rest of the team.
+        delete update.status;
+        delete update.deny_reason;
+      }
+    } else if (votes.some((v) => v && v.uid === uid)) {
+      update.deny_votes = votes.filter((v) => v && v.uid !== uid);
+    }
+  }
   if (patch.claim === true) {
     update.claimed_by = uid;
     update.claimed_email = email;

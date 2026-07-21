@@ -119,6 +119,11 @@ create table if not exists public.shared_finds (
   unique (shared_project_id, dedup_key)
 );
 
+-- Per-person deny votes: [{uid, email, reason, at}]. One teammate's deny only
+-- FLAGS the find ("Denied by Brooke"); it goes fully denied (hidden + excluded
+-- from team searches) once 60% of the project's members have denied it.
+alter table public.shared_finds add column if not exists deny_votes jsonb not null default '[]'::jsonb;
+
 create index if not exists shared_finds_project_idx on public.shared_finds (shared_project_id);
 create index if not exists workspace_members_user_idx on public.workspace_members (user_id);
 create index if not exists shared_project_members_user_idx on public.shared_project_members (user_id);

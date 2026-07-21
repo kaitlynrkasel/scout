@@ -2021,6 +2021,71 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [getToken]);
 
+  // ---- Team shared pipeline, merged into the Finds tab on a company lens ----
+  // When the lens is a real workspace, the Finds tab is that team's SHARED
+  // pipeline: fetch every shared project's finds so teammates' finds show too,
+  // with attribution and per-person deny votes.
+  const [teamFinds, setTeamFinds] = useState<any[]>([]);
+  const [teamFindsBusyId, setTeamFindsBusyId] = useState("");
+  const teamLens =
+    activeCompanyId && activeCompanyId !== "personal" ? activeCompanyId : "";
+  const teamLensName = companies.find((c) => c.id === teamLens)?.name || "";
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      if (!teamLens || tab !== "finds" || !getToken) {
+        setTeamFinds([]);
+        return;
+      }
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const h = { authorization: `Bearer ${token}` };
+        const pr = await fetch(`/api/team/project?workspaceId=${teamLens}`, { headers: h });
+        const pdata = await pr.json().catch(() => ({}));
+        const all: any[] = [];
+        for (const p of pdata.projects || []) {
+          const fr = await fetch(`/api/team/finds?projectId=${p.id}`, { headers: h });
+          const fdata = await fr.json().catch(() => ({}));
+          for (const f of fdata.finds || []) all.push({ ...f, __projectName: p.name });
+        }
+        if (alive) setTeamFinds(all);
+      } catch {
+        /* teams not configured — the Finds tab just shows your own finds */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, tab]);
+
+  async function patchTeamFind(findId: string, patch: any) {
+    if (!getToken) return;
+    setTeamFindsBusyId(findId);
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch("/api/team/finds/update", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ findId, ...patch }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data.find) {
+        setTeamFinds((prev) =>
+          prev.map((x) =>
+            x.id === findId ? { ...data.find, __projectName: x.__projectName } : x
+          )
+        );
+      }
+    } catch {
+      /* leave the row as-is; the next lens refresh reconciles */
+    } finally {
+      setTeamFindsBusyId("");
+    }
+  }
+
   // Switch the active company lens. Persist it, and if the current project isn't
   // in the new company, jump to that company's first project.
   function selectCompany(id: string) {
@@ -6296,6 +6361,11 @@ function ScoutTool({
         <FindsTab
           finds={myFinds}
           categories={categories}
+          teamName={teamLensName}
+          teamFinds={teamFinds}
+          accountEmail={accountEmail || ""}
+          teamBusyId={teamFindsBusyId}
+          onTeamPatch={patchTeamFind}
           projectName={activeProject?.name || "this project"}
           projects={visibleProjects}
           activeProjectId={activeId}
@@ -8867,6 +8937,11 @@ function FindsTab({
   senderName,
   senderEmail,
   senderExtra,
+  teamName,
+  teamFinds,
+  accountEmail,
+  teamBusyId,
+  onTeamPatch,
 }: {
   finds: Find[];
   categories: Category[];
@@ -8930,6 +9005,13 @@ function FindsTab({
     linkedin?: string;
     website?: string;
   };
+  // Team lens: when set, this tab is the company's SHARED pipeline — teammates'
+  // finds appear too, with who-found-what attribution and per-person deny votes.
+  teamName?: string;
+  teamFinds?: any[];
+  accountEmail?: string;
+  teamBusyId?: string;
+  onTeamPatch?: (findId: string, patch: any) => void;
 }) {
   // ---- Comprehensive filters (collapsible panel below the status tabs) ----
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -8940,6 +9022,8 @@ function FindsTab({
   const [pinnedOnly, setPinnedOnly] = useState(false);
   const [draftReq, setDraftReq] = useState<"any" | "has" | "none">("any");
   const [sortBy, setSortBy] = useState<"activity" | "oldest" | "newest" | "name" | "fit">("activity");
+  // Team lens only: filter the shared pipeline to one person's finds ("" = everyone).
+  const [foundBy, setFoundBy] = useState("");
 
   const catNameOf = (f: Find) =>
     categories.find((c) => c.id === f.categoryId)?.name || "";
@@ -8957,6 +9041,7 @@ function FindsTab({
     (contactReq !== "any" ? 1 : 0) +
     (draftReq !== "any" ? 1 : 0) +
     (pinnedOnly ? 1 : 0) +
+    (foundBy ? 1 : 0) +
     (sortBy !== "activity" ? 1 : 0);
   const clearFilters = () => {
     setQ("");
@@ -8965,6 +9050,7 @@ function FindsTab({
     setContactReq("any");
     setDraftReq("any");
     setPinnedOnly(false);
+    setFoundBy("");
     setSortBy("activity");
   };
   const toggleFrom = (
@@ -9099,8 +9185,30 @@ function FindsTab({
           : f.status === filter && !f.pinned
     )
     .filter(matchesFilters)
+    // Your local finds are yours: hide them when filtering to a teammate.
+    .filter(() => !foundBy || foundBy === (accountEmail || ""))
     .slice()
     .sort(sortFns[sortBy] || sortFns.activity);
+
+  // ---- Team lens: the shared pipeline, merged in below your own finds ----
+  // Teammates' shared finds that you DON'T already have locally (your own copy
+  // wins), respecting the status tab, the filters panel, and the person filter.
+  const localNameKeys = new Set(finds.map((f) => normNameKey(f.opp?.name || "")));
+  const teamShown = (teamName ? teamFinds || [] : [])
+    .filter((f: any) => !localNameKeys.has(normNameKey(f.opp?.name || "")))
+    .filter((f: any) =>
+      filter === "pinned" ? false : filter === "all" ? true : f.status === filter
+    )
+    .filter((f: any) => !foundBy || (f.added_email || "") === foundBy)
+    .filter((f: any) => matchesFilters(f as Find));
+  // Everyone who has contributed a find, for the "Found by" filter chips.
+  const teamPeople = Array.from(
+    new Set(
+      (accountEmail ? [accountEmail] : []).concat(
+        (teamFinds || []).map((f: any) => String(f.added_email || "")).filter(Boolean)
+      )
+    )
+  );
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
@@ -9187,6 +9295,51 @@ function FindsTab({
           </button>
         </div>
       </div>
+
+      {/* Team lens: make it unmistakable that this pipeline is SHARED, and let
+          the user slice it person-by-person (who ran the search / whose finds). */}
+      {teamName && (
+        <div className="mt-5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span className="font-extrabold text-ink">Shared finds</span>
+            <span className="text-body/80">
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens — everyone
+              on the team sees this pipeline. A teammate&apos;s deny only flags a find for the
+              rest of you; it disappears once most of the team passes on it.
+            </span>
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-bold text-body/60">Found by:</span>
+            <button
+              onClick={() => setFoundBy("")}
+              className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                !foundBy
+                  ? "border-sage bg-sage text-white"
+                  : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+              }`}
+            >
+              Everyone
+            </button>
+            {teamPeople.map((em) => (
+              <button
+                key={em}
+                onClick={() => setFoundBy(foundBy === em ? "" : em)}
+                title={em}
+                className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                  foundBy === em
+                    ? "border-sage bg-sage text-white"
+                    : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                }`}
+              >
+                {em === accountEmail ? "You" : (em || "").split("@")[0] || em}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {repliesNote && (
         <p className="mt-3 rounded-xl border border-warm-border bg-warm-bg/60 px-4 py-2.5 text-xs font-medium text-ink">
@@ -9602,6 +9755,34 @@ function FindsTab({
             )
           )}
         </div>
+      )}
+
+      {/* Team lens: teammates' shared finds you don't have locally. Same status
+          tab + filters, with who-found-what attribution and deny votes. */}
+      {teamName && teamShown.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-2 flex flex-wrap items-baseline gap-2">
+            <span className="text-xs font-extrabold uppercase tracking-wide text-body/60">
+              From your team
+            </span>
+            <span className="text-[11px] text-body/50">
+              shared finds added by teammates at {teamName}
+            </span>
+          </div>
+          <div className="space-y-2">
+            {teamShown.map((f: any) => (
+              <SharedFindRow
+                key={f.id}
+                f={f}
+                accountEmail={accountEmail || ""}
+                busy={teamBusyId === f.id}
+                onClaim={(claim) => onTeamPatch?.(f.id, { claim })}
+                onStatus={(status) => onTeamPatch?.(f.id, { status })}
+                emailShort={(e) => (e || "").split("@")[0] || e}
+              />
+            ))}
+          </div>
+        </section>
       )}
 
       {/* Bulk action bar — floats over the list while items are selected. */}
@@ -14478,8 +14659,17 @@ function SharedFindRow({
 }) {
   const opp = f.opp || {};
   const mine = f.claimed_email && f.claimed_email === accountEmail;
+  // Per-person deny votes: below the team threshold these are just flags —
+  // the find stays live for everyone else until most of the team agrees.
+  const votes: any[] = Array.isArray(f.deny_votes) ? f.deny_votes : [];
+  const iDenied = votes.some((v) => v && v.email === accountEmail);
+  const teamDenied = f.status === "denied";
   return (
-    <div className="rounded-xl border border-warm-border bg-surface p-3">
+    <div
+      className={`rounded-xl border bg-surface p-3 ${
+        teamDenied ? "border-red-200 opacity-70" : "border-warm-border"
+      }`}
+    >
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-semibold text-ink">
           {opp.url ? (
@@ -14491,6 +14681,26 @@ function SharedFindRow({
           )}
         </span>
         {opp.outlet && <span className="text-xs text-body/70">{opp.outlet}</span>}
+        {f.__projectName && (
+          <span className="rounded-full bg-warm-bg px-2 py-0.5 text-[10px] font-semibold text-body/60">
+            {f.__projectName}
+          </span>
+        )}
+        {teamDenied ? (
+          <span className="rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-600">
+            Denied by the team
+          </span>
+        ) : (
+          votes.map((v, i) => (
+            <span
+              key={i}
+              title={v.reason ? `Reason: ${v.reason}` : undefined}
+              className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+            >
+              Denied by {v.email === accountEmail ? "you" : emailShort(v.email || "")}
+            </span>
+          ))
+        )}
         <select
           value={f.status}
           onChange={(e) => onStatus(e.target.value as FindStatus)}
@@ -14518,7 +14728,13 @@ function SharedFindRow({
           <span className="text-body/50">Unclaimed</span>
         )}
         {f.added_email && (
-          <span className="text-body/50">added by {emailShort(f.added_email)}</span>
+          <span className="text-body/50">found by {emailShort(f.added_email)}</span>
+        )}
+        {iDenied && !teamDenied && (
+          <span className="text-amber-700/80">
+            Your deny flags this for the team; it stays live until most teammates
+            agree. Pick another status to undo.
+          </span>
         )}
         <button
           onClick={() => onClaim(!mine)}
