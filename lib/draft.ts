@@ -115,6 +115,35 @@ function editBlock(editPairs?: { before: string; after: string }[]): string {
 }
 
 // What this specific target asks for (pasted by the user or found by deep-scan).
+// A signature seeded from a shared team project can carry the TEAMMATE'S name
+// ("Best,\nKaitlyn Kasel\nCue Creative") while someone else is sending. If the
+// sender's first name appears nowhere in the signature, replace the one line
+// that looks like a bare person's name with the sender's name. Conservative on
+// purpose: closings ("Best,", "Thanks,"), lines with contact info, and long
+// lines are never touched, and if no clean name line is found the signature is
+// left exactly as written.
+const SIGNATURE_CLOSINGS =
+  /^(best|thanks|thank you|sincerely|cheers|regards|warmly|talk soon|best regards|kind regards|all the best|respectfully|take care)[,!.]?$/i;
+export function personalizeSignature(sig: string, senderName?: string): string {
+  const name = String(senderName || "").trim();
+  const first = (name.split(/\s+/)[0] || "").toLowerCase();
+  if (!first || sig.toLowerCase().includes(first)) return sig;
+  const lines = sig.split("\n");
+  const idx = lines.findIndex((l) => {
+    const t = l.trim();
+    if (!t || t.length > 40) return false;
+    if (SIGNATURE_CLOSINGS.test(t)) return false;
+    if (/[@\d/:]|http/i.test(t)) return false;
+    const words = t.replace(/[,.]$/g, "").split(/\s+/);
+    return (
+      words.length <= 3 && words.every((w) => /^[A-Z][a-zA-Z.'-]*$/.test(w))
+    );
+  });
+  if (idx === -1) return sig;
+  lines[idx] = name;
+  return lines.join("\n");
+}
+
 function requirementsBlock(requirements?: string): string {
   const r = String(requirements || "").trim();
   if (!r) return "";
@@ -305,11 +334,15 @@ export async function draftFor(
   // The message is always FROM the sender personally, even when the search was
   // grounded on the company only (so their name may not be in `about`). When
   // they have no saved signature, make sure the model still signs with their
-  // real name rather than as the company or leaving it blank.
-  const signoffBlock =
-    !signature && senderName
-      ? `\n\nSIGN-OFF: this note is sent personally by ${senderName}. End with a brief closing signed as "${senderName}" (their real first name), even if little about them appears above. Never sign as the company or leave it unsigned.`
-      : "";
+  // real name rather than as the company or leaving it blank. When there IS a
+  // signature (appended below), still pin the identity: shared team templates
+  // are often written by a teammate, and the model must never copy THAT
+  // person's name into the body.
+  const signoffBlock = senderName
+    ? signature
+      ? `\n\nSENDER IDENTITY: the person sending this is ${senderName}. If any template or example above mentions or is signed by a DIFFERENT person's name, do not copy that name into the body — the message must read as coming from ${senderName}.`
+      : `\n\nSIGN-OFF: this note is sent personally by ${senderName}. End with a brief closing signed as "${senderName}" (their real first name), even if little about them appears above. Never sign as the company or leave it unsigned.`
+    : "";
 
   const tpl = templateBlock(templates, channelType);
   const extras =
@@ -333,10 +366,15 @@ export async function draftFor(
   }
 
   // Append the user's signature verbatim (their own text, not run through noDash)
-  // to email drafts only. DMs/forms don't use email signatures.
+  // to email drafts only. DMs/forms don't use email signatures. If the signature
+  // came from a SHARED project (seeded by a teammate), it may carry the
+  // teammate's name — swap that name line for the actual sender's.
   let body = noDash(gen?.body || "(could not generate a draft for this one, try again)");
   if (signature && channelType === "email") {
-    body = body.replace(/\s+$/, "") + "\n\n" + signature;
+    body =
+      body.replace(/\s+$/, "") +
+      "\n\n" +
+      personalizeSignature(signature, senderName);
   }
 
   // Hard clamp for LinkedIn: connection notes cap at 200 characters. The model

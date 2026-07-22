@@ -590,6 +590,11 @@ const DENY_REASONS = [
   "Already reached out",
 ];
 
+// Fresh subject/body handed straight to a send/schedule call, so sending while
+// the draft editor is still open always sends what's on screen, never the
+// stale stored draft (React state may not have flushed yet).
+type DraftOverride = { subject: string; body: string };
+
 // Same normalization the discover engine uses so IDs match across the boundary.
 // Strips role suffixes (", VP of…", " at Acme", " (Head of X)"), honorifics,
 // name suffixes, and middle names/initials, then keeps first + last token.
@@ -1290,6 +1295,8 @@ function ScoutTool({
   // Per-candidate skip log surfaced from /api/discover, so the user (or you
   // while iterating on the extract prompt) can see exactly what got filtered.
   const [skipped, setSkipped] = useState<Array<{ title: string; url: string; reason: string }>>([]);
+  // Result ids denied during THIS results session; they stay visible with Undo.
+  const [justDenied, setJustDenied] = useState<Set<string>>(new Set());
   const [showSkipped, setShowSkipped] = useState(false);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -2033,7 +2040,10 @@ function ScoutTool({
   useEffect(() => {
     let alive = true;
     (async () => {
-      if (!teamLens || tab !== "finds" || !getToken) {
+      // Fetched on ANY tab (not just Finds): searches consult this for the
+      // teammate-deny guardrail, so it must be warm before a search runs.
+      // Re-runs on tab switches so the Finds tab always shows fresh votes.
+      if (!teamLens || !getToken) {
         setTeamFinds([]);
         return;
       }
@@ -2428,6 +2438,7 @@ function ScoutTool({
   function resetResults() {
     setOpps([]);
     setSelected({});
+    setJustDenied(new Set());
     setDrafts([]);
     setRedraftChat([]);
     setStats("");
@@ -3644,6 +3655,29 @@ function ScoutTool({
           : f
       )
     );
+    // If this draft is already queued for a future send, the queued row holds a
+    // SNAPSHOT — update it too, or the cron would send the pre-edit version.
+    if (
+      find.scheduledSendAt &&
+      new Date(find.scheduledSendAt).getTime() > Date.now() &&
+      getToken
+    ) {
+      getToken()
+        .then((token) => {
+          if (!token) return;
+          return fetch("/api/schedule-send", {
+            method: "PATCH",
+            headers: {
+              "content-type": "application/json",
+              authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ findId: find.id, subject, body }),
+          });
+        })
+        .catch(() => {
+          /* best-effort; the row keeps its old copy if this fails */
+        });
+    }
   }
   // Re-draft every un-sent ("drafted") find with the current voice edits +
   // coaching, so past drafts benefit from what Scout just learned. Sent and
@@ -4075,17 +4109,21 @@ function ScoutTool({
 
   // Send/draft a find's message via Gmail. sendViaGmail patches the find itself
   // (thread id + sent status), so nothing more to do here.
-  async function sendFindViaGmail(find: Find) {
+  async function sendFindViaGmail(find: Find, override?: DraftOverride) {
     if (!find.draft) return;
     // If this find already has a thread (e.g. a follow-up on an earlier send),
-    // thread the new message into it instead of starting a new one.
-    await sendViaMailbox(find.draft, find.gmailThreadId);
+    // thread the new message into it instead of starting a new one. An override
+    // carries just-typed editor content that React state hasn't flushed yet.
+    const d = override
+      ? { ...find.draft, subject: override.subject, body: override.body }
+      : find.draft;
+    await sendViaMailbox(d, find.gmailThreadId);
   }
 
   // Queue this find's draft for future sending via the active mailbox. The
   // /api/cron/send-scheduled endpoint (fired by Vercel Cron every 15 min)
   // drains due rows and calls Gmail/Outlook send under the hood.
-  async function scheduleFindSend(find: Find, sendAt: Date) {
+  async function scheduleFindSend(find: Find, sendAt: Date, override?: DraftOverride) {
     if (!find.draft || !activeMailbox.connected) return;
     const token = getToken ? await getToken() : null;
     if (!token) {
@@ -4102,8 +4140,8 @@ function ScoutTool({
         body: JSON.stringify({
           provider: activeMailbox.provider,
           to: find.draft.to,
-          subject: find.draft.subject,
-          body: find.draft.body,
+          subject: override?.subject ?? find.draft.subject,
+          body: override?.body ?? find.draft.body,
           sendAt: sendAt.toISOString(),
           findId: find.id,
           opportunityId: find.opp.id,
@@ -4523,7 +4561,37 @@ function ScoutTool({
         );
       }
 
-      setOpps(finalOpps);
+      // ---- Team deny guardrail ----
+      // Results a teammate already denied in the shared pipeline are capped at
+      // ONE per search (flagged "denied by …", they might still be YOUR fit)
+      // so nobody's feed floods with already-vetoed prospects. Fully
+      // team-denied prospects (past the vote threshold) never show at all.
+      const flaggedBy = new Map<string, string[]>();
+      const teamKilled = new Set<string>();
+      for (const tf of teamFinds) {
+        const key = normNameKey(tf.opp?.name || "");
+        if (!key) continue;
+        if (tf.status === "denied") teamKilled.add(key);
+        else if (Array.isArray(tf.deny_votes) && tf.deny_votes.length)
+          flaggedBy.set(
+            key,
+            tf.deny_votes.map((v: any) => String(v.email || "")).filter(Boolean)
+          );
+      }
+      let flaggedShown = 0;
+      const guardedOpps = finalOpps.filter((o) => {
+        const key = normNameKey(o.name || "");
+        if (teamKilled.has(key)) return false;
+        const deniers = flaggedBy.get(key);
+        if (deniers && deniers.length) {
+          if (flaggedShown >= 1) return false;
+          flaggedShown++;
+          o.teamDeniedBy = deniers;
+        }
+        return true;
+      });
+
+      setOpps(guardedOpps);
       setSelected({}); // nothing pre-approved, you approve who you want to reach
       setSkipped(done && Array.isArray(done.skipped) ? done.skipped : []);
       setSearchNotice(done?.notice || "");
@@ -5160,15 +5228,31 @@ function ScoutTool({
   const deniedFindIds = new Set(
     finds.filter((f) => f.status === "denied").map((f) => f.id)
   );
-  const visibleOpps = opps.filter((o) => !deniedFindIds.has(findKey(activeId, o)));
+  // Hide previously-denied prospects, EXCEPT ones denied in this results
+  // session — those stay visible (dimmed) so a mis-click can be undone.
+  const visibleOpps = opps.filter(
+    (o) => !deniedFindIds.has(findKey(activeId, o)) || justDenied.has(o.id)
+  );
   const selectedCount = visibleOpps.filter((o) => selected[o.id]).length;
   const toggle = (id: string, v: boolean) =>
     setSelected((s) => ({ ...s, [id]: v }));
   // Deny a result: mark it "Not a fit" (with an optional reason) in the pipeline
   // and drop it from the batch.
+  // Denied results stay VISIBLE (dimmed, with Undo) for this results session —
+  // the Approve/Deny buttons sit next to each other, so a mis-click must be
+  // reversible. Undo removes the deny record entirely (no training effect).
   const denyOpp = (o: Opportunity, reason = "") => {
     denyFindWithReason(findKey(activeId, o), reason);
     setSelected((s) => ({ ...s, [o.id]: false }));
+    setJustDenied((prev) => new Set(prev).add(o.id));
+  };
+  const undoDenyOpp = (o: Opportunity) => {
+    removeFind(findKey(activeId, o));
+    setJustDenied((prev) => {
+      const next = new Set(prev);
+      next.delete(o.id);
+      return next;
+    });
   };
 
   return (
@@ -6161,6 +6245,8 @@ function ScoutTool({
                         selected={selected}
                         onApprove={toggle}
                         onDeny={denyOpp}
+                        deniedIds={justDenied}
+                        onUndoDeny={undoDenyOpp}
                       />
                     </div>
 
@@ -6851,6 +6937,8 @@ function ScoutTool({
                 selected={selected}
                 onApprove={toggle}
                 onDeny={denyOpp}
+                deniedIds={justDenied}
+                onUndoDeny={undoDenyOpp}
                 roomy
               />
             </div>
@@ -7518,12 +7606,16 @@ function FindsList({
   selected,
   onApprove,
   onDeny,
+  deniedIds,
+  onUndoDeny,
   roomy = false,
 }: {
   opps: Opportunity[];
   selected: Record<string, boolean>;
   onApprove: (id: string, v: boolean) => void;
   onDeny: (o: Opportunity, reason?: string) => void;
+  deniedIds?: Set<string>;
+  onUndoDeny?: (o: Opportunity) => void;
   roomy?: boolean;
 }) {
   const [denyingId, setDenyingId] = useState("");
@@ -7536,13 +7628,16 @@ function FindsList({
     <div className={`grid gap-3 ${roomy ? "lg:grid-cols-2" : "grid-cols-1"}`}>
       {opps.map((o) => {
         const on = !!selected[o.id];
+        const isDenied = !!deniedIds?.has(o.id);
         return (
           <div
             key={o.id}
             className={`flex flex-col gap-3 rounded-2xl border p-3.5 transition ${
-              on
-                ? "border-coral/40 bg-warm-bg/60"
-                : "border-warm-border bg-surface"
+              isDenied
+                ? "border-warm-border bg-surface opacity-60"
+                : on
+                  ? "border-coral/40 bg-warm-bg/60"
+                  : "border-warm-border bg-surface"
             }`}
           >
             <div className="min-w-0 flex-1">
@@ -7580,6 +7675,15 @@ function FindsList({
                 <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
                   {o.channel}
                 </span>
+                {(o.teamDeniedBy || []).map((em, i) => (
+                  <span
+                    key={i}
+                    title="A teammate passed on this one. It stays in your results (max one per search) because it might still be a fit for you."
+                    className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700"
+                  >
+                    Denied by {(em || "").split("@")[0] || em}
+                  </span>
+                ))}
               </div>
               {(o.outlet || o.location) && (
                 <div className="mt-0.5 text-xs text-body/80">
@@ -7627,19 +7731,42 @@ function FindsList({
                 </div>
               )}
             </div>
-            <div className="flex items-center gap-2 border-t border-warm-border/70 pt-2.5">
-              <button
-                onClick={() => onApprove(o.id, !on)}
-                className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-                  on
-                    ? "bg-brand-gradient text-white shadow-card"
-                    : "border border-warm-border text-body hover:bg-warm-bg"
-                }`}
-              >
-                {on ? "Approved" : "Approve"}
-              </button>
+            {isDenied ? (
+              <div className="flex items-center gap-2 border-t border-warm-border/70 pt-2.5">
+                <span className="text-xs font-semibold text-body/60">Denied</span>
+                {onUndoDeny && (
+                  <button
+                    onClick={() => onUndoDeny(o)}
+                    className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    Undo
+                  </button>
+                )}
+                <span className="text-[10px] text-body/45">
+                  Undo wipes it completely, as if you never clicked.
+                </span>
+              </div>
+            ) : (
+            <div className="flex items-start gap-2 border-t border-warm-border/70 pt-2.5">
+              <div className="flex flex-col items-start">
+                <button
+                  onClick={() => onApprove(o.id, !on)}
+                  className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                    on
+                      ? "bg-brand-gradient text-white shadow-card"
+                      : "border border-warm-border text-body hover:bg-warm-bg"
+                  }`}
+                >
+                  {on ? "Approved" : "Approve"}
+                </button>
+                <span className="mt-1 max-w-[180px] text-[10px] leading-snug text-body/45">
+                  {on
+                    ? "Click again to un-approve."
+                    : "Doesn't send anything. Just tells Scout you like this find."}
+                </span>
+              </div>
               {denyingId === o.id ? (
-                <div className="flex flex-wrap items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <span className="text-[10px] text-body/45">
                     Why? optional, but a reason helps Scout learn faster
                   </span>
@@ -7668,11 +7795,12 @@ function FindsList({
                 </button>
               )}
               {on && denyingId !== o.id && (
-                <span className="ml-auto text-[11px] font-medium text-accent">
+                <span className="ml-auto pt-1.5 text-[11px] font-medium text-accent">
                   Will be drafted
                 </span>
               )}
             </div>
+            )}
           </div>
         );
       })}
@@ -8003,8 +8131,8 @@ function FindDetailModal({
   onReopen: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: () => void;
-  onSchedule: (sendAt: Date) => void;
+  onSendGmail: (override?: DraftOverride) => void;
+  onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
   onCopy: () => void;
@@ -8964,8 +9092,8 @@ function FindsTab({
   onMarkSent: (f: Find) => void;
   onStatus: (f: Find, s: FindStatus) => void;
   onRemove: (f: Find) => void;
-  onSendGmail: (f: Find) => void;
-  onSchedule: (f: Find, sendAt: Date) => void;
+  onSendGmail: (f: Find, override?: DraftOverride) => void;
+  onSchedule: (f: Find, sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: (f: Find) => void;
   meetingPrepId: string;
   onCopy: () => void;
@@ -9725,8 +9853,8 @@ function FindsTab({
               onMarkSent={() => onMarkSent(f)}
               onStatus={(s) => onStatus(f, s)}
               onRemove={() => onRemove(f)}
-              onSendGmail={() => onSendGmail(f)}
-              onSchedule={(date) => onSchedule(f, date)}
+              onSendGmail={(ov) => onSendGmail(f, ov)}
+              onSchedule={(date, ov) => onSchedule(f, date, ov)}
               onMeetingPrep={() => onMeetingPrep(f)}
               meetingPrepBusy={meetingPrepId === f.id}
               onCopy={onCopy}
@@ -9912,8 +10040,8 @@ function FindsTab({
           onReopen={() => onReopen(detailFind)}
           onStatus={(s) => onStatus(detailFind, s)}
           onRemove={() => onRemove(detailFind)}
-          onSendGmail={() => onSendGmail(detailFind)}
-          onSchedule={(date) => onSchedule(detailFind, date)}
+          onSendGmail={(ov) => onSendGmail(detailFind, ov)}
+          onSchedule={(date, ov) => onSchedule(detailFind, date, ov)}
           onMeetingPrep={() => onMeetingPrep(detailFind)}
           meetingPrepBusy={meetingPrepId === detailFind.id}
           onCopy={onCopy}
@@ -10170,8 +10298,8 @@ function FindCard({
   onMarkSent: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: () => void;
-  onSchedule: (sendAt: Date) => void;
+  onSendGmail: (override?: DraftOverride) => void;
+  onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
   onCopy: () => void;
@@ -10492,8 +10620,8 @@ function FindWorkflow({
   onReopen: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: () => void;
-  onSchedule: (sendAt: Date) => void;
+  onSendGmail: (override?: DraftOverride) => void;
+  onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
   onCopy: () => void;
@@ -10528,7 +10656,11 @@ function FindWorkflow({
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
-  const [sendGuard, setSendGuard] = useState<null | { local: string; next: string }>(null);
+  const [sendGuard, setSendGuard] = useState<null | {
+    local: string;
+    next: string;
+    override?: DraftOverride;
+  }>(null);
   const [editing, setEditing] = useState(false); // draft edit mode
   const [editSubject, setEditSubject] = useState("");
   const [editBody, setEditBody] = useState("");
@@ -10589,24 +10721,45 @@ function FindWorkflow({
     !isApplication &&
     !!recipientTz &&
     !isBusinessHours(recipientTz);
+  // If the editor is open, SAVE what's on screen first and hand the fresh
+  // subject/body to the caller. Without this, "Send" while editing shipped the
+  // OLD stored draft (the "my edit didn't send" bug).
+  const commitEditsIfAny = (): DraftOverride | undefined => {
+    if (!editing) return undefined;
+    const sig = (editSignature || "").trim();
+    const trimmedBody = editBody.trimEnd();
+    const body =
+      hasSignatureSplit && sig && !trimmedBody.endsWith(sig)
+        ? `${trimmedBody}\n\n${sig}`
+        : editBody;
+    onEditDraft(editSubject, body);
+    if (hasSignatureSplit && sig !== currentSignature.trim()) {
+      onEditSignature(sig);
+    }
+    setEditing(false);
+    return { subject: editSubject, body };
+  };
   const doSend = () => {
+    const ov = sendGuard?.override;
     setSendGuard(null);
-    onSendGmail();
+    onSendGmail(ov);
   };
   const attemptSend = () => {
+    const ov = commitEditsIfAny();
     if (afterHours) {
       // Auto-schedule setting on → silently queue for the recipient's next
       // business hour instead of prompting.
       if (autoScheduleOn()) {
-        onSchedule(suggestBusinessHour(recipientTz));
+        onSchedule(suggestBusinessHour(recipientTz), ov);
         return;
       }
       setSendGuard({
         local: localTimeLabel(recipientTz),
         next: nextBusinessLabel(recipientTz),
+        override: ov,
       });
     } else {
-      onSendGmail();
+      onSendGmail(ov);
     }
   };
 
@@ -10776,20 +10929,7 @@ function FindWorkflow({
           )}
           <div className="mt-2 flex items-center gap-2">
             <button
-              onClick={() => {
-                const sig = (editSignature || "").trim();
-                const trimmedBody = editBody.trimEnd();
-                // Append the signature unless the body already ends with it.
-                const body =
-                  hasSignatureSplit && sig && !trimmedBody.endsWith(sig)
-                    ? `${trimmedBody}\n\n${sig}`
-                    : editBody;
-                onEditDraft(editSubject, body);
-                if (hasSignatureSplit && sig !== currentSignature.trim()) {
-                  onEditSignature(sig);
-                }
-                setEditing(false);
-              }}
+              onClick={() => void commitEditsIfAny()}
               className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
             >
               Save
@@ -10919,7 +11059,7 @@ function FindWorkflow({
                   <SchedulePicker
                     timezone={find.opp.timezone}
                     scheduledFor={find.scheduledSendAt}
-                    onSchedule={onSchedule}
+                    onSchedule={(date) => onSchedule(date, commitEditsIfAny())}
                   />
                 )}
               </>

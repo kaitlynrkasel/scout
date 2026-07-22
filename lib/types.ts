@@ -63,6 +63,9 @@ export interface Opportunity {
   // cold-email (often with a contact person attached); "person" = a named contact.
   targetType?: "listing" | "company" | "person";
   whyItFits: string; // recent/specific note used to personalize
+  // Teammates who denied this prospect in the shared pipeline (client-side
+  // annotation). At most ONE such flagged result is shown per search.
+  teamDeniedBy?: string[];
   sourceTitle: string;
   sourceSnippet: string;
   // All the articles/pages that mentioned this person, in the order they were

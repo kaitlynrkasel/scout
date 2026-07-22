@@ -88,3 +88,35 @@ export async function POST(req: NextRequest) {
   }
   return NextResponse.json({ ok: true, id: data.id, sendAt: data.send_at });
 }
+
+// The user edited a draft that's already queued: refresh the queued snapshot so
+// the cron sends what they see now, not the pre-edit version. Only touches this
+// user's still-pending, non-follow-up rows for that find.
+export async function PATCH(req: NextRequest) {
+  const uid = await userIdFromReq(req);
+  if (!uid || !supabaseAdmin) {
+    return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+  }
+  const body = await req.json().catch(() => ({}));
+  const findId = String(body.findId || "");
+  const subject = body.subject;
+  const messageBody = body.body;
+  if (!findId || typeof messageBody !== "string" || !messageBody.trim()) {
+    return NextResponse.json({ error: "Missing find or message body." }, { status: 400 });
+  }
+  const { data, error } = await supabaseAdmin
+    .from("scheduled_sends")
+    .update({
+      subject: String(subject || ""),
+      body: String(messageBody),
+    })
+    .eq("user_id", uid)
+    .eq("find_id", findId)
+    .eq("status", "pending")
+    .eq("is_followup", false)
+    .select("id");
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true, updated: (data || []).length });
+}
