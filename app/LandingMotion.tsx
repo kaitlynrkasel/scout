@@ -53,24 +53,49 @@ export default function LandingMotion() {
       gsap.to(big, { xPercent: -50, duration: dur, ease: "none", repeat: -1 });
     }
 
-    // ---- Run band: the dog runs left → right, off-screen, once every 10s ----
+    // ---- Run band: the dog runs left → right, off-screen ----
+    // Visibility-triggered, not a blind timer: at most zoom levels the band sits
+    // below the fold, so a free-running 10s loop meant visitors almost never
+    // caught the dog mid-crossing. The run RESTARTS the moment the band scrolls
+    // into view (from either direction), so everyone sees it, and it keeps
+    // lapping every ~10s while the band stays visible. Paused while off-screen.
+    // Checked from the gsap ticker (throttled to ~6x/s) instead of
+    // IntersectionObserver/ScrollTrigger so it works under zoom, resize, and
+    // deep links with no stale position math.
+    let dogCheck: (() => void) | null = null;
     const dog = q(".run .dogrun");
     if (dog) {
-      const band = dog.closest(".run") as HTMLElement | null;
-      const bandW = band?.clientWidth || window.innerWidth;
+      const band = (dog.closest(".run") as HTMLElement | null) || dog;
+      const bandW = band.clientWidth || window.innerWidth;
       const off = 440; // start/end fully past the edges (band clips overflow)
       const startX = -off;
       const endX = bandW + off;
       const dogSpeed = 420; // px/s
       const cross = (endX - startX) / dogSpeed;
       gsap.set(dog, { x: startX });
-      gsap.to(dog, {
+      const run = gsap.to(dog, {
         x: endX,
         duration: cross,
         ease: "none",
         repeat: -1,
-        repeatDelay: Math.max(0, 10 - cross), // hold off-screen so each run is 10s apart
+        repeatDelay: Math.max(0, 10 - cross), // breather between laps while visible
+        paused: true,
       });
+      let bandVisible = false;
+      let frame = 0;
+      dogCheck = () => {
+        if (frame++ % 10 !== 0) return; // ~6 checks/sec is plenty
+        const rect = band.getBoundingClientRect();
+        const vis = rect.bottom > 0 && rect.top < window.innerHeight && rect.height > 0;
+        if (vis && !bandVisible) {
+          bandVisible = true;
+          run.restart();
+        } else if (!vis && bandVisible) {
+          bandVisible = false;
+          run.pause();
+        }
+      };
+      gsap.ticker.add(dogCheck);
     }
 
     // ---- Scroll reveals: headings, kickers, and content rise as they enter ----
@@ -142,7 +167,10 @@ export default function LandingMotion() {
 
     // useGSAP treats a returned function as its cleanup, remove the listeners
     // when the landing unmounts.
-    return () => anchors.forEach((a) => a.removeEventListener("click", onAnchorClick));
+    return () => {
+      anchors.forEach((a) => a.removeEventListener("click", onAnchorClick));
+      if (dogCheck) gsap.ticker.remove(dogCheck);
+    };
   });
 
   // Invisible marker; the component renders nothing meaningful itself.

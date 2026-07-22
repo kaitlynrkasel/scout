@@ -124,6 +124,22 @@ create table if not exists public.shared_finds (
 -- from team searches) once 60% of the project's members have denied it.
 alter table public.shared_finds add column if not exists deny_votes jsonb not null default '[]'::jsonb;
 
+-- Shared templates: the workspace's communal voice library. Each member's
+-- templates auto-publish here under the company lens; teammates see them with
+-- attribution and can copy them into their own set.
+create table if not exists public.shared_templates (
+  id uuid primary key default gen_random_uuid(),
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  template_key text not null, -- the owner's client-side template id
+  template jsonb not null,    -- { channel, text, projectName?, categoryName? }
+  added_by uuid not null,
+  added_email text,
+  updated_at timestamptz not null default now(),
+  created_at timestamptz not null default now(),
+  unique (workspace_id, template_key)
+);
+create index if not exists shared_templates_ws_idx on public.shared_templates (workspace_id);
+
 create index if not exists shared_finds_project_idx on public.shared_finds (shared_project_id);
 create index if not exists workspace_members_user_idx on public.workspace_members (user_id);
 create index if not exists shared_project_members_user_idx on public.shared_project_members (user_id);

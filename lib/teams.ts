@@ -777,6 +777,78 @@ export async function setProjectMembers(
   return { ok: true };
 }
 
+// ---- Shared templates (the workspace's communal voice library) ----
+
+export async function listSharedTemplates(uid: string, workspaceId: string) {
+  await assertWorkspaceMember(uid, workspaceId);
+  const { data } = await db()
+    .from("shared_templates")
+    .select("*")
+    .eq("workspace_id", workspaceId)
+    .order("created_at", { ascending: false });
+  return data || [];
+}
+
+// Publish (upsert) the caller's templates into the workspace library. Keyed by
+// the client-side template id, so edits overwrite rather than duplicate.
+// Also prunes rows the caller previously published whose template no longer
+// exists locally (they deleted it), keeping the library in sync with reality.
+export async function publishSharedTemplates(
+  uid: string,
+  email: string,
+  workspaceId: string,
+  templates: { id: string; channel: string; text: string; projectName?: string; categoryName?: string }[]
+) {
+  await assertWorkspaceMember(uid, workspaceId);
+  const clean = (templates || [])
+    .filter((t) => t && t.id && String(t.text || "").trim())
+    .slice(0, 100)
+    .map((t) => ({
+      workspace_id: workspaceId,
+      template_key: String(t.id).slice(0, 200),
+      template: {
+        channel: String(t.channel || ""),
+        text: String(t.text).slice(0, 8000),
+        projectName: t.projectName || "",
+        categoryName: t.categoryName || "",
+      },
+      added_by: uid,
+      added_email: email,
+      updated_at: new Date().toISOString(),
+    }));
+  if (clean.length) {
+    const { error } = await db()
+      .from("shared_templates")
+      .upsert(clean, { onConflict: "workspace_id,template_key" });
+    if (error) throw new TeamError(error.message, 500);
+  }
+  // Drop my stale rows (templates I deleted locally).
+  const keep = new Set(clean.map((c) => c.template_key));
+  const { data: mine } = await db()
+    .from("shared_templates")
+    .select("id, template_key")
+    .eq("workspace_id", workspaceId)
+    .eq("added_by", uid);
+  const stale = (mine || []).filter((r: any) => !keep.has(r.template_key)).map((r: any) => r.id);
+  if (stale.length) await db().from("shared_templates").delete().in("id", stale);
+  return { published: clean.length };
+}
+
+// Remove one shared template: its publisher can always remove their own;
+// workspace admins/owners can prune anyone's.
+export async function removeSharedTemplate(uid: string, templateRowId: string) {
+  const { data: row } = await db()
+    .from("shared_templates")
+    .select("id, workspace_id, added_by")
+    .eq("id", templateRowId)
+    .maybeSingle();
+  if (!row) return { ok: true }; // already gone
+  if (row.added_by !== uid) await assertRole(uid, row.workspace_id, "admin");
+  else await assertWorkspaceMember(uid, row.workspace_id);
+  await db().from("shared_templates").delete().eq("id", row.id);
+  return { ok: true };
+}
+
 // ---- Shared finds ----
 
 export async function listSharedFinds(uid: string, sharedProjectId: string) {

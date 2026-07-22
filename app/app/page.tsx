@@ -2033,6 +2033,7 @@ function ScoutTool({
   // pipeline: fetch every shared project's finds so teammates' finds show too,
   // with attribution and per-person deny votes.
   const [teamFinds, setTeamFinds] = useState<any[]>([]);
+  const [teamTemplates, setTeamTemplates] = useState<any[]>([]);
   const [teamFindsBusyId, setTeamFindsBusyId] = useState("");
   const teamLens =
     activeCompanyId && activeCompanyId !== "personal" ? activeCompanyId : "";
@@ -2045,6 +2046,7 @@ function ScoutTool({
       // Re-runs on tab switches so the Finds tab always shows fresh votes.
       if (!teamLens || !getToken) {
         setTeamFinds([]);
+        setTeamTemplates([]);
         return;
       }
       try {
@@ -2060,6 +2062,10 @@ function ScoutTool({
           for (const f of fdata.finds || []) all.push({ ...f, __projectName: p.name });
         }
         if (alive) setTeamFinds(all);
+        // The workspace's communal template library rides along.
+        const tr = await fetch(`/api/team/templates?workspaceId=${teamLens}`, { headers: h });
+        const tdata = await tr.json().catch(() => ({}));
+        if (alive && Array.isArray(tdata.templates)) setTeamTemplates(tdata.templates);
       } catch {
         /* teams not configured — the Finds tab just shows your own finds */
       }
@@ -2947,6 +2953,64 @@ function ScoutTool({
   const visibleTemplates = activeCompanyId
     ? myTemplates.filter((t) => !t.projectId || visibleProjectIdSet.has(t.projectId))
     : myTemplates;
+
+  // On a team lens, templates are COMMUNAL: my visible templates auto-publish
+  // to the workspace's shared library (debounced), and deleting one locally
+  // prunes it from the library on the next sync. Guarded against publishing an
+  // empty set so a transient empty state never wipes my shared rows.
+  const tplPublishTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!teamLens || !getToken || visibleTemplates.length === 0) return;
+    if (tplPublishTimer.current) clearTimeout(tplPublishTimer.current);
+    tplPublishTimer.current = setTimeout(async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const payload = visibleTemplates.map((t) => ({
+          id: t.id,
+          channel: t.channel,
+          text: t.text,
+          projectName: t.projectId
+            ? projects.find((p) => p.id === t.projectId)?.name || ""
+            : "",
+          categoryName: t.categoryId
+            ? categories.find((c) => c.id === t.categoryId)?.name || ""
+            : "",
+        }));
+        const h = {
+          authorization: `Bearer ${token}`,
+          "content-type": "application/json",
+        };
+        await fetch("/api/team/templates", {
+          method: "POST",
+          headers: h,
+          body: JSON.stringify({ workspaceId: teamLens, templates: payload }),
+        });
+        const r = await fetch(`/api/team/templates?workspaceId=${teamLens}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (Array.isArray(j.templates)) setTeamTemplates(j.templates);
+      } catch {
+        /* library sync is best-effort; next change retries */
+      }
+    }, 1500);
+    return () => {
+      if (tplPublishTimer.current) clearTimeout(tplPublishTimer.current);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, visibleTemplates]);
+
+  // Copy a teammate's shared template into my own set (unscoped, so it applies
+  // everywhere until I narrow it).
+  function copyTeamTemplate(row: any) {
+    const t = row?.template || {};
+    if (!String(t.text || "").trim()) return;
+    saveTpls([
+      { id: `${Date.now()}`, channel: t.channel || "Email", text: String(t.text) },
+      ...myTemplates,
+    ]);
+  }
   // Finds under the current company lens — so the Dashboard's top match / counts
   // reflect the company you're on, not a find from another company's project.
   const visibleFinds = activeCompanyId
@@ -6579,6 +6643,10 @@ function ScoutTool({
           onBuildSignature={buildSignatureFromBio}
           setProjectSignature={setProjectSignature}
           activeProjectId={activeId}
+          teamName={teamLensName}
+          teamTemplates={teamTemplates}
+          accountEmail={accountEmail || ""}
+          onCopyTeamTemplate={copyTeamTemplate}
         />
       )}
 
@@ -15774,6 +15842,10 @@ function TemplatesTab({
   onBuildSignature,
   setProjectSignature,
   activeProjectId,
+  teamName,
+  teamTemplates,
+  accountEmail,
+  onCopyTeamTemplate,
 }: {
   kinds: string[];
   channel: string;
@@ -15798,6 +15870,11 @@ function TemplatesTab({
   onBuildSignature: () => Promise<string>;
   setProjectSignature: (projectId: string, sig: string) => void;
   activeProjectId: string;
+  // Team lens: the workspace's communal template library + attribution.
+  teamName?: string;
+  teamTemplates?: any[];
+  accountEmail?: string;
+  onCopyTeamTemplate?: (row: any) => void;
 }) {
   // Email-signature editor state: which project (if any) the per-project
   // signature editor is pointed at, and whether a "build from resume" is running.
@@ -15847,6 +15924,34 @@ function TemplatesTab({
     }
   }
   const scopeCats = categories.filter((c) => c.projectId === scopeProjectId);
+
+  // ---- Filters (channel + person) over both lists ----
+  const [fltChannel, setFltChannel] = useState("");
+  const [fltPerson, setFltPerson] = useState(""); // "" everyone; email otherwise
+  // Teammates' rows: everyone's published templates except my own (mine already
+  // appear under "Your Templates").
+  const teamRows = (teamTemplates || []).filter(
+    (r) => r.added_email && r.added_email !== accountEmail
+  );
+  const channelOptions = Array.from(
+    new Set(
+      list
+        .map((t) => t.channel)
+        .concat(teamRows.map((r: any) => String(r.template?.channel || "")))
+        .filter(Boolean)
+    )
+  );
+  const personOptions = Array.from(
+    new Set(teamRows.map((r: any) => String(r.added_email || "")).filter(Boolean))
+  );
+  const emShort = (e: string) => (e || "").split("@")[0] || e;
+  const myShown = list
+    .filter((t) => !fltChannel || t.channel === fltChannel)
+    .filter(() => !fltPerson || fltPerson === (accountEmail || ""));
+  const teamShown = teamRows
+    .filter((r: any) => !fltChannel || (r.template?.channel || "") === fltChannel)
+    .filter((r: any) => !fltPerson || r.added_email === fltPerson);
+
   // Human label for where a saved template applies.
   const scopeLabel = (t: OutreachTemplate): string => {
     if (!t.projectId) return "All projects";
@@ -15867,6 +15972,23 @@ function TemplatesTab({
         it uses your voice. Keep a template universal, or assign it to a specific
         project or category.
       </p>
+
+      {/* Team lens: templates are a communal library, same treatment as Finds. */}
+      {teamName && (
+        <div className="mt-5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span className="font-extrabold text-ink">Shared templates</span>
+            <span className="text-body/80">
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens —
+              templates you save here are published to the team&apos;s library, and
+              teammates&apos; templates appear below with their name on them.
+            </span>
+          </div>
+        </div>
+      )}
 
       <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <div className="grid gap-5 sm:grid-cols-[210px_1fr]">
@@ -15957,9 +16079,85 @@ function TemplatesTab({
       </section>
 
       <section className="mt-8">
-        <h2 className="mb-4 text-lg font-bold text-ink">
-          Your Templates ({list.length})
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <h2 className="text-lg font-bold text-ink">
+            Your Templates ({myShown.length})
+          </h2>
+          {/* Toggleable filters: by format, and (on a team) by person. */}
+          {(channelOptions.length > 1 || personOptions.length > 0) && (
+            <div className="ml-auto flex flex-wrap items-center gap-1.5">
+              {channelOptions.length > 1 && (
+                <>
+                  <span className="text-[11px] font-bold text-body/60">Format:</span>
+                  <button
+                    onClick={() => setFltChannel("")}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      !fltChannel
+                        ? "border-brown bg-brown text-white"
+                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                    }`}
+                  >
+                    All
+                  </button>
+                  {channelOptions.map((c) => (
+                    <button
+                      key={c}
+                      onClick={() => setFltChannel(fltChannel === c ? "" : c)}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                        fltChannel === c
+                          ? "border-brown bg-brown text-white"
+                          : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                      }`}
+                    >
+                      {c}
+                    </button>
+                  ))}
+                </>
+              )}
+              {personOptions.length > 0 && (
+                <>
+                  <span className="ml-2 text-[11px] font-bold text-body/60">By:</span>
+                  <button
+                    onClick={() => setFltPerson("")}
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      !fltPerson
+                        ? "border-sage bg-sage text-white"
+                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                    }`}
+                  >
+                    Everyone
+                  </button>
+                  <button
+                    onClick={() =>
+                      setFltPerson(fltPerson === (accountEmail || "") ? "" : accountEmail || "")
+                    }
+                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                      fltPerson === (accountEmail || "")
+                        ? "border-sage bg-sage text-white"
+                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                    }`}
+                  >
+                    You
+                  </button>
+                  {personOptions.map((em) => (
+                    <button
+                      key={em}
+                      onClick={() => setFltPerson(fltPerson === em ? "" : em)}
+                      title={em}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                        fltPerson === em
+                          ? "border-sage bg-sage text-white"
+                          : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                      }`}
+                    >
+                      {emShort(em)}
+                    </button>
+                  ))}
+                </>
+              )}
+            </div>
+          )}
+        </div>
         {list.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-10 text-center text-sm text-body/70">
             No templates yet. Add one for email, a LinkedIn message, or an Instagram
@@ -15967,7 +16165,12 @@ function TemplatesTab({
           </div>
         ) : (
           <Reveal className="space-y-3" stagger={0.05}>
-            {list.map((s) => (
+            {myShown.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-center text-sm text-body/70">
+                No templates match your filters.
+              </div>
+            )}
+            {myShown.map((s) => (
               <div
                 key={s.id}
                 className={`rounded-2xl border p-5 shadow-card transition ${
@@ -16012,6 +16215,53 @@ function TemplatesTab({
           </Reveal>
         )}
       </section>
+
+      {/* Teammates' shared templates, with attribution + one-tap copy. */}
+      {teamName && teamShown.length > 0 && (
+        <section className="mt-8">
+          <div className="mb-3 flex flex-wrap items-baseline gap-2">
+            <h2 className="text-lg font-bold text-ink">From your team ({teamShown.length})</h2>
+            <span className="text-[12px] text-body/60">
+              shared by teammates at {teamName}
+            </span>
+          </div>
+          <div className="space-y-3">
+            {teamShown.map((r: any) => {
+              const t = r.template || {};
+              return (
+                <div key={r.id} className="rounded-2xl border border-sage/40 bg-sage/5 p-5 shadow-card">
+                  <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
+                      {t.channel || "Email"}
+                    </span>
+                    {t.projectName && (
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-xs font-semibold text-body/70">
+                        {t.projectName}
+                        {t.categoryName ? ` · ${t.categoryName}` : ""}
+                      </span>
+                    )}
+                    <span className="rounded-full border border-sage/50 bg-sage/10 px-2.5 py-0.5 text-xs font-semibold text-sage" title={r.added_email}>
+                      by {emShort(r.added_email)}
+                    </span>
+                    {onCopyTeamTemplate && (
+                      <button
+                        onClick={() => onCopyTeamTemplate(r)}
+                        title="Copy this into your own templates so Scout drafts with it for you. Sign-offs are always rewritten to YOUR name."
+                        className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                      >
+                        Add to my templates
+                      </button>
+                    )}
+                  </div>
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
+                    {t.text}
+                  </pre>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* -------- Email signatures -------- */}
       <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
