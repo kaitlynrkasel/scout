@@ -15,6 +15,7 @@ import { MicButton, joinSpoken } from "./dictate";
 import {
   fetchSheetRows,
   rowsToFinds,
+  FIELD_LABELS,
   type SyncedSheet,
 } from "@/lib/sheetImport";
 import ComboInput from "./ComboInput";
@@ -5516,7 +5517,11 @@ function ScoutTool({
   };
 
   return (
-    <div className="flex min-h-screen">
+    <div
+      className="flex min-h-screen"
+      style={appAccentStyle(activeAccentKey)}
+      data-accent={activeAccentKey || undefined}
+    >
       {/* Blocking first-run gate: you can't reach Scout until you pick
           individual vs company (and answer the company questions if company).
           profileLoaded gates ScoutTool, so profile.accountType is already
@@ -5577,8 +5582,6 @@ function ScoutTool({
         companies={companies}
         activeCompanyId={activeCompanyId}
         onSelectCompany={selectCompany}
-        accentKey={activeAccentKey}
-        onSetAccent={setCompanyAccent}
         showLogout={!!showLogout}
         onLogout={onLogout}
         accountEmail={accountEmail || ""}
@@ -6874,6 +6877,8 @@ function ScoutTool({
           companies={companies}
           activeCompanyId={activeCompanyId}
           onSelectCompany={selectCompany}
+          accentKey={activeAccentKey}
+          onSetAccent={setCompanyAccent}
           hasPersonalProjects={hasPersonalProjects}
           syncedSheets={syncedSheets}
           onRemoveSync={removeSyncedSheet}
@@ -7442,22 +7447,48 @@ function GlobalScoutStatus({
 
 /* ---------------- Sidebar navigation ---------------- */
 // Per-company accent colors, so you can tell which company's lens you're on at
-// a glance. Applied to the rail's top bar + active nav pill (both readable on
-// the light OR dark rail, unlike recoloring the whole panel). "" = no accent.
-const COMPANY_ACCENTS: { key: string; label: string; color: string; on: string }[] = [
-  { key: "", label: "None", color: "", on: "" },
-  { key: "teal", label: "Teal", color: "#2f8f83", on: "#ffffff" },
-  { key: "denim", label: "Denim", color: "#3e5c86", on: "#ffffff" },
-  { key: "plum", label: "Plum", color: "#7a4f86", on: "#ffffff" },
-  { key: "clay", label: "Clay", color: "#b5613a", on: "#ffffff" },
-  { key: "gold", label: "Gold", color: "#b58a2f", on: "#ffffff" },
-  { key: "rose", label: "Rose", color: "#b0466a", on: "#ffffff" },
-  { key: "forest", label: "Forest", color: "#3f7a4f", on: "#ffffff" },
-  { key: "slate", label: "Slate", color: "#556270", on: "#ffffff" },
+// a glance. When set, the color becomes the app's accent EVERYWHERE (primary
+// buttons, links, fit badges, the active nav pill) by overriding the brand
+// tokens on the app root. `rgb` is the space-separated triplet the --c-* tokens
+// use; `color` is the hex the gradient/pill use. "" = no accent (default brown).
+const COMPANY_ACCENTS: {
+  key: string;
+  label: string;
+  color: string;
+  on: string;
+  rgb: string;
+  deep: string;
+}[] = [
+  { key: "", label: "None", color: "", on: "", rgb: "", deep: "" },
+  { key: "teal", label: "Teal", color: "#2f8f83", on: "#ffffff", rgb: "47 143 131", deep: "34 106 97" },
+  { key: "denim", label: "Denim", color: "#3e5c86", on: "#ffffff", rgb: "62 92 134", deep: "45 68 100" },
+  { key: "plum", label: "Plum", color: "#7a4f86", on: "#ffffff", rgb: "122 79 134", deep: "92 60 102" },
+  { key: "clay", label: "Clay", color: "#b5613a", on: "#ffffff", rgb: "181 97 58", deep: "140 74 44" },
+  { key: "gold", label: "Gold", color: "#b58a2f", on: "#ffffff", rgb: "181 138 47", deep: "138 105 35" },
+  { key: "rose", label: "Rose", color: "#b0466a", on: "#ffffff", rgb: "176 70 106", deep: "138 54 82" },
+  { key: "forest", label: "Forest", color: "#3f7a4f", on: "#ffffff", rgb: "63 122 79", deep: "47 92 60" },
+  { key: "slate", label: "Slate", color: "#556270", on: "#ffffff", rgb: "85 98 112", deep: "64 74 86" },
 ];
-function accentColor(key: string): { color: string; on: string } | null {
+function accentColor(
+  key: string
+): { color: string; on: string; rgb: string; deep: string } | null {
   const a = COMPANY_ACCENTS.find((x) => x.key === key);
-  return a && a.color ? { color: a.color, on: a.on } : null;
+  return a && a.color ? { color: a.color, on: a.on, rgb: a.rgb, deep: a.deep } : null;
+}
+// The CSS-var overrides that make a chosen accent the app-wide accent. Applied
+// to the app-root wrapper (which contains both the rail and the content), so it
+// cascades everywhere. data-accent triggers the .bg-brand-gradient override in
+// globals.css. Empty when no color is chosen (keeps the default brown).
+function appAccentStyle(key: string): React.CSSProperties | undefined {
+  const a = accentColor(key);
+  if (!a) return undefined;
+  return {
+    ["--c-brown" as any]: a.rgb,
+    ["--c-brown-deep" as any]: a.deep,
+    ["--accent-solid" as any]: a.color,
+    ["--su-rail-active-bg" as any]: a.color,
+    ["--su-rail-active-fg" as any]: a.on,
+  } as React.CSSProperties;
 }
 
 function SideNav({
@@ -7482,8 +7513,6 @@ function SideNav({
   accountEmail,
   onSwitchAccount,
   onAddAccount,
-  accentKey,
-  onSetAccent,
 }: {
   tab: string;
   setTab: (t: any) => void;
@@ -7506,18 +7535,7 @@ function SideNav({
   accountEmail?: string;
   onSwitchAccount?: (email: string) => void;
   onAddAccount?: () => void;
-  accentKey?: string;
-  onSetAccent?: (key: string) => void;
 }) {
-  const accent = accentColor(accentKey || "");
-  // Accent recolors the active nav pill via the rail's CSS vars (cascades to
-  // .nav-active children), safely on both the light and dark rail.
-  const railStyle = accent
-    ? ({
-        ["--su-rail-active-bg" as any]: accent.color,
-        ["--su-rail-active-fg" as any]: accent.on,
-      } as React.CSSProperties)
-    : undefined;
   // Account switcher menu (loaded from the local registry when opened).
   const [acctOpen, setAcctOpen] = useState(false);
   const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
@@ -7693,38 +7711,6 @@ function SideNav({
                 </option>
               ))}
             </select>
-            {/* Per-company color, so you know at a glance which one you're on.
-                Only meaningful once you've picked a specific company. */}
-            {onSetAccent && activeCompanyId && (
-              <div className="mt-2 flex flex-wrap items-center gap-1.5 px-2">
-                {COMPANY_ACCENTS.map((a) => {
-                  const selected = (accentKey || "") === a.key;
-                  return (
-                    <button
-                      key={a.key || "none"}
-                      onClick={() => onSetAccent(a.key)}
-                      title={a.label}
-                      aria-label={`${a.label} accent`}
-                      className={`h-4 w-4 rounded-full border transition ${
-                        selected ? "ring-2 ring-offset-1" : ""
-                      }`}
-                      style={{
-                        background: a.color || "transparent",
-                        borderColor: a.color ? a.color : "var(--su-rail-line)",
-                        // @ts-expect-error CSS custom prop
-                        "--tw-ring-color": a.color || "var(--su-rail-muted)",
-                      }}
-                    >
-                      {!a.color && (
-                        <span className="block text-[9px] leading-[14px] text-[color:var(--su-rail-muted)]">
-                          ×
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
           </div>
         )}
         <div className="kicker px-2 pb-1.5">Active project</div>
@@ -7873,16 +7859,14 @@ function SideNav({
             className="absolute inset-0 bg-ink/40"
             onClick={() => setMobileOpen(false)}
           />
-          <aside style={railStyle} className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto p-3.5 shadow-xl">
-            {accent && <div className="mb-1 h-1 rounded-full" style={{ background: accent.color }} />}
+          <aside className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto p-3.5 shadow-xl">
             {navContent}
           </aside>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <aside style={railStyle} className="rail su-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 overflow-y-auto p-3.5 md:flex">
-        {accent && <div className="mb-1 h-1 rounded-full" style={{ background: accent.color }} />}
+      <aside className="rail su-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 overflow-y-auto p-3.5 md:flex">
         {navContent}
       </aside>
     </>
@@ -10915,6 +10899,9 @@ function FindCard({
         </span>
         {(() => {
           const via = find.foundVia || "search";
+          // Person-centric: on your own account every search find was run by
+          // you. Team attribution (which teammate found a shared find) shows on
+          // the shared-pipeline rows, which carry the teammate's name.
           const label =
             via === "manual"
               ? "Added by you"
@@ -10922,7 +10909,7 @@ function FindCard({
                 ? "Imported"
                 : via === "auto-search"
                   ? "Auto-search"
-                  : "Found by Scout";
+                  : "Found by you";
           return (
             <span
               title="How this contact got into your pipeline"
@@ -17433,6 +17420,155 @@ function RoleOnboardModal({
 }
 
 /* ---------------- Profile tab ---------------- */
+// One linked-sheet row with an expandable "what Scout reads" panel: Scout's
+// understanding of the sheet, the exact column-to-field mapping, which tab new
+// finds are written to, and how many rows came in last sync. So you can always
+// go back and see what Scout is pulling from a sheet you connected.
+function SyncedSheetRow({
+  s,
+  sheetsConnected,
+  onPreviewWrite,
+  onSetSheetWrite,
+  onRemoveSync,
+}: {
+  s: SyncedSheet;
+  sheetsConnected: boolean;
+  onPreviewWrite: (id: string) => void;
+  onSetSheetWrite: (id: string, on: boolean) => void;
+  onRemoveSync: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const isGoogle = /docs\.google\.com\/spreadsheets/.test(s.url);
+  const mapEntries = Object.entries(s.mapping || {}).filter(([, f]) => f);
+  return (
+    <div className="rounded-lg border border-warm-border bg-surface/60">
+      <div className="flex flex-wrap items-center gap-2.5 px-2.5 py-2 text-xs">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="min-w-0 flex-1 truncate text-left font-semibold text-body underline-offset-2 hover:text-accent hover:underline"
+          title="See what Scout reads from this sheet"
+        >
+          {s.label || s.url}
+        </button>
+        <span className="hidden shrink-0 text-body/50 sm:inline">
+          {s.lastSyncedAt
+            ? `synced ${new Date(s.lastSyncedAt).toLocaleDateString()}`
+            : "syncing…"}
+        </span>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="shrink-0 rounded-md border border-warm-border px-2 py-0.5 font-semibold text-body/70 transition hover:bg-warm-bg"
+        >
+          {open ? "Hide" : "What it reads"}
+        </button>
+        {isGoogle && (
+          <label
+            className={`flex shrink-0 cursor-pointer items-center gap-1.5 ${
+              sheetsConnected ? "" : "opacity-50"
+            }`}
+            title={
+              sheetsConnected
+                ? "Let Scout write your pipeline back into this sheet"
+                : "Connect Google Sheets first"
+            }
+          >
+            <input
+              type="checkbox"
+              checked={!!s.allowWrite}
+              disabled={!sheetsConnected}
+              onChange={(e) =>
+                e.target.checked ? onPreviewWrite(s.id) : onSetSheetWrite(s.id, false)
+              }
+              className="h-3.5 w-3.5 accent-brown"
+            />
+            <span className="font-semibold text-body/70">Allow edits</span>
+          </label>
+        )}
+        <button
+          onClick={() => onRemoveSync(s.id)}
+          title="Stop syncing this sheet"
+          className="shrink-0 rounded-md px-1.5 font-bold text-body/40 transition hover:text-red-600"
+        >
+          &times;
+        </button>
+      </div>
+
+      {open && (
+        <div className="border-t border-warm-border px-3 py-3 text-xs">
+          <a
+            href={s.url}
+            target="_blank"
+            rel="noreferrer"
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            Open the sheet ↗
+          </a>
+
+          {s.understandingSummary && (
+            <div className="mt-2.5">
+              <div className="font-bold text-ink">What Scout understands</div>
+              <p className="mt-0.5 leading-relaxed text-body/80">{s.understandingSummary}</p>
+            </div>
+          )}
+
+          <div className="mt-3">
+            <div className="font-bold text-ink">Columns Scout reads</div>
+            {mapEntries.length === 0 ? (
+              <p className="mt-0.5 text-body/60">
+                No column mapping saved for this sheet yet.
+              </p>
+            ) : (
+              <div className="mt-1.5 overflow-hidden rounded-lg border border-warm-border">
+                {mapEntries.map(([col, field], i) => (
+                  <div
+                    key={col}
+                    className={`flex items-center justify-between gap-3 px-3 py-1.5 ${
+                      i % 2 ? "bg-warm-bg/40" : "bg-surface"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate font-medium text-body" title={col}>
+                      {col}
+                    </span>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-body/40"><path d="M5 12h14" /><path d="m13 6 6 6-6 6" /></svg>
+                    <span className="shrink-0 font-semibold text-accent">
+                      {FIELD_LABELS[field as Exclude<typeof field, "">] || String(field)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className="mt-1.5 text-body/50">
+              Any column not listed here is ignored on import.
+            </p>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-body/70">
+            {typeof s.lastCount === "number" && (
+              <span>
+                <span className="font-semibold text-ink">{s.lastCount}</span> row
+                {s.lastCount === 1 ? "" : "s"} added last sync
+              </span>
+            )}
+            {s.writeTab && (
+              <span>
+                Writes new finds to tab{" "}
+                <span className="font-semibold text-ink">{s.writeTab}</span>
+              </span>
+            )}
+            {s.defaultStatus && (
+              <span>
+                Imported as{" "}
+                <span className="font-semibold text-ink">{s.defaultStatus}</span>
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProfileTab({
   name,
   bio,
@@ -17443,6 +17579,8 @@ function ProfileTab({
   companies,
   activeCompanyId,
   onSelectCompany,
+  accentKey,
+  onSetAccent,
   hasPersonalProjects,
   syncedSheets,
   onRemoveSync,
@@ -17527,6 +17665,8 @@ function ProfileTab({
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
   onSelectCompany: (id: string) => void;
+  accentKey?: string;
+  onSetAccent?: (key: string) => void;
   hasPersonalProjects: boolean;
   syncedSheets: SyncedSheet[];
   onRemoveSync: (id: string) => void;
@@ -17762,8 +17902,49 @@ function ProfileTab({
             {hasPersonalProjects && <option value="personal">Personal</option>}
           </select>
           <span className="text-xs leading-snug text-body/70">
-            This whole page — company details, your role, projects — is for this company.
+            This whole page (company details, your role, projects) is for this company.
           </span>
+        </div>
+      )}
+
+      {/* Per-company color. Picking one makes it Scout's accent everywhere while
+          you're on this company's lens (buttons, links, the active nav item),
+          so you can tell at a glance which company you're working in. */}
+      {kind === "company" && onSetAccent && activeCompanyId && activeCompanyId !== "personal" && (
+        <div className="mt-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Company color
+          </div>
+          <p className="mt-0.5 text-xs text-body/70">
+            Sets Scout&apos;s accent color while you&apos;re on this company.
+          </p>
+          <div className="mt-2.5 flex flex-wrap items-center gap-2">
+            {COMPANY_ACCENTS.map((a) => {
+              const selected = (accentKey || "") === a.key;
+              return (
+                <button
+                  key={a.key || "none"}
+                  onClick={() => onSetAccent(a.key)}
+                  title={a.label}
+                  aria-label={`${a.label} color`}
+                  className={`grid h-7 w-7 place-items-center rounded-full border transition ${
+                    selected ? "ring-2 ring-offset-2" : "hover:scale-105"
+                  }`}
+                  style={{
+                    background: a.color || "var(--c-surface, #fff)",
+                    borderColor: a.color || "var(--c-warm-border)",
+                    // @ts-expect-error CSS custom prop
+                    "--tw-ring-color": a.color || "#b8b0a2",
+                  }}
+                >
+                  {!a.color && <span className="text-[11px] text-body/50">×</span>}
+                  {selected && a.color && (
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -18234,54 +18415,16 @@ function ProfileTab({
                 Synced sheets
               </div>
               <div className="mt-2 space-y-1.5">
-                {syncedSheets.map((s) => {
-                  const isGoogle = /docs\.google\.com\/spreadsheets/.test(s.url);
-                  return (
-                    <div key={s.id} className="flex flex-wrap items-center gap-2.5 text-xs">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><path d="M21 12a9 9 0 1 1-3-6.7L21 8" /><path d="M21 3v5h-5" /></svg>
-                      <span className="min-w-0 flex-1 truncate text-body" title={s.url}>
-                        {s.label || s.url}
-                      </span>
-                      <span className="hidden shrink-0 text-body/50 sm:inline">
-                        {s.lastSyncedAt
-                          ? `synced ${new Date(s.lastSyncedAt).toLocaleDateString()}`
-                          : "syncing…"}
-                      </span>
-                      {/* Explicit edit permission — only for Google Sheets, and only
-                          works once Google Sheets is connected. */}
-                      {isGoogle && (
-                        <label
-                          className={`flex shrink-0 cursor-pointer items-center gap-1.5 ${
-                            sheetsConnected ? "" : "opacity-50"
-                          }`}
-                          title={
-                            sheetsConnected
-                              ? "Let Scout write your pipeline back into this sheet"
-                              : "Connect Google Sheets first"
-                          }
-                        >
-                          <input
-                            type="checkbox"
-                            checked={!!s.allowWrite}
-                            disabled={!sheetsConnected}
-                            onChange={(e) =>
-                              e.target.checked ? onPreviewWrite(s.id) : onSetSheetWrite(s.id, false)
-                            }
-                            className="h-3.5 w-3.5 accent-brown"
-                          />
-                          <span className="font-semibold text-body/70">Allow edits</span>
-                        </label>
-                      )}
-                      <button
-                        onClick={() => onRemoveSync(s.id)}
-                        title="Stop syncing this sheet"
-                        className="shrink-0 rounded-md px-1.5 font-bold text-body/40 transition hover:text-red-600"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  );
-                })}
+                {syncedSheets.map((s) => (
+                  <SyncedSheetRow
+                    key={s.id}
+                    s={s}
+                    sheetsConnected={sheetsConnected}
+                    onPreviewWrite={onPreviewWrite}
+                    onSetSheetWrite={onSetSheetWrite}
+                    onRemoveSync={onRemoveSync}
+                  />
+                ))}
               </div>
             </div>
           )}

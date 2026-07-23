@@ -692,3 +692,19 @@ html.dark .su-rail .su-logo img {
   justify-content: center;
   flex: 0 0 auto;
 }
+
+/* Per-company accent: when a company color is chosen, `data-accent` is set on
+   the app-root wrapper and the accent CSS vars are supplied inline (see
+   appAccentStyle in page.tsx). The --c-brown/--c-brown-deep overrides already
+   recolor every brown/coral/accent token (links, badges, fit pills). These
+   rules also flip the two hard-coded navy gradients (primary buttons + the
+   draft split-button select) to the same solid accent, so the color is truly
+   app-wide, not just the sidebar. */
+[data-accent] .bg-brand-gradient {
+  background: var(--accent-solid) !important;
+}
+[data-accent] select.scout-select-light {
+  background-color: var(--accent-solid) !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"), none !important;
+}
