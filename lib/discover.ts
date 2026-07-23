@@ -1183,7 +1183,7 @@ async function extract(
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
     `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), ` +
-    `name (the person/company/outlet, plus role if any), outlet (org/company/publication), ` +
+    `name (WHO this find is — when the target is a specific named individual, this MUST be that PERSON'S name, e.g. "Stacy Blythe" or "Stacy Blythe, EVP of Promotion", NEVER the company, page headline, or article title like "Big Loud Records, Executive Promotions & Hires". If a real person is named anywhere as the target or the point of contact, title the find by them and put their employer in outlet. Use a company/organization name here ONLY when there is genuinely no specific person), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +

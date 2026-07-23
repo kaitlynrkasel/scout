@@ -5777,6 +5777,7 @@ function ScoutTool({
         <GlobalScoutStatus
           startedAt={discoverStartedAt}
           onGo={() => setTab("outreach")}
+          onCancel={stopDiscover}
         />
       )}
       {/* Concierge: hand-picked finds just landed. */}
@@ -5839,19 +5840,21 @@ function ScoutTool({
                 <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-body/50">
                   Company
                 </span>
-                <select
-                  value={activeCompanyId}
-                  onChange={(e) => selectCompany(e.target.value)}
-                  className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
-                >
-                  <option value="">All companies</option>
-                  {hasPersonalProjects && <option value="personal">Personal</option>}
-                  {companies.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                <PrettySelect
+                  ariaLabel="Company lens"
+                  className="min-w-[180px]"
+                  value={
+                    companies.length === 1 && !hasPersonalProjects && !activeCompanyId
+                      ? companies[0].id
+                      : activeCompanyId
+                  }
+                  onChange={selectCompany}
+                  options={[
+                    ...(companies.length > 1 ? [{ value: "", label: "All companies" }] : []),
+                    ...(hasPersonalProjects ? [{ value: "personal", label: "Personal" }] : []),
+                    ...companies.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
               </div>
             )}
           </div>
@@ -6184,11 +6187,12 @@ function ScoutTool({
                 {discovering && (
                   <button
                     onClick={stopDiscover}
-                    className="rounded-xl border border-warm-border px-4 py-3 text-sm font-semibold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+                    title="Stop this run. Scout keeps whatever it has already found."
+                    className="rounded-xl border border-warm-border px-4 py-3 text-sm font-semibold text-body transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
                   >
                     {liveCount > 0
-                      ? `Stop & keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
-                      : "Stop"}
+                      ? `Cancel · keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
+                      : "Cancel run"}
                   </button>
                 )}
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
@@ -7381,9 +7385,11 @@ function SearchProgress({
 function GlobalScoutStatus({
   startedAt,
   onGo,
+  onCancel,
 }: {
   startedAt: number | null;
   onGo: () => void;
+  onCancel?: () => void;
 }) {
   // Same trick as SearchProgress, write to the DOM directly in the RAF tick
   // so the chip doesn't rerender every frame.
@@ -7408,30 +7414,42 @@ function GlobalScoutStatus({
   }, [startedAt]);
 
   return (
-    <button
-      onClick={onGo}
-      title="Back to Outreach"
-      className="fixed bottom-6 right-6 z-40 flex items-center gap-2.5 rounded-full border border-warm-border bg-surface/95 px-3.5 py-2 shadow-soft backdrop-blur transition hover:border-brown/40 hover:shadow-card"
-    >
-      <span className="relative flex h-5 w-5 items-center justify-center">
-        <span className="absolute inset-0 animate-ping rounded-full bg-brown/30" />
-        <span className="relative h-2 w-2 rounded-full bg-brown" />
-      </span>
-      <span className="text-xs font-bold text-ink">Scouting</span>
-      <span className="h-1.5 w-20 overflow-hidden rounded-full bg-brown-tint">
-        <span
-          ref={fillRef}
-          className="block h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
-          style={{ width: `${searchPctFor(startedAt)}%` }}
-        />
-      </span>
-      <span
-        ref={pctRef}
-        className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70"
+    <div className="fixed bottom-6 right-6 z-40 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface/95 py-2 pl-3.5 pr-2 shadow-soft backdrop-blur">
+      <button
+        onClick={onGo}
+        title="Back to Outreach"
+        className="flex items-center gap-2.5 transition hover:opacity-80"
       >
-        {Math.round(searchPctFor(startedAt))}%
-      </span>
-    </button>
+        <span className="relative flex h-5 w-5 items-center justify-center">
+          <span className="absolute inset-0 animate-ping rounded-full bg-brown/30" />
+          <span className="relative h-2 w-2 rounded-full bg-brown" />
+        </span>
+        <span className="text-xs font-bold text-ink">Scouting</span>
+        <span className="h-1.5 w-20 overflow-hidden rounded-full bg-brown-tint">
+          <span
+            ref={fillRef}
+            className="block h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+            style={{ width: `${searchPctFor(startedAt)}%` }}
+          />
+        </span>
+        <span
+          ref={pctRef}
+          className="w-8 text-right text-[11px] font-bold tabular-nums text-body/70"
+        >
+          {Math.round(searchPctFor(startedAt))}%
+        </span>
+      </button>
+      {onCancel && (
+        <button
+          onClick={onCancel}
+          title="Cancel this run (keeps the finds found so far)"
+          aria-label="Cancel run"
+          className="ml-1 grid h-6 w-6 place-items-center rounded-full border border-warm-border text-body/60 transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+        </button>
+      )}
+    </div>
   );
 }
 
