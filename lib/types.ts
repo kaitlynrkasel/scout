@@ -42,6 +42,13 @@ export interface Opportunity {
   contactRole: string;
   contactHandle: string;
   contactPhone: string; // phone number if the source lists one (lead-gen / local businesses)
+  // The page Scout actually read the contact (email/handle/phone) off of, so the
+  // user can click through and verify it's real rather than trusting it blind.
+  contactSource?: { title: string; url: string };
+  // The contact's own social profiles (Instagram, Facebook, LinkedIn, TikTok,
+  // X, YouTube…), whenever the sources expose them. Real URLs only, never
+  // invented. Shown under Website in the find detail.
+  socials?: string[];
   location: string;
   timezone?: string; // IANA tz inferred from location (e.g. America/Chicago), for send timing
   fitScore: number | null; // 0..1 — headline score (drives ranking)

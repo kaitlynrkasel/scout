@@ -29,7 +29,7 @@ export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
 // physically PRESENT at a place for a window, not living there. Placed after the
 // location clause in the prompt so it wins for these goals.
 export const TRANSIENT_PRESENCE_CLAUSE =
-  ` TRANSIENT / EVENT PRESENCE OVERRIDE: this applies ONLY when the GOAL is about a person being physically present at a place for an event, appearance, tour stop, festival, conference, residency, or visit during a time window (e.g. "artists who will be in Nashville in March", "founders coming to Austin for SXSW", "a speaker in town the week of the 12th"). For such goals, location compatibility is about WHERE THE PERSON WILL BE during that window, NOT where they are based or headquartered — and the residence-based LOCATION ALIGNMENT ceiling above does NOT apply. A person based anywhere who has a confirmed appearance, booked show, tour date, festival slot, or scheduled visit at the goal's location within the window is a STRONG location match: do not penalize them for living elsewhere. Conversely, a local resident who is clearly touring/away during the window is a WEAKER match. Capture the specific appearance/tour date in why_it_fits when the source states it, and raise fit_score when that date falls inside the requested window; lower it (or set is_relevant false) only when the source explicitly shows the person will NOT be there in the window. When you cannot confirm the date but the person is a plausible fit for the event, treat it as an ambiguous timing case (moderate fit_score) rather than a hard location mismatch. If the goal is NOT about transient presence, ignore this override entirely.`;
+  ` TRANSIENT / EVENT PRESENCE OVERRIDE: this applies ONLY when the GOAL is about a person being physically present at a place for an event, appearance, tour stop, festival, conference, residency, or visit during a time window (e.g. "artists who will be in Nashville in March", "founders coming to Austin for SXSW", "a speaker in town the week of the 12th"). For such goals, location compatibility is about WHERE THE PERSON WILL BE during that window, NOT where they are based or headquartered — and the residence-based LOCATION ALIGNMENT ceiling above does NOT apply. A person based anywhere who has a confirmed appearance, booked show, tour date, festival slot, or scheduled visit at the goal's location within the window is a STRONG location match: do not penalize them for living elsewhere. Conversely, a local resident who is clearly touring/away during the window is a WEAKER match. Capture the specific appearance/tour date in why_it_fits when the source states it, and raise fit_score when that date falls inside the requested window; lower it (or set is_relevant false) only when the source explicitly shows the person will NOT be there in the window. A candidate is LOCATION-ELIGIBLE for such a goal if EITHER of these is true, and you must accept both paths (do not require a printed future date for everyone): (A) the source shows a confirmed appearance, booked show, tour date, festival slot, residency, or scheduled visit at the goal's location within the window — this is the STRONGEST match, rank it highest and capture the date in why_it_fits; OR (B) the person is openly BASED IN / headquartered in / local to the goal's location (their bio, profile, or the source says they live or are based there) — a local is present by default, so being based there IS sufficient proof they can be in town, treat it as a STRONG match even with no specific date. Reject (set is_relevant false) only when the person is NEITHER confirmed-present in the window NOR based at the location — e.g. an out-of-town person with no booked appearance there — because someone who won't be in town cannot be used. Do NOT reject a locally-based person merely for lacking a printed date; their home base is the proof. Rank confirmed-in-window above merely-local. This eligibility rule SUPERSEDES any required/hard_constraint that would demand a specific printed date and reject locals along with everyone else. If the goal is NOT about transient presence, ignore this override entirely.`;
 
 // Tunable rank weights (Phase 1 of the opportunity-intelligence architecture).
 // The headline fit shown to users is now COMPUTED: a weighted blend of the
@@ -321,7 +321,15 @@ const DECOMPOSE_SYS =
   "target_type = the entity type (Person, Company, Artist, Founder, Journalist, Investor, Professor, Creator, " +
   "Podcast Host, etc.). required = things that MUST be true; if one is false, reject the candidate. preferred = " +
   "strong positives, not required. hard_constraints = concrete requirements (available in April, within 25 miles, " +
-  "in healthcare, under 500 employees). soft_constraints = nice-to-haves (independent, emerging, growing fast). " +
+  "in healthcare, under 500 employees). IMPORTANT — TRANSIENT / EVENT PRESENCE: if the objective is about someone " +
+  "being physically present at a place during a time window (touring through a city, in town for an event, appearing " +
+  "at a conference/festival that month), the person genuinely must be able to be in town — but that is satisfied TWO " +
+  "ways, so do NOT write a hard_constraint demanding a specific printed future date. Instead set evidence_needed to " +
+  "cover BOTH paths: (1) dated proof of an appearance/show/tour stop at the location in the window (venue calendars, " +
+  "tour schedules, festival/conference lineups for that month), AND (2) people openly BASED IN / local to that " +
+  "location (they are present by default). A locally-based candidate qualifies even with no specific date. The " +
+  "window decides RANK (confirmed date ranks above merely-local), and only someone who is neither confirmed-present " +
+  "nor local should be excluded. soft_constraints = nice-to-haves (independent, emerging, growing fast). " +
   "negative_constraints = who to EXCLUDE (major celebrities, retired, no public contact, inactive, already " +
   "contacted, out of budget). evidence_needed = THE MOST IMPORTANT field: never search for people directly, search " +
   "for EVIDENCE that would PROVE someone matches (tour schedules, festival lineups, conference speaker lists, " +
@@ -702,7 +710,10 @@ async function planQueries(
     "'{venue} upcoming shows {month} {year}', 'artists touring through {city} {month} {year}'). Prefer sources that are " +
     "dated by nature — venue calendars, event/ticketing listings (Songkick, Bandsintown, Eventbrite, city event guides), " +
     "festival and conference lineups, tour-date pages — over undated directories or bio pages, because only dated sources " +
-    "can prove someone will actually be there during the window. If the goal has no time window, ignore this. ";
+    "can prove someone will actually be there during the window. BUT also spend SOME queries finding people who are BASED " +
+    "IN the location (e.g. '{city}-based artists', 'musicians who live in {city}', '{city} local {profession}'), because " +
+    "a local is in town by default and is fully eligible without a dated appearance — dated visitors and locals are BOTH " +
+    "valid, so cover both. If the goal has no time window, ignore this. ";
   const sys =
     anchor +
     guidance +
@@ -1176,6 +1187,7 @@ async function extract(
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
+    `socials (an array of the TARGET'S OWN social profile URLs that appear verbatim in the source — Instagram, Facebook, LinkedIn, TikTok, X/Twitter, YouTube, Threads, SoundCloud, Spotify — up to 6; return the full URLs exactly as shown, never guess or construct a handle that is not printed, empty array if none), ` +
     `url (the TARGET'S OWN primary home — their official website, or their main profile page / LinkedIn if they have no website — NOT the news article, press piece, directory, or listicle you found them through. That evidence belongs in the source, never here. Only fall back to the article's link if the target genuinely has no home of its own), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
@@ -1690,6 +1702,7 @@ export async function discover(
             (!isPersonalEmail(existing.contactEmail) && isPersonalEmail(r.contact_email)))
         ) {
           existing.contactEmail = r.contact_email;
+          existing.contactSource = { title: cand.title || "", url: cand.url || "" };
           if (r.contact_name && !existing.contactName) existing.contactName = r.contact_name;
         }
         if (!existing.contactHandle && r.contact_handle) existing.contactHandle = r.contact_handle;
@@ -1779,6 +1792,18 @@ export async function discover(
         contactRole: noDash(r.contact_role || ""),
         contactHandle: r.contact_handle || "",
         contactPhone: r.contact_phone || "",
+        // The page the contact was read from, for verification. Only set when we
+        // actually have a contact route to attribute.
+        contactSource:
+          r.contact_email || r.contact_handle || r.contact_phone
+            ? { title: cand.title || "", url: cand.url || "" }
+            : undefined,
+        socials: Array.isArray(r.socials)
+          ? r.socials
+              .map((s: any) => String(s || "").trim())
+              .filter((s: string) => /^https?:\/\//i.test(s))
+              .slice(0, 6)
+          : [],
         location: noDash(r.location || ""),
         timezone: r.timezone || "",
         fitScore: fit,

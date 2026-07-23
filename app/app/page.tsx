@@ -4134,11 +4134,15 @@ function ScoutTool({
       const c = j.contact || {};
       const gotReqs = !!(j.requirements || "").trim();
       const opp = { ...find.opp };
+      const gotContact = (c.email && !opp.contactEmail) || (c.handle && !opp.contactHandle);
       if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
       if (c.name && !opp.contactName) opp.contactName = c.name;
       if (c.role && !opp.contactRole) opp.contactRole = c.role;
       if (c.handle && !opp.contactHandle) opp.contactHandle = c.handle;
       if (c.email && (!opp.channel || /unknown/i.test(opp.channel))) opp.channel = "Email";
+      // Attribute a newly-scanned contact to the page it was read from.
+      if (gotContact)
+        opp.contactSource = { title: opp.outlet || "their page", url: find.opp.url };
       return {
         ...find,
         opp,
@@ -4189,12 +4193,16 @@ function ScoutTool({
           if (f.id !== find.id) return f;
           const opp = { ...f.opp };
           // Only fill gaps, never overwrite a contact we already trust.
+          const filledContact =
+            (c.email && !opp.contactEmail) || (c.handle && !opp.contactHandle);
           if (c.email && !opp.contactEmail) opp.contactEmail = c.email;
           if (c.name && !opp.contactName) opp.contactName = c.name;
           if (c.role && !opp.contactRole) opp.contactRole = c.role;
           if (c.handle && !opp.contactHandle) opp.contactHandle = c.handle;
           if (c.email && (!opp.channel || /unknown/i.test(opp.channel)))
             opp.channel = "Email";
+          if (filledContact && f.opp.url)
+            opp.contactSource = { title: opp.outlet || "their page", url: f.opp.url };
           return {
             ...f,
             opp,
@@ -8091,10 +8099,13 @@ function FindsList({
               )}
               <div className="mt-1 text-xs">
                 {o.contactEmail && (
-                  <ContactValue
-                    value={o.contactEmail}
-                    className="font-semibold text-accent"
-                  />
+                  <>
+                    <ContactValue
+                      value={o.contactEmail}
+                      className="font-semibold text-accent"
+                    />
+                    <ContactSourceLink src={o.contactSource} />
+                  </>
                 )}
                 {o.contactName && (
                   <span className="text-body">
@@ -8239,6 +8250,69 @@ function ContactValue({
       className={`${className} underline decoration-dotted underline-offset-2 transition hover:text-accent`}
     >
       {value}
+    </a>
+  );
+}
+
+// Which social platform (if any) a URL points at, for labeling social chips.
+const SOCIAL_PLATFORMS: { host: RegExp; label: string }[] = [
+  { host: /instagram\.com/i, label: "Instagram" },
+  { host: /facebook\.com|fb\.com/i, label: "Facebook" },
+  { host: /linkedin\.com/i, label: "LinkedIn" },
+  { host: /tiktok\.com/i, label: "TikTok" },
+  { host: /(twitter\.com|x\.com)/i, label: "X" },
+  { host: /youtube\.com|youtu\.be/i, label: "YouTube" },
+  { host: /threads\.net/i, label: "Threads" },
+  { host: /soundcloud\.com/i, label: "SoundCloud" },
+  { host: /spotify\.com/i, label: "Spotify" },
+];
+function socialPlatformOf(url: string): string | null {
+  const u = String(url || "");
+  for (const p of SOCIAL_PLATFORMS) if (p.host.test(u)) return p.label;
+  return null;
+}
+// Collect the contact's social profiles from every place one might hide: the
+// dedicated `socials` field, a social contactHandle, and any source URL that is
+// itself a social page. Deduped by platform so we show one chip each.
+function socialLinksFor(o: Opportunity): { platform: string; url: string }[] {
+  const out: { platform: string; url: string }[] = [];
+  const seen = new Set<string>();
+  const add = (url: string) => {
+    const raw = String(url || "").trim();
+    if (!raw) return;
+    const full = /^https?:\/\//i.test(raw) ? raw : "https://" + raw.replace(/^\/+/, "");
+    const platform = socialPlatformOf(full);
+    if (!platform || seen.has(platform)) return;
+    seen.add(platform);
+    out.push({ platform, url: full });
+  };
+  for (const s of (o as any).socials || []) add(typeof s === "string" ? s : s?.url);
+  if (o.contactHandle) add(o.contactHandle);
+  for (const s of o.sources || []) add(s.url);
+  return out;
+}
+
+// A tiny "source" chip shown next to a contact, linking to the page Scout read
+// the email/handle off of, so the user can verify it's real before reaching out.
+function ContactSourceLink({
+  src,
+  className = "",
+}: {
+  src?: { title: string; url: string };
+  className?: string;
+}) {
+  if (!src?.url) return null;
+  return (
+    <a
+      href={src.url}
+      target="_blank"
+      rel="noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      title={`Verify: Scout found this on ${src.title || src.url}`}
+      className={`ml-1.5 inline-flex items-center gap-0.5 rounded-full border border-warm-border bg-warm-bg px-1.5 py-0.5 align-middle text-[9px] font-bold text-body/55 transition hover:border-accent/40 hover:text-accent ${className}`}
+    >
+      <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+      source
     </a>
   );
 }
@@ -8572,6 +8646,8 @@ function FindDetailModal({
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
+  // Deny reason popover in the header (Deny asks why, like the card does).
+  const [denyingModal, setDenyingModal] = useState(false);
   // On phones the two-column grid is unusable, so stack the sections and let the
   // whole modal scroll instead.
   const [narrow, setNarrow] = useState(false);
@@ -8779,7 +8855,12 @@ function FindDetailModal({
   if (o.contactEmail && !wantedChannels.includes("email"))
     rows.push({
       label: "Email",
-      node: <ContactValue value={o.contactEmail} className="font-semibold text-accent" />,
+      node: (
+        <span>
+          <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
+          <ContactSourceLink src={o.contactSource} />
+        </span>
+      ),
     });
   if (o.contactPhone && !wantedChannels.includes("phone"))
     rows.push({
@@ -8835,6 +8916,28 @@ function FindDetailModal({
         </a>
       ),
     });
+  // The contact's social profiles (Instagram, Facebook, LinkedIn, TikTok, X,
+  // YouTube), whenever Scout found any. Shown right under Website.
+  const socials = socialLinksFor(o);
+  if (socials.length)
+    rows.push({
+      label: "Socials",
+      node: (
+        <span className="flex flex-wrap gap-1.5">
+          {socials.map((s) => (
+            <a
+              key={s.url}
+              href={s.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[11px] font-semibold text-body transition hover:border-accent/40 hover:text-accent"
+            >
+              {s.platform}
+            </a>
+          ))}
+        </span>
+      ),
+    });
 
   return (
     <div
@@ -8879,19 +8982,39 @@ function FindDetailModal({
               Decide later
             </button>
           )}
-          {find.status !== "denied" && (
-            <button
-              onClick={() => {
-                onDeny();
-                if (position < total) onNext();
-                else onClose();
-              }}
-              title="Mark this find as not a fit"
-              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
-            >
-              Not a fit
-            </button>
-          )}
+          {find.status !== "denied" &&
+            (denyingModal ? (
+              <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                <span className="text-[10px] text-body/45">Why?</span>
+                <DenyReasons
+                  onPick={(r) => {
+                    setDenyingModal(false);
+                    onDeny(r);
+                    if (position < total) onNext();
+                    else onClose();
+                  }}
+                />
+                <button
+                  onClick={() => {
+                    setDenyingModal(false);
+                    onDeny("");
+                    if (position < total) onNext();
+                    else onClose();
+                  }}
+                  className="text-[11px] font-semibold text-body/50 transition hover:text-accent"
+                >
+                  Skip
+                </button>
+              </div>
+            ) : (
+              <button
+                onClick={() => setDenyingModal(true)}
+                title="Deny this find"
+                className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
+              >
+                Deny
+              </button>
+            ))}
           <button
             onClick={onClose}
             className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -11056,7 +11179,10 @@ function FindCard({
         return (
           <div className="mt-1 text-xs">
             {showEmail && (
-              <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
+              <>
+                <ContactValue value={o.contactEmail} className="font-semibold text-accent" />
+                <ContactSourceLink src={o.contactSource} />
+              </>
             )}
             {o.contactName && (
               <span className="text-body">
@@ -11788,7 +11914,7 @@ function FindWorkflow({
             onClick={() => setDenying(true)}
             className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
           >
-            Not a fit
+            Deny
           </button>
         )}
         {/* A plain delete, always available (except mid deny-reason). Unlike
