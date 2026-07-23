@@ -1282,6 +1282,12 @@ function ScoutTool({
     } | null
   >(null);
   const [gating, setGating] = useState(false); // the understanding pass is running
+  // Per-session cache of the last understanding pass, keyed by category, so we
+  // don't burn an API call re-understanding an inquiry that hasn't changed since
+  // it was last understood. Holds the input signature + the plan to reuse.
+  const understoodCache = useRef<Map<string, { sig: string; plan: any; understanding: number }>>(
+    new Map()
+  );
   // Multiple-choice picks for the current round, keyed by question index. Each is
   // an ARRAY (multi-select): option strings, plus the special tokens "__any__"
   // (any/all — exclusive) and "__other__" (a free-text write-in is active).
@@ -5048,16 +5054,38 @@ function ScoutTool({
     setPlanGate(null);
     setPicks({});
     setOtherText({});
+    // Resume this search's cumulative state: answers we've already folded in,
+    // and questions already asked (so they're never re-asked).
+    const priorAsked = activeCategory?.askedQuestions || [];
+    const priorAnswers = activeCategory?.clarifyAnswers || "";
+    // Signature of everything the understanding pass depends on. If it's
+    // unchanged since we last understood THIS category and understanding was
+    // already high enough to run, reuse that plan and skip the API call.
+    const cacheKey = catId || "custom";
+    const sig = JSON.stringify({
+      goal: goal.trim(),
+      examples: examplesBlock(),
+      about: aboutForProject(activeProject),
+      priorAnswers,
+      priorAsked,
+    });
+    const cached = understoodCache.current.get(cacheKey);
+    if (cached && cached.sig === sig && cached.understanding >= UNDERSTAND_GATE) {
+      await runDiscover(cached.plan, priorAnswers);
+      return;
+    }
     setGating(true);
     try {
-      // Resume this search's cumulative state: answers we've already folded in,
-      // and questions already asked (so they're never re-asked).
-      const priorAsked = activeCategory?.askedQuestions || [];
-      const priorAnswers = activeCategory?.clarifyAnswers || "";
       const u = await fetchUnderstanding(priorAnswers, priorAsked);
       // Remember the (cumulative) understanding so the next run shows the real %.
       persistUnderstanding({ understanding: u.understanding });
+      // Cache a fully-understood pass so an unchanged re-run is free.
       if (u.understanding >= UNDERSTAND_GATE || u.questions.length === 0) {
+        understoodCache.current.set(cacheKey, {
+          sig,
+          plan: u.plan,
+          understanding: u.understanding,
+        });
         await runDiscover(u.plan, priorAnswers);
       } else {
         setPlanGate({ ...u, priorAsked, priorAnswers });
@@ -6194,6 +6222,18 @@ function ScoutTool({
                       ? `Cancel · keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
                       : "Cancel run"}
                   </button>
+                )}
+                {/* Understanding phase status, so it never looks frozen while
+                    Scout reads the goal before searching. */}
+                {gating && (
+                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-brown-tint">
+                      <div className="scout-indeterminate h-full w-1/2 rounded-full bg-brown" />
+                    </div>
+                    <span className="text-xs font-medium text-body/80">
+                      Reading your goal…
+                    </span>
+                  </div>
                 )}
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
                 {skipped.length > 0 && (
