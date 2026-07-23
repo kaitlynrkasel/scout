@@ -544,6 +544,7 @@ interface Find {
   gmailThreadId?: string; // set when sent/drafted via Gmail, enables reply tracking
   outlookThreadId?: string; // Outlook conversation id, enables reply tracking
   denyReason?: string; // why the user passed on this find
+  foundVia?: string; // how it entered the pipeline: search | auto-search | import | manual
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
@@ -926,6 +927,28 @@ function AuthedShell() {
   const uid = session?.user?.id;
   useEffect(() => {
     if (!uid) return;
+    // Cross-account guard: localStorage is per-BROWSER, not per-account. When
+    // the signed-in user changes (multi-account switch, or a different login on
+    // a shared computer), wipe the previous account's cached projects / finds /
+    // etc. so they can't bleed into this account's fallback hydration. Server
+    // state remains the source of truth; this only clears the local cache. On
+    // the very first load (no stored uid) we DON'T clear, preserving the
+    // migration from the browser-only era for existing single-account users.
+    try {
+      const lastUid = localStorage.getItem("scout_last_uid");
+      if (lastUid && lastUid !== uid) {
+        for (const k of [
+          PROJECTS_KEY, ACTIVE_KEY, CAT_KEY, FINDS_KEY, TPL_KEY, ACT_KEY,
+          COACH_KEY, DISMISSED_ADVICE_KEY, EDITS_KEY, RESUME_KEY, SIG_KEY,
+          PROFILE_KEY, KIND_KEY, "scout_active_company", "scout_company_colors",
+        ]) {
+          localStorage.removeItem(k);
+        }
+      }
+      localStorage.setItem("scout_last_uid", uid);
+    } catch {
+      /* storage unavailable; server state still hydrates correctly */
+    }
     let cancelled = false;
     let done = false;
     setProfileLoaded(false);
@@ -1379,6 +1402,29 @@ function ScoutTool({
   // the active lens. "" = All companies (show everything). Persisted per device.
   const [companies, setCompanies] = useState<{ id: string; name: string; role: string }[]>([]);
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
+  // Per-company accent color (localStorage map, keyed by company id / lens).
+  const [companyColors, setCompanyColors] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem("scout_company_colors");
+      if (raw) setCompanyColors(JSON.parse(raw) || {});
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function setCompanyAccent(key: string) {
+    if (!activeCompanyId) return;
+    setCompanyColors((prev) => {
+      const next = { ...prev, [activeCompanyId]: key };
+      try {
+        localStorage.setItem("scout_company_colors", JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+  const activeAccentKey = companyColors[activeCompanyId] || "";
   // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
   const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
   // Google Sheets connection (level 3: private read + write-back).
@@ -1742,6 +1788,77 @@ function ScoutTool({
       projectId,
     }));
   }
+
+  // After onboarding, replace the generic starter with projects + categories
+  // Scout ANTICIPATES this user will actually run, read from what their company
+  // does / their resume. Best-effort: on any miss it leaves the generic seed
+  // in place. Only touches an untouched pipeline (the auto-seeded "Untitled
+  // project" with no finds), so it never clobbers real work.
+  async function applyStarterPlan(info: {
+    about?: string;
+    role?: string;
+    contribution?: string;
+    industry?: string;
+    useCase?: string;
+    name?: string;
+    companyWorkspaceId?: string;
+  }) {
+    try {
+      const res = await fetch("/api/starter-plan", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          about: info.about || "",
+          role: info.role || "",
+          contribution: info.contribution || "",
+          industry: info.industry || "",
+          useCase: info.useCase || "",
+          name: info.name || "",
+        }),
+      });
+      const data = await parseApiResponse(res);
+      const planned: any[] = Array.isArray(data?.projects) ? data.projects : [];
+      if (!planned.length) return;
+      // Only intervene if the pipeline is still the untouched generic seed.
+      const untouched =
+        finds.length === 0 &&
+        projects.every((p) => p.name === "Untitled project");
+      if (!untouched) return;
+
+      const companyId = info.companyWorkspaceId || undefined;
+      const stamp = Date.now();
+      const newProjects: Project[] = [];
+      const newCats: Category[] = [];
+      planned.forEach((p, pi) => {
+        const pid = `proj-${stamp}-${pi}`;
+        newProjects.push({
+          id: pid,
+          name: p.name,
+          useCase: p.useCase || info.useCase || "",
+          context: info.about || "",
+          ...(companyId ? { companyId } : {}),
+        });
+        (p.categories || []).forEach((c: any, ci: number) => {
+          newCats.push({
+            id: `sug-${pid}-${ci}`,
+            name: c.name,
+            goal: c.goal,
+            projectId: pid,
+          });
+        });
+      });
+      if (!newProjects.length) return;
+      // Drop the empty auto-seed projects; keep anything real.
+      const keptProjects = projects.filter((p) => p.name !== "Untitled project");
+      const keptIds = new Set(keptProjects.map((p) => p.id));
+      const keptCats = categories.filter((c) => keptIds.has(c.projectId));
+      saveProjects([...keptProjects, ...newProjects]);
+      saveCats([...keptCats, ...newCats]);
+      selectProject(newProjects[0].id);
+    } catch {
+      /* leave the generic seed in place */
+    }
+  }
   const saveTpls = (n: OutreachTemplate[]) => {
     setMyTemplates(n);
     try {
@@ -1929,6 +2046,26 @@ function ScoutTool({
     const { error } = await supabase.auth.updateUser({ password: pw });
     setAccountBusy("");
     setAccountNote(error ? error.message : "Password updated.");
+  };
+
+  // Change the display name on the account. Updates the auth user's metadata
+  // (so the account switcher's "Continue as …" and greetings reflect it) AND
+  // the profile name Scout signs drafts with, keeping the two in sync.
+  const changeName = async (newName: string) => {
+    const nm = newName.trim();
+    if (!supabase || !nm) {
+      setAccountNote("Enter a name.");
+      return;
+    }
+    setAccountBusy("name");
+    setAccountNote("");
+    // The USER_UPDATED auth event refreshes the switcher registry with the new
+    // full_name automatically (see onAuthStateChange), so no manual registry
+    // write here (which would clobber the saved tokens).
+    const { error } = await supabase.auth.updateUser({ data: { full_name: nm } });
+    if (!error) patchProfile({ name: nm });
+    setAccountBusy("");
+    setAccountNote(error ? error.message : "Name updated.");
   };
 
   // Permanently delete the account and all data, then sign out.
@@ -3246,7 +3383,7 @@ function ScoutTool({
   // (see runDiscover), `catId` state hasn't re-rendered yet, this closure would
   // still see the old "" and tag fresh finds as uncategorized. Pass the fresh
   // id explicitly so newly-found people land under the new category right away.
-  function mergeFinds(newOpps: Opportunity[], categoryIdOverride?: string): number {
+  function mergeFinds(newOpps: Opportunity[], categoryIdOverride?: string, via: string = "search"): number {
     const effectiveCatId = categoryIdOverride !== undefined ? categoryIdOverride : catId;
     // Two dedup layers: exact id match (same person + same host, historic key)
     // AND normalized-name/handle match against every find in this project. The
@@ -3326,6 +3463,7 @@ function ScoutTool({
         status: "new",
         opp: o,
         addedAt: Date.now(),
+        foundVia: via,
       });
     }
     if (fresh.length || updates.size) {
@@ -3344,7 +3482,7 @@ function ScoutTool({
     for (const f of imported) {
       if (existing.has(f.id)) continue;
       existing.add(f.id);
-      fresh.push(f);
+      fresh.push({ ...f, foundVia: f.foundVia || "import" });
     }
     if (fresh.length) saveFinds([...fresh, ...finds]);
     return fresh.length;
@@ -3623,7 +3761,7 @@ function ScoutTool({
       const items: Array<{ id: string; opp: Opportunity; note?: string }> =
         Array.isArray(body?.items) ? body.items : [];
       if (!items.length) return 0;
-      const added = mergeFinds(items.map((i) => i.opp));
+      const added = mergeFinds(items.map((i) => i.opp), undefined, "auto-search");
       // Mark them consumed even if dedupe dropped some — we've now incorporated
       // everything, and leaving them pending would just re-merge duplicates.
       await fetch("/api/seeded-finds", {
@@ -3877,7 +4015,7 @@ function ScoutTool({
     if (finds.some((f) => f.id === id))
       return "They're already in your finds (check the status tabs).";
     saveFinds([
-      { id, projectId, status: "new" as FindStatus, opp, addedAt: Date.now() },
+      { id, projectId, status: "new" as FindStatus, opp, addedAt: Date.now(), foundVia: "manual" },
       ...finds,
     ]);
     return null;
@@ -4733,7 +4871,7 @@ function ScoutTool({
       // broadened pass is empty, show a real empty state (below) instead.
       if (done && finalOpps.length === 0) {
         if (!broaden) {
-          setStats("No exact matches — broadening the search…");
+          setStats("No exact matches, broadening the search…");
           broadenRetryRef.current = { plan: precomputedPlan, clarify: clarifyText };
         } else {
           setNoResults(true);
@@ -5388,6 +5526,20 @@ function ScoutTool({
           name={profile.name.trim().split(/\s+/)[0] || ""}
           onComplete={(patch) => {
             patchProfile(patch);
+            // Seed projects/categories Scout anticipates from what the company
+            // told us, instead of generic defaults (best-effort, replaces only
+            // the untouched starter). Company accounts have this detail now;
+            // individuals fill their bio later, so their seed stays generic.
+            if (patch.accountType === "company") {
+              void applyStarterPlan({
+                about: patch.companyAbout,
+                role: patch.companyRole,
+                contribution: patch.companyContribution,
+                industry: patch.companyIndustry,
+                name: patch.companyName,
+                companyWorkspaceId: patch.companyWorkspaceId,
+              });
+            }
             // Line up an instant first search unless this browser already had one.
             let done = false;
             try {
@@ -5412,7 +5564,7 @@ function ScoutTool({
         tab={tab}
         setTab={setTab}
         newFindCount={newFindCount}
-        templatesCount={myTemplates.length}
+        templatesCount={visibleTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
         isCompany={profile.accountType === "company"}
@@ -5425,6 +5577,8 @@ function ScoutTool({
         companies={companies}
         activeCompanyId={activeCompanyId}
         onSelectCompany={selectCompany}
+        accentKey={activeAccentKey}
+        onSetAccent={setCompanyAccent}
         showLogout={!!showLogout}
         onLogout={onLogout}
         accountEmail={accountEmail || ""}
@@ -5551,7 +5705,7 @@ function ScoutTool({
                 <div className="flex items-start gap-2.5">
                   <span className="mt-0.5 text-sage-deep">🔒</span>
                   <span className="text-body/80">
-                    Your existing tabs, columns, and cells are never overwritten — Scout only adds a
+                    Your existing tabs, columns, and cells are never overwritten: Scout only adds a
                     column and writes to its own tab.
                   </span>
                 </div>
@@ -5632,7 +5786,7 @@ function ScoutTool({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warm-border bg-brown-tint/50 px-6 py-2.5 text-sm">
           <span className="font-semibold text-ink">You're trying Scout.</span>
           <span className="text-body/80">
-            Your finds are saved on this device only — create a free account to
+            Your finds are saved on this device only, create a free account to
             save them for good and send outreach.
           </span>
           <button
@@ -5686,7 +5840,7 @@ function ScoutTool({
                 <div className="text-sm font-extrabold text-ink">
                   {discovering
                     ? "Running your first search…"
-                    : "Welcome — let's find your first people"}
+                    : "Welcome, let's find your first people"}
                 </div>
                 <p className="mt-0.5 text-xs leading-relaxed text-body/80">
                   Scout is searching on the goal below so you can see real results
@@ -6004,11 +6158,11 @@ function ScoutTool({
                       value={examples}
                       onChange={(e) => setExamples(e.target.value)}
                       rows={2}
-                      placeholder="Links, names, or companies like the ones you want — e.g. https://example.com/their-page, Jane Doe at Sub Pop, “something like Daytrotter”"
+                      placeholder="Links, names, or companies like the ones you want, e.g. https://example.com/their-page, Jane Doe at Sub Pop, “something like Daytrotter”"
                       className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                     />
                     <p className="mt-1 text-[11px] leading-relaxed text-body/60">
-                      Scout uses these as examples of the <b>type</b> you want — they
+                      Scout uses these as examples of the <b>type</b> you want, they
                       won&apos;t narrow your search. If your goal says any industry,
                       you&apos;ll still get all industries.
                     </p>
@@ -6088,7 +6242,7 @@ function ScoutTool({
                         Scout understands {liveUnderstanding}% of your inquiry
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                        Answer to sharpen it — the more you tell Scout, the higher this
+                        Answer to sharpen it: the more you tell Scout, the higher this
                         climbs. Change any answer, or just run Scout now.
                       </p>
                     </div>
@@ -6298,13 +6452,13 @@ function ScoutTool({
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
                 </div>
                 <h3 className="mt-3 text-lg font-semibold tracking-tight text-ink">
-                  No matches yet — even after broadening
+                  No matches yet, even after broadening
                 </h3>
                 <p className="mx-auto mt-1.5 max-w-md text-sm leading-relaxed text-body">
                   Scout widened the search and still came up empty. That usually
                   means the goal is too specific or points somewhere with a thin
-                  public trail. Try loosening it — drop a location, a niche, or a
-                  hard requirement — and search again.
+                  public trail. Try loosening it (drop a location, a niche, or a
+                  hard requirement) and search again.
                 </p>
                 <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
                   <button
@@ -6460,7 +6614,7 @@ function ScoutTool({
                 </h2>
                 {/* Tell users where their drafts live so they don't wonder (task #56). */}
                 <p className="mb-4 text-xs text-body/60">
-                  Saved automatically — reach them anytime under{" "}
+                  Saved automatically. Reach them anytime under{" "}
                   <button
                     onClick={() => setTab("finds")}
                     className="font-semibold text-accent hover:underline"
@@ -6540,7 +6694,7 @@ function ScoutTool({
                                   (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body
                                 );
                                 if (ok) bumpActivity({ copies: 1 });
-                                else setError("Couldn't copy — select the text and press ⌘C.");
+                                else setError("Couldn't copy. Select the text and press ⌘C.");
                               }}
                               className="rounded-lg border border-warm-border px-3 py-1 text-xs font-semibold text-body transition hover:bg-warm-bg"
                             >
@@ -6807,8 +6961,10 @@ function ScoutTool({
           </p>
           <AccountCard
             email={accountEmail}
+            currentName={profile.name || ""}
             busy={accountBusy}
             note={accountNote}
+            onChangeName={changeName}
             onChangePassword={changePassword}
             onDeleteAccount={deleteAccount}
             onLogout={onLogout}
@@ -7285,6 +7441,25 @@ function GlobalScoutStatus({
 }
 
 /* ---------------- Sidebar navigation ---------------- */
+// Per-company accent colors, so you can tell which company's lens you're on at
+// a glance. Applied to the rail's top bar + active nav pill (both readable on
+// the light OR dark rail, unlike recoloring the whole panel). "" = no accent.
+const COMPANY_ACCENTS: { key: string; label: string; color: string; on: string }[] = [
+  { key: "", label: "None", color: "", on: "" },
+  { key: "teal", label: "Teal", color: "#2f8f83", on: "#ffffff" },
+  { key: "denim", label: "Denim", color: "#3e5c86", on: "#ffffff" },
+  { key: "plum", label: "Plum", color: "#7a4f86", on: "#ffffff" },
+  { key: "clay", label: "Clay", color: "#b5613a", on: "#ffffff" },
+  { key: "gold", label: "Gold", color: "#b58a2f", on: "#ffffff" },
+  { key: "rose", label: "Rose", color: "#b0466a", on: "#ffffff" },
+  { key: "forest", label: "Forest", color: "#3f7a4f", on: "#ffffff" },
+  { key: "slate", label: "Slate", color: "#556270", on: "#ffffff" },
+];
+function accentColor(key: string): { color: string; on: string } | null {
+  const a = COMPANY_ACCENTS.find((x) => x.key === key);
+  return a && a.color ? { color: a.color, on: a.on } : null;
+}
+
 function SideNav({
   tab,
   setTab,
@@ -7307,6 +7482,8 @@ function SideNav({
   accountEmail,
   onSwitchAccount,
   onAddAccount,
+  accentKey,
+  onSetAccent,
 }: {
   tab: string;
   setTab: (t: any) => void;
@@ -7329,7 +7506,18 @@ function SideNav({
   accountEmail?: string;
   onSwitchAccount?: (email: string) => void;
   onAddAccount?: () => void;
+  accentKey?: string;
+  onSetAccent?: (key: string) => void;
 }) {
+  const accent = accentColor(accentKey || "");
+  // Accent recolors the active nav pill via the rail's CSS vars (cascades to
+  // .nav-active children), safely on both the light and dark rail.
+  const railStyle = accent
+    ? ({
+        ["--su-rail-active-bg" as any]: accent.color,
+        ["--su-rail-active-fg" as any]: accent.on,
+      } as React.CSSProperties)
+    : undefined;
   // Account switcher menu (loaded from the local registry when opened).
   const [acctOpen, setAcctOpen] = useState(false);
   const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
@@ -7505,6 +7693,38 @@ function SideNav({
                 </option>
               ))}
             </select>
+            {/* Per-company color, so you know at a glance which one you're on.
+                Only meaningful once you've picked a specific company. */}
+            {onSetAccent && activeCompanyId && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5 px-2">
+                {COMPANY_ACCENTS.map((a) => {
+                  const selected = (accentKey || "") === a.key;
+                  return (
+                    <button
+                      key={a.key || "none"}
+                      onClick={() => onSetAccent(a.key)}
+                      title={a.label}
+                      aria-label={`${a.label} accent`}
+                      className={`h-4 w-4 rounded-full border transition ${
+                        selected ? "ring-2 ring-offset-1" : ""
+                      }`}
+                      style={{
+                        background: a.color || "transparent",
+                        borderColor: a.color ? a.color : "var(--su-rail-line)",
+                        // @ts-expect-error CSS custom prop
+                        "--tw-ring-color": a.color || "var(--su-rail-muted)",
+                      }}
+                    >
+                      {!a.color && (
+                        <span className="block text-[9px] leading-[14px] text-[color:var(--su-rail-muted)]">
+                          ×
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         <div className="kicker px-2 pb-1.5">Active project</div>
@@ -7653,14 +7873,16 @@ function SideNav({
             className="absolute inset-0 bg-ink/40"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto p-3.5 shadow-xl">
+          <aside style={railStyle} className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto p-3.5 shadow-xl">
+            {accent && <div className="mb-1 h-1 rounded-full" style={{ background: accent.color }} />}
             {navContent}
           </aside>
         </div>
       )}
 
       {/* Desktop sidebar */}
-      <aside className="rail su-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 overflow-y-auto p-3.5 md:flex">
+      <aside style={railStyle} className="rail su-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 overflow-y-auto p-3.5 md:flex">
+        {accent && <div className="mb-1 h-1 rounded-full" style={{ background: accent.color }} />}
         {navContent}
       </aside>
     </>
@@ -8017,7 +8239,7 @@ function DenyReasons({
       <div>
         <p className="mb-1.5 text-[11px] text-body/60">
           A quick reason trains <span className="font-semibold text-body/80">your</span>{" "}
-          Scout — it stops surfacing ones like this and finds more of what you want.
+          Scout: it stops surfacing ones like this and finds more of what you want.
         </p>
         <div className="flex flex-wrap items-center gap-1.5">
         {DENY_REASONS.map((r) => (
@@ -8601,7 +8823,7 @@ function FindDetailModal({
                 if (position < total) onNext();
                 else onClose();
               }}
-              title="Park this one — decide whether to reach out later"
+              title="Park this one, decide whether to reach out later"
               className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
             >
               Decide later
@@ -8828,7 +9050,7 @@ function FindDetailModal({
                   Evidence
                 </div>
                 <p className="mb-1 text-[11px] leading-relaxed text-body/60">
-                  How Scout found them — read the sources behind this match.
+                  How Scout found them: read the sources behind this match.
                 </p>
                 <SourcesList sources={o.sources} />
               </div>
@@ -9562,7 +9784,7 @@ function FindsTab({
           Value: (() => {
             const sent = finds.filter((f) => f.status === "sent" || f.status === "replied").length;
             const rep = finds.filter((f) => f.status === "replied").length;
-            return sent ? `${Math.round((rep / sent) * 100)}%` : "—";
+            return sent ? `${Math.round((rep / sent) * 100)}%` : "·";
           })(),
         },
         { Metric: "", Value: "" },
@@ -9750,7 +9972,7 @@ function FindsTab({
             </svg>
             <span className="font-extrabold text-ink">Shared finds</span>
             <span className="text-body/80">
-              You&apos;re on the <span className="font-semibold">{teamName}</span> lens — everyone
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens: everyone
               on the team sees this pipeline. A teammate&apos;s deny only flags a find for the
               rest of you; it disappears once most of the team passes on it.
             </span>
@@ -10691,6 +10913,25 @@ function FindCard({
         <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
           {o.channel}
         </span>
+        {(() => {
+          const via = find.foundVia || "search";
+          const label =
+            via === "manual"
+              ? "Added by you"
+              : via === "import"
+                ? "Imported"
+                : via === "auto-search"
+                  ? "Auto-search"
+                  : "Found by Scout";
+          return (
+            <span
+              title="How this contact got into your pipeline"
+              className="rounded-full border border-warm-border bg-surface px-2 py-0.5 text-[10px] font-semibold text-body/60"
+            >
+              {label}
+            </span>
+          );
+        })()}
         {recipientTz && (
           <span
             title={`${o.name}'s local time${
@@ -11328,8 +11569,8 @@ function FindWorkflow({
             {applying
               ? "Reading the application…"
               : find.application
-              ? "Redo application"
-              : "Draft full application"}
+              ? "Redo outreach"
+              : "Draft outreach"}
           </button>
         )}
 
@@ -12193,7 +12434,7 @@ function DashboardTab({
     ];
   const roleLine = (o: Opportunity) =>
     [o.contactRole, o.outlet, o.location].filter(Boolean).join(" · ") || o.channel || "";
-  const replyRatePct = learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "—";
+  const replyRatePct = learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "·";
   const weekday = new Date().toLocaleDateString(undefined, { weekday: "long" });
 
   const dashToggle = (
@@ -12230,7 +12471,7 @@ function DashboardTab({
               <div className="kicker" style={{ color: "var(--su-terra-deep)" }}>
                 {dashTab === "you"
                   ? newThisWeek > 0
-                    ? `${weekday} — ${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"}`
+                    ? `${weekday} · ${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"}`
                     : weekday
                   : "Across everyone on Scout"}
               </div>
@@ -12261,7 +12502,7 @@ function DashboardTab({
                   {strongThisWeek > 0
                     ? `${strongThisWeek} strong ${strongThisWeek === 1 ? "match is" : "matches are"} ready and drafted in your voice.`
                     : newThisWeek > 0
-                    ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week — worth a look.`
+                    ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week, worth a look.`
                     : "No new finds yet. Start a hunt and Scout brings people back."}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2.5">
@@ -12348,7 +12589,7 @@ function DashboardTab({
                         <div className="su-rl">{roleLine(spotlight.opp)}</div>
                         <div className="su-quote">
                           {cleanDash(spotlight.opp.whyItFits).trim() ||
-                            "Your strongest still-open match — worth a short, specific intro."}
+                            "Your strongest still-open match, worth a short, specific intro."}
                         </div>
                         <div className="su-act">
                           <button onClick={() => onOpenFind(spotlight)} className="su-btn su-btn-t">
@@ -13220,7 +13461,7 @@ function AutoSearchPanel({
       setMsg(
         `On. Scout will run this ${cadence}, drop the finds in your Finds${
           emailDigest ? ", and email them to you" : ""
-        }${items.length === 0 ? " — the first batch arrives on its next scheduled run." : "."}`
+        }${items.length === 0 ? ", the first batch arrives on its next scheduled run." : "."}`
       );
       load();
     } catch (e: any) {
@@ -13289,7 +13530,7 @@ function AutoSearchPanel({
                 <option value="daily">every day</option>
                 <option value="weekly">every week</option>
               </select>
-              <span className="text-body/60">— finds land in your Finds automatically.</span>
+              <span className="text-body/60">finds land in your Finds automatically.</span>
             </div>
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input
@@ -13299,7 +13540,7 @@ function AutoSearchPanel({
                 className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
               />
               <span className="leading-relaxed text-body/80">
-                <span className="font-semibold text-ink">Auto-email me the finds</span> — a
+                <span className="font-semibold text-ink">Auto-email me the finds</span>: a
                 digest to your inbox with one-tap Approve / Not-a-fit. Off (the
                 default) = they just appear in Finds, no email.
               </span>
@@ -14359,7 +14600,7 @@ function TeamTab({
         body: JSON.stringify({ workspaceId: workspace.id, code: companyCode.trim() }),
       });
       setCompanyCode("");
-      setNote("Company code redeemed — your whole team now has free unlimited use.");
+      setNote("Company code redeemed: your whole team now has free unlimited use.");
       await loadCtx();
     });
 
@@ -14793,7 +15034,7 @@ function TeamTab({
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     rows={2}
-                    placeholder="Invite teammates by email — paste several, separated by commas, spaces, or new lines"
+                    placeholder="Invite teammates by email, paste several, separated by commas, spaces, or new lines"
                     className="min-w-[240px] flex-1 resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                   />
                   <select
@@ -14817,7 +15058,7 @@ function TeamTab({
                 <p className="mt-2 text-[11px] leading-relaxed text-body/60">
                   <b>Admin</b> manages the team &middot; <b>Editor</b> works finds
                   (search, draft, send) &middot; <b>Viewer</b> can only look. They
-                  join automatically the next time they open Scout — whether they
+                  join automatically the next time they open Scout, whether they
                   sign up or already have an account.
                 </p>
 
@@ -14857,7 +15098,7 @@ function TeamTab({
                     </button>
                   )}
                   <p className="mt-2 text-[11px] leading-relaxed text-body/60">
-                    Safe to share anywhere — <b>only the emails you invited above</b> can
+                    Safe to share anywhere: <b>only the emails you invited above</b> can
                     join through it. Someone who opens the link signs in with their
                     approved email and lands on your team. No email delivery needed.
                   </p>
@@ -14878,7 +15119,7 @@ function TeamTab({
                 </div>
                 {workspace.comped ? (
                   <p className="mt-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs font-semibold text-sage-deep">
-                    ✓ Your whole team has free unlimited use — no one here needs to pay
+                    ✓ Your whole team has free unlimited use, no one here needs to pay
                     or redeem an individual code.
                   </p>
                 ) : (
@@ -14902,7 +15143,7 @@ function TeamTab({
                       </button>
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed text-body/60">
-                      One code that gives <b>everyone on this team</b> free unlimited use —
+                      One code that gives <b>everyone on this team</b> free unlimited use,
                       current and future members. No per-person code needed.
                     </p>
                   </>
@@ -16230,7 +16471,7 @@ function TemplatesTab({
             </svg>
             <span className="font-extrabold text-ink">Shared templates</span>
             <span className="text-body/80">
-              You&apos;re on the <span className="font-semibold">{teamName}</span> lens —
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens:
               templates you save here are published to the team&apos;s library, and
               teammates&apos; templates appear below with their name on them.
             </span>
@@ -18092,20 +18333,25 @@ function ProfileTab({
 /* ---------------- Account section (login info, password, delete) ---------------- */
 function AccountCard({
   email,
+  currentName,
   busy,
   note,
+  onChangeName,
   onChangePassword,
   onDeleteAccount,
   onLogout,
 }: {
   email: string;
+  currentName?: string;
   busy: string;
   note: string;
+  onChangeName?: (name: string) => void;
   onChangePassword: (pw: string) => void;
   onDeleteAccount: () => void;
   onLogout?: () => void;
 }) {
   const [pw, setPw] = useState("");
+  const [nm, setNm] = useState(currentName || "");
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -18126,6 +18372,31 @@ function AccountCard({
           </button>
         )}
       </div>
+
+      {/* Change display name */}
+      {onChangeName && (
+        <div className="mt-5">
+          <Label>Your name</Label>
+          <div className="flex flex-wrap gap-2">
+            <input
+              value={nm}
+              onChange={(e) => setNm(e.target.value)}
+              placeholder="Your name"
+              className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+            <button
+              onClick={() => onChangeName(nm)}
+              disabled={busy === "name" || !nm.trim() || nm.trim() === (currentName || "").trim()}
+              className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+            >
+              {busy === "name" ? "Saving…" : "Save"}
+            </button>
+          </div>
+          <p className="mt-1.5 text-xs text-body/60">
+            This is the name Scout signs your outreach with.
+          </p>
+        </div>
+      )}
 
       {/* Change password */}
       <div className="mt-5">

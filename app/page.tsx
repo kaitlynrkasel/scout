@@ -357,7 +357,7 @@ const BODY = `
     </div>
     <div>
       <div class="msg gen"><div class="lbl">Generic</div><p>Hi, I came across your profile and wanted to connect regarding potential opportunities at your company.</p></div>
-      <div class="msg you"><div class="lbl">In your voice · illustrative</div><p>Hey Rina — saw Northwind's launch went really well last week. I'm deep in growth right now and would love 15 minutes on how you found your first 1k users.</p></div>
+      <div class="msg you"><div class="lbl">In your voice · illustrative</div><p>Hey Rina, saw Northwind's launch went really well last week. I'm deep in growth right now and would love 15 minutes on how you found your first 1k users.</p></div>
     </div>
   </div>
 </div></section>

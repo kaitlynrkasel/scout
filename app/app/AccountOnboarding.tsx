@@ -17,6 +17,8 @@ type CompletePatch = {
   companyName?: string;
   companyRole?: string;
   companyContribution?: string;
+  companyAbout?: string;
+  companyIndustry?: string;
   companyWorkspaceId?: string;
 };
 
@@ -139,6 +141,8 @@ export default function AccountOnboarding({
       companyName: companyName.trim(),
       companyRole: companyRole.trim(),
       companyContribution: companyContribution.trim(),
+      companyAbout: companyAbout.trim(),
+      companyIndustry: companyIndustry.trim(),
       companyWorkspaceId: res.id,
     });
   }
@@ -197,9 +201,9 @@ export default function AccountOnboarding({
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-brown-tint text-brown-deep">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="3.5" /><path d="M5 20a7 7 0 0 1 14 0" /></svg>
                 </span>
-                <div className="mt-3 text-base font-bold text-ink">I&apos;m an individual</div>
+                <div className="mt-3 text-base font-bold text-ink">Just me</div>
                 <p className="mt-1 text-sm leading-relaxed text-body/80">
-                  Reaching out for yourself, your job search, your art, your network.
+                  Reaching out for yourself: your job search, your art, your network.
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brown">
                   Continue
@@ -214,9 +218,9 @@ export default function AccountOnboarding({
                 <span className="grid h-11 w-11 place-items-center rounded-xl bg-brown-tint text-brown-deep">
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 21h18" /><path d="M5 21V7l7-4 7 4v14" /><path d="M9 21v-5h6v5" /><path d="M9 10h.01M15 10h.01M9 13h.01M15 13h.01" /></svg>
                 </span>
-                <div className="mt-3 text-base font-bold text-ink">I&apos;m with a company</div>
+                <div className="mt-3 text-base font-bold text-ink">A company, org, or team</div>
                 <p className="mt-1 text-sm leading-relaxed text-body/80">
-                  Reaching out on behalf of a company, brand, or team you&apos;re part of.
+                  Reaching out on behalf of a company, brand, student org, nonprofit, or any team you&apos;re part of.
                 </p>
                 <span className="mt-3 inline-flex items-center gap-1 text-xs font-bold text-brown">
                   Continue
@@ -320,7 +324,7 @@ export default function AccountOnboarding({
                 </div>
                 <p className="mt-1.5 text-xs leading-relaxed text-body/70">
                   {scanNote ||
-                    "Scout reads your site — or an Instagram / TikTok / LinkedIn / Facebook page — to learn what your company does, then fills the questions below. No web presence? Just fill them in yourself, it's not required."}
+                    "Scout reads your site (or an Instagram / TikTok / LinkedIn / Facebook page) to learn what your company does, then fills the questions below. No web presence? Just fill them in yourself, it's not required."}
                 </p>
               </div>
 
