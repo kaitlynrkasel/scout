@@ -2156,6 +2156,19 @@ function ScoutTool({
         if (wss.length && profile.accountType !== "company") {
           patchProfile({ accountType: "company", companyWorkspaceId: wss[0].id });
         }
+        // Single-company account with no saved lens: default straight to that
+        // company (there's no "All companies" to sit on), so its color + lens
+        // apply without the user having to pick.
+        if (wss.length === 1) {
+          try {
+            if (!localStorage.getItem("scout_active_company")) {
+              setActiveCompanyId(wss[0].id);
+              localStorage.setItem("scout_active_company", wss[0].id);
+            }
+          } catch {
+            setActiveCompanyId(wss[0].id);
+          }
+        }
       } catch {
         /* teams not configured — switcher just stays hidden */
       }
@@ -5869,37 +5882,22 @@ function ScoutTool({
                 className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[230px_1fr]"
               >
                 <div>
-                  <Label>Project name</Label>
+                  <Label>Project</Label>
+                  {/* Same control as Category below: pick from the dropdown, tap
+                      the pencil to rename / add / remove. One consistent system. */}
                   <div className="relative">
-                    {/* The project title is edited RIGHT HERE — an obvious text
-                        field, not buried behind the manage dialog. Switching
-                        between projects moves to the small picker below. */}
                     <div className="flex items-center gap-2">
-                      <input
-                        value={activeProject?.name || ""}
-                        onChange={(e) =>
-                          saveProjects(
-                            projects.map((p) =>
-                              p.id === activeId ? { ...p, name: e.target.value } : p
-                            )
-                          )
-                        }
-                        onBlur={(e) => {
-                          if (!e.target.value.trim())
-                            saveProjects(
-                              projects.map((p) =>
-                                p.id === activeId ? { ...p, name: "Untitled project" } : p
-                              )
-                            );
-                        }}
-                        placeholder="Name this project"
-                        aria-label="Project name"
-                        className="w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      <PrettySelect
+                        ariaLabel="Project"
+                        className="flex-1"
+                        value={activeId}
+                        onChange={selectProject}
+                        options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
                       />
                       <button
                         onClick={() => setEditingProjects(true)}
-                        title="Add or remove projects"
-                        aria-label="Add or remove projects"
+                        title="Rename, add, or remove projects"
+                        aria-label="Rename, add, or remove projects"
                         className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
                         <PencilIcon />
@@ -5918,25 +5916,9 @@ function ScoutTool({
                       />
                     )}
                   </div>
-                  {projects.length > 1 && (
-                    <label className="mt-2 flex items-center gap-2 text-xs font-medium text-body/70">
-                      <span className="shrink-0">Switch to</span>
-                      <select
-                        value={activeId}
-                        onChange={(e) => selectProject(e.target.value)}
-                        className="scout-select min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none transition focus:border-coral"
-                      >
-                        {visibleProjects.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                  )}
                   <p className="mt-2.5 text-xs leading-relaxed text-body/70">
-                    A project is one workspace per client, brand, or goal. Type a
-                    name above; tap the pencil to add or remove projects.
+                    A project is one workspace per client, brand, or goal. Tap the
+                    pencil to rename, add, or remove projects.
                   </p>
                 </div>
 
@@ -6030,24 +6012,24 @@ function ScoutTool({
               >
                 <div>
                   <Label>Category of search</Label>
+                  {/* Identical control to Project above: dropdown to switch,
+                      pencil to rename / add / remove. */}
                   <div className="relative">
                     <div className="flex items-center gap-2">
-                      <select
+                      <PrettySelect
+                        ariaLabel="Category of search"
+                        className="flex-1"
                         value={catId}
-                        onChange={(e) => selectCategory(e.target.value)}
-                        className="scout-select w-full flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                      >
-                        {myCats.map((c) => (
-                          <option key={c.id} value={c.id}>
-                            {c.name}
-                          </option>
-                        ))}
-                        <option value="">Custom search…</option>
-                      </select>
+                        onChange={selectCategory}
+                        options={[
+                          ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                          { value: "", label: "Custom search…" },
+                        ]}
+                      />
                       <button
                         onClick={() => setEditingCats(true)}
-                        title="Edit categories"
-                        aria-label="Edit categories"
+                        title="Rename, add, or remove categories"
+                        aria-label="Rename, add, or remove categories"
                         className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                       >
                         <PencilIcon />
@@ -7491,6 +7473,94 @@ function appAccentStyle(key: string): React.CSSProperties | undefined {
   } as React.CSSProperties;
 }
 
+// A custom dropdown that matches Scout's warm aesthetic (rounded, cream, brown
+// accent), instead of the browser's native system menu. Keyboard accessible,
+// closes on outside-click / Escape. Options are { value, label }.
+function PrettySelect({
+  value,
+  options,
+  onChange,
+  className = "",
+  ariaLabel,
+}: {
+  value: string;
+  options: { value: string; label: string }[];
+  onChange: (v: string) => void;
+  className?: string;
+  ariaLabel?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = options.find((o) => o.value === value);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  return (
+    <div ref={ref} className={`relative ${className}`}>
+      <button
+        type="button"
+        aria-label={ariaLabel}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        className="pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
+      >
+        <span className="min-w-0 truncate">{current?.label || "Select…"}</span>
+        <svg
+          width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
+          className={`shrink-0 text-body/50 transition-transform ${open ? "rotate-180" : ""}`}
+          aria-hidden
+        >
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 right-0 z-30 mt-1.5 max-h-64 overflow-auto rounded-2xl border border-warm-border bg-surface p-1.5 shadow-xl"
+        >
+          {options.map((o) => {
+            const sel = o.value === value;
+            return (
+              <button
+                key={o.value}
+                role="option"
+                aria-selected={sel}
+                onClick={() => {
+                  onChange(o.value);
+                  setOpen(false);
+                }}
+                className={`flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm transition ${
+                  sel
+                    ? "bg-brown-tint/60 font-bold text-brown-deep"
+                    : "font-medium text-body hover:bg-warm-bg"
+                }`}
+              >
+                <span className="min-w-0 flex-1 truncate">{o.label}</span>
+                {sel && (
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown"><path d="M20 6 9 17l-5-5" /></svg>
+                )}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SideNav({
   tab,
   setTab,
@@ -7693,39 +7763,35 @@ function SideNav({
       </nav>
 
       <div className="su-foot mt-auto pt-3">
-        {/* Company lens — always available when you belong to 1+ companies.
-            Scopes the project list (and Dashboard/Outreach) to that company. */}
+        {/* Company lens. "All companies" only appears when there's more than one
+            to switch between; a single-company account just shows that company. */}
         {companies.length > 0 && (
           <div className="mb-2.5">
             <div className="kicker px-2 pb-1.5">Company</div>
-            <select
-              value={activeCompanyId}
-              onChange={(e) => onSelectCompany(e.target.value)}
-              className="su-projsel"
-            >
-              <option value="">All companies</option>
-              {hasPersonal && <option value="personal">Personal</option>}
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <PrettySelect
+              ariaLabel="Company lens"
+              value={
+                companies.length === 1 && !hasPersonal && !activeCompanyId
+                  ? companies[0].id
+                  : activeCompanyId
+              }
+              onChange={onSelectCompany}
+              options={[
+                ...(companies.length > 1 ? [{ value: "", label: "All companies" }] : []),
+                ...(hasPersonal ? [{ value: "personal", label: "Personal" }] : []),
+                ...companies.map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
           </div>
         )}
         <div className="kicker px-2 pb-1.5">Active project</div>
         {projects.length > 0 ? (
-          <select
+          <PrettySelect
+            ariaLabel="Active project"
             value={activeId}
-            onChange={(e) => onSelectProject(e.target.value)}
-            className="su-projsel"
-          >
-            {projects.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.name}
-              </option>
-            ))}
-          </select>
+            onChange={onSelectProject}
+            options={projects.map((p) => ({ value: p.id, label: p.name }))}
+          />
         ) : (
           <p className="px-2 text-[11px] leading-relaxed text-[color:var(--su-rail-muted)]">
             No projects in this company yet. Start a search in Outreach to create one.
@@ -17889,18 +17955,16 @@ function ProfileTab({
           <span className="text-[11px] font-bold uppercase tracking-wider text-blue-deep">
             Company
           </span>
-          <select
+          <PrettySelect
+            ariaLabel="Company"
+            className="min-w-[200px]"
             value={activeCompanyId || companies[0].id}
-            onChange={(e) => onSelectCompany(e.target.value)}
-            className="scout-select rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-bold text-ink outline-none transition focus:border-coral"
-          >
-            {companies.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-            {hasPersonalProjects && <option value="personal">Personal</option>}
-          </select>
+            onChange={onSelectCompany}
+            options={[
+              ...companies.map((c) => ({ value: c.id, label: c.name })),
+              ...(hasPersonalProjects ? [{ value: "personal", label: "Personal" }] : []),
+            ]}
+          />
           <span className="text-xs leading-snug text-body/70">
             This whole page (company details, your role, projects) is for this company.
           </span>
