@@ -3825,6 +3825,64 @@ function ScoutTool({
     saveFinds(finds.filter((f) => f.id !== id));
   }
 
+  // Hand-add a contact you already know (an artist whose email you have, a
+  // referral, a business card). Becomes a normal find in the pipeline, so
+  // drafting uses your templates, voice, and signature exactly like a found
+  // contact. Returns an error message, or null on success.
+  function addManualFind(input: {
+    name: string;
+    outlet?: string;
+    email?: string;
+    phone?: string;
+    handle?: string;
+    url?: string;
+    location?: string;
+    notes?: string;
+    projectId?: string;
+  }): string | null {
+    const name = (input.name || "").trim();
+    if (!name) return "Give them at least a name.";
+    const projectId = input.projectId || activeId;
+    const email = (input.email || "").trim();
+    const handle = (input.handle || "").trim();
+    const url = (input.url || "").trim();
+    const channel = email
+      ? "Email"
+      : /linkedin/i.test(handle)
+        ? "LinkedIn"
+        : handle
+          ? "Instagram DM"
+          : url
+            ? "Website"
+            : "Email";
+    const opp: Opportunity = {
+      id: `manual-${Date.now()}`,
+      name,
+      outlet: (input.outlet || "").trim(),
+      url,
+      channel,
+      contactEmail: email,
+      contactName: "",
+      contactRole: "",
+      contactHandle: handle,
+      contactPhone: (input.phone || "").trim(),
+      location: (input.location || "").trim(),
+      fitScore: null,
+      targetType: "person",
+      whyItFits: (input.notes || "").trim() || "Added by you",
+      sourceTitle: "Added by you",
+      sourceSnippet: "",
+    };
+    const id = findKey(projectId, opp);
+    if (finds.some((f) => f.id === id))
+      return "They're already in your finds (check the status tabs).";
+    saveFinds([
+      { id, projectId, status: "new" as FindStatus, opp, addedAt: Date.now() },
+      ...finds,
+    ]);
+    return null;
+  }
+
   // Tell the shared ledger this user is pursuing a contact, so it isn't
   // over-surfaced to everyone else. Fire-and-forget; no-op for signed-out users.
   // Only personal outreach counts, job/internship openings are meant to get many
@@ -6516,6 +6574,7 @@ function ScoutTool({
           accountEmail={accountEmail || ""}
           teamBusyId={teamFindsBusyId}
           onTeamPatch={patchTeamFind}
+          onAddManual={addManualFind}
           projectName={activeProject?.name || "this project"}
           projects={visibleProjects}
           activeProjectId={activeId}
@@ -9082,6 +9141,156 @@ function FindDetailModal({
 }
 
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
+// "Add a contact" — hand-enter someone you already know (name + any contact
+// route). Saves straight into the pipeline as a normal find, so drafting uses
+// your templates and voice like any Scout-found contact.
+function AddContactModal({
+  projects,
+  defaultProjectId,
+  onClose,
+  onAdd,
+}: {
+  projects: Project[];
+  defaultProjectId: string;
+  onClose: () => void;
+  onAdd: (input: {
+    name: string;
+    outlet?: string;
+    email?: string;
+    phone?: string;
+    handle?: string;
+    url?: string;
+    location?: string;
+    notes?: string;
+    projectId?: string;
+  }) => string | null;
+}) {
+  const [name, setName] = useState("");
+  const [outlet, setOutlet] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [handle, setHandle] = useState("");
+  const [url, setUrl] = useState("");
+  const [location, setLocation] = useState("");
+  const [notes, setNotes] = useState("");
+  const [projectId, setProjectId] = useState(defaultProjectId);
+  const [error, setError] = useState("");
+  const inp =
+    "w-full rounded-xl border border-warm-border bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral";
+  const submit = () => {
+    const err = onAdd({ name, outlet, email, phone, handle, url, location, notes, projectId });
+    if (err) setError(err);
+  };
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-3xl border border-warm-border bg-surface p-6 shadow-xl"
+      >
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-extrabold text-ink">Add a contact</h2>
+            <p className="mt-1 text-xs leading-relaxed text-body/70">
+              Someone you already have in mind. They join your finds like anyone
+              Scout digs up, and drafts to them use your templates and voice.
+            </p>
+          </div>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-lg border border-warm-border px-2.5 py-1 text-sm font-semibold text-body/60 transition hover:bg-warm-bg"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <Label>Name (required)</Label>
+            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maren Doyle" className={inp} autoFocus />
+          </div>
+          <div>
+            <Label>Email</Label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="maren@label.com" className={inp} />
+          </div>
+          <div>
+            <Label>Company / outlet</Label>
+            <input value={outlet} onChange={(e) => setOutlet(e.target.value)} placeholder="Band, label, company…" className={inp} />
+          </div>
+          <div>
+            <Label>Social or LinkedIn</Label>
+            <input value={handle} onChange={(e) => setHandle(e.target.value)} placeholder="@handle or profile link" className={inp} />
+          </div>
+          <div>
+            <Label>Phone</Label>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(615) 555-0100" className={inp} />
+          </div>
+          <div>
+            <Label>Website</Label>
+            <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="theirsite.com" className={inp} />
+          </div>
+          <div>
+            <Label>Location</Label>
+            <input value={location} onChange={(e) => setLocation(e.target.value)} placeholder="Nashville, TN" className={inp} />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Why them / notes</Label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              placeholder="Anything Scout should work into the message (how you know them, why now…)"
+              className={`${inp} resize-y`}
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <Label>Project</Label>
+            <select
+              value={projectId}
+              onChange={(e) => setProjectId(e.target.value)}
+              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-coral"
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs text-amber-800">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex items-center gap-2">
+          <button
+            onClick={submit}
+            disabled={!name.trim()}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+          >
+            Add to my finds
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Cancel
+          </button>
+          <span className="text-[11px] text-body/50">
+            Nothing is sent. Drafting stays up to you.
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FindsTab({
   finds,
   categories,
@@ -9138,6 +9347,7 @@ function FindsTab({
   accountEmail,
   teamBusyId,
   onTeamPatch,
+  onAddManual,
 }: {
   finds: Find[];
   categories: Category[];
@@ -9208,7 +9418,20 @@ function FindsTab({
   accountEmail?: string;
   teamBusyId?: string;
   onTeamPatch?: (findId: string, patch: any) => void;
+  onAddManual?: (input: {
+    name: string;
+    outlet?: string;
+    email?: string;
+    phone?: string;
+    handle?: string;
+    url?: string;
+    location?: string;
+    notes?: string;
+    projectId?: string;
+  }) => string | null;
 }) {
+  // "Add a contact" by hand (someone you already know) — modal open state.
+  const [addOpen, setAddOpen] = useState(false);
   // ---- Comprehensive filters (collapsible panel below the status tabs) ----
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [q, setQ] = useState(""); // free-text search over name/notes/contact
@@ -9483,6 +9706,15 @@ function FindsTab({
               {repliesBusy ? "Checking…" : "Check replies now"}
             </button>
           )}
+          {onAddManual && (
+            <button
+              onClick={() => setAddOpen(true)}
+              title="Already know who you want to reach? Add them by hand and Scout drafts to them in your voice, using your templates."
+              className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Add a contact
+            </button>
+          )}
           <button
             onClick={goOutreach}
             className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
@@ -9491,6 +9723,22 @@ function FindsTab({
           </button>
         </div>
       </div>
+
+      {addOpen && onAddManual && (
+        <AddContactModal
+          projects={projects}
+          defaultProjectId={activeProjectId}
+          onClose={() => setAddOpen(false)}
+          onAdd={(input) => {
+            const err = onAddManual(input);
+            if (!err) {
+              setAddOpen(false);
+              setFilter("new"); // land where the new contact is visible
+            }
+            return err;
+          }}
+        />
+      )}
 
       {/* Team lens: make it unmistakable that this pipeline is SHARED, and let
           the user slice it person-by-person (who ran the search / whose finds). */}
