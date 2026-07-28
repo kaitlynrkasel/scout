@@ -7003,6 +7003,7 @@ function ScoutTool({
           onSetProjectCompany={setProjectCompany}
           primaryCompanyId={primaryCompanyId}
           onImportOutreach={() => setImportOpen(true)}
+          onGoManual={() => setTab("manual")}
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
@@ -18093,6 +18094,7 @@ function ProfileTab({
   onSetProjectCompany,
   primaryCompanyId,
   onImportOutreach,
+  onGoManual,
   resumeFileName,
   onResumeFile,
   onClearResume,
@@ -18189,6 +18191,7 @@ function ProfileTab({
   onSetProjectCompany: (id: string, companyId: string) => void;
   primaryCompanyId: string;
   onImportOutreach: () => void;
+  onGoManual: () => void;
   resumeFileName: string;
   onResumeFile: (file: File) => void;
   onClearResume: () => void;
@@ -18784,8 +18787,12 @@ function ProfileTab({
 
         <hr className="my-7 border-warm-border" />
 
-        {/* -------- Import your existing outreach (dedup + learn) -------- */}
-        <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+        {/* Import moved to its own Manual tab (Profile was getting busy). Just a
+            pointer here so people still find it. */}
+        <button
+          onClick={onGoManual}
+          className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 text-left shadow-card transition hover:border-brown/40 hover:bg-warm-bg/40"
+        >
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
           </span>
@@ -18794,82 +18801,12 @@ function ProfileTab({
               Already reaching out somewhere else?
             </div>
             <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-              Drop in your tracking sheet — CSV, Excel, Numbers, or OpenDocument.
-              Scout won&apos;t resurface those contacts and starts learning what a
-              fit looks like for you.
+              Import a tracking sheet or hand-add contacts you already know in the
+              Manual tab.
             </p>
           </div>
-          <button
-            onClick={onImportOutreach}
-            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-          >
-            Import a file
-          </button>
-          {/* Level 3: connect Google Sheets for private reads + write-back. */}
-          <div className="w-full border-t border-warm-border pt-3">
-            <div className="flex flex-wrap items-center gap-2">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-blue-deep"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M3 15h18M9 3v18M15 3v18" /></svg>
-              <span className="text-xs font-bold text-ink">Google Sheets</span>
-              {sheetsConnected ? (
-                <span className="rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
-                  Connected{sheetsEmail ? ` · ${sheetsEmail}` : ""}
-                </span>
-              ) : (
-                <span className="text-[11px] text-body/50">Not connected</span>
-              )}
-              <div className="ml-auto flex items-center gap-2">
-                {/* Primary path most people want: paste a sheet link. Opens the
-                    importer where the link box lives. Works for public sheets
-                    without connecting; private sheets need the OAuth connect. */}
-                <button
-                  onClick={onImportOutreach}
-                  className="rounded-lg bg-brand-gradient px-3 py-1.5 text-[11px] font-bold text-white shadow-soft transition hover:opacity-95"
-                >
-                  Paste a sheet link
-                </button>
-                {sheetsConnected ? (
-                  <button
-                    onClick={onDisconnectSheets}
-                    className="text-[11px] font-semibold text-body/50 transition hover:text-red-600"
-                  >
-                    Disconnect
-                  </button>
-                ) : (
-                  <button
-                    onClick={onConnectSheets}
-                    className="rounded-lg border border-warm-border px-3 py-1.5 text-[11px] font-bold text-ink transition hover:bg-warm-bg"
-                  >
-                    Connect for private sheets
-                  </button>
-                )}
-              </div>
-            </div>
-            <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
-              {sheetsConnected
-                ? "Paste a sheet link to add one. Scout can read your private sheets (no public sharing needed), and only edits a sheet after you tick “Allow edits” and confirm a preview — then it adds a Scout Status column (never overwriting) and puts new finds in a separate “Scout” tab."
-                : "Paste a link to add a Google Sheet — public sheets (Anyone with the link · Viewer) work right away. To pull in private sheets without sharing them publicly, connect Google Sheets first. Scout never edits a sheet unless you allow it per sheet, and always shows a preview."}
-            </p>
-          </div>
-          {syncedSheets.length > 0 && (
-            <div className="w-full border-t border-warm-border pt-3">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-                Synced sheets
-              </div>
-              <div className="mt-2 space-y-1.5">
-                {syncedSheets.map((s) => (
-                  <SyncedSheetRow
-                    key={s.id}
-                    s={s}
-                    sheetsConnected={sheetsConnected}
-                    onPreviewWrite={onPreviewWrite}
-                    onSetSheetWrite={onSetSheetWrite}
-                    onRemoveSync={onRemoveSync}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
+          <span className="shrink-0 text-sm font-bold text-accent">Manual tab →</span>
+        </button>
 
         <hr className="my-7 border-warm-border" />
 
