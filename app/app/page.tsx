@@ -3180,6 +3180,161 @@ function ScoutTool({
   const myCats = activeProject
     ? categories.filter((c) => c.projectId === activeProject.id)
     : [];
+
+  // ---- Shared workspace projects + categories -----------------------------
+  // On a company lens, the projects/categories tagged to that company are the
+  // TEAM's shared structure, so everyone searches the same buckets. The source
+  // of truth is a per-workspace blob; we pull it on entering the lens and push
+  // our changes back (debounced). Only the structural fields travel (name,
+  // context, use case, goal, examples, channels); per-person bits like a
+  // project's email signature stay local.
+  const wsSyncedSig = useRef<string>("");
+  // The company-scope signature of the current local projects/categories, in the
+  // exact shape stored in the shared blob, so pull + push agree on "unchanged".
+  function companyScope(projs: Project[], cats: Category[]) {
+    const cp = projs.filter((p) => (p.companyId || primaryCompanyId) === teamLens);
+    const ids = new Set(cp.map((p) => p.id));
+    const projects = cp.map((p) => ({
+      id: p.id,
+      name: p.name,
+      useCase: p.useCase || "",
+      context: p.context || "",
+    }));
+    const categories = cats
+      .filter((c) => ids.has(c.projectId))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        goal: c.goal || "",
+        projectId: c.projectId,
+        examples: c.examples || "",
+        wantedChannels: c.wantedChannels || [],
+      }));
+    return { projects, categories, sig: JSON.stringify({ projects, categories }) };
+  }
+
+  // Pull on entering a company lens: make my company-scoped projects/categories
+  // match the team's shared blob (authoritative), preserving my local-only
+  // per-project fields (signature, usesProfile…). Empty blob = nothing shared
+  // yet; leave mine and let the push effect seed it.
+  useEffect(() => {
+    if (!teamLens || !getToken) return;
+    let alive = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const r = await fetch(`/api/team/workspace-state?workspaceId=${teamLens}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!alive) return;
+        const bp: any[] = Array.isArray(j.state?.projects) ? j.state.projects : [];
+        const bc: any[] = Array.isArray(j.state?.categories) ? j.state.categories : [];
+        if (bp.length === 0 && bc.length === 0) {
+          wsSyncedSig.current = ""; // nothing shared — push effect will seed it
+          return;
+        }
+        setProjects((prev) => {
+          const mine = new Map(prev.map((p) => [p.id, p]));
+          const others = prev.filter(
+            (p) => (p.companyId || primaryCompanyId) !== teamLens
+          );
+          const shared: Project[] = bp.map((p) => {
+            const local = mine.get(p.id);
+            return {
+              ...(local || {}),
+              id: p.id,
+              name: p.name,
+              useCase: p.useCase || local?.useCase || "networking",
+              context: p.context || "",
+              companyId: teamLens,
+            } as Project;
+          });
+          const next = [...others, ...shared];
+          try {
+            localStorage.setItem(PROJECTS_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        setCategories((prev) => {
+          const sharedProjIds = new Set(bp.map((p) => p.id));
+          const others = prev.filter((c) => !sharedProjIds.has(c.projectId));
+          const mine = new Map(prev.map((c) => [c.id, c]));
+          const shared: Category[] = bc.map((c) => {
+            const local = mine.get(c.id);
+            return {
+              ...(local || {}),
+              id: c.id,
+              name: c.name,
+              goal: c.goal || "",
+              projectId: c.projectId,
+              examples: c.examples || "",
+              wantedChannels: c.wantedChannels || [],
+            } as Category;
+          });
+          const next = [...others, ...shared];
+          try {
+            localStorage.setItem(CAT_KEY, JSON.stringify(next));
+          } catch {}
+          return next;
+        });
+        // Mark synced in the SAME shape the push computes, so we don't
+        // immediately re-push the very data we just pulled.
+        wsSyncedSig.current = JSON.stringify({
+          projects: bp.map((p) => ({
+            id: p.id,
+            name: p.name,
+            useCase: p.useCase || "",
+            context: p.context || "",
+          })),
+          categories: bc.map((c) => ({
+            id: c.id,
+            name: c.name,
+            goal: c.goal || "",
+            projectId: c.projectId,
+            examples: c.examples || "",
+            wantedChannels: c.wantedChannels || [],
+          })),
+        });
+      } catch {
+        /* teams not configured — projects/categories just stay local */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens]);
+
+  // Push my company-scoped projects/categories to the shared blob whenever they
+  // change on a company lens (debounced). Authoritative: teammates pull this on
+  // their next lens entry, so adds, edits, and removes all propagate.
+  useEffect(() => {
+    if (!teamLens || !getToken) return;
+    const scope = companyScope(projects, categories);
+    if (scope.sig === wsSyncedSig.current) return;
+    const t = setTimeout(async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch("/api/team/workspace-state", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: teamLens,
+            projects: scope.projects,
+            categories: scope.categories,
+          }),
+        });
+        wsSyncedSig.current = scope.sig;
+      } catch {
+        /* best-effort; the next change retries */
+      }
+    }, 1000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, projects, categories]);
   // The company identity (only present on company accounts). Split out so a
   // project can turn it OFF and represent the person alone, e.g. a co-founder
   // hunting internships for herself, not pitching on behalf of the company.
@@ -5883,6 +6038,18 @@ function ScoutTool({
                     ...companies.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
+              </div>
+            )}
+            {teamLens && (
+              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+                </svg>
+                <span className="font-semibold text-ink">Shared with your team.</span>
+                <span className="text-body/80">
+                  Projects and categories you add on the {teamLensName} lens are
+                  shared, so everyone searches the same buckets.
+                </span>
               </div>
             )}
           </div>

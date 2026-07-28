@@ -777,6 +777,38 @@ export async function setProjectMembers(
   return { ok: true };
 }
 
+// ---- Shared workspace projects + categories (the team's outreach structure) ----
+
+export async function loadWorkspaceState(uid: string, workspaceId: string) {
+  await assertWorkspaceMember(uid, workspaceId);
+  const { data } = await db()
+    .from("workspace_shared_state")
+    .select("data")
+    .eq("workspace_id", workspaceId)
+    .maybeSingle();
+  return (data?.data || {}) as { projects?: any[]; categories?: any[] };
+}
+
+export async function saveWorkspaceState(
+  uid: string,
+  workspaceId: string,
+  state: { projects?: any[]; categories?: any[] }
+) {
+  await assertWorkspaceMember(uid, workspaceId);
+  const clean = {
+    projects: Array.isArray(state.projects) ? state.projects.slice(0, 200) : [],
+    categories: Array.isArray(state.categories) ? state.categories.slice(0, 1000) : [],
+  };
+  const { error } = await db()
+    .from("workspace_shared_state")
+    .upsert(
+      { workspace_id: workspaceId, data: clean, updated_at: new Date().toISOString() },
+      { onConflict: "workspace_id" }
+    );
+  if (error) throw new TeamError(error.message, 500);
+  return { ok: true };
+}
+
 // ---- Shared templates (the workspace's communal voice library) ----
 
 export async function listSharedTemplates(uid: string, workspaceId: string) {
