@@ -3235,35 +3235,35 @@ function ScoutTool({
           wsSyncedSig.current = ""; // nothing shared — push effect will seed it
           return;
         }
+        // UNION merge, never replace: keep every local project/category and
+        // fold the team's in on top. This guarantees your own categories are
+        // never lost to a blob that doesn't have them yet (e.g. you're the owner
+        // and a teammate seeded it first). Your extras then push back out, so
+        // the whole team converges to the union.
         setProjects((prev) => {
-          const mine = new Map(prev.map((p) => [p.id, p]));
-          const others = prev.filter(
-            (p) => (p.companyId || primaryCompanyId) !== teamLens
-          );
-          const shared: Project[] = bp.map((p) => {
-            const local = mine.get(p.id);
-            return {
+          const byId = new Map(prev.map((p) => [p.id, p] as const));
+          for (const p of bp) {
+            const local = byId.get(p.id);
+            byId.set(p.id, {
               ...(local || {}),
               id: p.id,
               name: p.name,
               useCase: p.useCase || local?.useCase || "networking",
               context: p.context || "",
               companyId: teamLens,
-            } as Project;
-          });
-          const next = [...others, ...shared];
+            } as Project);
+          }
+          const next = [...byId.values()];
           try {
             localStorage.setItem(PROJECTS_KEY, JSON.stringify(next));
           } catch {}
           return next;
         });
         setCategories((prev) => {
-          const sharedProjIds = new Set(bp.map((p) => p.id));
-          const others = prev.filter((c) => !sharedProjIds.has(c.projectId));
-          const mine = new Map(prev.map((c) => [c.id, c]));
-          const shared: Category[] = bc.map((c) => {
-            const local = mine.get(c.id);
-            return {
+          const byId = new Map(prev.map((c) => [c.id, c] as const));
+          for (const c of bc) {
+            const local = byId.get(c.id);
+            byId.set(c.id, {
               ...(local || {}),
               id: c.id,
               name: c.name,
@@ -3271,9 +3271,9 @@ function ScoutTool({
               projectId: c.projectId,
               examples: c.examples || "",
               wantedChannels: c.wantedChannels || [],
-            } as Category;
-          });
-          const next = [...others, ...shared];
+            } as Category);
+          }
+          const next = [...byId.values()];
           try {
             localStorage.setItem(CAT_KEY, JSON.stringify(next));
           } catch {}
