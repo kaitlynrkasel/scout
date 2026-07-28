@@ -1204,7 +1204,7 @@ function ScoutTool({
   onCreateAccount,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual"
   >("dashboard");
 
   // ---- Billing / plan state ----
@@ -6868,6 +6868,27 @@ function ScoutTool({
         />
       )}
 
+      {tab === "manual" && (
+        <ManualTab
+          projects={visibleProjects}
+          activeProjectId={activeId}
+          onAddManual={addManualFind}
+          onImportFile={() => setImportOpen(true)}
+          syncedSheets={syncedSheets}
+          sheetsConnected={sheetsConnected}
+          onConnectSheets={connectSheets}
+          onPreviewWrite={openWritePreview}
+          onSetSheetWrite={setSheetWrite}
+          onRemoveSync={removeSyncedSheet}
+          onSaveSync={saveSyncedSheet}
+          getToken={getToken}
+          goFinds={() => {
+            setTab("finds");
+            setFindFilter("new");
+          }}
+        />
+      )}
+
       {tab === "templates" && (
         <TemplatesTab
           kinds={OUTREACH_KINDS}
@@ -7704,6 +7725,17 @@ function SideNav({
       label: "Finds",
       badge: newFindCount,
       icon: <path d="M20 7 9 18l-5-5" />,
+    },
+    {
+      key: "manual",
+      label: "Manual",
+      // Hand-add: a pencil-writing mark, distinct from the others.
+      icon: (
+        <>
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      ),
     },
     {
       key: "templates",
@@ -9594,6 +9626,167 @@ function FindDetailModal({
 }
 
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
+// The Manual tab: for when you already know who to reach and want to do it
+// yourself instead of having Scout find people. Two ways in — hand-add one
+// contact, or import a whole sheet of outreach you've already done — and both
+// land in Finds where your templates + voice draft and send. Lives here (not
+// Profile) so the "find it yourself" path has its own clear home.
+function ManualTab({
+  projects,
+  activeProjectId,
+  onAddManual,
+  onImportFile,
+  syncedSheets,
+  sheetsConnected,
+  onConnectSheets,
+  onPreviewWrite,
+  onSetSheetWrite,
+  onRemoveSync,
+  goFinds,
+}: {
+  projects: Project[];
+  activeProjectId: string;
+  onAddManual: (input: {
+    name: string;
+    outlet?: string;
+    email?: string;
+    phone?: string;
+    handle?: string;
+    url?: string;
+    location?: string;
+    notes?: string;
+    projectId?: string;
+  }) => string | null;
+  onImportFile: () => void;
+  syncedSheets: SyncedSheet[];
+  sheetsConnected: boolean;
+  onConnectSheets: () => void;
+  onPreviewWrite: (id: string) => void;
+  onSetSheetWrite: (id: string, on: boolean) => void;
+  onRemoveSync: (id: string) => void;
+  onSaveSync: (cfg: any) => void;
+  getToken?: () => Promise<string | null>;
+  goFinds: () => void;
+}) {
+  const [addOpen, setAddOpen] = useState(false);
+  const [added, setAdded] = useState<string[]>([]); // names added this session
+  return (
+    <main className="mx-auto w-full max-w-3xl px-6 pb-16 pt-8">
+      <div className="kicker mb-2">Do it yourself</div>
+      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+        Manual <span className="text-brown">outreach</span>
+      </h1>
+      <p className="mt-2 text-[15px] leading-relaxed text-body">
+        Already know who you want to reach? Add them here or import a sheet of
+        outreach you&apos;ve already done. They land in your Finds, where your
+        templates and voice draft the message and you send it, no searching
+        required.
+      </p>
+
+      {/* Add one contact you already know */}
+      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-base font-extrabold text-ink">Add a contact</h2>
+            <p className="mt-0.5 text-sm leading-relaxed text-body/80">
+              A name, an email, a handle, whatever you have. Scout drafts to them
+              in your voice with your templates.
+            </p>
+          </div>
+          <button
+            onClick={() => setAddOpen(true)}
+            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          >
+            Add a contact
+          </button>
+        </div>
+        {added.length > 0 && (
+          <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3 text-sm">
+            <span className="font-semibold text-ink">
+              Added {added.length}: {added.slice(0, 4).join(", ")}
+              {added.length > 4 ? "…" : ""}
+            </span>{" "}
+            <button onClick={goFinds} className="font-bold text-accent hover:underline">
+              Draft &amp; send in Finds →
+            </button>
+          </div>
+        )}
+      </section>
+
+      {/* Import a sheet of existing outreach */}
+      <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
+        <h2 className="text-base font-extrabold text-ink">Import your outreach</h2>
+        <p className="mt-0.5 text-sm leading-relaxed text-body/80">
+          Drop in a tracking sheet, CSV, Excel, Numbers, or a Google Sheet link.
+          Scout imports the contacts (and won&apos;t resurface them in searches).
+        </p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button
+            onClick={onImportFile}
+            className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            Import a file
+          </button>
+          <button
+            onClick={onImportFile}
+            className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
+          >
+            Paste a sheet link
+          </button>
+          {!sheetsConnected && (
+            <button
+              onClick={onConnectSheets}
+              className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
+            >
+              Connect for private sheets
+            </button>
+          )}
+          {sheetsConnected && (
+            <span className="rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+              Google Sheets connected
+            </span>
+          )}
+        </div>
+        {syncedSheets.length > 0 && (
+          <div className="mt-4 border-t border-warm-border pt-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+              Synced sheets
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {syncedSheets.map((s) => (
+                <SyncedSheetRow
+                  key={s.id}
+                  s={s}
+                  sheetsConnected={sheetsConnected}
+                  onPreviewWrite={onPreviewWrite}
+                  onSetSheetWrite={onSetSheetWrite}
+                  onRemoveSync={onRemoveSync}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
+      {addOpen && (
+        <AddContactModal
+          projects={projects}
+          defaultProjectId={activeProjectId}
+          onClose={() => setAddOpen(false)}
+          onAdd={(input) => {
+            const err = onAddManual(input);
+            if (!err) {
+              setAdded((a) => [input.name.trim(), ...a]);
+              setAddOpen(false);
+            }
+            return err;
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
 // "Add a contact" — hand-enter someone you already know (name + any contact
 // route). Saves straight into the pipeline as a normal find, so drafting uses
 // your templates and voice like any Scout-found contact.

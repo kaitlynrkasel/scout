@@ -140,6 +140,16 @@ create table if not exists public.shared_templates (
 );
 create index if not exists shared_templates_ws_idx on public.shared_templates (workspace_id);
 
+-- Shared workspace projects + categories: the company's outreach structure, so
+-- every teammate sees and searches the same projects/categories. One JSON blob
+-- per workspace: { projects: [...], categories: [...] }. Last write wins (same
+-- risk class as user_state). Members read; the app writes via the service role.
+create table if not exists public.workspace_shared_state (
+  workspace_id uuid primary key references public.workspaces(id) on delete cascade,
+  data jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 create index if not exists shared_finds_project_idx on public.shared_finds (shared_project_id);
 create index if not exists workspace_members_user_idx on public.workspace_members (user_id);
 create index if not exists shared_project_members_user_idx on public.shared_project_members (user_id);
