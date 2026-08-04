@@ -1977,6 +1977,23 @@ export async function discover(
       o.scores.reachability = reachabilityFrom(o.contactEmail, o.contactHandle, o.contactPhone);
   }
 
+  // Minimum-fit floor: never surface a near-zero match. A fit at or below 0.1
+  // is a confirmed non-fit (e.g. the wrong-location hard veto lands at 0.01), so
+  // showing a "1% fit" is just noise. Casting a wide net is about VARIETY, not
+  // scraping the bottom, so drop these outright. Unknown fit (null) is kept.
+  const FIT_FLOOR = 0.1;
+  {
+    const before = opps.length;
+    for (let i = opps.length - 1; i >= 0; i--) {
+      const f = opps[i].fitScore;
+      if (typeof f === "number" && f <= FIT_FLOOR) {
+        logSkip(opps[i].name, opps[i].url, `too low a fit (${Math.round(f * 100)}%) to surface`);
+        opps.splice(i, 1);
+      }
+    }
+    if (opps.length < before) skippedNotFit += before - opps.length;
+  }
+
   // Hard cap: drop any target already contacted by too many other users recently,
   // so the same inboxes don't get blasted across profiles. Fail-open (if the
   // ledger is unreachable, nothing is dropped).

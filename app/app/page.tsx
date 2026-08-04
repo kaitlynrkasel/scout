@@ -16533,8 +16533,9 @@ function BillingTab({
         </section>
       )}
 
-      {/* Plans */}
-      {!comp && (
+      {/* Plans. Hidden once comped, and also while a code is being entered —
+          someone redeeming a free code doesn't need the paid upgrade cards. */}
+      {!comp && !code.trim() && (
       <section className="mt-4 grid gap-4 sm:grid-cols-2">
         {PLANS.map((p) => {
           const current = tier === p.key;
