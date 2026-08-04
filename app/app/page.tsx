@@ -9814,13 +9814,21 @@ function SpreadsheetTab({
   activeProjectId: string;
 }) {
   const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
+  // Split by origin: Scout-found (search / auto-search / legacy) vs Manual
+  // (hand-added or imported from your own sheet).
+  const isManual = (f: Find) => f.foundVia === "manual" || f.foundVia === "import";
+  const [view, setView] = useState<"all" | "scout" | "manual">("all");
+  const scoutFinds = finds.filter((f) => !isManual(f));
+  const manualFinds = finds.filter(isManual);
+  const shownFinds =
+    view === "scout" ? scoutFinds : view === "manual" ? manualFinds : finds;
   const [exporting, setExporting] = useState(false);
   async function exportXlsx() {
     if (exporting) return;
     setExporting(true);
     try {
       const XLSX = await import("xlsx");
-      const rows = finds.map((f) => ({
+      const rows = shownFinds.map((f) => ({
         Name: f.opp.name || "",
         "Company / Outlet": f.opp.outlet || "",
         Email: f.opp.contactEmail || "",
@@ -9892,7 +9900,7 @@ function SpreadsheetTab({
           >
             + Add row
           </button>
-          {finds.length > 0 && (
+          {shownFinds.length > 0 && (
             <button
               onClick={exportXlsx}
               disabled={exporting}
@@ -9904,13 +9912,38 @@ function SpreadsheetTab({
         </div>
       </div>
 
-      {finds.length === 0 ? (
-        <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
-          No finds yet. Run a search, import a sheet, or add a contact and it
-          shows up here as a row.
+      {/* Scout-found vs Manual (hand-added / imported) split. */}
+      <div className="mt-5 inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+        {(
+          [
+            ["all", "All", finds.length],
+            ["scout", "Scout", scoutFinds.length],
+            ["manual", "Manual", manualFinds.length],
+          ] as const
+        ).map(([key, label, n]) => (
+          <button
+            key={key}
+            onClick={() => setView(key)}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-semibold transition ${
+              view === key ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}{" "}
+            <span className={view === key ? "text-body/50" : "text-body/40"}>{n}</span>
+          </button>
+        ))}
+      </div>
+
+      {shownFinds.length === 0 ? (
+        <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
+          {finds.length === 0
+            ? "No finds yet. Run a search, import a sheet, or add a contact and it shows up here as a row."
+            : view === "manual"
+              ? "No manual finds. Add a contact or import a sheet and they show up here."
+              : "No Scout-found finds yet. Run a search on the Outreach tab."}
         </div>
       ) : (
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
           <div className="min-w-[1000px]">
             {/* Header */}
             <div
@@ -9927,7 +9960,7 @@ function SpreadsheetTab({
               <span>Project</span>
               <span />
             </div>
-            {finds.map((f, i) => (
+            {shownFinds.map((f, i) => (
               <div
                 key={f.id}
                 className={`grid items-center gap-2 px-3 py-1 ${
@@ -9976,8 +10009,8 @@ function SpreadsheetTab({
         </div>
       )}
       <p className="mt-3 text-xs text-body/55">
-        {finds.length} {finds.length === 1 ? "row" : "rows"}. Edits here update the
-        find everywhere in Scout.
+        {shownFinds.length} {shownFinds.length === 1 ? "row" : "rows"}. Edits here update
+        the find everywhere in Scout.
       </p>
     </main>
   );
