@@ -6016,30 +6016,7 @@ function ScoutTool({
             <p className="mt-1.5 text-sm text-body">
               Find your people and draft messages in your voice.
             </p>
-            {/* Company lens sits above Project + Category — pick which company
-                you're working in, then its project + category below. */}
-            {companies.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-body/50">
-                  Company
-                </span>
-                <PrettySelect
-                  ariaLabel="Company lens"
-                  className="min-w-[180px]"
-                  value={
-                    companies.length === 1 && !hasPersonalProjects && !activeCompanyId
-                      ? companies[0].id
-                      : activeCompanyId
-                  }
-                  onChange={selectCompany}
-                  options={[
-                    ...(companies.length > 1 ? [{ value: "", label: "All companies" }] : []),
-                    ...(hasPersonalProjects ? [{ value: "personal", label: "Personal" }] : []),
-                    ...companies.map((c) => ({ value: c.id, label: c.name })),
-                  ]}
-                />
-              </div>
-            )}
+            {/* The company lens lives in the sidebar now; no duplicate here. */}
             {teamLens && (
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
