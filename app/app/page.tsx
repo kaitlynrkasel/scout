@@ -18986,7 +18986,7 @@ function ProfileTab({
           </div>
         )}
 
-        {kind !== "company" && <hr className="my-7 border-warm-border" />}
+        <hr className="my-7 border-warm-border" />
 
         <Label>What are you using Scout for?</Label>
         <UseCaseCombo value={useCase} onChange={onUseCase} />
