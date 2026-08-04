@@ -1429,7 +1429,9 @@ export async function discover(
   // reads to pull many creators out of one article. Everything else stays on
   // the cheaper basic depth.
   const creatorSearch = isSocialCreatorSearch(useCase, goal);
-  const perQuery = creatorSearch ? 10 : 8;
+  // Pull more pages per query so the net is wide enough to reliably reach the
+  // ~10 target even when many candidates get filtered out.
+  const perQuery = creatorSearch ? 10 : 10;
   const depth: "basic" | "advanced" = creatorSearch ? "advanced" : "basic";
 
   // 1+2: gather + dedupe candidate pages. Wrapped so a broadening retry can
@@ -1475,7 +1477,9 @@ export async function discover(
       }
       buckets.push(bucket);
     }
-    const cap = maxItems * 4;
+    // Wider candidate pool (was 4x) so a heavily-filtered search still surfaces
+    // close to the full ~10, casting a broad first net to learn what fits.
+    const cap = maxItems * 6;
     const depthMax = Math.max(0, ...buckets.map((b) => b.length));
     for (let col = 0; col < depthMax && candidates.length < cap; col++) {
       for (const b of buckets) {

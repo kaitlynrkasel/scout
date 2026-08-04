@@ -1359,7 +1359,13 @@ function ScoutTool({
   const broadenRetryRef = useRef<{ plan: any; clarify: string } | null>(null);
   const goalInputRef = useRef<HTMLTextAreaElement | null>(null); // focus target for the empty state
   const [searchLog, setSearchLog] = useState<string[]>([]); // live "what Scout is doing"
+  const [understoodFlash, setUnderstoodFlash] = useState(false); // brief "Scout gets it" note
   const [expanded, setExpanded] = useState(false);
+  function flashUnderstood() {
+    setUnderstoodFlash(true);
+    window.clearTimeout((flashUnderstood as any)._t);
+    (flashUnderstood as any)._t = window.setTimeout(() => setUnderstoodFlash(false), 2600);
+  }
 
   // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
   // to wag. Proximity, not hover, it starts as you head that way. Throttled
@@ -5226,6 +5232,7 @@ function ScoutTool({
     });
     const cached = understoodCache.current.get(cacheKey);
     if (cached && cached.sig === sig && cached.understanding >= UNDERSTAND_GATE) {
+      flashUnderstood();
       await runDiscover(cached.plan, priorAnswers);
       return;
     }
@@ -5241,6 +5248,7 @@ function ScoutTool({
           plan: u.plan,
           understanding: u.understanding,
         });
+        flashUnderstood();
         await runDiscover(u.plan, priorAnswers);
       } else {
         setPlanGate({ ...u, priorAsked, priorAnswers });
@@ -6334,7 +6342,7 @@ function ScoutTool({
                 {/* Understanding phase status, so it never looks frozen while
                     Scout reads the goal before searching. */}
                 {gating && (
-                  <div className="flex min-w-0 flex-1 items-center gap-2.5">
+                  <div className="scout-fade-in flex min-w-0 flex-1 items-center gap-2.5">
                     <div className="h-1.5 w-32 overflow-hidden rounded-full bg-brown-tint">
                       <div className="scout-indeterminate h-full w-1/2 rounded-full bg-brown" />
                     </div>
@@ -6342,6 +6350,13 @@ function ScoutTool({
                       Reading your goal…
                     </span>
                   </div>
+                )}
+                {/* Brief confirmation the moment understanding finishes. */}
+                {understoodFlash && !gating && (
+                  <span className="scout-fade-in inline-flex items-center gap-1.5 rounded-full border border-sage/40 bg-sage/10 px-2.5 py-1 text-xs font-semibold text-sage-deep">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                    Scout understands your inquiry
+                  </span>
                 )}
                 {stats && <span className="text-xs text-body/80">{stats}</span>}
                 {skipped.length > 0 && (
@@ -6556,8 +6571,8 @@ function ScoutTool({
                             const latest = i === arr.length - 1;
                             return (
                               <li
-                                key={i}
-                                className={`flex items-start gap-2 text-xs leading-relaxed transition ${
+                                key={m}
+                                className={`scout-fade-in flex items-start gap-2 text-xs leading-relaxed transition ${
                                   latest ? "text-ink" : "text-body/45"
                                 }`}
                               >
@@ -8356,8 +8371,8 @@ function FindsList({
                 </span>
               </div>
             ) : (
-            <div className="flex items-start gap-2 border-t border-warm-border/70 pt-2.5">
-              <div className="flex flex-col items-start">
+            <div className="border-t border-warm-border/70 pt-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => onApprove(o.id, !on)}
                   className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
@@ -8368,46 +8383,46 @@ function FindsList({
                 >
                   {on ? "Approved" : "Approve"}
                 </button>
-                <span className="mt-1 max-w-[180px] text-[10px] leading-snug text-body/45">
-                  {on
-                    ? "Click again to un-approve."
-                    : "Doesn't send anything. Just tells Scout you like this find."}
-                </span>
-              </div>
-              {denyingId === o.id ? (
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="text-[10px] text-body/45">
-                    Why? optional, but a reason helps Scout learn faster
-                  </span>
-                  <DenyReasons
-                    onPick={(r) => {
-                      setDenyingId("");
-                      onDeny(o, r);
-                    }}
-                  />
+                {denyingId === o.id ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] text-body/45">
+                      Why? optional, but a reason helps Scout learn faster
+                    </span>
+                    <DenyReasons
+                      onPick={(r) => {
+                        setDenyingId("");
+                        onDeny(o, r);
+                      }}
+                    />
+                    <button
+                      onClick={() => {
+                        setDenyingId("");
+                        onDeny(o, "");
+                      }}
+                      className="text-[11px] font-semibold text-body/50 transition hover:text-accent"
+                    >
+                      Skip
+                    </button>
+                  </div>
+                ) : (
                   <button
-                    onClick={() => {
-                      setDenyingId("");
-                      onDeny(o, "");
-                    }}
-                    className="text-[11px] font-semibold text-body/50 transition hover:text-accent"
+                    onClick={() => setDenyingId(o.id)}
+                    className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
                   >
-                    Skip
+                    Deny
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setDenyingId(o.id)}
-                  className="rounded-lg border border-warm-border px-3.5 py-1.5 text-xs font-semibold text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-                >
-                  Deny
-                </button>
-              )}
-              {on && denyingId !== o.id && (
-                <span className="ml-auto pt-1.5 text-[11px] font-medium text-accent">
-                  Will be drafted
-                </span>
-              )}
+                )}
+                {on && denyingId !== o.id && (
+                  <span className="ml-auto text-[11px] font-medium text-accent">
+                    Will be drafted
+                  </span>
+                )}
+              </div>
+              <span className="mt-1.5 block text-[10px] leading-snug text-body/45">
+                {on
+                  ? "Click again to un-approve."
+                  : "Doesn't send anything. Just tells Scout you like this find."}
+              </span>
             </div>
             )}
           </div>

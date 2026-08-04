@@ -721,3 +721,14 @@ html.dark .su-rail .su-logo img {
 @media (prefers-reduced-motion: reduce) {
   .scout-indeterminate { animation: none; }
 }
+
+/* Soft fade+rise for live search-log lines and transient status messages, so
+   text easing in/out doesn't look blocky. */
+@keyframes scout-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.scout-fade-in { animation: scout-fade-in 0.28s ease-out both; }
+@media (prefers-reduced-motion: reduce) {
+  .scout-fade-in { animation: none; }
+}
