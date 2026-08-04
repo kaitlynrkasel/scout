@@ -280,7 +280,6 @@ const BODY = `
 
 <!-- HERO -->
 <section class="hero"><div class="herwrap">
-  <div class="eyebrow">Professional networking, fetched</div>
   <div class="eyebrow2">Don&apos;t waste time.</div>
   <div class="backword">Scout</div>
   <div class="headline headfont"><span class="l">Find</span><span class="l">Your</span><span class="l">People</span></div>

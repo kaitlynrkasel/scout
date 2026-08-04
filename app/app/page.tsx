@@ -1204,7 +1204,7 @@ function ScoutTool({
   onCreateAccount,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual" | "spreadsheet"
   >("dashboard");
 
   // ---- Billing / plan state ----
@@ -4144,6 +4144,13 @@ function ScoutTool({
     saveFinds(finds.filter((f) => f.id !== id));
   }
 
+  // Edit a find's contact fields from the spreadsheet view. Patches the opp.
+  function updateFindOpp(id: string, patch: Partial<Opportunity>) {
+    saveFinds(
+      finds.map((f) => (f.id === id ? { ...f, opp: { ...f.opp, ...patch } } : f))
+    );
+  }
+
   // Hand-add a contact you already know (an artist whose email you have, a
   // referral, a business card). Becomes a normal find in the pipeline, so
   // drafting uses your templates, voice, and signature exactly like a found
@@ -7012,6 +7019,19 @@ function ScoutTool({
         />
       )}
 
+      {tab === "spreadsheet" && (
+        <SpreadsheetTab
+          finds={visibleFinds}
+          projects={visibleProjects}
+          onUpdateOpp={updateFindOpp}
+          onStatus={(id, s) => setFindStatus(id, s)}
+          onMoveProject={(id, pid) => moveFindToProject(id, pid)}
+          onRemove={removeFind}
+          onAddManual={addManualFind}
+          activeProjectId={activeId}
+        />
+      )}
+
       {tab === "templates" && (
         <TemplatesTab
           kinds={OUTREACH_KINDS}
@@ -7858,6 +7878,17 @@ function SideNav({
         <>
           <path d="M12 20h9" />
           <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+        </>
+      ),
+    },
+    {
+      key: "spreadsheet",
+      label: "Spreadsheet",
+      // A grid, for the sheet view of finds.
+      icon: (
+        <>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
         </>
       ),
     },
@@ -9750,6 +9781,208 @@ function FindDetailModal({
 }
 
 /* ---------------- Finds tab (pipeline: review / draft / deny / mark sent) ---------------- */
+// The Spreadsheet tab: every find as an editable grid, so you can scan and edit
+// your pipeline like a sheet. Imported outreach lands here as a real, editable
+// spreadsheet, and Scout's own finds show in the same view.
+function SpreadsheetTab({
+  finds,
+  projects,
+  onUpdateOpp,
+  onStatus,
+  onMoveProject,
+  onRemove,
+  onAddManual,
+  activeProjectId,
+}: {
+  finds: Find[];
+  projects: Project[];
+  onUpdateOpp: (id: string, patch: Partial<Opportunity>) => void;
+  onStatus: (id: string, s: FindStatus) => void;
+  onMoveProject: (id: string, projectId: string) => void;
+  onRemove: (id: string) => void;
+  onAddManual: (input: {
+    name: string;
+    outlet?: string;
+    email?: string;
+    phone?: string;
+    handle?: string;
+    url?: string;
+    location?: string;
+    notes?: string;
+    projectId?: string;
+  }) => string | null;
+  activeProjectId: string;
+}) {
+  const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
+  const [exporting, setExporting] = useState(false);
+  async function exportXlsx() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const XLSX = await import("xlsx");
+      const rows = finds.map((f) => ({
+        Name: f.opp.name || "",
+        "Company / Outlet": f.opp.outlet || "",
+        Email: f.opp.contactEmail || "",
+        Phone: f.opp.contactPhone || "",
+        "LinkedIn / Handle": f.opp.contactHandle || "",
+        Website: f.opp.url || "",
+        Location: f.opp.location || "",
+        Status: f.status,
+        Project: projName(f.projectId),
+        "Fit %": f.opp.fitScore != null ? Math.round(f.opp.fitScore * 100) : "",
+        "Why it fits": f.opp.whyItFits || "",
+      }));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Finds");
+      XLSX.writeFile(wb, `scout-finds-${new Date().toISOString().slice(0, 10)}.xlsx`);
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  // One editable text cell: shows the value, commits on blur / Enter.
+  const Cell = ({
+    value,
+    onSave,
+    placeholder,
+    className = "",
+  }: {
+    value: string;
+    onSave: (v: string) => void;
+    placeholder?: string;
+    className?: string;
+  }) => (
+    <input
+      defaultValue={value}
+      key={value}
+      placeholder={placeholder}
+      onBlur={(e) => {
+        if (e.target.value !== value) onSave(e.target.value);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+      className={`w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-xs text-ink outline-none transition hover:border-warm-border focus:border-coral focus:bg-white ${className}`}
+    />
+  );
+
+  const COLS = "minmax(140px,1.4fr) minmax(120px,1.2fr) minmax(160px,1.4fr) minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 130px 150px 40px";
+
+  return (
+    <main className="mx-auto w-full max-w-[1400px] px-6 pb-16 pt-8">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="kicker mb-2">Your pipeline, as a sheet</div>
+          <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+            <span className="text-brown">Spreadsheet</span>
+          </h1>
+          <p className="mt-2 text-[15px] leading-relaxed text-body">
+            Every find in one editable grid. Click any cell to edit; changes save
+            to the find. Imported sheets and Scout&apos;s own finds live here
+            together.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() =>
+              onAddManual({ name: "New contact", projectId: activeProjectId })
+            }
+            className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            + Add row
+          </button>
+          {finds.length > 0 && (
+            <button
+              onClick={exportXlsx}
+              disabled={exporting}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+            >
+              {exporting ? "Exporting…" : "Export to Excel"}
+            </button>
+          )}
+        </div>
+      </div>
+
+      {finds.length === 0 ? (
+        <div className="mt-6 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
+          No finds yet. Run a search, import a sheet, or add a contact and it
+          shows up here as a row.
+        </div>
+      ) : (
+        <div className="mt-6 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
+          <div className="min-w-[1000px]">
+            {/* Header */}
+            <div
+              className="grid items-center gap-2 border-b border-warm-border bg-warm-bg/50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-body/55"
+              style={{ gridTemplateColumns: COLS }}
+            >
+              <span>Name</span>
+              <span>Company</span>
+              <span>Email</span>
+              <span>Phone</span>
+              <span>LinkedIn</span>
+              <span>Location</span>
+              <span>Status</span>
+              <span>Project</span>
+              <span />
+            </div>
+            {finds.map((f, i) => (
+              <div
+                key={f.id}
+                className={`grid items-center gap-2 px-3 py-1 ${
+                  i % 2 ? "bg-warm-bg/25" : "bg-surface"
+                } hover:bg-warm-bg/50`}
+                style={{ gridTemplateColumns: COLS }}
+              >
+                <Cell value={f.opp.name || ""} onSave={(v) => onUpdateOpp(f.id, { name: v })} placeholder="Name" className="font-semibold" />
+                <Cell value={f.opp.outlet || ""} onSave={(v) => onUpdateOpp(f.id, { outlet: v })} placeholder="Company" />
+                <Cell value={f.opp.contactEmail || ""} onSave={(v) => onUpdateOpp(f.id, { contactEmail: v })} placeholder="email@…" />
+                <Cell value={f.opp.contactPhone || ""} onSave={(v) => onUpdateOpp(f.id, { contactPhone: v })} placeholder="phone" />
+                <Cell value={f.opp.contactHandle || ""} onSave={(v) => onUpdateOpp(f.id, { contactHandle: v })} placeholder="linkedin/@" />
+                <Cell value={f.opp.location || ""} onSave={(v) => onUpdateOpp(f.id, { location: v })} placeholder="location" />
+                <select
+                  value={f.status}
+                  onChange={(e) => onStatus(f.id, e.target.value as FindStatus)}
+                  className="scout-select w-full min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                >
+                  {STATUS_OPTIONS.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  value={f.projectId}
+                  onChange={(e) => onMoveProject(f.id, e.target.value)}
+                  className="scout-select w-full min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => onRemove(f.id)}
+                  title="Remove this row"
+                  className="grid h-6 w-6 place-items-center rounded-md text-body/40 transition hover:bg-red-50 hover:text-danger"
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      <p className="mt-3 text-xs text-body/55">
+        {finds.length} {finds.length === 1 ? "row" : "rows"}. Edits here update the
+        find everywhere in Scout.
+      </p>
+    </main>
+  );
+}
+
 // The Manual tab: for when you already know who to reach and want to do it
 // yourself instead of having Scout find people. Two ways in — hand-add one
 // contact, or import a whole sheet of outreach you've already done — and both
