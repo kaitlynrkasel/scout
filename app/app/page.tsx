@@ -7701,14 +7701,14 @@ const COMPANY_ACCENTS: {
   deep: string;
 }[] = [
   { key: "", label: "None", color: "", on: "", rgb: "", deep: "" },
-  { key: "teal", label: "Teal", color: "#2f8f83", on: "#ffffff", rgb: "47 143 131", deep: "34 106 97" },
-  { key: "denim", label: "Denim", color: "#3e5c86", on: "#ffffff", rgb: "62 92 134", deep: "45 68 100" },
-  { key: "plum", label: "Plum", color: "#7a4f86", on: "#ffffff", rgb: "122 79 134", deep: "92 60 102" },
-  { key: "clay", label: "Clay", color: "#b5613a", on: "#ffffff", rgb: "181 97 58", deep: "140 74 44" },
-  { key: "gold", label: "Gold", color: "#b58a2f", on: "#ffffff", rgb: "181 138 47", deep: "138 105 35" },
-  { key: "rose", label: "Rose", color: "#b0466a", on: "#ffffff", rgb: "176 70 106", deep: "138 54 82" },
-  { key: "forest", label: "Forest", color: "#3f7a4f", on: "#ffffff", rgb: "63 122 79", deep: "47 92 60" },
-  { key: "slate", label: "Slate", color: "#556270", on: "#ffffff", rgb: "85 98 112", deep: "64 74 86" },
+  { key: "teal", label: "Teal", color: "#35a79d", on: "#ffffff", rgb: "53 167 157", deep: "40 143 135" },
+  { key: "denim", label: "Denim", color: "#5785c1", on: "#ffffff", rgb: "87 133 193", deep: "55 102 164" },
+  { key: "plum", label: "Plum", color: "#a262bc", on: "#ffffff", rgb: "162 98 188", deep: "134 63 162" },
+  { key: "clay", label: "Clay", color: "#c9704a", on: "#ffffff", rgb: "201 112 74", deep: "169 82 45" },
+  { key: "gold", label: "Gold", color: "#af8c2c", on: "#ffffff", rgb: "175 140 44", deep: "146 116 32" },
+  { key: "rose", label: "Rose", color: "#c75778", on: "#ffffff", rgb: "199 87 120", deep: "173 52 88" },
+  { key: "forest", label: "Forest", color: "#3fa268", on: "#ffffff", rgb: "63 162 104", deep: "48 136 84" },
+  { key: "slate", label: "Slate", color: "#72869d", on: "#ffffff", rgb: "114 134 157", deep: "86 106 129" },
 ];
 function accentColor(
   key: string
