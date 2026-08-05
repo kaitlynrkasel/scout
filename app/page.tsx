@@ -172,7 +172,7 @@ const CSS = `
   .member .rl{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--terra-deep);margin-top:4px}
   .pack{margin-top:46px}
   .packrow{display:flex;gap:18px;margin-top:16px}
-  .packrow .p{flex:1;height:132px}
+  .packrow .p{flex:1;aspect-ratio:1;height:auto}
 
   /* HELPS — stat strip (distinct from steps) */
   .statstrip{display:grid;grid-template-columns:repeat(3,1fr);margin-top:32px;border-top:1px solid var(--border)}
