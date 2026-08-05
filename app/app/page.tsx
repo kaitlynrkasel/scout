@@ -8003,7 +8003,7 @@ function SideNav({
         Search
         <span className="ml-auto text-[10px] text-[#8f8069]">⌘K</span>
       </button>
-      <nav className="flex flex-col gap-0.5">
+      <nav className="flex flex-col gap-0.5 pb-5">
         {items.map((it) =>
           railItem(it.key, it.label, it.icon, {
             active: tab === it.key,
@@ -8015,7 +8015,7 @@ function SideNav({
         )}
       </nav>
 
-      <div className="su-foot mt-auto pt-3">
+      <div className="su-foot mt-auto pt-5">
         {/* Company lens. "All companies" only appears when there's more than one
             to switch between; a single-company account just shows that company. */}
         {companies.length > 0 && (
