@@ -361,33 +361,31 @@ const BODY = `
   </div>
 </div></section>
 
-<!-- TEAM -->
-<section class="sec" id="team"><div class="wrap">
-  <div style="max-width:640px"><div class="kicker">Who's behind it</div><h2 class="h2">Meet the pack.</h2>
-  <p class="lead">A small team building the outreach tool we wished existed, with four-legged supervisors.</p></div>
-  <div class="teamgrid">
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
-  </div>
-  <div class="pack">
-    <div class="kicker" style="color:var(--muted)">Our scouts</div>
-    <div class="packrow">
-      <div class="slot p"><div class="t">Dog photo</div></div>
-      <div class="slot p"><div class="t">Dog photo</div></div>
-      <div class="slot p"><div class="t">Dog photo</div></div>
-      <div class="slot p"><div class="t">Dog photo</div></div>
-    </div>
-  </div>
-</div></section>
-
 <!-- HELPS -->
-<section class="sec" id="help" style="background:#EFE7D6"><div class="wrap">
+<section class="sec" id="help"><div class="wrap">
   <div style="max-width:640px"><div class="kicker">Why it matters</div><h2 class="h2">Outreach that actually lands.</h2></div>
   <div class="statstrip">
     <div class="st"><div class="n">Higher</div><h3>Reply rates</h3><p>Personalised, specific messages tend to beat generic blasts.</p></div>
     <div class="st"><div class="n">~1 min</div><h3>Per person</h3><p>Find, research, and draft in about a minute, not an afternoon.</p></div>
     <div class="st"><div class="n">Real</div><h3>Contacts</h3><p>Names and details are pulled from live public pages, not a recycled list of stale leads.</p></div>
+  </div>
+</div></section>
+
+<!-- TEAM -->
+<section class="sec" id="team" style="background:#EFE7D6"><div class="wrap">
+  <div style="max-width:640px"><div class="kicker">Who's behind it</div><h2 class="h2">Meet the creators.</h2></div>
+  <div class="teamgrid">
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/kaitlyn.jpg" alt="Kaitlyn Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/mera.jpg" alt="Mera Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/suri.jpg" alt="Suri Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
+  </div>
+  <div class="pack">
+    <div class="kicker" style="color:var(--muted)">Our scouts</div>
+    <div class="packrow">
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-1.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-2.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-3.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+    </div>
   </div>
 </div></section>
 
