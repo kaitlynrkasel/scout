@@ -13566,9 +13566,6 @@ function DashboardTab({
             ) : (
               <>
                 <h1 className="su-bighead mt-3">Scout-wide</h1>
-                <p className="mt-3.5 max-w-[46ch] text-[15px] text-muted">
-                  How Scout is doing across everyone using it.
-                </p>
               </>
             )}
           </div>
@@ -13717,10 +13714,6 @@ function DashboardTab({
       {learned.decided > 0 && (
         <section className="mt-10">
           <h2 className="text-lg font-semibold tracking-tight text-ink">Your fit and preferences</h2>
-          <p className="mt-1 text-sm text-body/80">
-            The fit level and channels you gravitate toward, learned from the finds
-            you keep and pass on.
-          </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             {/* Reply rate (from tracked Gmail threads + manually logged replies) */}
@@ -13737,11 +13730,6 @@ function DashboardTab({
                     {learned.repliedCount} of {learned.sentCount} sent
                   </span>
                 </div>
-                <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                  Replies Scout has tracked through Gmail or you&apos;ve logged by
-                  setting a find to Replied. Untracked sends aren&apos;t counted
-                  against you.
-                </p>
               </div>
             )}
 
@@ -13816,10 +13804,6 @@ function DashboardTab({
                   </div>
                 </div>
               )}
-              <p className="mt-3 text-xs text-body/60">
-                Scout uses these patterns to rank future finds toward the kind you
-                actually act on.
-              </p>
             </div>
           </div>
         </section>
@@ -13878,10 +13862,6 @@ function DashboardTab({
       {/* -------- You vs the community (real aggregate averages) -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">You vs the community</h2>
-        <p className="mt-1 text-sm text-body/80">
-          How you compare to everyone else using Scout. Aggregate averages only,
-          never anyone&apos;s private data.
-        </p>
         {/* Hold the comparison (and the user count) until the cohort is big
             enough to mean something — a benchmark against a handful of people
             is noise, and surfacing a tiny headcount undersells Scout. */}
@@ -13913,13 +13893,6 @@ function DashboardTab({
                 fmt="num"
               />
             </div>
-            <p className="mt-3 text-xs text-body/60">
-              Based on {community.users} other{" "}
-              {community.users === 1 ? "person" : "people"} using Scout with a
-              similar use case to yours. Teammates who picked a different use case
-              are compared against a different cohort, so their numbers will
-              differ from yours.
-            </p>
           </>
         )}
       </section>
@@ -13927,10 +13900,6 @@ function DashboardTab({
       {/* -------- What Scout has learned about YOU lately (individual) -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
-        <p className="mt-1 text-sm text-body/80">
-          Recent, private-to-you signals Scout picks up as you work. These steer who it
-          finds and how it drafts.
-        </p>
         {insights.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             {insights.map((ins) => (
@@ -14068,10 +14037,6 @@ function DashboardTab({
       {coaching.length > 0 && (
         <section className="mt-10">
           <h2 className="text-lg font-bold text-ink">Coaching you turned on</h2>
-          <p className="mt-1 text-sm text-body/80">
-            Scout follows these in every draft it writes for you. Remove any that
-            stop feeling right.
-          </p>
           <div className="mt-4 space-y-2">
             {coaching.map((c) => (
               <div
@@ -14113,10 +14078,6 @@ function DashboardTab({
       {/* -------- How Scout learns YOU -------- */}
       <section className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout is learning you</h2>
-        <p className="mt-1 text-sm text-body/80">
-          Everything here is private to your account. The more Scout knows, the more
-          your outreach sounds like you, not a template.
-        </p>
         <div className="mt-4 space-y-2.5">
           {signals.map((s) => (
             <div
@@ -14390,32 +14351,6 @@ function DashboardTab({
 
       {dashTab === "scout" && (
       <>
-      {/* -------- How Scout learns from EVERYONE -------- */}
-      <section className="mt-10">
-        <h2 className="text-lg font-bold text-ink">How Scout gets better for everyone</h2>
-        <div className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
-          <p className="text-sm leading-relaxed text-body">
-            Scout improves for all users as the shared engine learns which search
-            angles surface real people, which channels actually get replies, and what a
-            strong match looks like by field. These patterns are aggregate and
-            anonymous, they tune the defaults everyone starts from.
-          </p>
-          <div className="mt-4 flex items-start gap-3 rounded-2xl bg-warm-bg/60 px-4 py-3">
-            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-brand-gradient text-white">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="11" width="18" height="10" rx="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-            </span>
-            <p className="text-xs leading-relaxed text-body">
-              <span className="font-semibold text-ink">Your data stays yours.</span> Your
-              resume, your voice templates, your contacts, and your messages are private
-              to your account and never shown to other users.
-            </p>
-          </div>
-        </div>
-      </section>
-
       </>
       )}
 
@@ -14425,9 +14360,6 @@ function DashboardTab({
       <section className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl bg-brand-gradient px-6 py-5 text-white shadow-soft">
         <div>
           <h3 className="text-base font-extrabold">Ready to reach a few more people?</h3>
-          <p className="mt-1 text-xs text-white/80">
-            Pick up where you left off, or start a fresh search.
-          </p>
         </div>
         <button
           onClick={goOutreach}
