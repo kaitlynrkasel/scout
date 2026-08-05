@@ -12,6 +12,8 @@ import {
   fetchSheetTabs,
   unionTabs,
   tabLooksLikeFinds,
+  statusFromTabName,
+  TAB_SOURCE_KEY,
   type SheetTab,
 } from "@/lib/sheetImport";
 import type { Opportunity } from "@/lib/types";
@@ -87,8 +89,10 @@ function fallbackNameFromRow(row: Record<string, string>): string {
 
 // Last-resort name: the first non-empty cell in the row, so a row with data but
 // no obvious name column still imports instead of being silently dropped.
+// Skips the internal tab-source stamp so it's never used as a name.
 function firstNonEmptyCell(row: Record<string, string>): string {
-  for (const v of Object.values(row)) {
+  for (const [k, v] of Object.entries(row)) {
+    if (k === TAB_SOURCE_KEY) continue;
     const s = String(v || "").trim();
     if (s) return s.slice(0, 120);
   }
@@ -105,6 +109,12 @@ function looksLikeReplied(v: string): boolean {
 }
 function looksLikeDenied(v: string): boolean {
   return /no|passed|rejected|ghosted|dead|declin/i.test(v);
+}
+function looksLikeSent(v: string): boolean {
+  return /sent|submitted|submit|contacted|reached out|reached|pitched|emailed|outreached|delivered/i.test(v);
+}
+function looksLikeDrafted(v: string): boolean {
+  return /draft|drafted|ready|queued|to send|pending/i.test(v);
 }
 
 export default function ImportOutreach({
@@ -494,10 +504,18 @@ export default function ImportOutreach({
           ? [notes0, rawName].filter(Boolean).join(" — ")
           : notes0;
       const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
+      const tabName = String(row[TAB_SOURCE_KEY] || "");
       let status: FindStatus = defaultStatus;
       if (statusStr) {
+        // A status column, when present, wins per row.
         if (looksLikeReplied(statusStr)) status = "replied";
         else if (looksLikeDenied(statusStr)) status = "denied";
+        else if (looksLikeSent(statusStr)) status = "sent";
+        else if (looksLikeDrafted(statusStr)) status = "drafted";
+      } else if (tabName) {
+        // Otherwise infer from which tab the row came from (Submitted, Denied…).
+        const s = statusFromTabName(tabName);
+        if (s) status = s;
       }
       const opp: Opportunity = {
         id: `import-${now}-${idx++}`,

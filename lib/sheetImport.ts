@@ -90,6 +90,26 @@ export function looksLikeReplied(v: string): boolean {
 export function looksLikeDenied(v: string): boolean {
   return /no|passed|rejected|ghosted|dead|declin/i.test(v);
 }
+export function looksLikeSent(v: string): boolean {
+  return /sent|submitted|submit|contacted|reached out|reached|pitched|emailed|outreached|delivered/i.test(v);
+}
+export function looksLikeDrafted(v: string): boolean {
+  return /draft|drafted|ready|queued|to send|pending/i.test(v);
+}
+
+// Infer a status from a TAB NAME, for multi-tab trackers that organize outreach
+// by tab (a "Submitted" tab, a "Denied" tab, etc.) instead of a status column.
+// Returns null when the tab name says nothing about state (use the default).
+export function statusFromTabName(tabName: string): ImportFindStatus | null {
+  const t = (tabName || "").toLowerCase();
+  if (/(denied|rejected|passed|no\b|dead|ghosted)/.test(t)) return "denied";
+  if (/(response|replied|reply|answered|meeting|interview|heard back)/.test(t)) return "replied";
+  if (/(submitted|submit|sent|outbox|contacted|reached|pitched|emailed)/.test(t)) return "sent";
+  if (/(draft|outbox draft|ready|queued)/.test(t)) return "drafted";
+  // Discovered / Manual / Pinned / Liked / Leads → still fresh
+  if (/(discover|manual|pinned|liked|lead|prospect|new|to reach|contact)/.test(t)) return "new";
+  return null;
+}
 
 // SheetJS worksheet → { headers, rows } matching the CSV parser's shape.
 function sheetToRows(XLSX: any, ws: any): { headers: string[]; rows: Record<string, string>[] } {
@@ -260,6 +280,10 @@ export async function fetchSheetTabs(
 
 // Union a set of tabs into one { headers, rows } for mapping/import. Only tabs
 // that share the finds schema should be combined (the picker enforces that).
+// Key used to stamp each unioned row with the tab it came from, so the importer
+// can infer a status from the tab name (a "Submitted" tab, a "Denied" tab, …).
+export const TAB_SOURCE_KEY = "__scout_tab";
+
 export function unionTabs(tabs: SheetTab[]): { headers: string[]; rows: Record<string, string>[] } {
   const headers: string[] = [];
   const seen = new Set<string>();
@@ -272,7 +296,8 @@ export function unionTabs(tabs: SheetTab[]): { headers: string[]; rows: Record<s
         headers.push(h);
       }
     }
-    rows.push(...t.rows);
+    // Stamp each row with its source tab (multi-tab trackers organize by tab).
+    for (const r of t.rows) rows.push({ ...r, [TAB_SOURCE_KEY]: t.name });
   }
   return { headers, rows };
 }
@@ -306,10 +331,16 @@ export function rowsToFinds(opts: {
     const handle = cols.handle ? String(row[cols.handle] || "").trim() : "";
     const notes = cols.notes ? String(row[cols.notes] || "").trim() : "";
     const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
+    const tabName = String(row[TAB_SOURCE_KEY] || "");
     let status: ImportFindStatus = defaultStatus;
     if (statusStr) {
       if (looksLikeReplied(statusStr)) status = "replied";
       else if (looksLikeDenied(statusStr)) status = "denied";
+      else if (looksLikeSent(statusStr)) status = "sent";
+      else if (looksLikeDrafted(statusStr)) status = "drafted";
+    } else if (tabName) {
+      const s = statusFromTabName(tabName);
+      if (s) status = s;
     }
     const opp: Opportunity = {
       id: `import-${now}-${idx++}`,

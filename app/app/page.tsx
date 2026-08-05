@@ -3552,9 +3552,13 @@ function ScoutTool({
   }
 
   // Finds belonging to the active project (newest first), and the count still to work.
-  const myFinds = activeProject
-    ? finds.filter((f) => f.projectId === activeProject.id)
-    : [];
+  // Finds tab can show one project or ALL projects (in the current company lens).
+  const [findsAllProjects, setFindsAllProjects] = useState(false);
+  const myFinds = findsAllProjects
+    ? visibleFinds
+    : activeProject
+      ? finds.filter((f) => f.projectId === activeProject.id)
+      : [];
   const newFindCount = myFinds.filter((f) => f.status === "new").length;
 
   // ---- Finds pipeline ----
@@ -4008,6 +4012,22 @@ function ScoutTool({
         x.id === id
           ? { ...x, id: newId, projectId: targetProjectId, categoryId: undefined }
           : x
+      )
+    );
+  }
+  // Set a find's category from the spreadsheet. If the category belongs to a
+  // different project, move the find there too so it stays consistent.
+  function setFindCategory(id: string, categoryId: string) {
+    const cat = categories.find((c) => c.id === categoryId);
+    saveFinds(
+      finds.map((f) =>
+        f.id === id
+          ? {
+              ...f,
+              categoryId: categoryId || undefined,
+              projectId: cat ? cat.projectId : f.projectId,
+            }
+          : f
       )
     );
   }
@@ -6898,8 +6918,14 @@ function ScoutTool({
           onAddManual={addManualFind}
           projectName={activeProject?.name || "this project"}
           projects={visibleProjects}
-          activeProjectId={activeId}
-          onSelectProject={selectProject}
+          activeProjectId={findsAllProjects ? "__all__" : activeId}
+          onSelectProject={(id) => {
+            if (id === "__all__") setFindsAllProjects(true);
+            else {
+              setFindsAllProjects(false);
+              selectProject(id);
+            }
+          }}
           voiceRefreshAvailable={voiceRefreshAvailable}
           refreshingVoice={refreshingVoice}
           onRefreshDrafts={refreshDraftsWithVoice}
@@ -7023,9 +7049,11 @@ function ScoutTool({
         <SpreadsheetTab
           finds={visibleFinds}
           projects={visibleProjects}
+          categories={categories}
           onUpdateOpp={updateFindOpp}
           onStatus={(id, s) => setFindStatus(id, s)}
           onMoveProject={(id, pid) => moveFindToProject(id, pid)}
+          onSetCategory={setFindCategory}
           onRemove={removeFind}
           onAddManual={addManualFind}
           activeProjectId={activeId}
@@ -9787,18 +9815,22 @@ function FindDetailModal({
 function SpreadsheetTab({
   finds,
   projects,
+  categories,
   onUpdateOpp,
   onStatus,
   onMoveProject,
+  onSetCategory,
   onRemove,
   onAddManual,
   activeProjectId,
 }: {
   finds: Find[];
   projects: Project[];
+  categories: Category[];
   onUpdateOpp: (id: string, patch: Partial<Opportunity>) => void;
   onStatus: (id: string, s: FindStatus) => void;
   onMoveProject: (id: string, projectId: string) => void;
+  onSetCategory: (id: string, categoryId: string) => void;
   onRemove: (id: string) => void;
   onAddManual: (input: {
     name: string;
@@ -9814,14 +9846,69 @@ function SpreadsheetTab({
   activeProjectId: string;
 }) {
   const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
+  const catName = (id?: string) => categories.find((c) => c.id === id)?.name || "";
   // Split by origin: Scout-found (search / auto-search / legacy) vs Manual
   // (hand-added or imported from your own sheet).
   const isManual = (f: Find) => f.foundVia === "manual" || f.foundVia === "import";
   const [view, setView] = useState<"all" | "scout" | "manual">("all");
   const scoutFinds = finds.filter((f) => !isManual(f));
   const manualFinds = finds.filter(isManual);
-  const shownFinds =
+  const viewFinds =
     view === "scout" ? scoutFinds : view === "manual" ? manualFinds : finds;
+
+  // ---- Collapsible filters ----
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [statusSel, setStatusSel] = useState<Set<string>>(new Set());
+  const [projSel, setProjSel] = useState("");
+  const [catSel, setCatSel] = useState("");
+  const [contactReq, setContactReq] = useState<"any" | "email" | "phone" | "has" | "none">("any");
+  const activeFilterCount =
+    (q.trim() ? 1 : 0) +
+    statusSel.size +
+    (projSel ? 1 : 0) +
+    (catSel ? 1 : 0) +
+    (contactReq !== "any" ? 1 : 0);
+  const clearFilters = () => {
+    setQ("");
+    setStatusSel(new Set());
+    setProjSel("");
+    setCatSel("");
+    setContactReq("any");
+  };
+  // Categories to offer in the filter: those under the selected project, or all.
+  const filterCats = catSel || projSel
+    ? categories.filter((c) => !projSel || c.projectId === projSel)
+    : categories;
+  const matches = (f: Find) => {
+    if (q.trim()) {
+      const hay = [
+        f.opp.name,
+        f.opp.outlet,
+        f.opp.contactEmail,
+        f.opp.contactHandle,
+        f.opp.contactPhone,
+        f.opp.location,
+        projName(f.projectId),
+        catName(f.categoryId),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!hay.includes(q.trim().toLowerCase())) return false;
+    }
+    if (statusSel.size && !statusSel.has(f.status)) return false;
+    if (projSel && f.projectId !== projSel) return false;
+    if (catSel && f.categoryId !== catSel) return false;
+    const hasEmail = !!f.opp.contactEmail;
+    const hasPhone = !!f.opp.contactPhone;
+    const hasAny = hasEmail || hasPhone || !!f.opp.contactHandle;
+    if (contactReq === "email" && !hasEmail) return false;
+    if (contactReq === "phone" && !hasPhone) return false;
+    if (contactReq === "has" && !hasAny) return false;
+    if (contactReq === "none" && hasAny) return false;
+    return true;
+  };
+  const shownFinds = viewFinds.filter(matches);
   const [exporting, setExporting] = useState(false);
   async function exportXlsx() {
     if (exporting) return;
@@ -9875,7 +9962,7 @@ function SpreadsheetTab({
     />
   );
 
-  const COLS = "minmax(140px,1.4fr) minmax(120px,1.2fr) minmax(160px,1.4fr) minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 130px 150px 40px";
+  const COLS = "minmax(140px,1.4fr) minmax(120px,1.2fr) minmax(160px,1.4fr) minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 130px 150px 150px 40px";
 
   return (
     <main className="mx-auto w-full max-w-[1400px] px-6 pb-16 pt-8">
@@ -9934,17 +10021,143 @@ function SpreadsheetTab({
         ))}
       </div>
 
+      {/* Collapsible filters */}
+      <div className="mt-3">
+        <button
+          onClick={() => setFiltersOpen((v) => !v)}
+          className="inline-flex items-center gap-2 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
+          </svg>
+          Filters
+          {activeFilterCount > 0 && (
+            <span className="rounded-full bg-brand-gradient px-1.5 py-0.5 text-[10px] font-bold text-white">
+              {activeFilterCount}
+            </span>
+          )}
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`} aria-hidden>
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </button>
+        {activeFilterCount > 0 && !filtersOpen && (
+          <button onClick={clearFilters} className="ml-2 text-xs font-semibold text-body/50 transition hover:text-red-500">
+            Clear
+          </button>
+        )}
+        {filtersOpen && (
+          <div className="mt-3 grid gap-4 rounded-2xl border border-warm-border bg-surface p-4 shadow-card sm:grid-cols-2 lg:grid-cols-4">
+            <div className="lg:col-span-2">
+              <Label className="mb-1">Search</Label>
+              <input
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder="Name, company, email, phone, location…"
+                className="w-full rounded-xl border border-warm-border bg-white px-3.5 py-2 text-sm text-ink outline-none transition focus:border-coral"
+              />
+            </div>
+            <div>
+              <Label className="mb-1">Project</Label>
+              <select
+                value={projSel}
+                onChange={(e) => setProjSel(e.target.value)}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+              >
+                <option value="">All projects</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1">Category</Label>
+              <select
+                value={catSel}
+                onChange={(e) => setCatSel(e.target.value)}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+              >
+                <option value="">All categories</option>
+                {filterCats.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                    {!projSel ? ` · ${projName(c.projectId)}` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label className="mb-1">Contact info</Label>
+              <select
+                value={contactReq}
+                onChange={(e) => setContactReq(e.target.value as any)}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
+              >
+                <option value="any">Any</option>
+                <option value="has">Has any contact</option>
+                <option value="email">Has email</option>
+                <option value="phone">Has phone</option>
+                <option value="none">Missing contact</option>
+              </select>
+            </div>
+            <div className="lg:col-span-4">
+              <Label className="mb-1">Status</Label>
+              <div className="flex flex-wrap gap-1.5">
+                {STATUS_OPTIONS.map((o) => {
+                  const on = statusSel.has(o.key);
+                  return (
+                    <button
+                      key={o.key}
+                      onClick={() =>
+                        setStatusSel((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(o.key)) next.delete(o.key);
+                          else next.add(o.key);
+                          return next;
+                        })
+                      }
+                      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
+                        on ? "border-brown bg-brown text-white" : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                      }`}
+                    >
+                      {o.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            {activeFilterCount > 0 && (
+              <div className="lg:col-span-4">
+                <button onClick={clearFilters} className="text-xs font-semibold text-accent hover:underline">
+                  Clear all filters
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       {shownFinds.length === 0 ? (
         <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-12 text-center text-sm text-body/70">
-          {finds.length === 0
-            ? "No finds yet. Run a search, import a sheet, or add a contact and it shows up here as a row."
-            : view === "manual"
-              ? "No manual finds. Add a contact or import a sheet and they show up here."
-              : "No Scout-found finds yet. Run a search on the Outreach tab."}
+          {finds.length === 0 ? (
+            "No finds yet. Run a search, import a sheet, or add a contact and it shows up here as a row."
+          ) : activeFilterCount > 0 ? (
+            <>
+              No rows match your filters.{" "}
+              <button onClick={clearFilters} className="font-semibold text-accent hover:underline">
+                Clear filters
+              </button>
+            </>
+          ) : view === "manual" ? (
+            "No manual finds. Add a contact or import a sheet and they show up here."
+          ) : (
+            "No Scout-found finds yet. Run a search on the Outreach tab."
+          )}
         </div>
       ) : (
         <div className="mt-4 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
-          <div className="min-w-[1000px]">
+          <div className="min-w-[1150px]">
             {/* Header */}
             <div
               className="grid items-center gap-2 border-b border-warm-border bg-warm-bg/50 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-body/55"
@@ -9958,6 +10171,7 @@ function SpreadsheetTab({
               <span>Location</span>
               <span>Status</span>
               <span>Project</span>
+              <span>Category</span>
               <span />
             </div>
             {shownFinds.map((f, i) => (
@@ -9995,6 +10209,21 @@ function SpreadsheetTab({
                       {p.name}
                     </option>
                   ))}
+                </select>
+                <select
+                  value={f.categoryId || ""}
+                  onChange={(e) => onSetCategory(f.id, e.target.value)}
+                  title="Category"
+                  className="scout-select w-full min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                >
+                  <option value="">— none —</option>
+                  {categories
+                    .filter((c) => c.projectId === f.projectId)
+                    .map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
                 </select>
                 <button
                   onClick={() => onRemove(f.id)}
@@ -10723,6 +10952,7 @@ function FindsTab({
               onChange={(e) => onSelectProject(e.target.value)}
               className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none transition focus:border-brown"
             >
+              <option value="__all__">All projects</option>
               {projects.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.name}
