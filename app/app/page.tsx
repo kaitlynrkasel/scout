@@ -2731,10 +2731,26 @@ function ScoutTool({
   }
 
   function removeProject(id: string) {
-    if (projects.length <= 1) return; // always keep at least one project
+    if (projects.length <= 1) {
+      setError("Keep at least one project. Add another first, then delete this one.");
+      return;
+    }
+    const proj = projects.find((p) => p.id === id);
+    const findCount = finds.filter((f) => f.projectId === id).length;
+    const catCount = categories.filter((c) => c.projectId === id).length;
+    // Deleting a project removes its categories AND its finds, so confirm first.
+    if (typeof window !== "undefined" && (findCount || catCount)) {
+      const ok = window.confirm(
+        `Delete "${proj?.name || "this project"}"? This also removes its ` +
+          `${catCount} categor${catCount === 1 ? "y" : "ies"} and ${findCount} ` +
+          `find${findCount === 1 ? "" : "s"}. This can't be undone.`
+      );
+      if (!ok) return;
+    }
     const nextProjects = projects.filter((p) => p.id !== id);
     saveProjects(nextProjects);
     saveCats(categories.filter((c) => c.projectId !== id));
+    saveFinds(finds.filter((f) => f.projectId !== id));
     if (activeId === id) selectProject(nextProjects[0].id);
   }
 
@@ -20288,7 +20304,7 @@ function CategoryManager({
   return (
     <div
       ref={ref}
-      className="absolute left-0 top-full z-30 mt-2 w-[300px] rounded-2xl border border-warm-border bg-surface p-3 shadow-soft"
+      className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-[300px] overflow-auto rounded-2xl border border-warm-border bg-surface p-3 shadow-xl"
     >
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[11px] font-bold uppercase tracking-wider text-body/60">
