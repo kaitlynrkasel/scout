@@ -6048,9 +6048,6 @@ function ScoutTool({
           <div className="mb-6">
             <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
             <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Outreach</h1>
-            <p className="mt-1.5 text-sm text-body">
-              Find your people and draft messages in your voice.
-            </p>
             {/* The company lens lives in the sidebar now; no duplicate here. */}
             {teamLens && (
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs">
@@ -7188,9 +7185,6 @@ function ScoutTool({
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="text-brown">account</span>
           </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-body">
-            Your login and everything Scout saves for you live here.
-          </p>
           <AccountCard
             email={accountEmail}
             currentName={profile.name || ""}
@@ -9972,11 +9966,6 @@ function SpreadsheetTab({
           <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
             <span className="text-brown">Spreadsheet</span>
           </h1>
-          <p className="mt-2 text-[15px] leading-relaxed text-body">
-            Every find in one editable grid. Click any cell to edit; changes save
-            to the find. Imported sheets and Scout&apos;s own finds live here
-            together.
-          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
@@ -10295,12 +10284,6 @@ function ManualTab({
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Manual <span className="text-brown">outreach</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Already know who you want to reach? Add them here or import a sheet of
-        outreach you&apos;ve already done. They land in your Finds, where your
-        templates and voice draft the message and you send it, no searching
-        required.
-      </p>
 
       {/* Add one contact you already know */}
       <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
@@ -15828,10 +15811,6 @@ function TeamTab({
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="text-brown">team</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Share a project with teammates so you all see the same finds and who is
-        working on what. No two people pitch the same contact twice.
-      </p>
 
       {error && (
         <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-2.5 text-sm text-amber-800">
@@ -16915,10 +16894,6 @@ function BillingTab({
   return (
     <main className="mx-auto w-full max-w-5xl px-8 py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Plan &amp; billing</h1>
-      <p className="mt-1 text-sm text-body">
-        Each search finds a fresh batch of people and drafts them a note. Pick the monthly
-        volume that fits.
-      </p>
 
       {billing && !billing.billingEnabled && (
         <div className="mt-5 rounded-xl border border-attention/30 bg-attention/10 p-4 text-sm text-body">
@@ -17184,9 +17159,6 @@ function SettingsTab({
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         <span className="text-brown">Settings</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Small preferences that shape how Scout shows up for you.
-      </p>
 
       {/* Access code */}
       <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
@@ -17240,9 +17212,6 @@ function SettingsTab({
       {/* Password */}
       <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Password</h2>
-        <p className="mt-1 text-sm leading-relaxed text-body">
-          Change the password you use to sign in.
-        </p>
         <div className="mt-4 grid max-w-sm gap-3">
           <input
             type="password"
@@ -17293,9 +17262,6 @@ function SettingsTab({
       {/* Appearance */}
       <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Appearance</h2>
-        <p className="mt-1 text-sm leading-relaxed text-body">
-          Choose the theme Scout uses on this device.
-        </p>
         <div className="mt-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(
             [
@@ -17552,11 +17518,6 @@ function TemplatesTab({
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
-        Set up how each kind of message should sound. When Scout drafts outreach,
-        it uses your voice. Keep a template universal, or assign it to a specific
-        project or category.
-      </p>
 
       {/* Team lens: templates are a communal library, same treatment as Finds. */}
       {teamName && (
@@ -18986,11 +18947,6 @@ function ProfileTab({
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">profile</span>
       </h1>
-      <p className="mt-2 text-[15px] leading-relaxed text-body">
-        {kind === "company"
-          ? "Everything here grounds how Scout searches and writes for your company. Pick the company below — the whole page follows your choice."
-          : "Drop in your resume, LinkedIn, or company website and Scout fills the rest for you. Everything stays editable, and it shapes who we find and how your messages sound."}
-      </p>
 
       {/* Company accounts: a prominent switcher at the very top, so it's obvious the
           entire page (company details, your role, projects) reflects the company
