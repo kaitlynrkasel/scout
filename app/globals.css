@@ -10,68 +10,68 @@
      layer, a whisper of warmth in the neutrals, and one restrained espresso
      accent. Elevation comes from hairlines; depth is reserved for floating
      surfaces (command bar, palette, peek). */
-  /* Monochromatic warm-brown ramp — one hue (~26°) top to bottom, tones stepping
-     evenly (Baker's Dream → Balsamico), with a single warm-olive accent. */
-  --c-ink: 44 30 19; /* Wood Bark — warm near-black */
-  --c-body: 91 70 50; /* dark mocha */
-  --c-muted: 111 89 64; /* warm taupe (holds 4.5:1 on the tan surfaces) */
-  --c-brown: 138 95 66; /* Mocha — primary accent */
-  --c-brown-deep: 92 64 47; /* Espresso Bar — hover / links */
-  --c-brown-tint: 227 209 186;
-  --c-clay: 201 178 145;
-  --c-coffee: 40 28 18;
-  --c-success: 111 122 78; /* warm olive */
-  --c-success-deep: 82 92 55;
+  /* Clean, functional system: near-white surfaces and soft neutral browns at low
+     chroma. Whites dominate; brown is the single restrained accent; contrast is
+     kept gentle (no dark chrome). A muted olive marks positive signals only. */
+  --c-ink: 56 50 43; /* soft neutral dark brown (not near-black) */
+  --c-body: 94 86 72;
+  --c-muted: 115 106 93; /* holds 4.5:1 on white */
+  --c-brown: 122 96 72; /* neutral brown — primary accent */
+  --c-brown-deep: 92 70 52; /* hover / links */
+  --c-brown-tint: 239 233 225;
+  --c-clay: 201 187 170;
+  --c-coffee: 58 51 43;
+  --c-success: 111 122 91; /* muted olive — positive signals only */
+  --c-success-deep: 85 96 63;
   --c-attention: 169 118 31;
   --c-danger: 176 85 63;
-  /* The former denim-blue secondary now aliases the warm olive-green accent, so
-     ~400 existing blue/sage usages flip to green centrally without touching
-     classNames. Same hue family as the browns, so it never cools the palette. */
-  --c-blue: 111 122 78; /* warm olive */
-  --c-blue-deep: 82 92 55; /* deep olive — labels, links, text on tint */
-  --c-blue-tint: 214 219 197; /* soft olive fill */
-  --c-slate: 111 122 78; /* alias → olive */
-  --c-sage: 111 122 78; /* alias → olive */
-  --c-sage-deep: 82 92 55; /* alias → deep olive */
-  --c-cream: 233 220 205; /* page canvas — warm tan */
-  --c-surface: 243 235 223; /* cards — cream tint, one step up from the canvas */
-  --c-surface-2: 221 204 183; /* inset layer */
-  --c-warm-bg: 230 217 199; /* hover fill */
-  --c-warm-border: 219 203 181; /* hairline */
-  --brand-a: #8a5f42;
-  --brand-b: #5c402f;
+  /* The former denim-blue secondary now aliases the neutral brown accent, so the
+     ~400 existing blue/sage usages stay in the clean brown family centrally. */
+  --c-blue: 122 96 72; /* neutral brown */
+  --c-blue-deep: 92 70 52; /* deep neutral brown — labels, links, text on tint */
+  --c-blue-tint: 236 229 220; /* soft neutral fill */
+  --c-slate: 122 96 72; /* alias → neutral brown */
+  --c-sage: 122 96 72; /* alias → neutral brown */
+  --c-sage-deep: 92 70 52; /* alias → deep neutral brown */
+  --c-cream: 248 247 245; /* page canvas — near-white */
+  --c-surface: 255 255 255; /* cards — white */
+  --c-surface-2: 241 239 235; /* light sidebar / inset */
+  --c-warm-bg: 243 241 236; /* hover fill */
+  --c-warm-border: 234 231 225; /* soft hairline */
+  --brand-a: #7a6048;
+  --brand-b: #5c4634;
 }
 
 html.dark {
   color-scheme: dark;
   /* Warm dark theme, deep espresso grounds, cream text, the brown accent
      lifted a touch so it reads on dark surfaces. */
-  --c-ink: 244 232 218;
-  --c-body: 214 196 173;
-  --c-muted: 168 154 133;
-  --c-brown: 176 128 92;
-  --c-brown-deep: 150 108 78;
-  --c-brown-tint: 60 46 32;
-  --c-clay: 110 92 70;
-  --c-coffee: 244 232 218;
-  --c-success: 143 158 108;
-  --c-success-deep: 176 190 145;
+  --c-ink: 240 236 230;
+  --c-body: 198 190 178;
+  --c-muted: 156 148 136;
+  --c-brown: 168 140 112;
+  --c-brown-deep: 146 120 94;
+  --c-brown-tint: 54 46 38;
+  --c-clay: 110 100 88;
+  --c-coffee: 240 236 230;
+  --c-success: 150 160 120;
+  --c-success-deep: 180 190 150;
   --c-attention: 208 162 78;
   --c-danger: 212 122 99;
-  /* Warm olive lifted so it reads on the espresso dark surfaces. */
-  --c-blue: 150 162 115; /* olive on dark */
-  --c-blue-deep: 190 200 160; /* soft olive, for text on dark tint */
-  --c-blue-tint: 60 66 44; /* deep olive fill */
-  --c-slate: 150 162 115;
-  --c-sage: 150 162 115; /* alias → olive */
-  --c-sage-deep: 190 200 160; /* alias → soft olive */
-  --c-cream: 32 25 18;
-  --c-surface: 42 33 24;
-  --c-surface-2: 36 28 20;
-  --c-warm-bg: 52 41 30;
-  --c-warm-border: 66 53 40;
-  --brand-a: #b0805c;
-  --brand-b: #8a5f42;
+  /* Neutral brown secondary, lifted to read on the dark surfaces. */
+  --c-blue: 168 140 112; /* neutral brown on dark */
+  --c-blue-deep: 205 190 172; /* soft brown, for text on dark tint */
+  --c-blue-tint: 58 50 42; /* deep neutral fill */
+  --c-slate: 168 140 112;
+  --c-sage: 168 140 112; /* alias → neutral brown */
+  --c-sage-deep: 205 190 172; /* alias → soft brown */
+  --c-cream: 28 25 21;
+  --c-surface: 38 34 29;
+  --c-surface-2: 33 29 25;
+  --c-warm-bg: 48 43 37;
+  --c-warm-border: 60 54 47;
+  --brand-a: #a8896f;
+  --brand-b: #8a6f57;
 }
 
 body {
@@ -152,12 +152,12 @@ h1, h2, h3, .font-display {
    tokens are light tints that flip for dark, so they can't carry white text) —
    white text reads cleanly on the navy. */
 .nav-active {
-  background-color: #5c402f;
-  color: #f4e8da;
+  background-color: #7a6048;
+  color: #f8f6f2;
 }
 html.dark .nav-active {
-  background-color: #6d4f3a;
-  color: #f4e8da;
+  background-color: #6a5540;
+  color: #f0ece6;
 }
 
 /* ---- Card + tab helpers (clean/flat) ---- */
@@ -207,9 +207,9 @@ select.scout-select {
    layer the chevron OVER the brand gradient here (and keep a solid navy
    fallback) to guarantee the picker stays dark and its default format shows. */
 select.scout-select-light {
-  background-color: #5c402f;
+  background-color: #7a6048;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"),
-    linear-gradient(120deg, #6d4f3a 0%, #5c402f 100%);
+    linear-gradient(120deg, #8a6f57 0%, #7a6048 100%);
   background-repeat: no-repeat, no-repeat;
   background-position: right 0.5rem center, center;
   background-size: 16px 16px, cover;
@@ -226,42 +226,42 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-terra: #8a5f42; /* warm brown accent (Mocha) */
-  --su-terra-deep: #5c402f; /* Espresso Bar — text / links */
-  --su-tan: #e3d1ba; /* warm tan stat band */
-  --su-tan-line: #d1bd9f;
-  --su-ghost: rgba(44, 30, 19, 0.06); /* ghost outline-word stroke */
-  --su-idx: rgba(138, 95, 66, 0.5); /* index-number stroke */
+  --su-terra: #7a6048; /* neutral brown accent */
+  --su-terra-deep: #5c4634; /* deep neutral brown — text / links */
+  --su-tan: #f1efeb; /* light stat band */
+  --su-tan-line: #e4e0d8;
+  --su-ghost: rgba(56, 50, 43, 0.05); /* ghost outline-word stroke */
+  --su-idx: rgba(122, 96, 72, 0.4); /* index-number stroke */
 
-  /* Sidebar rail — a deep espresso panel (Espresso Bar), the darkest brown in
-     the ramp. Light warm text on it; a Mocha pill marks the active item. */
-  --su-rail-bg: #5c402f; /* Espresso Bar */
-  --su-rail-fg: #d9c4ad; /* inactive nav text */
-  --su-rail-fg-strong: #f4e8da; /* logo, hovered / active text */
-  --su-rail-muted: #b39c81; /* kicker, search placeholder, counts */
-  --su-rail-line: rgba(255, 255, 255, 0.09);
-  --su-rail-hover: rgba(255, 255, 255, 0.06);
-  --su-rail-inset: rgba(255, 255, 255, 0.05);
-  --su-rail-active-bg: #8a5f42; /* Mocha active pill */
-  --su-rail-active-fg: #f4e8da;
+  /* Sidebar rail — a clean, light neutral panel (low contrast with the white
+     content). Dark text on it; a soft neutral-brown pill marks the active item. */
+  --su-rail-bg: #f1efeb; /* light neutral sidebar */
+  --su-rail-fg: #6a6152; /* inactive nav text */
+  --su-rail-fg-strong: #3b342c; /* logo, hovered / active text */
+  --su-rail-muted: #938a7b; /* kicker, search placeholder, counts */
+  --su-rail-line: rgba(60, 50, 40, 0.08);
+  --su-rail-hover: rgba(60, 50, 40, 0.045);
+  --su-rail-inset: rgba(60, 50, 40, 0.04);
+  --su-rail-active-bg: #7a6048; /* neutral brown active pill */
+  --su-rail-active-fg: #f8f6f2;
 }
 html.dark {
-  --su-terra: #b0805c;
-  --su-terra-deep: #d0b48f;
-  --su-tan: #2a2118;
-  --su-tan-line: #3a2f22;
-  --su-ghost: rgba(244, 232, 218, 0.05);
-  --su-idx: rgba(176, 128, 92, 0.45);
+  --su-terra: #a8896f;
+  --su-terra-deep: #cdbba6;
+  --su-tan: #211d19;
+  --su-tan-line: #332e28;
+  --su-ghost: rgba(240, 236, 230, 0.05);
+  --su-idx: rgba(168, 140, 112, 0.4);
 
-  --su-rail-bg: #241c14; /* deepest espresso for dark mode */
-  --su-rail-fg: #b6a488;
-  --su-rail-fg-strong: #f4e8da;
-  --su-rail-muted: #8f7f68;
-  --su-rail-line: rgba(255, 255, 255, 0.07);
-  --su-rail-hover: rgba(255, 255, 255, 0.05);
-  --su-rail-inset: rgba(255, 255, 255, 0.04);
-  --su-rail-active-bg: #6d4f3a;
-  --su-rail-active-fg: #f4e8da;
+  --su-rail-bg: #211d19; /* soft dark neutral for dark mode */
+  --su-rail-fg: #b0a795;
+  --su-rail-fg-strong: #f0ece6;
+  --su-rail-muted: #8a8070;
+  --su-rail-line: rgba(255, 255, 255, 0.06);
+  --su-rail-hover: rgba(255, 255, 255, 0.045);
+  --su-rail-inset: rgba(255, 255, 255, 0.035);
+  --su-rail-active-bg: #6a5540;
+  --su-rail-active-fg: #f0ece6;
 }
 
 .font-anton {

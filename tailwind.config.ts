@@ -73,8 +73,8 @@ const config: Config = {
         // Warm-brown primary action (Mocha → Espresso Bar). Brown leads
         // interaction across the app; warm olive is the accent, the tan ramp the
         // identity.
-        "brand-gradient": "linear-gradient(120deg, #8a5f42 0%, #5c402f 100%)",
-        "warm-fade": "linear-gradient(180deg, #efe4d5 0%, #f3ebdf 60%)",
+        "brand-gradient": "linear-gradient(120deg, #7a6048 0%, #5c4634 100%)",
+        "warm-fade": "linear-gradient(180deg, #f6f4f1 0%, #ffffff 60%)",
       },
     },
   },
