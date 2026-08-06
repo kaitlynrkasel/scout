@@ -13684,7 +13684,7 @@ function DashboardTab({
   const spotlight = pick;
   const moreList = (spotlight ? recentFinds.filter((f) => f.id !== spotlight.id) : recentFinds).slice(0, 5);
   const startNum = spotlight ? 2 : 1;
-  const avatarPalette = ["#7c5837", "#8da0bc", "#674a3a", "#536872", "#a9761f", "#a5b0b6"];
+  const avatarPalette = ["#8a5f42", "#6f7a4e", "#5c402f", "#a9761f", "#77563b", "#525c37"];
   const avatarColor = (name: string) =>
     avatarPalette[
       (name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0) % avatarPalette.length
@@ -13752,205 +13752,185 @@ function DashboardTab({
   );
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-8 py-10">
-      {/* -------- Edgy hero: ghost word + Anton greeting (full-bleed) -------- */}
-      <div className="-mx-8 -mt-10">
-        <div className="su-hero">
-          <div className="su-ghost font-anton" aria-hidden>
-            {dashTab === "you" ? "FETCH" : "SCOUT"}
-          </div>
-          <div className="relative z-[2]">
-            <div className="flex items-start justify-between gap-4">
-              <div className="kicker" style={{ color: "var(--su-terra-deep)" }}>
-                {dashTab === "you"
-                  ? newThisWeek > 0
-                    ? `${weekday} · ${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"}`
-                    : weekday
-                  : "Across everyone on Scout"}
-              </div>
-              <div className="flex items-center gap-3">
-                {dashToggle}
-                {dashTab === "you" && (
-                  <span className="su-uav" aria-hidden>
-                    {initials(profile.name)}
-                  </span>
-                )}
-              </div>
-            </div>
+    <main className="mx-auto w-full max-w-6xl px-8 py-10">
+      {/* -------- Header: title + You/Scout toggle + Search -------- */}
+      <div className="flex items-center gap-4">
+        <h1 className="font-display text-xl font-bold tracking-tight text-ink">Dashboard</h1>
+        {dashToggle}
+        <button
+          onClick={goOutreach}
+          className="ml-auto inline-flex items-center gap-2 rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
+        >
+          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
+          Search
+        </button>
+      </div>
 
-            {dashTab === "you" ? (
+      {dashTab === "you" ? (
+        <>
+          {/* -------- One-line status -------- */}
+          <p className="mt-4 text-sm text-muted">
+            {strongThisWeek > 0 ? (
               <>
-                <h1 className="su-bighead mt-3">
-                  Good {partOfDay},
-                  {firstName ? (
-                    <>
-                      <br />
-                      <span className="su-o">{firstName}!</span>
-                    </>
-                  ) : (
-                    "!"
-                  )}
-                </h1>
-                <p className="mt-3.5 max-w-[46ch] text-[15px] text-muted">
-                  {/* Falls back to your most recent real activity instead of a
-                      this-week-only line, so it never reads "no finds" when your
-                      pipeline is full. Truly-empty accounts keep the hunt prompt. */}
-                  {strongThisWeek > 0
-                    ? `${strongThisWeek} strong ${strongThisWeek === 1 ? "match is" : "matches are"} ready and drafted in your voice.`
-                    : newThisWeek > 0
-                    ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week, worth a look.`
-                    : pipe.drafted > 0
-                    ? `${pipe.drafted} ${pipe.drafted === 1 ? "draft is" : "drafts are"} ready to send in your voice.`
-                    : pipe.new > 0
-                    ? `${pipe.new} ${pipe.new === 1 ? "find is" : "finds are"} waiting for your review.`
-                    : pipeTotal > 0
-                    ? `${pipeTotal} ${pipeTotal === 1 ? "contact" : "contacts"} in your pipeline, pick up where you left off.`
-                    : finds.length > 0
-                    ? `${finds.length} ${finds.length === 1 ? "find" : "finds"} in your history. Start a fresh hunt anytime.`
-                    : "No new finds yet. Start a hunt and Scout brings people back."}
-                </p>
-                <div className="mt-4 flex flex-wrap gap-2.5">
-                  <button onClick={goOutreach} className="su-btn su-btn-t">
-                    Fetch opportunities →
-                  </button>
-                  <button onClick={openCommand} className="su-btn su-btn-ghost">
-                    Ask Scout
-                  </button>
-                </div>
+                <span className="font-semibold text-ink">
+                  {strongThisWeek} {strongThisWeek === 1 ? "match" : "matches"}
+                </span>{" "}
+                ready to send
+              </>
+            ) : newThisWeek > 0 ? (
+              <>
+                <span className="font-semibold text-ink">
+                  {newThisWeek} new {newThisWeek === 1 ? "find" : "finds"}
+                </span>{" "}
+                this week
               </>
             ) : (
+              "No new finds yet — run a search to fill your pipeline."
+            )}
+            {dueFollowUps > 0 && (
               <>
-                <h1 className="su-bighead mt-3">Scout-wide</h1>
+                <span className="mx-2 opacity-40">·</span>
+                <span className="font-semibold text-ink">{dueFollowUps}</span> due for follow-up
               </>
             )}
-          </div>
-        </div>
+          </p>
 
-        {dashTab === "you" && (
-          <>
-            {/* -------- Stat band (lighter tan, inset from the rail) --------
-                Cycles through the most telling non-zero numbers so it never
-                sits on a dead "0". Hidden entirely for a brand-new empty
-                account (the greeting above already covers that zero state). */}
-            {statItems.length > 0 && <StatBand items={statItems} />}
-
-            {/* -------- Follow-up nudge -------- */}
-            {dueFollowUps > 0 && (
-              <div className="px-[34px] pt-3">
-                <button
-                  onClick={goFinds}
-                  className="flex w-full items-center gap-3 rounded-xl border border-warm-border bg-warm-bg/50 p-3.5 text-left transition hover:bg-warm-bg"
-                >
-                  <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--su-terra)]/15 text-[var(--su-terra-deep)]">
-                    <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0" /></svg>
-                  </span>
-                  <span className="flex-1">
-                    <span className="block text-sm font-bold text-ink">
-                      {dueFollowUps} {dueFollowUps === 1 ? "contact is" : "contacts are"} due for a follow-up
-                    </span>
-                    <span className="block text-xs text-body/80">
-                      You reached out about a week ago with no reply yet. A short nudge helps.
-                    </span>
-                  </span>
-                  <span className="shrink-0 text-xs font-bold text-[var(--su-terra-deep)]">Review →</span>
-                </button>
-              </div>
-            )}
-
-            {recentFinds.length ? (
-              <>
-                {/* -------- Top match today (spotlight feature row) -------- */}
-                {spotlight && (
-                  <div className="su-sec">
-                    <div className="su-secttl">
-                      <div className="su-k">Top match today</div>
-                      <a onClick={goFinds}>All finds →</a>
-                    </div>
-                    <div className="su-feature">
-                      <div className="su-idxn font-anton">01</div>
-                      <div className="min-w-0">
-                        <div className="su-nm">
-                          {spotlight.opp.name}
+          {/* -------- Two-column: action (left) + glance (right) -------- */}
+          <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
+            {/* LEFT — the action */}
+            <div className="min-w-0">
+              {recentFinds.length ? (
+                <>
+                  {spotlight && (
+                    <>
+                      <h2 className="mb-3 px-0.5 text-[13px] font-bold text-muted">Do this next</h2>
+                      <div className="rounded-[18px] border border-warm-border bg-surface p-6 shadow-soft">
+                        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-brown">Top match today</div>
+                        <div className="mt-3 flex flex-wrap items-center gap-3">
+                          <span className="font-display text-[26px] font-extrabold leading-none text-ink">{spotlight.opp.name}</span>
                           {typeof spotlight.opp.fitScore === "number" && (
-                            <span className="su-tagfit ml-2">
+                            <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success-deep">
                               {Math.round(spotlight.opp.fitScore * 100)}% fit
                             </span>
                           )}
                         </div>
-                        <div className="su-rl">{roleLine(spotlight.opp)}</div>
-                        <div className="su-quote">
+                        <div className="mt-1.5 text-sm text-muted">{roleLine(spotlight.opp)}</div>
+                        <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/50 p-4 text-sm leading-relaxed text-body">
                           {cleanDash(spotlight.opp.whyItFits).trim() ||
                             "Your strongest still-open match, worth a short, specific intro."}
                         </div>
-                        <div className="su-act">
-                          <button onClick={() => onOpenFind(spotlight)} className="su-btn su-btn-t">
-                            {spotlight.status === "drafted" ? "Send in my voice" : "Draft in my voice"}
+                        <div className="mt-5 flex items-center gap-3">
+                          <button onClick={() => onOpenFind(spotlight)} className="rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brown-deep">
+                            {spotlight.status === "drafted" ? "Send in my voice →" : "Draft in my voice →"}
                           </button>
-                          <button onClick={() => onOpenFind(spotlight)} className="su-btn su-btn-ghost">
+                          <button onClick={() => onOpenFind(spotlight)} className="text-sm font-bold text-brown-deep hover:underline">
                             {spotlight.status === "drafted" ? "Edit draft" : "Open find"}
                           </button>
                         </div>
                       </div>
-                    </div>
-                  </div>
-                )}
+                    </>
+                  )}
 
-                {/* -------- More matches (numbered index rows) -------- */}
-                {moreList.length > 0 && (
-                  <div className="su-sec" style={{ paddingTop: 6 }}>
-                    <div className="su-secttl">
-                      <div className="su-k">More matches</div>
-                      <a onClick={goFinds}>View all →</a>
-                    </div>
-                    <div className="mt-2">
-                      {moreList.map((f, i) => {
-                        const st = FIND_STATUS[f.status];
-                        const fit =
-                          typeof f.opp.fitScore === "number" ? Math.round(f.opp.fitScore * 100) : null;
-                        return (
-                          <button key={f.id} onClick={() => onOpenFind(f)} className="su-find">
-                            <div className="su-fn font-anton">
-                              {String(startNum + i).padStart(2, "0")}
-                            </div>
-                            <span className="su-avatar" style={{ backgroundColor: avatarColor(f.opp.name) }} aria-hidden>
-                              {initials(f.opp.name)}
-                            </span>
-                            <div className="su-who min-w-0">
-                              <div className="su-wnm truncate">{f.opp.name}</div>
-                              <div className="su-wrl truncate">{roleLine(f.opp)}</div>
-                            </div>
-                            {fit != null && (
-                              <div className="su-fit">
-                                {fit}%
-                                <span className="su-fitbar">
-                                  <i style={{ width: `${fit}%` }} />
-                                </span>
-                              </div>
-                            )}
-                            <div className="su-go">{st.action}</div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="su-sec">
-                <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-warm-border bg-surface px-6 py-12 text-center">
+                  {moreList.length > 0 && (
+                    <>
+                      <div className="mb-3 mt-7 flex items-baseline justify-between px-0.5">
+                        <h2 className="text-[13px] font-bold text-muted">More matches</h2>
+                        <button onClick={goFinds} className="text-xs font-bold text-brown-deep hover:underline">All finds →</button>
+                      </div>
+                      <div className="overflow-hidden rounded-2xl border border-warm-border bg-surface">
+                        {moreList.map((f) => {
+                          const st = FIND_STATUS[f.status];
+                          const fit =
+                            typeof f.opp.fitScore === "number" ? Math.round(f.opp.fitScore * 100) : null;
+                          return (
+                            <button key={f.id} onClick={() => onOpenFind(f)} className="flex w-full items-center gap-4 border-b border-warm-border px-5 py-4 text-left transition last:border-b-0 hover:bg-warm-bg/40">
+                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white" style={{ backgroundColor: avatarColor(f.opp.name) }} aria-hidden>
+                                {initials(f.opp.name)}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className="block truncate text-sm font-bold text-ink">{f.opp.name}</span>
+                                <span className="block truncate text-xs text-muted">{roleLine(f.opp)}</span>
+                              </span>
+                              {fit != null && (
+                                <span className="shrink-0 text-xs font-bold tabular-nums text-success-deep">{fit}%</span>
+                              )}
+                              <span className="shrink-0 text-xs font-semibold text-brown-deep">{st.action}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-warm-border bg-surface px-6 py-14 text-center">
                   <p className="max-w-sm text-sm text-muted">
-                    No finds yet. Run a search and Scout starts filling your pipeline with
-                    people worth reaching.
+                    No finds yet. Run a search and Scout starts filling your pipeline with people worth reaching.
                   </p>
-                  <button onClick={goOutreach} className="su-btn su-btn-t mt-4">
+                  <button onClick={goOutreach} className="mt-4 rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brown-deep">
                     Start scouting →
                   </button>
                 </div>
+              )}
+            </div>
+
+            {/* RIGHT — the glance */}
+            <div className="min-w-0">
+              <h2 className="mb-3 px-0.5 text-[13px] font-bold text-muted">At a glance</h2>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-2xl border border-warm-border bg-surface p-4">
+                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{finds.length}</div>
+                  <div className="mt-1.5 text-[11.5px] text-muted">
+                    Finds{newThisWeek > 0 && <span className="ml-1 font-semibold text-success-deep">▲{newThisWeek}</span>}
+                  </div>
+                </div>
+                <div className="rounded-2xl border border-warm-border bg-surface p-4">
+                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{pipe.sent}</div>
+                  <div className="mt-1.5 text-[11.5px] text-muted">Messages sent</div>
+                </div>
+                <div className="rounded-2xl border border-warm-border bg-surface p-4">
+                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{replyRatePct}</div>
+                  <div className="mt-1.5 text-[11.5px] text-muted">Reply rate</div>
+                </div>
+                <div className="rounded-2xl border border-warm-border bg-surface p-4">
+                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{onTarget != null ? `${onTarget}%` : "·"}</div>
+                  <div className="mt-1.5 text-[11.5px] text-muted">On-target</div>
+                </div>
               </div>
-            )}
-          </>
-        )}
-      </div>
+
+              {(dueFollowUps > 0 || insights.length > 0 || coaching.length > 0) && (
+                <>
+                  <h2 className="mb-3 mt-7 px-0.5 text-[13px] font-bold text-muted">Also on your radar</h2>
+                  <div className="flex flex-col gap-2.5">
+                    {dueFollowUps > 0 && (
+                      <button onClick={goFinds} className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-left text-sm transition hover:border-brown/40">
+                        <span className="font-semibold text-ink">{dueFollowUps} follow-up{dueFollowUps === 1 ? "" : "s"} due</span>
+                        <span className="ml-auto text-xs font-semibold text-brown-deep">Review →</span>
+                      </button>
+                    )}
+                    {insights.length > 0 && (
+                      <div className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-sm">
+                        <span className="font-semibold text-ink">What Scout learned</span>
+                        <span className="ml-auto text-xs text-muted">{insights.length} signal{insights.length === 1 ? "" : "s"}</span>
+                      </div>
+                    )}
+                    {coaching.length > 0 && (
+                      <div className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-sm">
+                        <span className="font-semibold text-ink">Coaching you turned on</span>
+                        <span className="ml-auto text-xs text-muted">{coaching.length} rule{coaching.length === 1 ? "" : "s"}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </>
+      ) : (
+        <p className="mt-4 text-sm text-muted">
+          Across everyone using Scout with a use case like yours — real averages, never anyone&apos;s private data.
+        </p>
+      )}
 
       {dashTab === "you" && (
       <>
