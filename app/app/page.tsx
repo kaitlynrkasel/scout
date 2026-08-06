@@ -14700,11 +14700,11 @@ function AutoSearchPanel({
   return (
     <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
       <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
-        Search preferences
-        <span className="font-normal text-body/50">· contact info, auto-find &amp; emails</span>
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
+        <span className="shrink-0 whitespace-nowrap">Search preferences</span>
+        <span className="min-w-0 truncate font-normal text-body/50">· contact info, auto-find &amp; emails</span>
         {activeCount > 0 && (
-          <span className="ml-auto rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+          <span className="ml-auto shrink-0 whitespace-nowrap rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
             {activeCount} on
           </span>
         )}
