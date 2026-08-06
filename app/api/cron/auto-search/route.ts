@@ -223,7 +223,7 @@ export async function GET(req: NextRequest) {
             : "";
           return `
           <tr><td style="padding:0 0 12px">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #E7DFD2;border-radius:14px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #D2C9B8;border-radius:14px;box-shadow:0 1px 0 #E7DFD2">
               <tr><td style="padding:16px 18px">
                 <div style="font-size:16px;font-weight:800;color:#241C13;line-height:1.3">${htmlEsc(o.name)}${roleBit}${fitChip}</div>
                 ${o.whyItFits ? `<div style="font-size:13px;line-height:1.55;color:#57503f;margin-top:6px">${htmlEsc(o.whyItFits)}</div>` : ""}

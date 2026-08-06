@@ -13008,6 +13008,47 @@ function FindWorkflow({
   );
 }
 
+/* ---------------- Dashboard stat band ---------------- */
+// Shows up to three "telling" numbers and, when the pool has more than three,
+// quietly cycles through the rest every few seconds so the band never sits on a
+// stale or dead "0" (the caller only ever passes stats that actually say
+// something). Static under prefers-reduced-motion or when there are <=3 stats.
+function StatBand({ items }: { items: { value: string; label: string }[] }) {
+  const [start, setStart] = useState(0);
+  const n = items.length;
+  // Reset to the top whenever the pool changes (new finds, project switch).
+  useEffect(() => {
+    setStart(0);
+  }, [n]);
+  useEffect(() => {
+    if (n <= 3) return;
+    if (
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(prefers-reduced-motion: reduce)").matches
+    )
+      return;
+    const id = setInterval(() => setStart((s) => (s + 3) % n), 5000);
+    return () => clearInterval(id);
+  }, [n]);
+  if (!n) return null;
+  const count = Math.min(3, n);
+  const shown = Array.from({ length: count }, (_, k) => items[(start + k) % n]);
+  return (
+    <div
+      className="su-band"
+      aria-live="polite"
+      style={{ gridTemplateColumns: `repeat(${count}, 1fr)` }}
+    >
+      {shown.map((s, k) => (
+        <div className="su-st" key={`${start}-${k}`}>
+          <div className="su-n su-statfade">{s.value}</div>
+          <div className="su-l">{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /* ---------------- Preference / deny-rate analytics from real finds ---------------- */
 function learnedFromFinds(finds: Find[]) {
   const decided = finds.filter((f) => f.status !== "new");
@@ -13653,6 +13694,42 @@ function DashboardTab({
   const replyRatePct = learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "·";
   const weekday = new Date().toLocaleDateString(undefined, { weekday: "long" });
 
+  // ---- Stat band pool: never show a dead "0". Assemble every telling number we
+  // know, keep only the ones that actually say something (non-zero / known), in
+  // priority order (most recent + actionable first). StatBand shows the top three
+  // and cycles through the rest so the band always reflects real, current activity.
+  const strongOverall = finds.filter((f) => (f.opp.fitScore || 0) >= 0.8).length;
+  const avgFitAll = (() => {
+    const fs = finds
+      .map((f) => f.opp.fitScore)
+      .filter((v): v is number => typeof v === "number");
+    return fs.length ? fs.reduce((a, b) => a + b, 0) / fs.length : null;
+  })();
+  const statPool: { value: string; label: string; ok: boolean }[] = [
+    { value: String(newThisWeek), label: "Finds this week", ok: newThisWeek > 0 },
+    { value: String(pipe.drafted), label: "Ready to send", ok: pipe.drafted > 0 },
+    { value: String(dueFollowUps), label: "Follow-ups due", ok: dueFollowUps > 0 },
+    { value: replyRatePct, label: "Reply rate", ok: learned.replyRate != null },
+    { value: String(pipe.replied), label: "Replies", ok: pipe.replied > 0 },
+    { value: String(pipe.sent), label: "Messages sent", ok: pipe.sent > 0 },
+    { value: String(pipe.new), label: "New to review", ok: pipe.new > 0 },
+    { value: String(strongOverall), label: "Strong matches", ok: strongOverall > 0 },
+    {
+      value: onTarget != null ? `${onTarget}%` : "·",
+      label: "On-target rate",
+      ok: onTarget != null && learned.decided > 0,
+    },
+    { value: String(pipeTotal), label: "In your pipeline", ok: pipeTotal > 0 },
+    {
+      value: avgFitAll != null ? `${Math.round(avgFitAll * 100)}%` : "·",
+      label: "Average fit",
+      ok: avgFitAll != null,
+    },
+    { value: String(finds.length), label: "Total finds", ok: finds.length > 0 },
+    { value: String(learned.decided), label: "Decisions made", ok: learned.decided > 0 },
+  ];
+  const statItems = statPool.filter((s) => s.ok);
+
   const dashToggle = (
     <div className="inline-flex shrink-0 rounded-lg border border-warm-border bg-warm-bg p-0.5">
       {(
@@ -13740,21 +13817,11 @@ function DashboardTab({
 
         {dashTab === "you" && (
           <>
-            {/* -------- Stat band (lighter tan, inset from the rail) -------- */}
-            <div className="su-band">
-              <div className="su-st">
-                <div className="su-n">{newThisWeek}</div>
-                <div className="su-l">Finds this week</div>
-              </div>
-              <div className="su-st">
-                <div className="su-n">{pipe.sent}</div>
-                <div className="su-l">Messages sent</div>
-              </div>
-              <div className="su-st">
-                <div className="su-n">{replyRatePct}</div>
-                <div className="su-l">Reply rate</div>
-              </div>
-            </div>
+            {/* -------- Stat band (lighter tan, inset from the rail) --------
+                Cycles through the most telling non-zero numbers so it never
+                sits on a dead "0". Hidden entirely for a brand-new empty
+                account (the greeting above already covers that zero state). */}
+            {statItems.length > 0 && <StatBand items={statItems} />}
 
             {/* -------- Follow-up nudge -------- */}
             {dueFollowUps > 0 && (

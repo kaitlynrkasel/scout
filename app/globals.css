@@ -491,6 +491,18 @@ html.dark .su-rail .su-logo img {
   color: rgb(var(--c-muted));
   margin-top: 8px;
 }
+/* Each time the band cycles to a new stat, the number fades up in place. The
+   React key changes per cycle, so the node remounts and re-runs this. */
+@keyframes su-statfade {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: none; }
+}
+.su-statfade {
+  animation: su-statfade 0.45s ease both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .su-statfade { animation: none; }
+}
 /* Phone: keep all three stats visible in one row without side-scroll by
    shrinking the number + label + padding (was overflowing at ~375px). */
 @media (max-width: 640px) {
