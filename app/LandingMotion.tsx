@@ -22,6 +22,23 @@ export default function LandingMotion() {
     const root = document.querySelector<HTMLElement>(".scoutland");
     if (!root) return;
 
+    // Placeholder photos that aren't in /public yet (team + scout slots, the
+    // run-band gif) are hidden AFTER hydration. An inline onerror="this.remove()"
+    // would fire during initial parse — before React hydrates — mutating the DOM
+    // and tripping a dangerouslySetInnerHTML hydration-mismatch warning. Handling
+    // it here keeps the server HTML and client markup identical. Runs before the
+    // reduced-motion guard so broken images are hidden either way.
+    root.querySelectorAll<HTMLImageElement>("img[data-hide-if-broken]").forEach((img) => {
+      const hide = () => {
+        img.style.display = "none";
+      };
+      if (img.complete) {
+        if (img.naturalWidth === 0) hide();
+      } else {
+        img.addEventListener("error", hide, { once: true });
+      }
+    });
+
     // Respect reduced motion — do nothing, so the page renders statically.
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 

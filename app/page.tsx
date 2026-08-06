@@ -280,7 +280,7 @@ const BODY = `
 
 <!-- HERO -->
 <section class="hero"><div class="herwrap">
-  <div class="eyebrow2">Don&apos;t waste time.</div>
+  <div class="eyebrow2">Don't waste time.</div>
   <div class="backword">Scout</div>
   <div class="headline headfont"><span class="l">Find</span><span class="l">Your</span><span class="l">People</span></div>
   <div class="dog"><div class="lab">
@@ -298,7 +298,7 @@ const BODY = `
 <section class="run">
   <div class="big">go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; go fetch &nbsp;·&nbsp; </div>
   <div class="ground"></div>
-  <img class="dogrun" id="dog-runner" src="/dog-run.gif" alt="Scout the dog, running" onerror="this.style.display=&#39;none&#39;" />
+  <img class="dogrun" id="dog-runner" src="/dog-run.gif" alt="Scout the dog, running" data-hide-if-broken />
 </section>
 
 <!-- HOW IT WORKS (asymmetric) -->
@@ -375,16 +375,16 @@ const BODY = `
 <section class="sec" id="team" style="background:#EFE7D6"><div class="wrap">
   <div style="max-width:640px"><div class="kicker">Who's behind it</div><h2 class="h2">Meet the creators.</h2></div>
   <div class="teamgrid">
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/kaitlyn.jpg" alt="Kaitlyn Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/mera.jpg" alt="Mera Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/suri.jpg" alt="Suri Kasel" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/kaitlyn.jpg" alt="Kaitlyn Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/mera.jpg" alt="Mera Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
+    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/suri.jpg" alt="Suri Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
   </div>
   <div class="pack">
     <div class="kicker" style="color:var(--muted)">Our scouts</div>
     <div class="packrow">
-      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-1.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
-      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-2.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
-      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-3.jpg" alt="Scout" onerror="this.remove()" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-1.jpg" alt="Scout" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-2.jpg" alt="Scout" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
+      <div class="slot p"><div class="t">Dog photo</div><img src="/scouts/scout-3.jpg" alt="Scout" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div>
     </div>
   </div>
 </div></section>
