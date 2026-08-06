@@ -17563,6 +17563,33 @@ function TemplatesTab({
   // Which saved template (by id) is loaded into the form above for editing.
   // "" means the form is in add-a-new-template mode.
   const [editingId, setEditingId] = useState("");
+  // "Clean into a template": paste a real, already-sent message and Scout strips
+  // out the recipient-specific details, leaving a reusable skeleton in the box.
+  const [cleaning, setCleaning] = useState(false);
+  const [cleanErr, setCleanErr] = useState("");
+  async function templatize() {
+    const raw = text.trim();
+    if (!raw || cleaning) return;
+    setCleaning(true);
+    setCleanErr("");
+    try {
+      const r = await fetch("/api/templatize", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: raw, channel }),
+      });
+      const j = await r.json();
+      if (!r.ok || j?.error) {
+        setCleanErr(j?.error || "Couldn't clean that into a template.");
+        return;
+      }
+      if (j.template) setText(j.template);
+    } catch (e: any) {
+      setCleanErr(e?.message || "Something went wrong.");
+    } finally {
+      setCleaning(false);
+    }
+  }
   function startEdit(t: OutreachTemplate) {
     setEditingId(t.id);
     setChannel(t.channel);
@@ -17686,6 +17713,27 @@ function TemplatesTab({
               placeholder="…or paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
               className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
+            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+              <button
+                type="button"
+                onClick={templatize}
+                disabled={cleaning || !text.trim()}
+                title="Paste a real email you sent someone. Scout removes the names, company, and one-off details and leaves reusable placeholders."
+                className="inline-flex items-center gap-1.5 rounded-lg border border-sage/50 bg-sage/10 px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-sage/20 disabled:opacity-50"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
+                  <path d="m3 21 3-3m0 0 9-9m-9 9L3 15m3 3 6-6" /><path d="M15 4h.01M18 2v4M20 4h-4" /><path d="m14 10 4 4" />
+                </svg>
+                {cleaning ? "Cleaning up…" : "Clean into a template"}
+              </button>
+              <span className="text-[11px] leading-snug text-body/70">
+                Pasted a real email? Scout strips the recipient&apos;s name, company, and
+                one-off details, leaving reusable placeholders.
+              </span>
+            </div>
+            {cleanErr && (
+              <p className="mt-2 text-xs font-semibold text-accent">{cleanErr}</p>
+            )}
           </div>
         </div>
         <div className="mt-6 border-t border-warm-border pt-5">
