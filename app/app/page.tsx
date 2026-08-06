@@ -7023,7 +7023,7 @@ function ScoutTool({
           templates={myTemplates}
           projects={visibleProjects}
           categoriesCount={categories.length}
-          finds={visibleFinds}
+          finds={myFinds}
           community={community}
           coaching={coaching}
           dismissedAdvice={dismissedAdvice}
@@ -7900,6 +7900,27 @@ function SideNav({
 }) {
   // Account switcher menu (loaded from the local registry when opened).
   const [acctOpen, setAcctOpen] = useState(false);
+  // Collapsible nav groups: Pipeline (the daily loop) open by default, Setup
+  // (configure-once) collapsed. Persisted per device.
+  const [openGroups, setOpenGroups] = useState<{ pipeline: boolean; setup: boolean }>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("scout_nav_groups") || "null");
+      if (s && typeof s.pipeline === "boolean") return s;
+    } catch {}
+    return { pipeline: true, setup: false };
+  });
+  const toggleGroup = (k: "pipeline" | "setup") =>
+    setOpenGroups((prev) => {
+      const n = { ...prev, [k]: !prev[k] };
+      try {
+        localStorage.setItem("scout_nav_groups", JSON.stringify(n));
+      } catch {}
+      return n;
+    });
+  const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
+    { key: "setup", label: "Setup", keys: ["templates", "profile", "team"] },
+  ];
   const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
   const items: {
     key: string;
@@ -8065,15 +8086,55 @@ function SideNav({
         <span className="ml-auto text-[10px] text-[#8f8069]">⌘K</span>
       </button>
       <nav className="flex flex-col gap-0.5 pb-5">
-        {items.map((it) =>
-          railItem(it.key, it.label, it.icon, {
-            active: tab === it.key,
-            onClick: () => setTab(it.key),
-            badge: it.badge,
-            dot: it.dot,
-            tour: `nav-${it.key}`,
-          })
-        )}
+        {(() => {
+          const render = (it: (typeof items)[number]) =>
+            railItem(it.key, it.label, it.icon, {
+              active: tab === it.key,
+              onClick: () => setTab(it.key),
+              badge: it.badge,
+              dot: it.dot,
+              tour: `nav-${it.key}`,
+            });
+          const dash = items.find((i) => i.key === "dashboard");
+          const groupBadge = (keys: string[]) =>
+            keys.reduce((n, k) => n + (items.find((i) => i.key === k)?.badge || 0), 0);
+          return (
+            <>
+              {dash && render(dash)}
+              {NAV_GROUPS.map((g) => {
+                const groupItems = g.keys
+                  .map((k) => items.find((i) => i.key === k))
+                  .filter(Boolean) as typeof items;
+                if (!groupItems.length) return null;
+                const open = openGroups[g.key];
+                const badge = groupBadge(g.keys);
+                return (
+                  <div key={g.key} className="mt-1.5">
+                    <button
+                      onClick={() => toggleGroup(g.key)}
+                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--su-rail-muted)] transition hover:text-[color:var(--su-rail-fg-strong)]"
+                    >
+                      <svg
+                        width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
+                        className={`transition-transform ${open ? "rotate-90" : ""}`}
+                        aria-hidden
+                      >
+                        <path d="m9 18 6-6-6-6" />
+                      </svg>
+                      <span>{g.label}</span>
+                      {!open && badge > 0 && (
+                        <span className="ml-auto rounded-full bg-[color:var(--su-rail-hover)] px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--su-rail-fg-strong)]">
+                          {badge}
+                        </span>
+                      )}
+                    </button>
+                    {open && <div className="flex flex-col gap-0.5">{groupItems.map(render)}</div>}
+                  </div>
+                );
+              })}
+            </>
+          );
+        })()}
       </nav>
 
       <div className="su-foot mt-auto pt-5">
