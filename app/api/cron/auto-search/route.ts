@@ -243,7 +243,7 @@ export async function GET(req: NextRequest) {
       <div style="margin:0;padding:0;background:#F5F2EB">
         <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F2EB">
           <tr><td align="center" style="padding:28px 16px">
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:820px">
               <tr><td style="background:${NAVY};border-radius:14px 14px 0 0;padding:18px 22px">
                 <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-.01em">Scout</span>
                 <span style="color:#9FB0C6;font-size:13px;font-weight:600;margin-left:8px">found ${opps.length} new ${opps.length === 1 ? "match" : "matches"}</span>

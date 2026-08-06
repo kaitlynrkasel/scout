@@ -490,6 +490,24 @@ html.dark .su-rail .su-logo img {
   color: rgb(var(--c-muted));
   margin-top: 8px;
 }
+/* Phone: keep all three stats visible in one row without side-scroll by
+   shrinking the number + label + padding (was overflowing at ~375px). */
+@media (max-width: 640px) {
+  .su-band {
+    margin: 18px 16px 6px;
+  }
+  .su-band .su-st {
+    padding: 14px 8px;
+  }
+  .su-band .su-n {
+    font-size: 30px;
+  }
+  .su-band .su-l {
+    font-size: 9px;
+    letter-spacing: 0.05em;
+    margin-top: 5px;
+  }
+}
 
 /* ---- Editorial sections ---- */
 .su-sec {

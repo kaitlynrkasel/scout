@@ -10245,7 +10245,89 @@ function SpreadsheetTab({
           )}
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
+        <>
+        {/* Phone: stacked editable cards instead of a side-scrolling grid. */}
+        <div className="mt-4 space-y-3 md:hidden">
+          {shownFinds.map((f) => {
+            const mCell = (
+              label: string,
+              value: string,
+              onSave: (v: string) => void,
+              placeholder?: string
+            ) => (
+              <div className="flex items-center gap-2">
+                <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wide text-body/45">{label}</span>
+                <input
+                  defaultValue={value}
+                  key={value}
+                  placeholder={placeholder}
+                  onBlur={(e) => e.target.value !== value && onSave(e.target.value)}
+                  className="min-w-0 flex-1 rounded-md border border-warm-border bg-white px-2 py-1 text-xs text-ink outline-none focus:border-coral"
+                />
+              </div>
+            );
+            return (
+              <div key={f.id} className="rounded-2xl border border-warm-border bg-surface p-3 shadow-card">
+                <div className="mb-2 flex items-center gap-2">
+                  <input
+                    defaultValue={f.opp.name || ""}
+                    key={f.opp.name}
+                    placeholder="Name"
+                    onBlur={(e) => e.target.value !== f.opp.name && onUpdateOpp(f.id, { name: e.target.value })}
+                    className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm font-bold text-ink outline-none hover:border-warm-border focus:border-coral focus:bg-white"
+                  />
+                  <button
+                    onClick={() => onRemove(f.id)}
+                    aria-label="Remove"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-body/40 transition hover:bg-red-50 hover:text-danger"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 6 6 18" /><path d="m6 6 12 12" /></svg>
+                  </button>
+                </div>
+                <div className="space-y-1.5">
+                  {mCell("Company", f.opp.outlet || "", (v) => onUpdateOpp(f.id, { outlet: v }), "Company")}
+                  {mCell("Email", f.opp.contactEmail || "", (v) => onUpdateOpp(f.id, { contactEmail: v }), "email@…")}
+                  {mCell("Phone", f.opp.contactPhone || "", (v) => onUpdateOpp(f.id, { contactPhone: v }), "phone")}
+                  {mCell("LinkedIn", f.opp.contactHandle || "", (v) => onUpdateOpp(f.id, { contactHandle: v }), "linkedin/@")}
+                  {mCell("Location", f.opp.location || "", (v) => onUpdateOpp(f.id, { location: v }), "location")}
+                </div>
+                <div className="mt-2.5 grid grid-cols-3 gap-1.5">
+                  <select
+                    value={f.status}
+                    onChange={(e) => onStatus(f.id, e.target.value as FindStatus)}
+                    className="scout-select min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                  >
+                    {STATUS_OPTIONS.map((o) => (
+                      <option key={o.key} value={o.key}>{o.label}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={f.projectId}
+                    onChange={(e) => onMoveProject(f.id, e.target.value)}
+                    className="scout-select min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                  >
+                    {projects.map((p) => (
+                      <option key={p.id} value={p.id}>{p.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={f.categoryId || ""}
+                    onChange={(e) => onSetCategory(f.id, e.target.value)}
+                    className="scout-select min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
+                  >
+                    <option value="">— none —</option>
+                    {categories.filter((c) => c.projectId === f.projectId).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Desktop / tablet: the full grid (side-scrolls if needed). */}
+        <div className="mt-4 hidden overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card md:block">
           <div className="min-w-[1150px]">
             {/* Header */}
             <div
@@ -10325,6 +10407,7 @@ function SpreadsheetTab({
             ))}
           </div>
         </div>
+        </>
       )}
       <p className="mt-3 text-xs text-body/55">
         {shownFinds.length} {shownFinds.length === 1 ? "row" : "rows"}. Edits here update
