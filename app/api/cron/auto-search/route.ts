@@ -194,8 +194,8 @@ export async function GET(req: NextRequest) {
         if (o.whyItFits) lines.push(`   Why: ${o.whyItFits}`);
         if (contact) lines.push(`   Contact: ${contact}`);
         if (fid) {
-          lines.push(`   Approve:   ${base}/api/auto/action?t=${signAction(fid, "approve")}`);
-          lines.push(`   Not a fit: ${base}/api/auto/action?t=${signAction(fid, "deny")}`);
+          lines.push(`   Approve & draft: ${base}/auto/draft?t=${signAction(fid, "approve")}`);
+          lines.push(`   Not a fit:       ${base}/api/auto/action?t=${signAction(fid, "deny")}`);
         }
         lines.push(``);
       });
@@ -213,7 +213,9 @@ export async function GET(req: NextRequest) {
           const fid = ids[i];
           const fitPct = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
           const contact = [o.contactEmail, o.contactHandle, o.url].filter(Boolean)[0] || "";
-          const approve = `${base}/api/auto/action?t=${signAction(fid, "approve")}`;
+          // Approve now opens the review-and-send page (draft ready to edit);
+          // Not-a-fit still just records the decision.
+          const approve = `${base}/auto/draft?t=${signAction(fid, "approve")}`;
           const deny = `${base}/api/auto/action?t=${signAction(fid, "deny")}`;
           const roleBit = o.contactRole ? `<span style="color:#8A8172"> · ${htmlEsc(o.contactRole)}</span>` : "";
           const fitChip = fitPct != null
@@ -228,7 +230,7 @@ export async function GET(req: NextRequest) {
                 ${contact ? `<div style="font-size:12px;color:#8A8172;margin-top:8px;word-break:break-all">${htmlEsc(contact)}</div>` : ""}
                 ${fid ? `
                 <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr>
-                  <td><a href="${approve}" style="display:inline-block;background:${NAVY};color:#ffffff;font-size:13px;font-weight:700;text-decoration:none;padding:10px 20px;border-radius:9px">Approve</a></td>
+                  <td><a href="${approve}" style="display:inline-block;background:${NAVY};color:#ffffff;font-size:13px;font-weight:700;text-decoration:none;padding:10px 20px;border-radius:9px">Approve &amp; draft</a></td>
                   <td style="width:10px"></td>
                   <td><a href="${deny}" style="display:inline-block;background:#ffffff;color:#57503f;font-size:13px;font-weight:700;text-decoration:none;padding:9px 19px;border:1px solid #DED6C7;border-radius:9px">Not a fit</a></td>
                 </tr></table>` : ""}
