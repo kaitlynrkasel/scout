@@ -13792,10 +13792,21 @@ function DashboardTab({
                   )}
                 </h1>
                 <p className="mt-3.5 max-w-[46ch] text-[15px] text-muted">
+                  {/* Falls back to your most recent real activity instead of a
+                      this-week-only line, so it never reads "no finds" when your
+                      pipeline is full. Truly-empty accounts keep the hunt prompt. */}
                   {strongThisWeek > 0
                     ? `${strongThisWeek} strong ${strongThisWeek === 1 ? "match is" : "matches are"} ready and drafted in your voice.`
                     : newThisWeek > 0
                     ? `${newThisWeek} new ${newThisWeek === 1 ? "find" : "finds"} this week, worth a look.`
+                    : pipe.drafted > 0
+                    ? `${pipe.drafted} ${pipe.drafted === 1 ? "draft is" : "drafts are"} ready to send in your voice.`
+                    : pipe.new > 0
+                    ? `${pipe.new} ${pipe.new === 1 ? "find is" : "finds are"} waiting for your review.`
+                    : pipeTotal > 0
+                    ? `${pipeTotal} ${pipeTotal === 1 ? "contact" : "contacts"} in your pipeline, pick up where you left off.`
+                    : finds.length > 0
+                    ? `${finds.length} ${finds.length === 1 ? "find" : "finds"} in your history. Start a fresh hunt anytime.`
                     : "No new finds yet. Start a hunt and Scout brings people back."}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-2.5">
