@@ -4,6 +4,7 @@ import { discover } from "@/lib/discover";
 import { gmailSendOrDraft } from "@/lib/gmail";
 import { outlookSendOrDraft } from "@/lib/outlook";
 import { signAction, nextRunAt } from "@/lib/autoSearch";
+import { htmlEsc } from "@/lib/tuneEmail";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
 import { draftFor } from "@/lib/draft";
 import { sharedPipelineExclusions, addSharedFinds } from "@/lib/teams";
@@ -203,6 +204,65 @@ export async function GET(req: NextRequest) {
       const bodyText = lines.join("\n");
       const subject = `Scout: ${opps.length} new ${opps.length === 1 ? "find" : "finds"} — ${label}`;
 
+      // Branded HTML version, so the digest reads like a real product email
+      // instead of a wall of raw links. Table-based + inline styles for email
+      // clients; the plain-text bodyText above stays as the fallback.
+      const NAVY = "#13273F";
+      const cardsHtml = opps
+        .map((o, i) => {
+          const fid = ids[i];
+          const fitPct = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
+          const contact = [o.contactEmail, o.contactHandle, o.url].filter(Boolean)[0] || "";
+          const approve = `${base}/api/auto/action?t=${signAction(fid, "approve")}`;
+          const deny = `${base}/api/auto/action?t=${signAction(fid, "deny")}`;
+          const roleBit = o.contactRole ? `<span style="color:#8A8172"> · ${htmlEsc(o.contactRole)}</span>` : "";
+          const fitChip = fitPct != null
+            ? `<span style="display:inline-block;background:${NAVY};color:#fff;font-size:11px;font-weight:700;border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:middle">${fitPct}% fit</span>`
+            : "";
+          return `
+          <tr><td style="padding:0 0 12px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #E7DFD2;border-radius:14px">
+              <tr><td style="padding:16px 18px">
+                <div style="font-size:16px;font-weight:800;color:#241C13;line-height:1.3">${htmlEsc(o.name)}${roleBit}${fitChip}</div>
+                ${o.whyItFits ? `<div style="font-size:13px;line-height:1.55;color:#57503f;margin-top:6px">${htmlEsc(o.whyItFits)}</div>` : ""}
+                ${contact ? `<div style="font-size:12px;color:#8A8172;margin-top:8px;word-break:break-all">${htmlEsc(contact)}</div>` : ""}
+                ${fid ? `
+                <table role="presentation" cellpadding="0" cellspacing="0" style="margin-top:14px"><tr>
+                  <td><a href="${approve}" style="display:inline-block;background:${NAVY};color:#ffffff;font-size:13px;font-weight:700;text-decoration:none;padding:10px 20px;border-radius:9px">Approve</a></td>
+                  <td style="width:10px"></td>
+                  <td><a href="${deny}" style="display:inline-block;background:#ffffff;color:#57503f;font-size:13px;font-weight:700;text-decoration:none;padding:9px 19px;border:1px solid #DED6C7;border-radius:9px">Not a fit</a></td>
+                </tr></table>` : ""}
+              </td></tr>
+            </table>
+          </td></tr>`;
+        })
+        .join("");
+      const bodyHtml = `
+      <div style="margin:0;padding:0;background:#F5F2EB">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F2EB">
+          <tr><td align="center" style="padding:28px 16px">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px">
+              <tr><td style="background:${NAVY};border-radius:14px 14px 0 0;padding:18px 22px">
+                <span style="color:#ffffff;font-size:18px;font-weight:800;letter-spacing:-.01em">Scout</span>
+                <span style="color:#9FB0C6;font-size:13px;font-weight:600;margin-left:8px">found ${opps.length} new ${opps.length === 1 ? "match" : "matches"}</span>
+              </td></tr>
+              <tr><td style="background:#F5F2EB;padding:18px 22px 6px">
+                <div style="font-size:14px;color:#57503f;line-height:1.55">
+                  For <b style="color:#241C13">${htmlEsc(label)}</b>. Approve the ones worth reaching, pass on the rest, approved contacts land in your Scout pipeline ready to draft.
+                </div>
+              </td></tr>
+              <tr><td style="background:#F5F2EB;padding:12px 22px 4px">
+                <table role="presentation" width="100%" cellpadding="0" cellspacing="0">${cardsHtml}</table>
+              </td></tr>
+              <tr><td style="background:#F5F2EB;padding:6px 22px 26px;border-radius:0 0 14px 14px">
+                <a href="${base}/app" style="display:inline-block;color:${NAVY};font-size:13px;font-weight:700;text-decoration:none">Open Scout →</a>
+                <div style="font-size:11px;color:#A99E88;margin-top:10px">Manage or stop this auto-search in Scout → Outreach.</div>
+              </td></tr>
+            </table>
+          </td></tr>
+        </table>
+      </div>`;
+
       // Send from the user's own connected mailbox to their own address.
       const gmail = await supabaseAdmin
         .from("gmail_connections")
@@ -225,6 +285,7 @@ export async function GET(req: NextRequest) {
           to,
           subject,
           body: bodyText,
+          html: bodyHtml,
           mode: "send",
         });
         emailed++;
@@ -234,6 +295,7 @@ export async function GET(req: NextRequest) {
           to,
           subject,
           body: bodyText,
+          html: bodyHtml,
           mode: "send",
         });
         emailed++;
