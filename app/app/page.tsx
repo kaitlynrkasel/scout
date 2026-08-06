@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import gsap from "gsap";
+import { useGSAP } from "@gsap/react";
 import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
 import type { Draft, Opportunity, OutreachTemplate, SourceRef } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
@@ -1206,6 +1208,27 @@ function ScoutTool({
   const [tab, setTab] = useState<
     "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual" | "spreadsheet"
   >("dashboard");
+
+  // Small GSAP fade-and-lift on the main content whenever the active tab
+  // changes (dashboard, finds, manual, …). useGSAP reverts the previous tween
+  // before each run, so rapid switches stay clean. Respects reduced-motion.
+  const contentRef = useRef<HTMLDivElement>(null);
+  useGSAP(
+    () => {
+      if (!contentRef.current) return;
+      if (
+        typeof window !== "undefined" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      )
+        return;
+      gsap.fromTo(
+        contentRef.current,
+        { autoAlpha: 0, y: 10 },
+        { autoAlpha: 1, y: 0, duration: 0.32, ease: "power2.out" }
+      );
+    },
+    { dependencies: [tab], scope: contentRef }
+  );
 
   // ---- Billing / plan state ----
   // Shown when a search is blocked by the plan limit (code: 'quota' | 'free_exhausted').
@@ -6057,7 +6080,7 @@ function ScoutTool({
         </div>
       )}
       {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
-      <div className="flex flex-1 flex-col">
+      <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
