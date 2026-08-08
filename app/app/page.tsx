@@ -13804,7 +13804,7 @@ function DashboardTab({
                   {spotlight && (
                     <>
                       <h2 className="mb-3 px-0.5 text-[13px] font-bold text-muted">Do this next</h2>
-                      <div className="rounded-[18px] border border-warm-border bg-surface p-6 shadow-soft">
+                      <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-soft">
                         <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-brown">Top match today</div>
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <span className="font-display text-[26px] font-extrabold leading-none text-ink">{spotlight.opp.name}</span>
@@ -14169,39 +14169,34 @@ function DashboardTab({
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
           <h2 className="text-lg font-semibold tracking-tight text-ink">Getting sharper across Scout</h2>
           <p className="mt-1 text-sm text-body/80">
-            Scout learns from everyone&apos;s decisions (anonymously, in aggregate). The
-            more the community decides, the better it matches for all of you.
+            Scout learns from everyone&apos;s decisions, anonymously — so it gets better for all of you.
           </p>
-          <div className="mt-4 flex flex-wrap gap-8">
-            <div>
-              <div className="text-2xl font-extrabold text-ink">
+          <div className="mt-4 divide-y divide-warm-border">
+            <div className="flex items-baseline justify-between py-3">
+              <span className="text-2xl font-extrabold tabular-nums text-ink">
                 {(community.patterns?.decidedFinds || 0).toLocaleString()}
-              </div>
-              <div className="text-xs text-body/70">community decisions learned from</div>
+              </span>
+              <span className="text-xs text-body/70">community decisions learned from</span>
             </div>
-            <div>
-              <div className="text-2xl font-extrabold text-ink">
+            <div className="flex items-baseline justify-between py-3">
+              <span className="text-2xl font-extrabold tabular-nums text-ink">
                 {(community.users + 1).toLocaleString()}
-              </div>
-              <div className="text-xs text-body/70">
+              </span>
+              <span className="text-xs text-body/70">
                 {community.users + 1 === 1 ? "person" : "people"} using Scout
-              </div>
+              </span>
             </div>
             {community.patterns?.channels?.[0] && (
-              <div>
-                <div className="text-2xl font-extrabold text-ink">
+              <div className="flex items-baseline justify-between py-3">
+                <span className="text-2xl font-extrabold tabular-nums text-ink">
                   {Math.round(community.patterns.channels[0].keptRate * 100)}%
-                </div>
-                <div className="text-xs text-body/70">
+                </span>
+                <span className="text-xs text-body/70">
                   of {community.patterns.channels[0].channel.toLowerCase()} finds get acted on
-                </div>
+                </span>
               </div>
             )}
           </div>
-          <p className="mt-3 text-xs text-body/50">
-            Aggregate only, never anyone&apos;s individual data. Numbers grow and steady as
-            the community does.
-          </p>
         </section>
       )}
 
@@ -14236,8 +14231,7 @@ function DashboardTab({
             <p className="mt-1 text-sm text-body/80">
               Patterns from {c.users} other{" "}
               {c.users === 1 ? "person" : "people"} doing{" "}
-              <span className="font-semibold">{c.useCase}</span>. Scout uses these to steer
-              who it finds for you. Aggregate only, never anyone&apos;s individual data.
+              <span className="font-semibold">{c.useCase}</span>, steering who Scout finds for you.
             </p>
             <ul className="mt-3 space-y-2">
               {tips.map((t) => (
