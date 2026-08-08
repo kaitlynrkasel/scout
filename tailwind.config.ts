@@ -55,11 +55,12 @@ const config: Config = {
         "warm-border": "rgb(var(--c-warm-border) / <alpha-value>)",
       },
       borderRadius: {
-        // Tighter, more professional corners (crisper than Tailwind defaults).
-        lg: "0.5rem", // 8px
-        xl: "0.625rem", // 10px
-        "2xl": "0.75rem", // 12px
-        "3xl": "0.875rem", // 14px
+        // Tighter, more professional corners (crisper than Tailwind defaults),
+        // sharpened a step so boxes read less pill-like.
+        lg: "0.4375rem", // 7px
+        xl: "0.5rem", // 8px
+        "2xl": "0.625rem", // 10px
+        "3xl": "0.75rem", // 12px
       },
       boxShadow: {
         soft: "0 1px 2px rgba(40, 32, 24, 0.05), 0 10px 24px -14px rgba(40, 32, 24, 0.12)",
