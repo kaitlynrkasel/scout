@@ -93,7 +93,7 @@ export default function Terms() {
         <H>AI-generated content &amp; results</H>
         <P>
           Scout uses automated search and AI to find people and draft messages. Results and
-          drafts may contain inaccuracies and are provided as a starting point — you should
+          drafts may contain inaccuracies and are provided as a starting point. You should
           review contact details and message content before you rely on or send them. We do
           not guarantee any particular reply rate, outcome, or that every surfaced contact
           is accurate. Any figures or examples on our marketing pages are illustrative or

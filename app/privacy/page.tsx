@@ -3,7 +3,7 @@ import { Nav, Footer } from "../site";
 export const metadata = {
   title: "Scout · Privacy Policy",
   description:
-    "How Scout collects, uses, and protects personal data — including account data, Gmail/Outlook access, and contact information surfaced from the public web.",
+    "How Scout collects, uses, and protects personal data, including account data, Gmail/Outlook access, and contact information surfaced from the public web.",
 };
 
 // Plain-English privacy notice covering the app's actual data practices. This is
@@ -51,30 +51,30 @@ export default function Privacy() {
         <H>Data we collect</H>
         <ul className="mt-3 list-disc space-y-2 pl-5">
           <LI>
-            <b>Account data</b> — your name, email address, and password, handled by our
+            <b>Account data</b>, your name, email address, and password, handled by our
             authentication provider (Supabase). We never see your raw password.
           </LI>
           <LI>
-            <b>Profile you provide</b> — your bio, r&eacute;sum&eacute;, use case, LinkedIn,
+            <b>Profile you provide</b>, your bio, r&eacute;sum&eacute;, use case, LinkedIn,
             writing samples/templates, and project context you add to personalize drafts.
           </LI>
           <LI>
-            <b>Outreach content</b> — the searches you run, the people and opportunities you
+            <b>Outreach content</b>, the searches you run, the people and opportunities you
             save, notes, statuses, and the messages you draft and send.
           </LI>
           <LI>
-            <b>Mailbox access</b> — if you connect Gmail or Outlook, we store an OAuth token
+            <b>Mailbox access</b>, if you connect Gmail or Outlook, we store an OAuth token
             so Scout can create drafts or send from your address and detect replies in
             those threads. We access message metadata (headers) to track replies; we do
             not read unrelated mail.
           </LI>
           <LI>
-            <b>Contact information about other people</b> — when you search, Scout surfaces
+            <b>Contact information about other people</b>, when you search, Scout surfaces
             names, roles, and public contact details it finds on the open web about
             potential recipients. See &ldquo;Data about third parties&rdquo; below.
           </LI>
           <LI>
-            <b>Usage and billing</b> — basic activity (e.g. counts of searches and drafts)
+            <b>Usage and billing</b>, basic activity (e.g. counts of searches and drafts)
             and, if you subscribe, billing status via Stripe. We do not store your card
             details; Stripe processes payments.
           </LI>
@@ -110,10 +110,10 @@ export default function Privacy() {
           help us run Scout, under contract and only as needed:
         </P>
         <ul className="mt-3 list-disc space-y-2 pl-5">
-          <LI>Supabase — authentication and database hosting.</LI>
-          <LI>Google / Microsoft — when you connect Gmail or Outlook to send or draft mail.</LI>
-          <LI>Stripe — subscription billing.</LI>
-          <LI>Search and AI providers (e.g. web search and the model that drafts your messages) — to find people and generate drafts. Only the content needed for the request is sent.</LI>
+          <LI>Supabase, authentication and database hosting.</LI>
+          <LI>Google / Microsoft, when you connect Gmail or Outlook to send or draft mail.</LI>
+          <LI>Stripe, subscription billing.</LI>
+          <LI>Search and AI providers (e.g. web search and the model that drafts your messages), to find people and generate drafts. Only the content needed for the request is sent.</LI>
         </ul>
 
         <H>International transfers</H>

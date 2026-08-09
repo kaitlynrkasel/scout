@@ -10384,7 +10384,7 @@ function SpreadsheetTab({
                     onChange={(e) => onSetCategory(f.id, e.target.value)}
                     className="scout-select min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
                   >
-                    <option value="">— none —</option>
+                    <option value="">none</option>
                     {categories.filter((c) => c.projectId === f.projectId).map((c) => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
@@ -10456,7 +10456,7 @@ function SpreadsheetTab({
                   title="Category"
                   className="scout-select w-full min-w-0 rounded-md border border-warm-border bg-surface px-1.5 py-1 text-[11px] font-semibold text-ink outline-none"
                 >
-                  <option value="">— none —</option>
+                  <option value="">none</option>
                   {categories
                     .filter((c) => c.projectId === f.projectId)
                     .map((c) => (
@@ -11488,7 +11488,7 @@ function FindsTab({
                   <option value="activity">Recent activity</option>
                   <option value="newest">Newest added</option>
                   <option value="oldest">Oldest added</option>
-                  <option value="name">Name A–Z</option>
+                  <option value="name">Name A to Z</option>
                   <option value="fit">Best fit</option>
                 </select>
               </div>
@@ -13853,7 +13853,7 @@ function DashboardTab({
                 this week
               </>
             ) : (
-              "No new finds yet — run a search to fill your pipeline."
+              "No new finds yet. Run a search to fill your pipeline."
             )}
             {dueFollowUps > 0 && (
               <>
@@ -13996,7 +13996,7 @@ function DashboardTab({
         </>
       ) : (
         <p className="mt-4 text-sm text-muted">
-          Across everyone using Scout with a use case like yours — real averages, never anyone&apos;s private data.
+          Across everyone using Scout with a use case like yours, real averages, never anyone&apos;s private data.
         </p>
       )}
 
@@ -14237,7 +14237,7 @@ function DashboardTab({
         <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-card">
           <h2 className="text-lg font-semibold tracking-tight text-ink">Getting sharper across Scout</h2>
           <p className="mt-1 text-sm text-body/80">
-            Scout learns from everyone&apos;s decisions, anonymously — so it gets better for all of you.
+            Scout learns from everyone&apos;s decisions, anonymously, so it gets better for all of you.
           </p>
           <div className="mt-4 divide-y divide-warm-border">
             <div className="flex items-baseline justify-between py-3">
@@ -18618,7 +18618,7 @@ function CompanyDetailsEditor({
           page (and the sidebar), which drives selectedWsId. No second picker here. */}
       <p className="mt-2 text-sm leading-relaxed text-body">
         {isOwner
-          ? "These answers ground how Scout searches and writes for this company. Change them anytime — your whole team sees the updates."
+          ? "These answers ground how Scout searches and writes for this company. Change them anytime. Your whole team sees the updates."
           : "This company's details, managed by the admin."}
       </p>
       {loading ? (
@@ -18715,7 +18715,7 @@ function RoleOnboardModal({
           Tell Scout your role at {companyName || "the company"}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-body">
-          Scout writes on behalf of the company, so this is all it needs from you —
+          Scout writes on behalf of the company, so this is all it needs from you,
           no personal profile. Two minutes and it can search and draft as you.
         </p>
 
@@ -19319,14 +19319,14 @@ function ProfileTab({
           <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
             {!companyRole.trim() && (
               <div className="mb-4 rounded-2xl border border-blue-deep/25 bg-blue-tint/40 p-3 text-sm text-blue-deep">
-                Welcome to the team! Tell Scout your role and what you specialize in
-                — that&apos;s all it needs to search and write for the company as you.
+                Welcome to the team! Tell Scout your role and what you specialize in,
+                that&apos;s all it needs to search and write for the company as you.
               </div>
             )}
             <h2 className="text-base font-extrabold tracking-tight text-ink">Your role on the team</h2>
             <p className="mt-1 text-sm leading-relaxed text-body">
               Scout writes on behalf of {companyName || "the company"}, so this is what
-              shapes your outreach — no personal profile needed.
+              shapes your outreach, no personal profile needed.
             </p>
             <div className="mt-4">
               <Label>Your role at the company</Label>
@@ -19366,13 +19366,13 @@ function ProfileTab({
                 <FileDrop
                   label="Or drop your resume/CV here to fill this in"
                   accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
-                  hint="PDF, image, Word, HTML, or text — we read it into your experience above"
+                  hint="PDF, image, Word, HTML, or text, we read it into your experience above"
                   onText={(t) => onCompanyExpertise(String(t || "").trim().slice(0, 1500))}
                 />
               </div>
               {!useExpertise && (
                 <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
-                  Off — Scout searches and writes purely as {companyName || "the company"},
+                  Off. Scout searches and writes purely as {companyName || "the company"},
                   ignoring your personal experience above.
                 </p>
               )}

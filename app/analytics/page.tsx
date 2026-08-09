@@ -82,7 +82,7 @@ export default function Analytics() {
         <Section
           eyebrow="See the quality"
           title="Illustrative example: find people, then draft for them"
-          sub="A sample of the kind of output Scout produces — an illustrative contact and draft, not a real person."
+          sub="A sample of the kind of output Scout produces, an illustrative contact and draft, not a real person."
         >
           <div className="grid gap-5 lg:grid-cols-2">
             {/* Finds */}

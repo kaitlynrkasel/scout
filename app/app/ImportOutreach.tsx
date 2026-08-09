@@ -501,7 +501,7 @@ export default function ImportOutreach({
       // If the raw name was a description we set aside, preserve it as context.
       const notes =
         rawName && descLike(rawName) && name !== rawName
-          ? [notes0, rawName].filter(Boolean).join(" — ")
+          ? [notes0, rawName].filter(Boolean).join(", ")
           : notes0;
       const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
       const tabName = String(row[TAB_SOURCE_KEY] || "");
@@ -571,7 +571,7 @@ export default function ImportOutreach({
     try {
       const { finds, skippedNoName, dupWithin } = buildFinds();
       if (!finds.length) {
-        setError("No importable rows — every row was completely empty.");
+        setError("No importable rows. Every row was completely empty.");
         return;
       }
       const added = onImport(finds);
@@ -620,7 +620,7 @@ export default function ImportOutreach({
               Import your outreach history
             </h2>
             <p className="mt-0.5 text-xs text-body">
-              Drop a spreadsheet of people you've already reached out to — CSV,
+              Drop a spreadsheet of people you've already reached out to. CSV,
               Excel, Numbers, or OpenDocument. Scout uses it to avoid re-surfacing
               them and to learn what a fit looks like for you.
             </p>
@@ -728,7 +728,7 @@ export default function ImportOutreach({
                   </div>
                   <p className="mt-1 text-xs text-body/70">
                     This sheet has {tabs.length} tabs. Scout pre-picked the ones that
-                    look like lists of people/opportunities — uncheck any that aren&apos;t
+                    look like lists of people/opportunities. Uncheck any that aren&apos;t
                     (like Senders or Config).
                   </p>
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -786,7 +786,7 @@ export default function ImportOutreach({
                   {understand && understand.questions.length > 0 && (
                     <div className="mt-4 space-y-4">
                       <p className="text-xs text-body/70">
-                        Answer these so Scout fully gets your sheet — the number climbs as you do.
+                        Answer these so Scout fully gets your sheet. The number climbs as you do.
                       </p>
                       {understand.questions.map((q, i) => {
                         const sel = uPicks[i] || [];
@@ -860,7 +860,7 @@ export default function ImportOutreach({
                   )}
                   {understand && understand.questions.length === 0 && !uBusy && (
                     <p className="mt-3 text-xs font-semibold text-sage-deep">
-                      Scout understands this sheet — you&apos;re good to import.
+                      Scout understands this sheet. You&apos;re good to import.
                     </p>
                   )}
                 </div>
@@ -882,7 +882,7 @@ export default function ImportOutreach({
                       Columns matched
                     </h3>
                     <p className="mt-1 text-xs text-body/70">
-                      Scout already figured out what each column is — you don&apos;t need to
+                      Scout already figured out what each column is. You don&apos;t need to
                       do anything here. Open it only if a column looks wrong.
                     </p>
                   </div>
@@ -1017,7 +1017,7 @@ export default function ImportOutreach({
                     <span className="text-sm leading-relaxed text-body">
                       <span className="font-semibold text-ink">Keep this sheet synced.</span>{" "}
                       Scout re-reads the link automatically (on open and every few
-                      minutes) and pulls in new rows — you won&apos;t have to re-import.
+                      minutes) and pulls in new rows. You won&apos;t have to re-import.
                     </span>
                   </label>
 
@@ -1036,7 +1036,7 @@ export default function ImportOutreach({
                           <span className="font-semibold text-ink">
                             Let Scout write the rows back into this sheet.
                           </span>{" "}
-                          It adds a status/notes for each contact — never overwriting your
+                          It adds a status/notes for each contact, never overwriting your
                           existing columns.
                         </span>
                       </label>
