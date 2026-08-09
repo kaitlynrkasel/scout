@@ -711,7 +711,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
           </datalist>
           {selected && (
             <p className="mt-1 text-[11px] text-body/70">
-              {selected.name || "—"} · {selected.useCase || "no use case"} ·{" "}
+              {selected.name || "-"} · {selected.useCase || "no use case"} ·{" "}
               {selected.finds} finds · {selected.sent} sent · {selected.replied}{" "}
               replied
               {selected.pendingSeeds
@@ -721,7 +721,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
           )}
           {!selected && email.trim() && (
             <p className="mt-1 text-[11px] text-body/70">
-              No account yet — finds will wait here and appear when they sign up.
+              No account yet. Finds will wait here and appear when they sign up.
             </p>
           )}
         </div>
@@ -777,7 +777,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
               ]
                 .filter(Boolean)
                 .join(" · ")}
-              {selected.company.about ? ` — ${selected.company.about}` : ""}
+              {selected.company.about ? `, ${selected.company.about}` : ""}
             </p>
           )}
           {selected.projects.length > 0 && (
@@ -790,7 +790,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
                   <li key={i} className="text-xs leading-relaxed text-body">
                     <span className="font-semibold text-ink">{p.name || "Untitled"}</span>
                     {p.useCase ? ` · ${p.useCase}` : ""}
-                    {p.context ? <span className="text-body/70"> — {p.context}</span> : ""}
+                    {p.context ? <span className="text-body/70">, {p.context}</span> : ""}
                   </li>
                 ))}
               </ul>
@@ -800,7 +800,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
             !selected.company.name &&
             selected.projects.every((p) => !p.context) && (
               <p className="text-xs text-body/50">
-                This account hasn't filled in much yet — search on their use case
+                This account hasn't filled in much yet. Search on their use case
                 and pick broadly.
               </p>
             )}
@@ -846,7 +846,7 @@ export function ConciergePanel({ getToken }: { getToken?: () => Promise<string |
         <div className="mt-4">
           <div className="mb-2 flex items-center justify-between">
             <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
-              Results — check the ones to send
+              Results, check the ones to send
             </span>
             <span className="text-[11px] text-body/60">
               {results.filter((_, i) => picked[i]).length}/{results.length} picked
