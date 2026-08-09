@@ -320,16 +320,43 @@ export function rowsToFinds(opts: {
   const finds: ImportFind[] = [];
   const now = Date.now();
   let idx = 0;
+  // Spreadsheet checkbox/boolean artifacts ("TRUE", "FALSE", "x", "N/A") are
+  // cell VALUES, not contact data, blank them so they can't become a name, a
+  // LinkedIn handle, or a company. (Status columns keep their raw value, a
+  // TRUE in a "Submitted" column is real signal, handled below.)
+  const cleanCell = (v: string) => {
+    const t = String(v || "").trim();
+    return /^(true|false|yes|no|x|✓|✔|n\/?a|-|—)$/i.test(t) ? "" : t;
+  };
+  const EMAIL_RE = /[\w.+-]+@[\w-]+(\.[\w-]+)*\.[a-z]{2,}/i;
   for (const row of rows) {
-    const name =
-      (cols.name && String(row[cols.name] || "").trim()) || fallbackNameFromRow(row) || "";
+    const name = cleanCell(
+      (cols.name && String(row[cols.name] || "").trim()) || fallbackNameFromRow(row) || ""
+    );
     if (!name) continue;
-    const email = cols.email ? String(row[cols.email] || "").trim() : "";
-    const outlet = cols.outlet ? String(row[cols.outlet] || "").trim() : "";
-    const role = cols.role ? String(row[cols.role] || "").trim() : "";
-    const url = cols.url ? String(row[cols.url] || "").trim() : "";
-    const handle = cols.handle ? String(row[cols.handle] || "").trim() : "";
+    let email = cols.email ? cleanCell(row[cols.email]) : "";
+    // The mapped email column often comes back empty (mis-labeled headers,
+    // merged cells). Fall back to scanning the whole row for anything that
+    // looks like an email address, the value matters more than the header.
+    if (!email || !EMAIL_RE.test(email)) {
+      for (const v of Object.values(row)) {
+        const m = String(v || "").match(EMAIL_RE);
+        if (m) {
+          email = m[0];
+          break;
+        }
+      }
+    }
+    const outlet = cols.outlet ? cleanCell(row[cols.outlet]) : "";
+    const role = cols.role ? cleanCell(row[cols.role]) : "";
+    const url = cols.url ? cleanCell(row[cols.url]) : "";
+    const handle = cols.handle ? cleanCell(row[cols.handle]) : "";
     const notes = cols.notes ? String(row[cols.notes] || "").trim() : "";
+    // Prose rows ("In July 2025, covered a…", "Accepting submissions…") are
+    // sheet commentary, not contacts: sentence-length "name" with no way to
+    // reach anyone gets skipped instead of imported as a person.
+    const looksLikeProse = name.split(/\s+/).length >= 7 || name.length > 80;
+    if (looksLikeProse && !email && !url && !handle) continue;
     const statusStr = cols.status ? String(row[cols.status] || "").trim() : "";
     const tabName = String(row[TAB_SOURCE_KEY] || "");
     let status: ImportFindStatus = defaultStatus;
@@ -338,6 +365,9 @@ export function rowsToFinds(opts: {
       else if (looksLikeDenied(statusStr)) status = "denied";
       else if (looksLikeSent(statusStr)) status = "sent";
       else if (looksLikeDrafted(statusStr)) status = "drafted";
+      // A bare checkbox TRUE in a status-ish column ("Submitted?", "Contacted")
+      // almost always means the outreach happened.
+      else if (/^(true|yes|x|✓|✔)$/i.test(statusStr)) status = "sent";
     } else if (tabName) {
       const s = statusFromTabName(tabName);
       if (s) status = s;

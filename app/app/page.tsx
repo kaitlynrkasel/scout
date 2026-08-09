@@ -4950,10 +4950,26 @@ function ScoutTool({
           .filter((f) => f.status === "denied")
           .slice(0, 15)
           .map((f) => ({ name: f.opp.name, reason: f.denyReason || "" })),
-        favor: projFinds
-          .filter((f) => f.status !== "denied" && f.status !== "new")
-          .slice(0, 10)
-          .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
+        favor: [
+          // Hand-added contacts are the purest "more like this" signal, the
+          // user literally typed them in, so they count from the moment they
+          // exist (status "new" included). whyItFits is just "Added by you"
+          // for these, so describe them by role/company instead.
+          ...projFinds
+            .filter((f) => f.foundVia === "manual" && f.status !== "denied")
+            .slice(0, 8)
+            .map((f) => ({
+              name: f.opp.name,
+              why:
+                ["the user added this one by hand", f.opp.contactRole, f.opp.outlet]
+                  .filter(Boolean)
+                  .join(", ") || "the user added this one by hand",
+            })),
+          ...projFinds
+            .filter((f) => f.foundVia !== "manual" && f.status !== "denied" && f.status !== "new")
+            .slice(0, 10)
+            .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
+        ].slice(0, 15),
         outcomes: outcomePatterns(finds), // learn across ALL projects: replies are scarce
       };
       // For job/internship searches, layer in the competitiveness + company-size
@@ -11184,6 +11200,20 @@ function FindsTab({
   const [sortBy, setSortBy] = useState<"activity" | "oldest" | "newest" | "name" | "fit">("activity");
   // Team lens only: filter the shared pipeline to one person's finds ("" = everyone).
   const [foundBy, setFoundBy] = useState("");
+  // Source: Scout-found vs hand-added/imported. Defaults to Scout-found so the
+  // pipeline reads as "what Scout brought back"; flip to Manual or Both anytime.
+  const [srcFilter, setSrcFilter] = useState<"scout" | "manual" | "both">("scout");
+  const srcCounts = {
+    scout: finds.filter((f) => f.foundVia !== "manual").length,
+    manual: finds.filter((f) => f.foundVia === "manual").length,
+  };
+  const bySrc = (f: Find) => {
+    if (srcFilter === "both") return true;
+    // Single-source pipelines hide the toggle, so don't filter them either, a
+    // default of "scout" must never blank out an all-manual pipeline.
+    if (srcCounts.scout === 0 || srcCounts.manual === 0) return true;
+    return (f.foundVia === "manual" ? "manual" : "scout") === srcFilter;
+  };
 
   const catNameOf = (f: Find) =>
     categories.find((c) => c.id === f.categoryId)?.name || "";
@@ -11224,6 +11254,7 @@ function FindsTab({
     setter(next);
   };
   const matchesFilters = (f: Find) => {
+    if (!bySrc(f)) return false;
     if (q.trim()) {
       const hay = [
         f.opp.name,
@@ -11265,13 +11296,15 @@ function FindsTab({
   // pipeline as an editable grid and keeps its own richer exporter.)
 
   // Pinned finds live in their own tab and are excluded from the status/all
-  // lists, so status counts count only the un-pinned ones.
+  // lists, so status counts count only the un-pinned ones. Counts respect the
+  // Source toggle so the chips always match the list below them.
+  const srcFinds = finds.filter(bySrc);
   const counts: Record<string, number> = {
-    pinned: finds.filter((f) => f.pinned).length,
-    all: finds.filter((f) => !f.pinned).length,
+    pinned: srcFinds.filter((f) => f.pinned).length,
+    all: srcFinds.filter((f) => !f.pinned).length,
   };
   for (const s of ["new", "undecided", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
-    counts[s] = finds.filter((f) => f.status === s && !f.pinned).length;
+    counts[s] = srcFinds.filter((f) => f.status === s && !f.pinned).length;
   }
   const trackable = finds.some(
     (f) =>
@@ -11499,9 +11532,33 @@ function FindsTab({
         </div>
       )}
 
+      {/* Source: what Scout found vs what you added/imported by hand. Only
+          shown once both kinds exist, a single-source pipeline needs no toggle. */}
+      {srcCounts.manual > 0 && srcCounts.scout > 0 && (
+        <div className="mt-6 inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(
+            [
+              ["scout", `Scout-found ${srcCounts.scout}`],
+              ["manual", `Manual ${srcCounts.manual}`],
+              ["both", `Both ${srcCounts.scout + srcCounts.manual}`],
+            ] as const
+          ).map(([val, lbl]) => (
+            <button
+              key={val}
+              onClick={() => setSrcFilter(val)}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                srcFilter === val ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {lbl}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Status filter (the main control) + a quiet side group of view toggle,
           Filters, and Export — sub-options, pushed to the edge. */}
-      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className={`${srcCounts.manual > 0 && srcCounts.scout > 0 ? "mt-3" : "mt-6"} flex flex-wrap items-center gap-x-4 gap-y-2`}>
         <div className="flex flex-1 flex-wrap gap-2">
           {FIND_STATUSES.map((s) => {
             const on = filter === s.key;
