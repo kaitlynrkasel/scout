@@ -10957,6 +10957,66 @@ function AddContactModal({
   );
 }
 
+// Compact find tile for the grid view: leads with a live preview of the find's
+// page (routed through /api/site-preview so embedding isn't refused), then the
+// name, fit, role, and status. Clicking anywhere opens the full detail.
+function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
+  const o = find.opp;
+  const fit = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
+  const role =
+    [o.contactRole, o.outlet, o.location].filter(Boolean).join(" · ") || o.channel || "";
+  const st = FIND_STATUS[find.status];
+  let host = "";
+  try {
+    host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
+  } catch {}
+  return (
+    <button
+      onClick={onOpen}
+      className="group flex flex-col overflow-hidden rounded-2xl border border-warm-border bg-surface text-left transition hover:border-clay hover:shadow-soft"
+    >
+      <div className="relative h-44 w-full overflow-hidden border-b border-warm-border bg-warm-bg/40">
+        {o.url ? (
+          <>
+            <iframe
+              src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
+              title={`Preview of ${host || o.name}`}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              sandbox="allow-scripts allow-same-origin"
+              tabIndex={-1}
+              aria-hidden
+              className="pointer-events-none h-[250%] w-[250%] origin-top-left scale-[0.4] border-0 bg-white"
+            />
+            <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+              Open site
+            </span>
+          </>
+        ) : (
+          <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-body/50">
+            No page to preview yet
+          </div>
+        )}
+      </div>
+      <div className="p-4">
+        <div className="flex items-center gap-2">
+          <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{o.name}</span>
+          {fit != null && (
+            <span className="shrink-0 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success-deep">
+              {fit}%
+            </span>
+          )}
+        </div>
+        {role && <div className="mt-1 truncate text-xs text-muted">{role}</div>}
+        <div className="mt-3 flex items-center justify-between">
+          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
+          <span className="text-xs font-bold text-brown-deep">Open →</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function FindsTab({
   finds,
   categories,
@@ -11098,6 +11158,21 @@ function FindsTab({
 }) {
   // "Add a contact" by hand (someone you already know) — modal open state.
   const [addOpen, setAddOpen] = useState(false);
+  // List vs grid view. Grid leads with a website preview of each find (the
+  // click-to-view feature we want to advertise). Persisted per device.
+  const [viewMode, setViewMode] = useState<"grid" | "list">(() => {
+    try {
+      const v = localStorage.getItem("scout_finds_view");
+      if (v === "list" || v === "grid") return v;
+    } catch {}
+    return "grid";
+  });
+  const setView = (v: "grid" | "list") => {
+    setViewMode(v);
+    try {
+      localStorage.setItem("scout_finds_view", v);
+    } catch {}
+  };
   // ---- Comprehensive filters (collapsible panel below the status tabs) ----
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [q, setQ] = useState(""); // free-text search over name/notes/contact
@@ -11424,59 +11499,75 @@ function FindsTab({
         </div>
       )}
 
-      {/* Status filter */}
-      <div className="mt-6 flex flex-wrap gap-2">
-        {FIND_STATUSES.map((s) => {
-          const on = filter === s.key;
-          return (
+      {/* Status filter (the main control) + a quiet side group of view toggle,
+          Filters, and Export — sub-options, pushed to the edge. */}
+      <div className="mt-6 flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex flex-1 flex-wrap gap-2">
+          {FIND_STATUSES.map((s) => {
+            const on = filter === s.key;
+            return (
+              <button
+                key={s.key}
+                onClick={() => setFilter(s.key)}
+                className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                  on
+                    ? "border-coral/50 bg-brand-gradient text-white"
+                    : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                }`}
+              >
+                {s.label}
+                <span className={on ? "text-white/80" : "text-body/50"}>
+                  {" "}
+                  {counts[s.key] || 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <div className="mr-1 inline-flex rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
             <button
-              key={s.key}
-              onClick={() => setFilter(s.key)}
-              className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
-                on
-                  ? "border-coral/50 bg-brand-gradient text-white"
-                  : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+              onClick={() => setView("list")}
+              title="List view"
+              aria-label="List view"
+              className={`rounded-md p-1.5 transition ${
+                viewMode === "list" ? "bg-surface text-ink shadow-card" : "text-body/50 hover:text-ink"
               }`}
             >
-              {s.label}
-              <span className={on ? "text-white/80" : "text-body/50"}>
-                {" "}
-                {counts[s.key] || 0}
-              </span>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01" /></svg>
             </button>
-          );
-        })}
+            <button
+              onClick={() => setView("grid")}
+              title="Grid view"
+              aria-label="Grid view"
+              className={`rounded-md p-1.5 transition ${
+                viewMode === "grid" ? "bg-surface text-ink shadow-card" : "text-body/50 hover:text-ink"
+              }`}
+            >
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>
+            </button>
+          </div>
+          <button
+            onClick={() => setFiltersOpen((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg hover:text-ink"
+          >
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" /></svg>
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="rounded-full bg-brown px-1.5 py-0.5 text-[10px] font-bold text-white">{activeFilterCount}</span>
+            )}
+          </button>
+        </div>
       </div>
 
-      {/* ---- Collapsible comprehensive filters ---- */}
-      <div className="mt-4">
-        <button
-          onClick={() => setFiltersOpen((v) => !v)}
-          className="inline-flex items-center gap-2 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-        >
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />
-          </svg>
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="rounded-full bg-brand-gradient px-1.5 py-0.5 text-[10px] font-bold text-white">
-              {activeFilterCount}
-            </span>
-          )}
-          <svg
-            width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-            className={`transition-transform ${filtersOpen ? "rotate-180" : ""}`}
-            aria-hidden
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </button>
+      {/* ---- Comprehensive filters panel (toggled from the toolbar above) ---- */}
+      <div className="mt-3">
         {activeFilterCount > 0 && !filtersOpen && (
           <button
             onClick={clearFilters}
-            className="ml-2 text-xs font-semibold text-body/50 transition hover:text-red-500"
+            className="mb-1 text-xs font-semibold text-body/50 transition hover:text-red-500"
           >
-            Clear
+            Clear {activeFilterCount} active filter{activeFilterCount === 1 ? "" : "s"}
           </button>
         )}
         {/* Excel export lives on the Spreadsheet tab (same data, richer grid). */}
@@ -11676,6 +11767,17 @@ function FindsTab({
           ) : (
             "Nothing in this list."
           )}
+        </div>
+      ) : viewMode === "grid" && !selectMode ? (
+        <div className="mt-5">
+          <p className="mb-3 text-xs text-body/60">
+            Each find shows a preview of its page. Click a card to open the full site inside Scout.
+          </p>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {shown.map((f) => (
+              <FindGridCard key={f.id} find={f} onOpen={() => setDetailId(f.id)} />
+            ))}
+          </div>
         </div>
       ) : (
         <div className="mt-5 space-y-3">
