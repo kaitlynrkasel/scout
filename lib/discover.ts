@@ -791,6 +791,36 @@ function pickTrustedUrl(llmUrl: string, candUrl: string, candContent: string): s
   return cand || "";
 }
 
+// Hosts that are review sites, directories, or aggregators, never a target's
+// own home. Surfacing one as the find's "website" (a Yelp listing, a
+// YellowPages page) points the user somewhere that isn't the company at all.
+const DIRECTORY_URL_HOSTS =
+  /(^|\.)(yelp|yellowpages|superpages|bbb|mapquest|manta|tripadvisor|foursquare|chamberofcommerce|dnb|zoominfo|glassdoor|indeed|ziprecruiter|angi|thumbtack|houzz|birdeye|alignable|citysearch|merchantcircle|hotfrog|brownbook|cylex|nicelocal|opencorporates|buzzfile)\.(com|co|org|net|io)$/i;
+const FREEMAIL_DOMAINS =
+  /^(gmail|yahoo|ymail|outlook|hotmail|live|msn|aol|icloud|me|proton|protonmail|zoho|gmx|mail|pm)\./i;
+
+// The target's own site inferred from their contact email's domain, the one
+// URL we can trust more than a directory listing (freemail excluded).
+function siteFromEmailDomain(email: string): string {
+  const m = String(email || "")
+    .toLowerCase()
+    .match(/@([a-z0-9.-]+\.[a-z]{2,})$/i);
+  if (!m) return "";
+  if (FREEMAIL_DOMAINS.test(m[1])) return "";
+  return `https://${m[1]}`;
+}
+
+// Never present a directory/review listing as the target's website: prefer the
+// domain their real email lives on; otherwise leave the field empty (the
+// listing stays visible under sources/evidence, it just isn't "their site").
+function sanitizeSiteUrl(url: string, contactEmail: string): string {
+  const host = urlHost(url);
+  if (host && DIRECTORY_URL_HOSTS.test(host)) {
+    return siteFromEmailDomain(contactEmail);
+  }
+  return url;
+}
+
 // Normalize a person's name so "John Smith", "John J. Smith", "Dr. John Smith Jr",
 // and "John Jacob Smith" all collapse to the same key. Strips honorifics,
 // suffixes, and middle names/initials, then keeps first + last token.
@@ -1188,7 +1218,7 @@ async function extract(
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
     `socials (an array of the TARGET'S OWN social profile URLs that appear verbatim in the source — Instagram, Facebook, LinkedIn, TikTok, X/Twitter, YouTube, Threads, SoundCloud, Spotify — up to 6; return the full URLs exactly as shown, never guess or construct a handle that is not printed, empty array if none), ` +
-    `url (the TARGET'S OWN primary home — their official website, or their main profile page / LinkedIn if they have no website — NOT the news article, press piece, directory, or listicle you found them through. That evidence belongs in the source, never here. Only fall back to the article's link if the target genuinely has no home of its own), location, ` +
+    `url (the TARGET'S OWN primary home — their official website, or their main profile page / LinkedIn if they have no website — NOT the news article, press piece, directory, or listicle you found them through. NEVER a review/directory listing (Yelp, YellowPages, BBB, Mapquest, TripAdvisor and the like) and NEVER a page that merely mentions their name in its URL or title while actually being about something else entirely; when the only link you have is one of those, leave url EMPTY. That evidence belongs in the source, never here), location, ` +
     `timezone (the IANA timezone for their location, e.g. "America/Chicago" for Nashville TN, "Europe/London" for London; empty if the location is unknown or remote/global), ` +
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
     `components (an object grading WHY this is a good opportunity, each 0 to 1: {relevance = how squarely they match the ` +
@@ -1782,7 +1812,10 @@ export async function discover(
       // real cand.url. Fixes the "Concord Music Publishing → concordgroup
       // insurance.com" style cross-company confusion where the extractor
       // invents a plausible domain from the company name.
-      const chosenUrl = pickTrustedUrl(String(r.url || ""), cand.url || "", cand.content || "");
+      const chosenUrl = sanitizeSiteUrl(
+        pickTrustedUrl(String(r.url || ""), cand.url || "", cand.content || ""),
+        String(r.contact_email || "")
+      );
       opps.push({
         id: `${Date.now()}-${opps.length}`,
         // noDash on every LLM-written text field so em/en dashes never show in a

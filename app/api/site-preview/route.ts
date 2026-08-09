@@ -51,7 +51,13 @@ export async function GET(req: NextRequest) {
   // Inject a <base> so every relative href/src (css, js, images, links)
   // resolves against the real site instead of our proxy route. Must be the
   // very first thing in <head> to take effect for everything after it.
-  const base = `<base href="${u.origin}${u.pathname.replace(/[^/]*$/, "")}">`;
+  // Follow it with preconnect/dns-prefetch hints for the real origin so the
+  // browser opens the TCP+TLS connection to it early, shaving the wait before
+  // the page's own CSS/images (e.g. a big hero photo) start downloading.
+  const base =
+    `<base href="${u.origin}${u.pathname.replace(/[^/]*$/, "")}">` +
+    `<link rel="preconnect" href="${u.origin}" crossorigin>` +
+    `<link rel="dns-prefetch" href="${u.origin}">`;
   html = /<head[^>]*>/i.test(html)
     ? html.replace(/<head[^>]*>/i, (m) => `${m}${base}`)
     : `${base}${html}`;
@@ -62,7 +68,11 @@ export async function GET(req: NextRequest) {
     ? html.replace(/<\/body>/i, `${AUTOFILL_SCRIPT}</body>`)
     : `${html}${AUTOFILL_SCRIPT}`;
 
-  return htmlResponse(html);
+  // Cache the assembled preview: the output is deterministic per URL, so
+  // reopening the same find (or the same site on another find) serves instantly
+  // from the browser/CDN instead of re-fetching the whole page. Short TTL keeps
+  // it fresh; this is only the visual preview, never anything user-specific.
+  return htmlResponse(html, true);
 }
 
 // A modern desktop-Chrome header set. Many sites 403 a bare fetch that's missing
@@ -216,10 +226,17 @@ const AUTOFILL_SCRIPT = `<script>(function(){
   if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',announce);}else{setTimeout(announce,300);}
 })();</script>`;
 
-function htmlResponse(html: string): NextResponse {
+function htmlResponse(html: string, cache = false): NextResponse {
   return new NextResponse(html, {
     status: 200,
-    headers: { "content-type": "text/html; charset=utf-8" },
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      // Real previews cache briefly (instant reopen); error/blocked pages never
+      // cache, so a transient block or outage can be retried on the next open.
+      "cache-control": cache
+        ? "public, max-age=300, s-maxage=900, stale-while-revalidate=86400"
+        : "no-store",
+    },
   });
 }
 

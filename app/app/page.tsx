@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
@@ -593,6 +594,45 @@ const DENY_REASONS = [
   "Not a real prospect",
   "Already reached out",
 ];
+
+// Custom deny reasons the user typed become quick-pick chips of their own,
+// stored with usage counts; when the shelf is full the least-used one falls
+// off to make room. Local-only convenience (the reason itself still saves on
+// the find and syncs like before).
+const CUSTOM_DENY_KEY = "scout_custom_deny_reasons";
+const CUSTOM_DENY_MAX = 6;
+function loadCustomDenyReasons(): { t: string; n: number }[] {
+  try {
+    const arr = JSON.parse(localStorage.getItem(CUSTOM_DENY_KEY) || "[]");
+    return Array.isArray(arr)
+      ? arr.filter((r: any) => r && typeof r.t === "string" && typeof r.n === "number")
+      : [];
+  } catch {
+    return [];
+  }
+}
+function bumpCustomDenyReason(text: string) {
+  const t = text.trim();
+  // Chip-sized reasons only; long elaborations stay free-text.
+  if (!t || t.length > 60) return;
+  if (DENY_REASONS.some((r) => r.toLowerCase() === t.toLowerCase())) return;
+  const list = loadCustomDenyReasons();
+  const hit = list.find((r) => r.t.toLowerCase() === t.toLowerCase());
+  if (hit) hit.n += 1;
+  else {
+    list.push({ t, n: 1 });
+    if (list.length > CUSTOM_DENY_MAX) {
+      // Evict the least-used (keep the newcomer, it's in active use right now).
+      list.sort((a, b) => b.n - a.n);
+      list.length = CUSTOM_DENY_MAX;
+    }
+  }
+  try {
+    localStorage.setItem(CUSTOM_DENY_KEY, JSON.stringify(list));
+  } catch {
+    /* storage full/blocked, chips just won't persist */
+  }
+}
 
 // Fresh subject/body handed straight to a send/schedule call, so sending while
 // the draft editor is still open always sends what's on screen, never the
@@ -1261,9 +1301,10 @@ function ScoutTool({
   // tab shows an "Admin" link into /admin. The Insights view itself lives on
   // its own route so customers never see any hint of it in the sidebar.
   const [isOwner, setIsOwner] = useState(false);
-  // Per-search competitiveness override (defaults to the profile setting). "" =
-  // inherit from profile; anything else overrides for this search only.
-  const [searchComp, setSearchComp] = useState<"" | Competitiveness>("");
+  // Per-search competitiveness override. Defaults to "na" (not factored in at
+  // all, the right call for most searches); "" = inherit the profile setting;
+  // a level overrides for this search only.
+  const [searchComp, setSearchComp] = useState<"" | "na" | Competitiveness>("na");
   const [catId, setCatId] = useState<string>(""); // selected category, "" = custom
   // Contact channels this search should prioritize (email/phone/linkedin/website).
   // Mirrors the selected category's wantedChannels; persisted back onto it.
@@ -2219,6 +2260,9 @@ function ScoutTool({
   // pipeline: fetch every shared project's finds so teammates' finds show too,
   // with attribution and per-person deny votes.
   const [teamFinds, setTeamFinds] = useState<any[]>([]);
+  // The workspace's shared projects (id + name), kept at app level so adds can
+  // be mirrored into the team pipeline from anywhere (manual add, spreadsheet).
+  const [teamSharedProjects, setTeamSharedProjects] = useState<{ id: string; name: string }[]>([]);
   const [teamTemplates, setTeamTemplates] = useState<any[]>([]);
   const [teamFindsBusyId, setTeamFindsBusyId] = useState("");
   const teamLens =
@@ -2233,6 +2277,7 @@ function ScoutTool({
       if (!teamLens || !getToken) {
         setTeamFinds([]);
         setTeamTemplates([]);
+        setTeamSharedProjects([]);
         return;
       }
       try {
@@ -2241,6 +2286,10 @@ function ScoutTool({
         const h = { authorization: `Bearer ${token}` };
         const pr = await fetch(`/api/team/project?workspaceId=${teamLens}`, { headers: h });
         const pdata = await pr.json().catch(() => ({}));
+        if (alive)
+          setTeamSharedProjects(
+            (pdata.projects || []).map((p: any) => ({ id: String(p.id), name: String(p.name || "") }))
+          );
         const all: any[] = [];
         for (const p of pdata.projects || []) {
           const fr = await fetch(`/api/team/finds?projectId=${p.id}`, { headers: h });
@@ -4265,6 +4314,31 @@ function ScoutTool({
       { id, projectId, status: "new" as FindStatus, opp, addedAt: Date.now(), foundVia: "manual" },
       ...finds,
     ]);
+    // On a team lens, mirror the manual add into the shared pipeline so
+    // teammates see it too (the pipeline otherwise only fills at project
+    // creation + auto-search runs). Matched by project name; best-effort.
+    if (teamLens && getToken) {
+      const projName = (projects.find((p) => p.id === projectId)?.name || "").toLowerCase();
+      const shared = teamSharedProjects.find((sp) => sp.name.toLowerCase() === projName);
+      if (shared) {
+        (async () => {
+          try {
+            const token = await getToken();
+            if (!token) return;
+            await fetch("/api/team/finds", {
+              method: "POST",
+              headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+              body: JSON.stringify({
+                sharedProjectId: shared.id,
+                finds: [{ opp, status: "new" }],
+              }),
+            });
+          } catch {
+            /* teammates catch up on the next seed/sync; the local add stands */
+          }
+        })();
+      }
+    }
     return null;
   }
 
@@ -4886,9 +4960,12 @@ function ScoutTool({
       // directives so the LLM narrows to the right tier of opportunity. The
       // per-search override wins over the profile setting.
       const jobish = isJobUseCaseClient(activeUseCase);
-      const compLevel: Competitiveness = jobish
-        ? (searchComp || profile.competitiveness || "any")
-        : "any";
+      // "na" (the default) = competitiveness isn't factored in; "" = inherit
+      // the profile's setting; a level = explicit per-search override.
+      const compLevel: Competitiveness =
+        jobish && searchComp !== "na"
+          ? (searchComp || profile.competitiveness || "any")
+          : "any";
       // Beginners get pointed at small companies by default (more responsive,
       // less competitive, and the right audience for a "please consider me"
       // cold email), unless they've explicitly chosen a company size.
@@ -6159,7 +6236,7 @@ function ScoutTool({
                     </div>
                     {editingProjects && (
                       <CategoryManager
-                        cats={projects}
+                        cats={visibleProjects}
                         onAdd={addProject}
                         onRename={renameProject}
                         onRemove={removeProject}
@@ -8780,10 +8857,22 @@ function DenyReasons({
   const [phase, setPhase] = useState<"pick" | "elaborate">(current ? "elaborate" : "pick");
   const [base, setBase] = useState<string>(parsed.base ?? "");
   const [extra, setExtra] = useState<string>(parsed.extra);
+  // The user's own saved reasons (typed ones become chips; most-used first).
+  const [customReasons, setCustomReasons] = useState<{ t: string; n: number }[]>([]);
+  useEffect(() => {
+    setCustomReasons(loadCustomDenyReasons().sort((a, b) => b.n - a.n));
+  }, []);
 
   function choose(label: string) {
     setBase(label);
     setExtra("");
+    // A saved custom chip commits straight away (it IS the full reason);
+    // presets go on to the optional elaborate step as before.
+    if (label && customReasons.some((r) => r.t === label)) {
+      bumpCustomDenyReason(label);
+      onPick(label);
+      return;
+    }
     setPhase("elaborate");
   }
   function commit() {
@@ -8791,6 +8880,9 @@ function DenyReasons({
     const e = extra.trim();
     const final = b && e ? `${b}, ${e}` : b || e;
     if (!final) return;
+    // A fully typed reason (no preset chip behind it) joins the quick-pick
+    // shelf for next time, least-used falls off when it's full.
+    if (!b && e) bumpCustomDenyReason(e);
     onPick(final);
   }
 
@@ -8813,6 +8905,21 @@ function DenyReasons({
             }`}
           >
             {r}
+          </button>
+        ))}
+        {/* Your saved reasons: ones you typed before, most-used first. */}
+        {customReasons.map((r) => (
+          <button
+            key={`custom-${r.t}`}
+            onClick={() => choose(r.t)}
+            title="A reason you typed before"
+            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+              current === r.t
+                ? "border-coral/50 bg-brand-gradient text-white"
+                : "border-sage/40 bg-sage/10 text-brown-deep hover:bg-sage/20"
+            }`}
+          >
+            {r.t}
           </button>
         ))}
         <button
@@ -9079,6 +9186,18 @@ function FindDetailModal({
 }) {
   const o = find.opp;
   const [tall, setTall] = useState(false); // preview height: compact vs expanded
+  // Rendered through a portal to <body>: any transformed ancestor in the app
+  // tree would otherwise turn our fixed inset-0 into absolute positioning, so
+  // the modal would stretch the page (actions + Previous/Next pushed below the
+  // fold, footer mascot bleeding through) instead of overlaying the viewport.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  // User-dragged preview height (px). null = the 65vh default. The CSS
+  // resize:vertical corner grip never worked over an iframe, so a dedicated
+  // pointer-capture drag handle below the preview does the resizing.
+  const [pvHeight, setPvHeight] = useState<number | null>(null);
+  const previewBoxRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
@@ -9185,6 +9304,11 @@ function FindDetailModal({
         // Our injected bridge is running, so the real page proxied through fine.
         bridgeAliveRef.current = true;
         setPreviewFailed(false);
+        // The bridge phones home on DOMContentLoaded, so drop the "Loading…"
+        // overlay now instead of waiting for the iframe's full load event (which
+        // blocks on every image, e.g. a big hero photo). The page is already
+        // readable; remaining assets stream in behind it.
+        setFrameLoaded(true);
       }
       if (d.type === "scout-form-detected") {
         setFormDetected(!!d.hasForm);
@@ -9375,7 +9499,8 @@ function FindDetailModal({
       ),
     });
 
-  return (
+  if (!mounted) return null;
+  return createPortal(
     <div
       className="fixed inset-0 z-50 bg-surface"
       onClick={onClose}
@@ -9865,8 +9990,13 @@ function FindDetailModal({
               </div>
             ) : o.url ? (
               <div
-                className="relative w-full min-h-0 flex-1 overflow-hidden rounded-xl border border-warm-border bg-white"
-                style={{ height: tall ? "100%" : "65vh", resize: "vertical", minHeight: 240 }}
+                ref={previewBoxRef}
+                className="relative w-full min-h-0 overflow-hidden rounded-xl border border-warm-border bg-white"
+                style={{
+                  height: tall ? "100%" : pvHeight ? `${pvHeight}px` : "65vh",
+                  flex: tall ? "1 1 auto" : "0 0 auto",
+                  minHeight: 240,
+                }}
               >
                 {!frameLoaded && (
                   <div className="absolute inset-0 flex items-center justify-center text-xs text-body/40">
@@ -9921,6 +10051,40 @@ function FindDetailModal({
                 No website on file for this find.
               </div>
             )}
+            {/* Drag handle: pointer-captured so the iframe can't swallow the
+                move events mid-drag (the old CSS resize corner grip did nothing
+                over an iframe). */}
+            {o.url && !socialProfile && !tall && (
+              <div
+                role="separator"
+                aria-label="Drag to resize the preview"
+                title="Drag to resize the preview"
+                onPointerDown={(e) => {
+                  e.preventDefault();
+                  dragRef.current = {
+                    startY: e.clientY,
+                    startH: previewBoxRef.current?.getBoundingClientRect().height || 0,
+                  };
+                  try {
+                    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+                  } catch {
+                    /* capture is an optimization (keeps the iframe from
+                       stealing moves); the drag still works without it */
+                  }
+                }}
+                onPointerMove={(e) => {
+                  if (!dragRef.current) return;
+                  const h = dragRef.current.startH + e.clientY - dragRef.current.startY;
+                  setPvHeight(Math.round(Math.max(240, Math.min(window.innerHeight * 0.85, h))));
+                }}
+                onPointerUp={() => {
+                  dragRef.current = null;
+                }}
+                className="mx-auto mt-1 flex h-4 w-28 cursor-ns-resize touch-none items-center justify-center rounded-full transition hover:bg-warm-bg"
+              >
+                <span className="h-1 w-12 rounded-full bg-warm-border" />
+              </div>
+            )}
             {fillNote && (
               <p className="mt-2 text-[11px] font-medium leading-relaxed text-brown-deep">
                 {fillNote}
@@ -9938,7 +10102,7 @@ function FindDetailModal({
                 >
                   Open ↗
                 </a>{" "}
-                to view it in a new tab. Drag the bottom edge to resize.
+                to view it in a new tab. Drag the bar under the preview to resize it.
               </p>
             )}
           </div>
@@ -9967,7 +10131,8 @@ function FindDetailModal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -10590,9 +10755,10 @@ function ManualTab({
           {!sheetsConnected && (
             <button
               onClick={onConnectSheets}
+              title="Link-shared sheets import without this. Connect your Google account so Scout can also read sheets that are private to you."
               className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
             >
-              Connect for private sheets
+              Connect Google (reads private sheets)
             </button>
           )}
           {sheetsConnected && (
@@ -11020,65 +11186,8 @@ function FindsTab({
     fit: (a, b) => (b.opp.fitScore || 0) - (a.opp.fitScore || 0),
   };
 
-  // Export EVERYTHING to one .xlsx workbook: a Dashboard tab (pipeline summary +
-  // per-project breakdown) and a Finds tab (every find, all columns). Uses the
-  // already-bundled SheetJS; loaded on demand so the Finds tab stays light.
-  const [exporting, setExporting] = useState(false);
-  async function exportXlsx() {
-    if (exporting) return;
-    setExporting(true);
-    try {
-      const XLSX = await import("xlsx");
-      const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
-      const fmtDate = (t?: number) => (t ? new Date(t).toISOString().slice(0, 10) : "");
-      const findsRows = finds.map((f) => ({
-        Name: f.opp.name || "",
-        "Company / Outlet": f.opp.outlet || "",
-        Status: f.status,
-        Project: projName(f.projectId),
-        Category: catNameOf(f),
-        Channel: f.opp.channel || "",
-        Email: f.opp.contactEmail || "",
-        Handle: f.opp.contactHandle || "",
-        Website: f.opp.url || "",
-        Location: f.opp.location || "",
-        "Fit %": f.opp.fitScore != null ? Math.round((f.opp.fitScore || 0) * 100) : "",
-        "Why it fits": f.opp.whyItFits || "",
-        Added: fmtDate(f.addedAt),
-        Sent: fmtDate(f.sentAt),
-        Pinned: f.pinned ? "Yes" : "",
-        "Deny reason": f.denyReason || "",
-      }));
-      const statuses: FindStatus[] = ["new", "undecided", "drafted", "sent", "replied", "denied"];
-      const dash: Record<string, string | number>[] = [
-        { Metric: "Total finds", Value: finds.length },
-        ...statuses.map((s) => ({
-          Metric: `Status: ${s}`,
-          Value: finds.filter((f) => f.status === s).length,
-        })),
-        { Metric: "Pinned", Value: finds.filter((f) => f.pinned).length },
-        {
-          Metric: "Reply rate (replied / sent+replied)",
-          Value: (() => {
-            const sent = finds.filter((f) => f.status === "sent" || f.status === "replied").length;
-            const rep = finds.filter((f) => f.status === "replied").length;
-            return sent ? `${Math.round((rep / sent) * 100)}%` : "·";
-          })(),
-        },
-        { Metric: "", Value: "" },
-        ...projects.map((p) => ({
-          Metric: `Project: ${p.name}`,
-          Value: finds.filter((f) => f.projectId === p.id).length,
-        })),
-      ];
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(dash), "Dashboard");
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(findsRows), "Finds");
-      XLSX.writeFile(wb, `scout-export-${new Date().toISOString().slice(0, 10)}.xlsx`);
-    } finally {
-      setExporting(false);
-    }
-  }
+  // (The Excel export moved to the Spreadsheet tab, which shows the same
+  // pipeline as an editable grid and keeps its own richer exporter.)
 
   // Pinned finds live in their own tab and are excluded from the status/all
   // lists, so status counts count only the un-pinned ones.
@@ -11370,20 +11479,7 @@ function FindsTab({
             Clear
           </button>
         )}
-        {/* Everything → one Excel workbook (Dashboard summary + all finds). */}
-        {finds.length > 0 && (
-          <button
-            onClick={exportXlsx}
-            disabled={exporting}
-            title="Download your dashboard summary and every find as an Excel workbook"
-            className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
-          >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
-            </svg>
-            {exporting ? "Exporting…" : "Export to Excel"}
-          </button>
-        )}
+        {/* Excel export lives on the Spreadsheet tab (same data, richer grid). */}
 
         {filtersOpen && (
           <div className="mt-3 space-y-4 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
@@ -14686,8 +14782,8 @@ function AutoSearchPanel({
   wantedChannels: string[];
   onToggleChannel: (key: string) => void;
   channelsSaved: boolean;
-  comp: "" | Competitiveness;
-  onComp: (v: "" | Competitiveness) => void;
+  comp: "" | "na" | Competitiveness;
+  onComp: (v: "" | "na" | Competitiveness) => void;
   profileComp?: Competitiveness;
 }) {
   const [items, setItems] = useState<any[]>([]);
@@ -14793,6 +14889,7 @@ function AutoSearchPanel({
           <div className="mt-1.5 inline-flex flex-wrap gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
             {(
               [
+                ["na", "N/A"],
                 ["", "From profile"],
                 ["beginner", "Beginner"],
                 ["intermediate", "Intermediate"],
@@ -14812,13 +14909,15 @@ function AutoSearchPanel({
             ))}
           </div>
           <p className="mt-1 text-[11px] leading-relaxed text-body/60">
-            {comp === ""
-              ? `Using your Profile setting${
-                  profileComp && profileComp !== "any" ? ` (${profileComp})` : ""
-                }. Leave as-is when it doesn't apply.`
-              : comp === "any"
-                ? "Any level, Scout won't filter by selectivity."
-                : `Scout focuses on ${comp} opportunities for this search.`}
+            {comp === "na"
+              ? "Not factored in, pick a level only when selectivity matters (like a job hunt)."
+              : comp === ""
+                ? `Using your Profile setting${
+                    profileComp && profileComp !== "any" ? ` (${profileComp})` : ""
+                  }.`
+                : comp === "any"
+                  ? "Any level, Scout won't filter by selectivity."
+                  : `Scout focuses on ${comp} opportunities for this search.`}
           </p>
         </div>
 

@@ -232,6 +232,19 @@ const CSS = `
     .herwrap{transform:scale(1.52)}
   }
 
+  /* Short viewports (most laptops): the same scale trick in reverse, shrink the
+     hero composition a notch so the go-fetch run band (the dog) peeks above the
+     fold on load instead of hiding below it. Placed after the width tiers so
+     height wins on short-but-wide screens; mobile stacking (<=980px) untouched. */
+  @media (min-width: 981px) and (max-height: 900px){
+    .hero{height:640px}
+    .herwrap{transform:scale(0.855);transform-origin:top center}
+  }
+  @media (min-width: 981px) and (max-height: 780px){
+    .hero{height:556px}
+    .herwrap{transform:scale(0.74);transform-origin:top center}
+  }
+
   /* responsive */
   @media (max-width: 980px){
     .scoutland .wrap{padding:0 22px}

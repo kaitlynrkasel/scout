@@ -51,10 +51,26 @@ export function Reveal({
         duration: 0.5,
         stagger,
         ease: "power2.out",
+        // Leave no inline styles behind once done, so nothing can stay faded.
+        onComplete() {
+          gsap.set(el.children, { clearProps: "opacity,transform" });
+        },
         ...(alreadyInView
           ? {}
           : { scrollTrigger: { trigger: el, start: "top 88%", once: true } }),
       });
+      // Fail-safe: a tween killed mid-flight (a re-render at the wrong moment)
+      // would otherwise freeze a child at partial opacity, which reads as a
+      // mysteriously "greyed out" card. After the animation window has surely
+      // passed, force-clear the inline styles. (Immediate branch only; the
+      // below-fold branch would reveal early.)
+      if (alreadyInView) {
+        const totalMs = (0.5 + stagger * el.children.length) * 1000 + 400;
+        const t = window.setTimeout(() => {
+          gsap.set(el.children, { clearProps: "opacity,transform" });
+        }, totalMs);
+        return () => window.clearTimeout(t);
+      }
     },
     { scope: ref },
   );
