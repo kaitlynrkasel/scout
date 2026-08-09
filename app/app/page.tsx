@@ -7921,6 +7921,45 @@ function SideNav({
     { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
     { key: "setup", label: "Setup", keys: ["templates", "profile", "team"] },
   ];
+
+  // Drag-and-drop reordering of the nav items within a group, persisted per
+  // device. `navOrder` is a custom key order; each group renders its own keys
+  // sorted by it (empty default = the natural order defined below).
+  const [navOrder, setNavOrder] = useState<string[]>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("scout_nav_order") || "null");
+      if (Array.isArray(s)) return s as string[];
+    } catch {}
+    return [];
+  });
+  const dragKey = useRef<string | null>(null);
+  const orderKeys = (keys: string[]) => {
+    const rank = (k: string) => {
+      const i = navOrder.indexOf(k);
+      return i === -1 ? 1e9 : i;
+    };
+    return [...keys].sort((a, b) => rank(a) - rank(b));
+  };
+  const reorderWithin = (
+    group: { key: "pipeline" | "setup"; keys: string[] },
+    fromKey: string,
+    toKey: string
+  ) => {
+    if (fromKey === toKey) return;
+    const cur = orderKeys(group.keys);
+    const from = cur.indexOf(fromKey);
+    const to = cur.indexOf(toKey);
+    if (from < 0 || to < 0) return;
+    const [moved] = cur.splice(from, 1);
+    cur.splice(to, 0, moved);
+    // Rebuild the full order: dashboard, then each group's current order.
+    const full: string[] = ["dashboard"];
+    for (const g of NAV_GROUPS) full.push(...(g.key === group.key ? cur : orderKeys(g.keys)));
+    setNavOrder(full);
+    try {
+      localStorage.setItem("scout_nav_order", JSON.stringify(full));
+    } catch {}
+  };
   const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
   const items: {
     key: string;
@@ -8038,13 +8077,23 @@ function SideNav({
       dot?: boolean;
       tag?: string;
       tour?: string;
+      draggable?: boolean;
+      onDragStart?: () => void;
+      onDragOver?: (e: React.DragEvent) => void;
+      onDrop?: () => void;
     }
   ) => (
     <button
       key={key}
       data-tour={opts.tour}
       onClick={opts.onClick}
-      className={`su-navitem ${opts.active ? "su-active" : ""}`}
+      draggable={opts.draggable}
+      onDragStart={opts.onDragStart}
+      onDragOver={opts.onDragOver}
+      onDrop={opts.onDrop}
+      className={`su-navitem ${opts.active ? "su-active" : ""} ${
+        opts.draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
+      }`}
     >
       <svg
         width="15"
@@ -8087,13 +8136,29 @@ function SideNav({
       </button>
       <nav className="flex flex-col gap-0.5 pb-5">
         {(() => {
-          const render = (it: (typeof items)[number]) =>
+          const render = (
+            it: (typeof items)[number],
+            group?: { key: "pipeline" | "setup"; keys: string[] }
+          ) =>
             railItem(it.key, it.label, it.icon, {
               active: tab === it.key,
               onClick: () => setTab(it.key),
               badge: it.badge,
               dot: it.dot,
               tour: `nav-${it.key}`,
+              ...(group
+                ? {
+                    draggable: true,
+                    onDragStart: () => {
+                      dragKey.current = it.key;
+                    },
+                    onDragOver: (e: React.DragEvent) => e.preventDefault(),
+                    onDrop: () => {
+                      if (dragKey.current) reorderWithin(group, dragKey.current, it.key);
+                      dragKey.current = null;
+                    },
+                  }
+                : {}),
             });
           const dash = items.find((i) => i.key === "dashboard");
           const groupBadge = (keys: string[]) =>
@@ -8102,7 +8167,7 @@ function SideNav({
             <>
               {dash && render(dash)}
               {NAV_GROUPS.map((g) => {
-                const groupItems = g.keys
+                const groupItems = orderKeys(g.keys)
                   .map((k) => items.find((i) => i.key === k))
                   .filter(Boolean) as typeof items;
                 if (!groupItems.length) return null;
@@ -8128,7 +8193,11 @@ function SideNav({
                         </span>
                       )}
                     </button>
-                    {open && <div className="flex flex-col gap-0.5">{groupItems.map(render)}</div>}
+                    {open && (
+                      <div className="flex flex-col gap-0.5">
+                        {groupItems.map((it) => render(it, g))}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -13761,8 +13830,7 @@ function DashboardTab({
           onClick={goOutreach}
           className="ml-auto inline-flex items-center gap-2 rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
         >
-          <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-          Search
+          Start scouting
         </button>
       </div>
 
