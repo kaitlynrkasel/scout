@@ -111,25 +111,32 @@ export function statusFromTabName(tabName: string): ImportFindStatus | null {
   return null;
 }
 
+// Key used to stamp each parsed row with its 1-based row number in the source
+// sheet (header = row 1), so an imported find can deep-link back to its row.
+export const ROW_NUM_KEY = "__scout_row";
+
 // SheetJS worksheet → { headers, rows } matching the CSV parser's shape.
 function sheetToRows(XLSX: any, ws: any): { headers: string[]; rows: Record<string, string>[] } {
   const aoa: any[][] = XLSX.utils.sheet_to_json(ws, {
     header: 1,
-    blankrows: false,
+    // Keep blank rows so the stamped row numbers stay aligned with the real
+    // sheet; empties are dropped after stamping.
+    blankrows: true,
     defval: "",
     raw: false,
   });
   const headers = (aoa[0] || []).map((h: any) => String(h ?? "").trim());
   const rows = aoa
     .slice(1)
-    .map((r) => {
+    .map((r, i) => {
       const obj: Record<string, string> = {};
-      headers.forEach((h: string, i: number) => {
-        obj[h] = String(r[i] ?? "").trim();
+      headers.forEach((h: string, ci: number) => {
+        obj[h] = String(r[ci] ?? "").trim();
       });
+      obj[ROW_NUM_KEY] = String(i + 2); // +2: past the header, 1-based
       return obj;
     })
-    .filter((r) => Object.values(r).some((v) => v));
+    .filter((r) => Object.entries(r).some(([k, v]) => k !== ROW_NUM_KEY && v));
   return { headers, rows };
 }
 
@@ -205,19 +212,25 @@ export async function fetchSheetRows(
   if (data.kind === "rows") {
     return {
       headers: Array.isArray(data.headers) ? data.headers : [],
-      rows: Array.isArray(data.rows) ? data.rows : [],
+      rows: (Array.isArray(data.rows) ? data.rows : []).map(
+        (r: Record<string, string>, i: number) => ({ ...r, [ROW_NUM_KEY]: String(i + 2) })
+      ),
     };
   }
 
   if (data.kind === "csv") {
     const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
       header: true,
-      skipEmptyLines: true,
+      // Keep empty lines so stamped row numbers track the real sheet rows;
+      // they're filtered right after stamping.
+      skipEmptyLines: false,
       transformHeader: (h) => h.trim(),
     });
-    const rows = (result.data || []).filter((r) =>
-      Object.values(r).some((v) => String(v || "").trim())
-    );
+    const rows = (result.data || [])
+      .map((r, i) => ({ ...r, [ROW_NUM_KEY]: String(i + 2) }))
+      .filter((r) =>
+        Object.entries(r).some(([k, v]) => k !== ROW_NUM_KEY && String(v || "").trim())
+      );
     const headers = (result.meta.fields || []).map((h) => h.trim());
     return { headers, rows };
   }
@@ -253,19 +266,23 @@ export async function fetchSheetTabs(
       {
         name: "Sheet",
         headers: Array.isArray(data.headers) ? data.headers : [],
-        rows: Array.isArray(data.rows) ? data.rows : [],
+        rows: (Array.isArray(data.rows) ? data.rows : []).map(
+          (r: Record<string, string>, i: number) => ({ ...r, [ROW_NUM_KEY]: String(i + 2) })
+        ),
       },
     ];
   }
   if (data.kind === "csv") {
     const result = Papa.parse<Record<string, string>>(String(data.text || ""), {
       header: true,
-      skipEmptyLines: true,
+      skipEmptyLines: false, // keep row numbering aligned; empties dropped below
       transformHeader: (h) => h.trim(),
     });
-    const rows = (result.data || []).filter((r) =>
-      Object.values(r).some((v) => String(v || "").trim())
-    );
+    const rows = (result.data || [])
+      .map((r, i) => ({ ...r, [ROW_NUM_KEY]: String(i + 2) }))
+      .filter((r) =>
+        Object.entries(r).some(([k, v]) => k !== ROW_NUM_KEY && String(v || "").trim())
+      );
     const headers = (result.meta.fields || []).map((h) => h.trim());
     return [{ name: "Sheet", headers, rows }];
   }
@@ -302,6 +319,15 @@ export function unionTabs(tabs: SheetTab[]): { headers: string[]; rows: Record<s
   return { headers, rows };
 }
 
+// Deep link to one row of a Google Sheet. Keeps the sheet's own gid when the
+// saved URL carries one (#gid=N or ?gid=N); falls back to the first tab.
+export function sheetRowLink(sheetUrl: string, row: number): string {
+  if (!/docs\.google\.com\/spreadsheets/i.test(sheetUrl || "")) return "";
+  const base = sheetUrl.split("#")[0];
+  const gid = sheetUrl.match(/[#?&]gid=(\d+)/)?.[1] || "0";
+  return `${base}#gid=${gid}&range=A${row}`;
+}
+
 // Turn mapped rows into Find records (deterministic ids, so re-syncing the same
 // row produces the same id and dedups cleanly against existing finds).
 export function rowsToFinds(opts: {
@@ -310,8 +336,11 @@ export function rowsToFinds(opts: {
   defaultStatus: ImportFindStatus;
   projectId: string;
   sourceLabel: string;
+  // The synced Google Sheet's URL, when the rows came from one. Combined with
+  // each row's stamped row number to deep-link the find back to its row.
+  sourceUrl?: string;
 }): ImportFind[] {
-  const { rows, mapping, defaultStatus, projectId, sourceLabel } = opts;
+  const { rows, mapping, defaultStatus, projectId, sourceLabel, sourceUrl } = opts;
   if (!projectId) return [];
   const cols: Partial<Record<Exclude<FieldKey, "">, string>> = {};
   for (const [col, field] of Object.entries(mapping)) if (field) cols[field] = col;
@@ -372,6 +401,8 @@ export function rowsToFinds(opts: {
       const s = statusFromTabName(tabName);
       if (s) status = s;
     }
+    const rowNum = Number(row[ROW_NUM_KEY] || 0);
+    const rowLink = sourceUrl && rowNum ? sheetRowLink(sourceUrl, rowNum) : "";
     const opp: Opportunity = {
       id: `import-${now}-${idx++}`,
       name,
@@ -389,6 +420,7 @@ export function rowsToFinds(opts: {
       whyItFits: notes,
       sourceTitle: sourceLabel,
       sourceSnippet: notes.slice(0, 220),
+      ...(rowLink ? { sheetRef: { url: rowLink, row: rowNum } } : {}),
     };
     const nm = name.toLowerCase().replace(/[^a-z0-9]/g, "");
     const host = urlHost(opp.url || "");

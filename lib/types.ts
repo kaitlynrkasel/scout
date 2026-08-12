@@ -76,9 +76,13 @@ export interface Opportunity {
   sourceTitle: string;
   sourceSnippet: string;
   // All the articles/pages that mentioned this person, in the order they were
-  // found. Older opps saved before this field existed have `sources` undefined, 
+  // found. Older opps saved before this field existed have `sources` undefined,
   // reader code should treat that as [{ title: sourceTitle, url }].
   sources?: SourceRef[];
+  // For contacts imported from a linked Google Sheet: a deep link back to the
+  // exact source row (docs.google.com …#gid=N&range=A<row>), so the Spreadsheet
+  // tab can jump to the row this contact came from.
+  sheetRef?: { url: string; row: number };
 }
 
 export interface Draft {

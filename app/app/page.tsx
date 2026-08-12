@@ -256,6 +256,7 @@ const RESUME_KEY = "scout_resume_file"; // resume file (name + data URL) for att
 const SIG_KEY = "scout_signature"; // email signature appended to drafts
 const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished or skipped
 const AUTOSCHED_KEY = "scout_auto_schedule"; // "1" → after-hours sends auto-queue for the next business hour
+const LISTS_KEY = "scout_lists"; // saved status lists (the stakeholder-friendly Lists tab)
 
 // Whether after-hours sends should silently queue for the recipient's next
 // business hour instead of prompting. Read at send time so it's always current.
@@ -514,6 +515,18 @@ interface Category {
   understanding?: number;
   askedQuestions?: string[];
   clarifyAnswers?: string;
+}
+
+// A saved status list (the Lists tab): a named, stakeholder-friendly view of
+// part of the pipeline ("Band members", "Venues we pitched"). Membership is
+// live, defined by scope (project + optional category), so the list always
+// reflects current statuses without upkeep.
+interface ScoutList {
+  id: string;
+  name: string;
+  projectId: string;
+  categoryId?: string; // unset = the whole project
+  createdAt: number;
 }
 
 // The contact channels a user can ask Scout to prioritize per search.
@@ -1246,7 +1259,7 @@ function ScoutTool({
   onCreateAccount,
 }: ScoutToolProps) {
   const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual" | "spreadsheet"
+    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual" | "spreadsheet" | "lists"
   >("dashboard");
 
   // Small GSAP fade-and-lift on the main content whenever the active tab
@@ -1504,6 +1517,14 @@ function ScoutTool({
   const activeAccentKey = companyColors[activeCompanyId] || "";
   // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
   const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
+  // Saved status lists (Lists tab). Synced in user state like projects.
+  const [lists, setLists] = useState<ScoutList[]>([]);
+  const saveLists = (n: ScoutList[]) => {
+    setLists(n);
+    try {
+      localStorage.setItem(LISTS_KEY, JSON.stringify(n));
+    } catch {}
+  };
   // Google Sheets connection (level 3: private read + write-back).
   const [sheetsConnected, setSheetsConnected] = useState(false);
   const [sheetsEmail, setSheetsEmail] = useState("");
@@ -1647,6 +1668,20 @@ function ScoutTool({
     setSyncedSheets(
       Array.isArray((initialState as any)?.syncedSheets) ? (initialState as any).syncedSheets : []
     );
+    // Saved status lists: server state wins; fall back to this device's copy.
+    {
+      let ls: ScoutList[] = Array.isArray((initialState as any)?.lists)
+        ? (initialState as any).lists
+        : [];
+      if (!ls.length) {
+        try {
+          const raw = localStorage.getItem(LISTS_KEY);
+          const arr = raw ? JSON.parse(raw) : [];
+          if (Array.isArray(arr)) ls = arr;
+        } catch {}
+      }
+      setLists(ls.filter((l: any) => l && l.id && l.name && l.projectId));
+    }
     setCoaching(Array.isArray(coach) ? coach : []);
     setEditPairs(Array.isArray(edits) ? edits : []);
     setResumeFile(resume && resume.dataUrl ? resume : null);
@@ -1730,6 +1765,7 @@ function ScoutTool({
       resumeFile,
       signature,
       syncedSheets,
+      lists,
       // Ride the extras along in the JSON blob so they survive a redeploy.
       // The profiles table only has name/bio/useCase/linkedin; everything else
       // lived in localStorage before this, which meant it evaporated on any
@@ -1755,7 +1791,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -3751,13 +3787,27 @@ function ScoutTool({
   // Returns the count actually added so the importer can report it.
   function importFinds(imported: Find[]): number {
     const existing = new Set(finds.map((f) => f.id));
+    // Backfill: rows imported before sheet-row links existed keep their find,
+    // but adopt the deep link the fresh sync now carries for the same row.
+    const refByKey = new Map(
+      imported.filter((f) => f.opp.sheetRef).map((f) => [f.id, f.opp.sheetRef!])
+    );
+    let backfilled = false;
+    const withRefs = finds.map((f) => {
+      const ref = !f.opp.sheetRef && refByKey.get(f.id);
+      if (ref) {
+        backfilled = true;
+        return { ...f, opp: { ...f.opp, sheetRef: ref } };
+      }
+      return f;
+    });
     const fresh: Find[] = [];
     for (const f of imported) {
       if (existing.has(f.id)) continue;
       existing.add(f.id);
       fresh.push({ ...f, foundVia: f.foundVia || "import" });
     }
-    if (fresh.length) saveFinds([...fresh, ...finds]);
+    if (fresh.length || backfilled) saveFinds([...fresh, ...withRefs]);
     return fresh.length;
   }
 
@@ -3870,6 +3920,7 @@ function ScoutTool({
           defaultStatus: s.defaultStatus,
           projectId: s.projectId,
           sourceLabel: s.label || "Synced sheet",
+          sourceUrl: s.url, // deep-link each find back to its sheet row
         });
         all.push(...(built as Find[]));
         touched[s.id] = built.length;
@@ -7189,6 +7240,17 @@ function ScoutTool({
         />
       )}
 
+      {tab === "lists" && (
+        <ListsTab
+          lists={lists}
+          onSave={saveLists}
+          finds={visibleFinds}
+          projects={visibleProjects}
+          categories={categories}
+          activeProjectId={activeId}
+        />
+      )}
+
       {tab === "templates" && (
         <TemplatesTab
           kinds={OUTREACH_KINDS}
@@ -8011,7 +8073,7 @@ function SideNav({
       return n;
     });
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet", "lists"] },
     { key: "setup", label: "Setup", keys: ["templates", "profile", "team"] },
   ];
 
@@ -8103,6 +8165,17 @@ function SideNav({
         <>
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+        </>
+      ),
+    },
+    {
+      key: "lists",
+      label: "Lists",
+      // Checklist rows, a status board at a glance.
+      icon: (
+        <>
+          <path d="M8 6h13M8 12h13M8 18h13" />
+          <path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" />
         </>
       ),
     },
@@ -10526,6 +10599,17 @@ function SpreadsheetTab({
                     onBlur={(e) => e.target.value !== f.opp.name && onUpdateOpp(f.id, { name: e.target.value })}
                     className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-1 py-1 text-sm font-bold text-ink outline-none hover:border-warm-border focus:border-coral focus:bg-white"
                   />
+                  {f.opp.sheetRef && (
+                    <a
+                      href={f.opp.sheetRef.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Open row ${f.opp.sheetRef.row} in your sheet`}
+                      className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-body/40 transition hover:bg-warm-bg hover:text-accent"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M15 3h6v6" /><path d="M10 14 21 3" /></svg>
+                    </a>
+                  )}
                   <button
                     onClick={() => onRemove(f.id)}
                     aria-label="Remove"
@@ -10603,7 +10687,20 @@ function SpreadsheetTab({
                 } hover:bg-warm-bg/50`}
                 style={{ gridTemplateColumns: COLS }}
               >
-                <Cell value={f.opp.name || ""} onSave={(v) => onUpdateOpp(f.id, { name: v })} placeholder="Name" className="font-semibold" />
+                <div className="flex min-w-0 items-center">
+                  <Cell value={f.opp.name || ""} onSave={(v) => onUpdateOpp(f.id, { name: v })} placeholder="Name" className="font-semibold" />
+                  {f.opp.sheetRef && (
+                    <a
+                      href={f.opp.sheetRef.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={`Open row ${f.opp.sheetRef.row} in your sheet`}
+                      className="ml-0.5 shrink-0 rounded p-1 text-body/35 transition hover:bg-warm-bg hover:text-accent"
+                    >
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" /><path d="M15 3h6v6" /><path d="M10 14 21 3" /></svg>
+                    </a>
+                  )}
+                </div>
                 <Cell value={f.opp.outlet || ""} onSave={(v) => onUpdateOpp(f.id, { outlet: v })} placeholder="Company" />
                 <Cell value={f.opp.contactEmail || ""} onSave={(v) => onUpdateOpp(f.id, { contactEmail: v })} placeholder="email@…" />
                 <Cell value={f.opp.contactPhone || ""} onSave={(v) => onUpdateOpp(f.id, { contactPhone: v })} placeholder="phone" />
@@ -17653,8 +17750,68 @@ function SettingsTab({
         <span className="text-brown">Settings</span>
       </h1>
 
+      {/* ---- Display ---- */}
+      <div className="kicker mt-8">Display</div>
+
+      {/* Appearance */}
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Appearance</h2>
+        <div className="mt-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(
+            [
+              ["light", "Light"],
+              ["dark", "Dark"],
+            ] as const
+          ).map(([val, label]) => {
+            const active = (val === "dark") === dark;
+            return (
+              <button
+                key={val}
+                onClick={() => setTheme(val === "dark")}
+                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
+                  active
+                    ? "bg-surface text-ink shadow-card"
+                    : "text-body/70 hover:text-ink"
+                }`}
+              >
+                {val === "light" ? (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+                ) : (
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
+                )}
+                {label}
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Introduction tour */}
+      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <h2 className="text-base font-extrabold tracking-tight text-ink">
+              Introduction tour
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">
+              A quick walkthrough that highlights each part of the app. It shows
+              automatically the first time you sign in. Replay it here anytime.
+            </p>
+          </div>
+          <button
+            onClick={onStartTour}
+            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            Show the tour
+          </button>
+        </div>
+      </section>
+
+      {/* ---- Account ---- */}
+      <div className="kicker mt-10">Account</div>
+
       {/* Access code */}
-      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Access code</h2>
         {isComp ? (
           <p className="mt-1 flex items-center gap-2 text-sm leading-relaxed text-body">
@@ -17703,7 +17860,7 @@ function SettingsTab({
       </section>
 
       {/* Password */}
-      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Password</h2>
         <div className="mt-4 grid max-w-sm gap-3">
           <input
@@ -17752,41 +17909,11 @@ function SettingsTab({
         </div>
       </section>
 
-      {/* Appearance */}
-      <section className="mt-8 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        <h2 className="text-base font-extrabold tracking-tight text-ink">Appearance</h2>
-        <div className="mt-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
-          {(
-            [
-              ["light", "Light"],
-              ["dark", "Dark"],
-            ] as const
-          ).map(([val, label]) => {
-            const active = (val === "dark") === dark;
-            return (
-              <button
-                key={val}
-                onClick={() => setTheme(val === "dark")}
-                className={`flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-bold transition ${
-                  active
-                    ? "bg-surface text-ink shadow-card"
-                    : "text-body/70 hover:text-ink"
-                }`}
-              >
-                {val === "light" ? (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
-                ) : (
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /></svg>
-                )}
-                {label}
-              </button>
-            );
-          })}
-        </div>
-      </section>
+      {/* ---- Sending ---- */}
+      <div className="kicker mt-10">Sending</div>
 
       {/* Sending */}
-      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Sending</h2>
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
@@ -17818,29 +17945,11 @@ function SettingsTab({
         </div>
       </section>
 
-      {/* Introduction tour */}
-      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="max-w-md">
-            <h2 className="text-base font-extrabold tracking-tight text-ink">
-              Introduction tour
-            </h2>
-            <p className="mt-1.5 text-sm leading-relaxed text-body">
-              A quick walkthrough that highlights each part of the app. It shows
-              automatically the first time you sign in. Replay it here anytime.
-            </p>
-          </div>
-          <button
-            onClick={onStartTour}
-            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
-          >
-            Show the tour
-          </button>
-        </div>
-      </section>
+      {/* ---- Your data ---- */}
+      <div className="kicker mt-10">Your data</div>
 
       {/* Your data */}
-      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
             <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -17860,6 +17969,294 @@ function SettingsTab({
           </button>
         </div>
       </section>
+    </main>
+  );
+}
+
+/* ---------------- Lists tab (stakeholder-friendly status boards) ---------------- */
+// Plain-English status labels: what someone who ISN'T working the pipeline
+// needs to know at a glance, not internal pipeline jargon.
+const LIST_STATUS_META: Record<FindStatus, { label: string; cls: string; order: number }> = {
+  replied: { label: "Replied", cls: "border-sage/40 bg-sage/15 text-sage-deep", order: 0 },
+  sent: { label: "Reached out", cls: "border-brown/30 bg-brown-tint/50 text-brown-deep", order: 1 },
+  drafted: { label: "Draft ready", cls: "border-warm-border bg-warm-bg text-body", order: 2 },
+  new: { label: "Not contacted yet", cls: "border-warm-border bg-surface text-body/70", order: 3 },
+  undecided: { label: "Deciding", cls: "border-warm-border bg-surface text-body/70", order: 4 },
+  denied: { label: "Passed", cls: "border-warm-border bg-warm-bg/60 text-body/50", order: 5 },
+};
+
+function ListsTab({
+  lists,
+  onSave,
+  finds,
+  projects,
+  categories,
+  activeProjectId,
+}: {
+  lists: ScoutList[];
+  onSave: (n: ScoutList[]) => void;
+  finds: Find[];
+  projects: Project[];
+  categories: Category[];
+  activeProjectId: string;
+}) {
+  const [openId, setOpenId] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [name, setName] = useState("");
+  const [projId, setProjId] = useState(
+    projects.some((p) => p.id === activeProjectId) ? activeProjectId : projects[0]?.id || ""
+  );
+  const [catId, setCatId] = useState("");
+
+  const membersOf = (l: ScoutList) =>
+    finds.filter(
+      (f) => f.projectId === l.projectId && (!l.categoryId || f.categoryId === l.categoryId)
+    );
+  const scopeLabel = (l: ScoutList) => {
+    const p = projects.find((x) => x.id === l.projectId)?.name || "a project";
+    const c = l.categoryId ? categories.find((x) => x.id === l.categoryId)?.name : "";
+    return c ? `${p} · ${c}` : p;
+  };
+  const fmtDate = (t?: number) =>
+    t ? new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+
+  function create() {
+    const nm = name.trim();
+    if (!nm || !projId) return;
+    const l: ScoutList = {
+      id: `list-${Date.now()}`,
+      name: nm,
+      projectId: projId,
+      categoryId: catId || undefined,
+      createdAt: Date.now(),
+    };
+    onSave([l, ...lists]);
+    setName("");
+    setCatId("");
+    setCreating(false);
+    setOpenId(l.id);
+  }
+
+  const open = lists.find((l) => l.id === openId);
+  const scopeCats = categories.filter((c) => c.projectId === projId);
+
+  // ---- Detail: one list as a clean status board ----
+  if (open) {
+    const rows = membersOf(open)
+      .slice()
+      .sort(
+        (a, b) =>
+          LIST_STATUS_META[a.status].order - LIST_STATUS_META[b.status].order ||
+          (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
+      );
+    const reached = rows.filter((f) => f.status === "sent" || f.status === "replied").length;
+    const replied = rows.filter((f) => f.status === "replied").length;
+    return (
+      <main className="mx-auto w-full max-w-4xl px-6 py-12">
+        <button
+          onClick={() => setOpenId("")}
+          className="text-xs font-bold text-body/60 transition hover:text-accent"
+        >
+          ← All lists
+        </button>
+        <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <div className="kicker mb-2">{scopeLabel(open)}</div>
+            <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+              {open.name}
+            </h1>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs font-semibold">
+            <span className="rounded-full border border-warm-border bg-surface px-3 py-1.5 text-body">
+              {rows.length} {rows.length === 1 ? "person" : "people"}
+            </span>
+            <span className="rounded-full border border-brown/30 bg-brown-tint/50 px-3 py-1.5 text-brown-deep">
+              {reached} reached out
+            </span>
+            <span className="rounded-full border border-sage/40 bg-sage/15 px-3 py-1.5 text-sage-deep">
+              {replied} replied
+            </span>
+          </div>
+        </div>
+
+        {rows.length === 0 ? (
+          <div className="mt-8 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-10 text-center text-sm text-body/70">
+            Nothing in this list yet. Finds in {scopeLabel(open)} appear here automatically.
+          </div>
+        ) : (
+          <div className="mt-6 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-card">
+            {rows.map((f, i) => {
+              const meta = LIST_STATUS_META[f.status];
+              const who = [f.opp.contactRole, f.opp.outlet].filter(Boolean).join(" · ");
+              return (
+                <div
+                  key={f.id}
+                  className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-3.5 ${
+                    i > 0 ? "border-t border-warm-border" : ""
+                  }`}
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
+                    {who && <div className="truncate text-xs text-body/60">{who}</div>}
+                  </div>
+                  {f.sentAt && (
+                    <span className="text-[11px] font-medium text-body/50">
+                      {f.status === "replied" ? "replied after " : "reached out "}
+                      {fmtDate(f.sentAt)}
+                    </span>
+                  )}
+                  <span
+                    className={`shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-bold ${meta.cls}`}
+                  >
+                    {meta.label}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <p className="mt-3 text-[11px] leading-relaxed text-body/50">
+          Lists stay live: statuses here always reflect the current pipeline, nothing to update
+          by hand.
+        </p>
+      </main>
+    );
+  }
+
+  // ---- Home: every list as a card + create ----
+  return (
+    <main className="mx-auto w-full max-w-4xl px-6 py-12">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <div className="kicker mb-2">Share where things stand</div>
+          <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+            Your <span className="text-brown">lists</span>
+          </h1>
+          <p className="mt-2 max-w-[52ch] text-sm leading-relaxed text-body/80">
+            A list is a clean status board for part of your pipeline, made for someone who
+            isn&apos;t in Scout every day: who&apos;s on the radar, who&apos;s been reached, who
+            replied.
+          </p>
+        </div>
+        <button
+          onClick={() => setCreating((v) => !v)}
+          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+        >
+          {creating ? "Close" : "+ New list"}
+        </button>
+      </div>
+
+      {creating && (
+        <div className="mt-5 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div>
+              <Label>List name</Label>
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && create()}
+                placeholder="e.g. Band members"
+                autoFocus
+                className="w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+            </div>
+            <div>
+              <Label>Project</Label>
+              <select
+                value={projId}
+                onChange={(e) => {
+                  setProjId(e.target.value);
+                  setCatId("");
+                }}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none focus:border-coral"
+              >
+                {projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <Label>Category (optional)</Label>
+              <select
+                value={catId}
+                onChange={(e) => setCatId(e.target.value)}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none focus:border-coral"
+              >
+                <option value="">Whole project</option>
+                {scopeCats.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <button
+            onClick={create}
+            disabled={!name.trim() || !projId}
+            className="mt-4 rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+          >
+            Create list
+          </button>
+        </div>
+      )}
+
+      {lists.length === 0 && !creating ? (
+        <div className="mt-8 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-10 text-center text-sm text-body/70">
+          No lists yet. Create one, like &quot;Band members&quot;, and anyone can see its status
+          at a glance.
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-3 sm:grid-cols-2">
+          {lists.map((l) => {
+            const rows = membersOf(l);
+            const reached = rows.filter(
+              (f) => f.status === "sent" || f.status === "replied"
+            ).length;
+            const replied = rows.filter((f) => f.status === "replied").length;
+            return (
+              <div
+                key={l.id}
+                className="group relative rounded-2xl border border-warm-border bg-surface p-5 text-left shadow-card transition hover:border-brown/40"
+              >
+                <button
+                  onClick={() => setOpenId(l.id)}
+                  className="block w-full text-left"
+                >
+                  <div className="text-[11px] font-bold uppercase tracking-wide text-body/50">
+                    {scopeLabel(l)}
+                  </div>
+                  <div className="mt-1 text-base font-extrabold text-ink">{l.name}</div>
+                  <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs font-semibold text-body/70">
+                    <span>
+                      <span className="text-ink">{rows.length}</span>{" "}
+                      {rows.length === 1 ? "person" : "people"}
+                    </span>
+                    <span>
+                      <span className="text-ink">{reached}</span> reached out
+                    </span>
+                    <span>
+                      <span className="text-ink">{replied}</span> replied
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete the list "${l.name}"? (Finds are not touched.)`))
+                      onSave(lists.filter((x) => x.id !== l.id));
+                  }}
+                  title="Delete this list (its finds stay in your pipeline)"
+                  className="absolute right-3 top-3 hidden rounded-md px-1.5 py-0.5 text-sm text-body/40 transition hover:bg-warm-bg hover:text-danger group-hover:block"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }
