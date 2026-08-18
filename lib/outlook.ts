@@ -4,6 +4,7 @@
 // short-lived access token per action and either create a draft or send.
 
 import crypto from "crypto";
+import { openToken } from "./tokenCrypto";
 
 // "common" supports both personal Outlook.com and work/school accounts.
 const TENANT = process.env.MICROSOFT_TENANT || "common";
@@ -105,7 +106,9 @@ export async function exchangeCode(origin: string, code: string): Promise<any> {
 
 export async function accessTokenFromRefresh(refreshToken: string): Promise<string> {
   const body = new URLSearchParams({
-    refresh_token: refreshToken,
+    // Decrypt-at-exchange, the single funnel every stored token passes
+    // through; openToken passes legacy plaintext rows through untouched.
+    refresh_token: openToken(refreshToken),
     client_id: process.env.MICROSOFT_CLIENT_ID || "",
     client_secret: process.env.MICROSOFT_CLIENT_SECRET || "",
     grant_type: "refresh_token",

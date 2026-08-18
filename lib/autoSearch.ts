@@ -16,11 +16,16 @@ function secret(): string {
 
 export type AutoAction = "approve" | "deny";
 
-// Sign { auto_find id, action } into a compact, URL-safe token.
+// Digest emails get forwarded; a link that works forever is a standing
+// capability to draft/send from the user's mailbox. Two weeks covers "catch up
+// on last week's digest" without leaving the door open indefinitely.
+const ACTION_TOKEN_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+
+// Sign { auto_find id, action, issued-at } into a compact, URL-safe token.
 export function signAction(findId: string, action: AutoAction): string {
-  const payload = Buffer.from(JSON.stringify({ f: findId, a: action })).toString(
-    "base64url"
-  );
+  const payload = Buffer.from(
+    JSON.stringify({ f: findId, a: action, t: Date.now() })
+  ).toString("base64url");
   const sig = crypto.createHmac("sha256", secret()).update(payload).digest("base64url");
   return `${payload}.${sig}`;
 }
@@ -35,8 +40,11 @@ export function verifyAction(
   const b = Buffer.from(expect);
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
   try {
-    const { f, a: action } = JSON.parse(Buffer.from(payload, "base64url").toString());
+    const { f, a: action, t } = JSON.parse(Buffer.from(payload, "base64url").toString());
     if (!f || (action !== "approve" && action !== "deny")) return null;
+    // No issued-at (pre-expiry token) or too old → expired. The action pages
+    // already render verify failures as a clean "link expired" state.
+    if (typeof t !== "number" || Date.now() - t > ACTION_TOKEN_TTL_MS) return null;
     return { findId: String(f), action };
   } catch {
     return null;

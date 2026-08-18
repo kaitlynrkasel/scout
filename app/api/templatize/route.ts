@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { claudeJson, parseJsonLoose } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
+import { userFromReq } from "@/lib/supabaseAdmin";
+import { withinRateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 45; // one Claude pass over a single pasted message
@@ -49,6 +51,22 @@ Return ONLY JSON: {"template": "the reusable template text with placeholders"}`;
 
 export async function POST(req: NextRequest) {
   try {
+    // Costs an Anthropic call per hit: signed-in users only, or anyone on the
+    // internet can drain the API budget with a curl loop.
+    const u = await userFromReq(req);
+    if (!u) {
+      return NextResponse.json(
+        { error: "Create a free account (or sign in) to clean templates." },
+        { status: 401 }
+      );
+    }
+    // Burst cap on top of auth: 20/hour per user is far beyond real usage.
+    if (!withinRateLimit(`tpl:${u.id}`, 20, 60 * 60 * 1000)) {
+      return NextResponse.json(
+        { error: "That's a lot of cleaning in one hour. Try again in a bit." },
+        { status: 429 }
+      );
+    }
     const { text, channel } = await req.json();
     const raw = String(text || "").trim();
     if (!raw) {

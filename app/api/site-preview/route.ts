@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { safeUrl } from "@/lib/pageText";
+import { verifyPreviewToken } from "@/lib/previewToken";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 20;
@@ -14,7 +16,25 @@ export const maxDuration = 20;
 // uncached pass-through for in-app preview, not a cache or republish of the
 // page.
 export async function GET(req: NextRequest) {
+  // Gate the proxy behind a short-lived signed token (minted by the auth'd
+  // /api/preview-token route), otherwise this endpoint is an open proxy that
+  // anyone can route traffic through. Signed-out visitors get a clean page
+  // with a direct link instead of a proxied preview.
+  const pt = req.nextUrl.searchParams.get("pt") || "";
   const raw = req.nextUrl.searchParams.get("url") || "";
+  if (!verifyPreviewToken(pt)) {
+    return htmlResponse(
+      errorPage(
+        "Sign in to Scout to preview sites here.",
+        safeUrl(raw)?.toString() || undefined
+      )
+    );
+  }
+  // Burst cap per caller: a grid of cards loads dozens of previews, so the
+  // ceiling is generous, but a runaway loop still hits a wall.
+  if (!withinRateLimit(`prev:${requestIp(req.headers)}`, 300, 10 * 60 * 1000)) {
+    return htmlResponse(errorPage("Too many previews at once, give it a minute."));
+  }
   const u = safeUrl(raw);
   if (!u) {
     return htmlResponse(errorPage("That link isn't a valid, reachable web address."));

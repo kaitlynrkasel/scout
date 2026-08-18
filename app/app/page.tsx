@@ -258,6 +258,19 @@ const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished o
 const AUTOSCHED_KEY = "scout_auto_schedule"; // "1" → after-hours sends auto-queue for the next business hour
 const LISTS_KEY = "scout_lists"; // saved status lists (the stakeholder-friendly Lists tab)
 
+// Short-lived token gating /api/site-preview (iframes can't send auth
+// headers, so the token rides the query string). Module-level: the app shell
+// fetches/refreshes it and bumps a state tick so consumers re-render; the
+// iframe src helpers below read the current value at render time. Empty for
+// signed-out/guest sessions, the proxy then shows a sign-in page with a
+// direct link instead of a preview.
+let PREVIEW_TOKEN = "";
+function previewSrc(url: string): string {
+  return `/api/site-preview?url=${encodeURIComponent(url)}${
+    PREVIEW_TOKEN ? `&pt=${encodeURIComponent(PREVIEW_TOKEN)}` : ""
+  }`;
+}
+
 // Whether after-hours sends should silently queue for the recipient's next
 // business hour instead of prompting. Read at send time so it's always current.
 function autoScheduleOn(): boolean {
@@ -1517,6 +1530,37 @@ function ScoutTool({
   const activeAccentKey = companyColors[activeCompanyId] || "";
   // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
   const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
+  // Preview-proxy token: fetched once signed in, refreshed well inside its 6h
+  // TTL. The tick re-renders consumers so iframe srcs pick up the fresh token.
+  const [, setPreviewTokenTick] = useState(0);
+  useEffect(() => {
+    if (!getToken) return;
+    let alive = true;
+    async function mint() {
+      try {
+        const token = await getToken!();
+        if (!token) return;
+        const r = await fetch("/api/preview-token", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (alive && r.ok && j.t) {
+          PREVIEW_TOKEN = String(j.t);
+          setPreviewTokenTick((x) => x + 1);
+        }
+      } catch {
+        /* previews degrade to the sign-in page; next interval retries */
+      }
+    }
+    mint();
+    const id = setInterval(mint, 4 * 60 * 60 * 1000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [getToken]);
+
   // Saved status lists (Lists tab). Synced in user state like projects.
   const [lists, setLists] = useState<ScoutList[]>([]);
   const saveLists = (n: ScoutList[]) => {
@@ -7280,6 +7324,7 @@ function ScoutTool({
           teamTemplates={teamTemplates}
           accountEmail={accountEmail || ""}
           onCopyTeamTemplate={copyTeamTemplate}
+          getToken={getToken}
         />
       )}
 
@@ -10098,7 +10143,7 @@ function FindDetailModal({
                   // X-Frame-Options / CSP frame-ancestors on the target site
                   // can't refuse the embed, those headers apply to a direct
                   // cross-origin request, not to our own proxied response.
-                  src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
+                  src={previewSrc(o.url)}
                   title={`Preview of ${host || o.name}`}
                   onLoad={() => {
                     setFrameLoaded(true);
@@ -10110,7 +10155,12 @@ function FindDetailModal({
                     }, 4500);
                   }}
                   referrerPolicy="no-referrer"
-                  sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+                  // No allow-same-origin: the proxied page is untrusted
+                  // third-party HTML served from OUR origin; with same-origin
+                  // access its scripts could read the user's session token and
+                  // local data. Opaque origin keeps scripts working while the
+                  // bridge talks over postMessage, which doesn't need it.
+                  sandbox="allow-scripts allow-popups allow-forms"
                   className="h-full w-full"
                 />
                 {previewFailed && (
@@ -11092,11 +11142,11 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
         {o.url ? (
           <>
             <iframe
-              src={`/api/site-preview?url=${encodeURIComponent(o.url)}`}
+              src={previewSrc(o.url)}
               title={`Preview of ${host || o.name}`}
               loading="lazy"
               referrerPolicy="no-referrer"
-              sandbox="allow-scripts allow-same-origin"
+              sandbox="allow-scripts"
               tabIndex={-1}
               aria-hidden
               className="pointer-events-none h-[250%] w-[250%] origin-top-left scale-[0.4] border-0 bg-white"
@@ -18287,6 +18337,7 @@ function TemplatesTab({
   teamTemplates,
   accountEmail,
   onCopyTeamTemplate,
+  getToken,
 }: {
   kinds: string[];
   channel: string;
@@ -18316,6 +18367,9 @@ function TemplatesTab({
   teamTemplates?: any[];
   accountEmail?: string;
   onCopyTeamTemplate?: (row: any) => void;
+  // Session token supplier for the AI-backed clean-into-a-template call
+  // (the endpoint requires sign-in so strangers can't burn API credits).
+  getToken?: (() => Promise<string | null>) | null;
 }) {
   // Email-signature editor state: which project (if any) the per-project
   // signature editor is pointed at, and whether a "build from resume" is running.
@@ -18348,9 +18402,13 @@ function TemplatesTab({
     setCleaning(true);
     setCleanErr("");
     try {
+      const token = getToken ? await getToken().catch(() => null) : null;
       const r = await fetch("/api/templatize", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({ text: raw, channel }),
       });
       const j = await r.json();

@@ -19,7 +19,12 @@ export function stripHtml(html: string): string {
     .trim();
 }
 
-// Reject internal/local addresses before fetching a user/model-supplied URL.
+// Reject internal/local addresses before fetching a user/model-supplied URL
+// (SSRF guard). Blocks the loopback/private/link-local ranges in every dotted
+// form, integer/hex-encoded IPs (http://2130706433 is 127.0.0.1), IPv6
+// literals, and local-only hostnames. DNS names that RESOLVE to private IPs
+// (rebinding) are out of scope for a static check; the deploy platform's
+// network is the backstop there.
 export function safeUrl(raw: string): URL | null {
   let s = String(raw || "").trim();
   if (!s) return null;
@@ -30,11 +35,37 @@ export function safeUrl(raw: string): URL | null {
   } catch {
     return null;
   }
+  if (!/^https?:$/.test(u.protocol)) return null;
+  const host = u.hostname.toLowerCase();
+  // IPv6 literals: no legitimate scouting target needs one; ::1 etc. hide here.
+  if (host.startsWith("[")) return null;
+  // Local-only names.
   if (
-    !/^https?:$/.test(u.protocol) ||
-    /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[)/i.test(u.hostname)
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host.endsWith(".local") ||
+    host.endsWith(".internal") ||
+    host.endsWith(".home.arpa")
   )
     return null;
+  const quad = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (quad) {
+    const o = quad.slice(1).map(Number);
+    if (o.some((x) => x > 255)) return null;
+    const [a, b] = o;
+    if (a === 0 || a === 127 || a === 10) return null; // this-host / loopback / private A
+    if (a === 172 && b >= 16 && b <= 31) return null; // private B
+    if (a === 192 && b === 168) return null; // private C
+    if (a === 169 && b === 254) return null; // link-local / cloud metadata
+    if (a === 100 && b >= 64 && b <= 127) return null; // CGNAT
+    if (a >= 224) return null; // multicast + reserved
+  } else if (/^(0x[0-9a-f]+|\d+)(\.(0x[0-9a-f]+|\d+)){0,3}$/.test(host)) {
+    // Not a plain dotted quad but still parseable as an IP: decimal
+    // (2130706433), hex (0x7f000001), octal (017700000001), or short dotted
+    // (127.1) encodings, every label purely numeric/hex. Real domains always
+    // have an alphabetic TLD label, so none are caught by this.
+    return null;
+  }
   return u;
 }
 

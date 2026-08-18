@@ -3,6 +3,7 @@
 // access token per action and either create a draft in their inbox or send.
 
 import crypto from "crypto";
+import { openToken } from "./tokenCrypto";
 
 const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
@@ -96,7 +97,9 @@ export async function exchangeCode(origin: string, code: string): Promise<any> {
 
 export async function accessTokenFromRefresh(refreshToken: string): Promise<string> {
   const body = new URLSearchParams({
-    refresh_token: refreshToken,
+    // Every stored-token consumer funnels through this exchange, so decrypting
+    // here (openToken passes legacy plaintext through) covers all call sites.
+    refresh_token: openToken(refreshToken),
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     client_secret: process.env.GOOGLE_CLIENT_SECRET || "",
     grant_type: "refresh_token",

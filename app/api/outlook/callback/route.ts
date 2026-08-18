@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { sealToken } from "@/lib/tokenCrypto";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { exchangeCode, verifyState, emailFromIdToken, reqOrigin } from "@/lib/outlook";
 
@@ -24,7 +25,7 @@ export async function GET(req: NextRequest) {
       {
         user_id: uid,
         email,
-        refresh_token: tok.refresh_token,
+        refresh_token: sealToken(tok.refresh_token), // encrypted at rest (lib/tokenCrypto)
         updated_at: new Date().toISOString(),
       },
       { onConflict: "user_id" }
