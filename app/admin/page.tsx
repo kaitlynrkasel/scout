@@ -11,12 +11,13 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import InsightsView, { ConciergePanel } from "./InsightsView";
+import IndexView from "./IndexView";
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
-  const [adminTab, setAdminTab] = useState<"insights" | "concierge">("insights");
+  const [adminTab, setAdminTab] = useState<"insights" | "concierge" | "index">("insights");
 
   useEffect(() => {
     if (!supabase) {
@@ -91,7 +92,7 @@ export default function AdminPage() {
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
           <nav className="ml-4 flex items-center gap-1">
-            {(["insights", "concierge"] as const).map((t) => (
+            {(["insights", "concierge", "index"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
@@ -115,6 +116,20 @@ export default function AdminPage() {
       </header>
       {adminTab === "insights" ? (
         <InsightsView getToken={getToken} />
+      ) : adminTab === "index" ? (
+        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+              <span className="brand-text">People index</span>
+            </h1>
+            <p className="mt-1 text-sm text-body">
+              The shared flywheel: every engine-found person, deduplicated,
+              compounding across searches. Public-web results only, users&apos;
+              manual and imported contacts never enter it.
+            </p>
+          </div>
+          <IndexView getToken={getToken} />
+        </main>
       ) : (
         <main className="mx-auto w-full max-w-6xl px-6 py-10">
           <div className="mb-6">

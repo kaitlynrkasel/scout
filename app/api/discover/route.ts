@@ -5,6 +5,7 @@ import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
 import { clientIp, guestSearchAllowed, recordGuestSearch } from "@/lib/guest";
 import { computeTuningSignal, buildPersonalOverride, buildTeamOverride } from "@/lib/autotune";
+import { searchPeopleIndex, upsertPeopleIndex } from "@/lib/peopleIndex";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
@@ -189,6 +190,10 @@ export async function POST(req: NextRequest) {
                 precomputedPlan && typeof precomputedPlan === "object"
                   ? precomputedPlan
                   : undefined,
+              // Shared people index: a small salted slice of previously
+              // verified people joins the candidate pool (per-user salt keeps
+              // slices different across users, see lib/peopleIndex guards).
+              indexLookup: (g) => searchPeopleIndex(g, 6, `${uid || ip}:${salt || ""}`),
               onOpp: (o) => {
                 try {
                   send(controller, { type: "opp", opp: o });
@@ -207,6 +212,9 @@ export async function POST(req: NextRequest) {
           );
           if (req.signal.aborted) return; // client cancelled; don't meter
           send(controller, { type: "done", result });
+          // Feed the flywheel: engine-found people persist in the shared index
+          // (public-web results only; fire-and-forget, never blocks the reply).
+          void upsertPeopleIndex(result.opportunities || []);
           if (metered && uid) {
             try {
               await consumeSearch(uid);

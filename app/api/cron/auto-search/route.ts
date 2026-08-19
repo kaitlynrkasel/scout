@@ -8,6 +8,7 @@ import { htmlEsc } from "@/lib/tuneEmail";
 import { getEntitlement, consumeSearch } from "@/lib/billing";
 import { draftFor } from "@/lib/draft";
 import { sharedPipelineExclusions, addSharedFinds } from "@/lib/teams";
+import { searchPeopleIndex, upsertPeopleIndex } from "@/lib/peopleIndex";
 import type { Opportunity } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -112,8 +113,17 @@ export async function GET(req: NextRequest) {
         String(s.about || ""),
         String(s.use_case || "networking"),
         Math.min(Number(s.max_finds) || 5, 10),
-        feedback
+        feedback,
+        undefined,
+        undefined,
+        undefined,
+        {
+          // Same shared-index blend as interactive searches: small salted
+          // slice in, results written back (public-web finds only).
+          indexLookup: (g) => searchPeopleIndex(g, 6, `${s.user_id}:${id}`),
+        }
       );
+      void upsertPeopleIndex(result.opportunities || []);
       // Running the engine spent a search — meter it against their plan.
       try {
         await consumeSearch(s.user_id as string);

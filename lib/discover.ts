@@ -1405,6 +1405,12 @@ export async function discover(
     onProgress?: (msg: string) => void;
     signal?: AbortSignal;
     plan?: GoalPlan | null;
+    // Shared people-index lookup (see lib/peopleIndex). Returns a SMALL salted
+    // slice of previously-verified people shaped like search results; they are
+    // appended to the candidate pool and must re-earn their place through the
+    // same extraction, fit scoring, and exposure caps as fresh candidates.
+    // Kept as an injected function so the engine stays storage-agnostic.
+    indexLookup?: (goal: string) => Promise<{ title: string; url: string; content: string }[]>;
   }
 ): Promise<DiscoverResult> {
   const aborted = () => !!opts?.signal?.aborted;
@@ -1881,6 +1887,25 @@ export async function discover(
       opts?.onOpp?.(added); // stream this find to the caller live
     }
   }
+  }
+
+  // Blend in a small slice from the shared people index, AFTER the fresh web
+  // candidates so the live web stays the majority voice. Capped hard (never
+  // more than 6, never more than half the ask) so the index can inform results
+  // without homogenizing them across users; each entry still has to pass the
+  // same extraction, relevance, fit, and exposure gates as everything else.
+  if (opts?.indexLookup && !aborted()) {
+    try {
+      const idxCap = Math.min(6, Math.max(2, Math.floor(maxItems / 2)));
+      const fromIndex = await opts.indexLookup(goal);
+      for (const r of fromIndex.slice(0, idxCap)) {
+        if (r?.url && candidates.some((c) => c.url === r.url)) continue;
+        candidates.push({ title: r.title || "", url: r.url || "", content: r.content || "" });
+      }
+      if (fromIndex.length) emit("Checking people Scout has verified before");
+    } catch {
+      /* index is an accelerant, never a dependency */
+    }
   }
 
   await extractFrom(0);
