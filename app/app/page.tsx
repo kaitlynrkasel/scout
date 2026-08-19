@@ -13,6 +13,7 @@ import CornerDog from "./CornerDog";
 import { Reveal, CountUp, FadeIn } from "./motion";
 import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
+import { InstallBanner, InstallCard } from "./InstallScout";
 import ImportOutreach from "./ImportOutreach";
 import { MicButton, joinSpoken } from "./dictate";
 import {
@@ -6454,6 +6455,9 @@ function ScoutTool({
         </div>
       )}
       <div className="flex min-w-0 flex-1 flex-col pt-[calc(52px+env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0">
+      {/* One-time nudge to install to the home screen (phones only, and only
+          where the browser can actually do it). */}
+      <InstallBanner />
       {/* Guest trial banner: everything is local until they make an account. */}
       {guest && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warm-border bg-brown-tint/50 px-6 py-2.5 text-sm">
@@ -18076,6 +18080,10 @@ function SettingsTab({
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         <span className="text-brown">Settings</span>
       </h1>
+
+      {/* ---- App ---- */}
+      <div className="kicker mt-8">App</div>
+      <InstallCard />
 
       {/* ---- Display ---- */}
       <div className="kicker mt-8">Display</div>
