@@ -1262,6 +1262,30 @@ interface BillingStatus {
   freeResetsAt: string | null;
 }
 
+// Every screen the sidebar can land on. Doubles as the whitelist for the tab
+// stored in the URL hash, so a hand-edited or stale #fragment can't wedge the
+// app on a screen that doesn't exist.
+const TABS = [
+  "outreach",
+  "finds",
+  "dashboard",
+  "team",
+  "templates",
+  "profile",
+  "account",
+  "settings",
+  "billing",
+  "manual",
+  "spreadsheet",
+  "lists",
+] as const;
+type TabId = (typeof TABS)[number];
+
+function tabFromHash(raw: string): TabId | null {
+  const id = decodeURIComponent(raw.replace(/^#/, ""));
+  return (TABS as readonly string[]).includes(id) ? (id as TabId) : null;
+}
+
 function ScoutTool({
   initialProfile,
   onSaveProfile,
@@ -1274,9 +1298,45 @@ function ScoutTool({
   guest,
   onCreateAccount,
 }: ScoutToolProps) {
-  const [tab, setTab] = useState<
-    "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing" | "manual" | "spreadsheet" | "lists"
-  >("dashboard");
+  const [tab, setTab] = useState<TabId>("dashboard");
+
+  // Mirror the active tab in the URL hash (#finds, #templates, …) so a refresh
+  // reopens the screen you were on instead of dropping you back on the
+  // dashboard — and so a tab can be linked or bookmarked. Restored in an effect
+  // rather than the useState initializer so the server and the first client
+  // render agree; the hash is only readable after hydration.
+  const tabRestored = useRef(false);
+  useEffect(() => {
+    const initial = tabFromHash(window.location.hash);
+    if (initial) setTab(initial);
+    tabRestored.current = true;
+    // Keep the view honest if the hash changes under us — an in-page #link or
+    // someone editing the address bar — instead of leaving it stranded.
+    const onHashChange = () => {
+      const next = tabFromHash(window.location.hash);
+      if (next) setTab(next);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  useEffect(() => {
+    // Skip until the restore above has run, or the default "dashboard" would
+    // overwrite the hash we're about to read.
+    if (!tabRestored.current) return;
+    if (window.location.hash === `#${tab}`) return;
+    try {
+      // replaceState, not push: switching tabs shouldn't stack history entries
+      // the back button has to chew through.
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${window.location.search}#${tab}`
+      );
+    } catch {
+      /* ignore */
+    }
+  }, [tab]);
 
   // Small GSAP fade-and-lift on the main content whenever the active tab
   // changes (dashboard, finds, manual, …). useGSAP reverts the previous tween
