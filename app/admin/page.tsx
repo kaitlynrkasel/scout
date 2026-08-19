@@ -12,12 +12,13 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import InsightsView, { ConciergePanel } from "./InsightsView";
 import IndexView from "./IndexView";
+import PricingView from "./PricingView";
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
-  const [adminTab, setAdminTab] = useState<"insights" | "concierge" | "index">("insights");
+  const [adminTab, setAdminTab] = useState<"insights" | "concierge" | "index" | "pricing">("insights");
 
   useEffect(() => {
     if (!supabase) {
@@ -92,7 +93,7 @@ export default function AdminPage() {
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
           <nav className="ml-4 flex items-center gap-1">
-            {(["insights", "concierge", "index"] as const).map((t) => (
+            {(["insights", "concierge", "index", "pricing"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
@@ -116,6 +117,19 @@ export default function AdminPage() {
       </header>
       {adminTab === "insights" ? (
         <InsightsView getToken={getToken} />
+      ) : adminTab === "pricing" ? (
+        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+              <span className="brand-text">Pricing model</span>
+            </h1>
+            <p className="mt-1 text-sm text-body">
+              Drag the levers, watch profit move. Everything recalculates
+              instantly; your inputs stay saved on this device.
+            </p>
+          </div>
+          <PricingView />
+        </main>
       ) : adminTab === "index" ? (
         <main className="mx-auto w-full max-w-6xl px-6 py-10">
           <div className="mb-6">

@@ -15342,6 +15342,17 @@ function AutoSearchPanel({
             {/* The two decisions: auto finds (schedule) + auto emails (digest). */}
             <div className="flex flex-wrap items-center gap-2 text-xs">
               <span className="font-semibold text-body/70">Auto-find:</span>
+              {/* State first, so a cadence picker never reads as "already on". */}
+              <span
+                className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                  items.length
+                    ? "bg-sage/20 text-sage-deep"
+                    : "bg-warm-bg text-body/60"
+                }`}
+              >
+                {items.length ? `${items.length} on` : "off"}
+              </span>
+              <span className="text-body/60">Turn on below to re-run this search</span>
               <select
                 value={cadence}
                 onChange={(e) => setCadence(e.target.value as "daily" | "weekly")}
@@ -15350,7 +15361,7 @@ function AutoSearchPanel({
                 <option value="daily">every day</option>
                 <option value="weekly">every week</option>
               </select>
-              <span className="text-body/60">finds land in your Finds automatically.</span>
+              <span className="text-body/60">with finds landing automatically.</span>
             </div>
             <label className="flex cursor-pointer items-start gap-2 text-xs">
               <input
