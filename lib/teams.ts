@@ -119,7 +119,7 @@ export async function createWorkspace(
   let { data: ws, error } = await db()
     .from("workspaces")
     .insert(full)
-    .select("id, name, about, website, industry, stage, created_by, created_at")
+    .select("id, name, about, website, industry, stage, location, created_by, created_at")
     .single();
   // If the DB predates the about/website/industry/stage columns (teams.sql not
   // fully applied), don't hard-fail, create the company with just its name so the
@@ -185,7 +185,14 @@ export async function listJoinableWorkspaces(uid: string, email: string) {
 export async function updateWorkspaceDetails(
   uid: string,
   workspaceId: string,
-  patch: { name?: string; about?: string; website?: string; industry?: string; stage?: string }
+  patch: {
+    name?: string;
+    about?: string;
+    website?: string;
+    industry?: string;
+    stage?: string;
+    location?: string;
+  }
 ) {
   await assertRole(uid, workspaceId, "admin");
   const update: Record<string, any> = {};
@@ -198,12 +205,13 @@ export async function updateWorkspaceDetails(
   if (typeof patch.website === "string") update.website = patch.website.trim() || null;
   if (typeof patch.industry === "string") update.industry = patch.industry.trim() || null;
   if (typeof patch.stage === "string") update.stage = patch.stage.trim() || null;
+  if (typeof patch.location === "string") update.location = patch.location.trim() || null;
   if (!Object.keys(update).length) throw new TeamError("Nothing to update.");
   const { data, error } = await db()
     .from("workspaces")
     .update(update)
     .eq("id", workspaceId)
-    .select("id, name, about, website, industry, stage")
+    .select("id, name, about, website, industry, stage, location")
     .single();
   if (error) throw new TeamError(error.message, 500);
   return data;
@@ -266,7 +274,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
   if (wsIds.length) {
     const { data: wsRows } = await db()
       .from("workspaces")
-      .select("id, name, about, website, industry, stage, created_by, created_at, comped")
+      .select("id, name, about, website, industry, stage, location, created_by, created_at, comped")
       .in("id", wsIds);
     const { data: memberRows } = await db()
       .from("workspace_members")

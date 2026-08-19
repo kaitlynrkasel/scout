@@ -31,6 +31,10 @@ alter table public.workspaces add column if not exists about text;
 alter table public.workspaces add column if not exists website text;
 alter table public.workspaces add column if not exists industry text;
 alter table public.workspaces add column if not exists stage text;
+-- Where the company is based (optional, free text: "Seattle, WA", "Remote —
+-- US"). Searches treat it as a REGIONAL preference, not a filter: it ranks
+-- nearby opportunities up without hiding the rest.
+alter table public.workspaces add column if not exists location text;
 
 create table if not exists public.workspace_members (
   workspace_id uuid not null references public.workspaces(id) on delete cascade,
