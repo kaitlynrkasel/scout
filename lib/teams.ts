@@ -612,8 +612,12 @@ export async function setMemberRole(
   role: string
 ) {
   const callerRole = await assertRole(uid, workspaceId, "admin");
-  if (!ASSIGNABLE_ROLES.includes(role as any))
-    throw new TeamError("Pick admin, editor, or viewer.");
+  // Owners can also promote a member to co-owner; everyone else is limited to
+  // the assignable set.
+  const allowed =
+    callerRole === "owner" ? ["owner", ...ASSIGNABLE_ROLES] : [...ASSIGNABLE_ROLES];
+  if (!allowed.includes(role as any))
+    throw new TeamError("Pick owner, admin, editor, or viewer.");
   const { data: target } = await db()
     .from("workspace_members")
     .select("role")
@@ -621,11 +625,13 @@ export async function setMemberRole(
     .eq("user_id", targetUserId)
     .maybeSingle();
   if (!target) throw new TeamError("That person is not on this team.", 404);
+  // No coups: an owner's role can never be changed by anyone else, co-owners
+  // included. (Owners are equals; neither can demote the other.)
   if (target.role === "owner")
-    throw new TeamError("The company owner's role can't be changed.", 403);
-  // Only the owner can grant admin or change someone who is currently an admin.
-  if ((role === "admin" || target.role === "admin") && callerRole !== "owner")
-    throw new TeamError("Only the company owner can manage admins.", 403);
+    throw new TeamError("An owner's role can't be changed.", 403);
+  // Only an owner can grant admin/owner or change someone who is an admin.
+  if ((role === "admin" || role === "owner" || target.role === "admin") && callerRole !== "owner")
+    throw new TeamError("Only a company owner can manage admins and owners.", 403);
   await db()
     .from("workspace_members")
     .update({ role })

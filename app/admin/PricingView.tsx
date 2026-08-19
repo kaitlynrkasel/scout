@@ -21,7 +21,10 @@ interface Model {
   costPerSearch: number;
   enrichPerPaid: number;
   enrichCost: number;
-  fixedCosts: number;
+  vercelCost: number;
+  supabaseCost: number;
+  claudeSubCost: number;
+  otherFixed: number;
   stripePct: number;
   stripeFlat: number;
 }
@@ -38,10 +41,16 @@ const DEFAULTS: Model = {
   costPerSearch: 0.15,
   enrichPerPaid: 0,
   enrichCost: 0.25,
-  fixedCosts: 45,
+  vercelCost: 20, // Vercel Pro
+  supabaseCost: 25, // Supabase Pro
+  claudeSubCost: 100, // the Claude subscription that builds and runs Scout
+  otherFixed: 5, // domain, email sending, misc
   stripePct: 2.9,
   stripeFlat: 0.3,
 };
+
+const fixedTotal = (m: Model) =>
+  m.vercelCost + m.supabaseCost + m.claudeSubCost + m.otherFixed;
 
 function computed(m: Model) {
   const paid = m.starterUsers + m.proUsers;
@@ -54,12 +63,13 @@ function computed(m: Model) {
   const searchCost = searches * m.costPerSearch;
   const enrich = paid * m.enrichPerPaid * m.enrichCost;
   const variable = searchCost + enrich + stripeFees;
-  const profit = mrr - variable - m.fixedCosts;
+  const fixed = fixedTotal(m);
+  const profit = mrr - variable - fixed;
   const margin = mrr > 0 ? ((mrr - variable) / mrr) * 100 : 0;
   // Everything except fixed costs scales linearly with the user mix, so
   // profit(t) = t * marginAtScale1 - fixed. Breakeven t solves profit = 0.
   const scaleMargin = mrr - variable;
-  const breakevenT = scaleMargin > 0 ? m.fixedCosts / scaleMargin : Infinity;
+  const breakevenT = scaleMargin > 0 ? fixed / scaleMargin : Infinity;
   const breakevenPaid = Number.isFinite(breakevenT) ? Math.ceil(breakevenT * paid) : null;
   return { paid, mrr, stripeFees, searches, searchCost, enrich, variable, profit, margin, scaleMargin, breakevenPaid };
 }
@@ -73,7 +83,13 @@ export default function PricingView() {
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE);
-      if (raw) setM({ ...DEFAULTS, ...JSON.parse(raw) });
+      if (raw) {
+        const p = JSON.parse(raw);
+        // Older saves had one lump "fixedCosts"; carry it into Other fixed.
+        if (p.fixedCosts != null && p.vercelCost == null) p.otherFixed = p.fixedCosts;
+        delete p.fixedCosts;
+        setM({ ...DEFAULTS, ...p });
+      }
     } catch {}
   }, []);
   const set = (k: keyof Model) => (v: number) => {
@@ -92,23 +108,38 @@ export default function PricingView() {
     const pts: { paid: number; profit: number }[] = [];
     for (let i = 0; i <= 40; i++) {
       const t = (i / 40) * 2.5;
-      pts.push({ paid: Math.round(t * c.paid), profit: t * c.scaleMargin - m.fixedCosts });
+      pts.push({ paid: Math.round(t * c.paid), profit: t * c.scaleMargin - fixedTotal(m) });
     }
     return pts;
-  }, [c.paid, c.scaleMargin, m.fixedCosts]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [c.paid, c.scaleMargin, m.vercelCost, m.supabaseCost, m.claudeSubCost, m.otherFixed]);
 
   const breakdown = [
     { name: "Revenue (MRR)", value: c.mrr, kind: "rev" as const },
     { name: "Search costs", value: c.searchCost, kind: "cost" as const },
     { name: "Enrichment", value: c.enrich, kind: "cost" as const },
     { name: "Stripe fees", value: c.stripeFees, kind: "cost" as const },
-    { name: "Fixed (hosting)", value: m.fixedCosts, kind: "cost" as const },
+    { name: "Fixed: tools", value: fixedTotal(m), kind: "cost" as const },
   ];
 
   return (
     <div className="space-y-6">
       {/* Validated chart colors, light + dark steps (blue/orange, CVD-safe). */}
       <style>{`:root{--ch-rev:#2a78d6;--ch-cost:#eb6834}html.dark{--ch-rev:#3987e5;--ch-cost:#d95926}`}</style>
+
+      {/* First-timer's guide, collapsed by default */}
+      <details className="rounded-2xl border border-warm-border bg-surface px-5 py-4 shadow-soft">
+        <summary className="cursor-pointer text-sm font-bold text-ink">
+          New to pricing models? Read this first (60 seconds)
+        </summary>
+        <div className="mt-3 space-y-2 text-sm leading-relaxed text-body/80">
+          <p><b className="text-ink">MRR</b> (monthly recurring revenue): what subscribers pay you each month. The number investors and founders track first.</p>
+          <p><b className="text-ink">Gross margin</b>: of every revenue dollar, how much is left after the costs that scale with usage (searches, enrichment, card fees). It measures whether the product itself is profitable, before rent-like fixed costs.</p>
+          <p><b className="text-ink">Breakeven</b>: how many paying users you need before profit crosses zero, keeping today's mix of tiers and prices.</p>
+          <p><b className="text-ink">Per-user economics</b>: what one user of each tier nets you per month. If a tier is negative, every new subscriber on it loses you money, growth makes things worse, not better.</p>
+          <p>Play pattern: change ONE lever, watch which tiles move. The advice box below the tiles explains what the current numbers are telling you.</p>
+        </div>
+      </details>
 
       {/* Hero numbers */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -122,6 +153,9 @@ export default function PricingView() {
           sub={c.breakevenPaid == null ? "unit economics negative" : "paying users at this mix"}
         />
       </div>
+
+      {/* Industry benchmarks + what-this-means advice */}
+      <HealthCard m={m} c={c} />
 
       <div className="grid gap-4 lg:grid-cols-[340px_1fr]">
         {/* ---- Levers ---- */}
@@ -144,7 +178,10 @@ export default function PricingView() {
           <Panel title="Costs">
             <Lever label="Cost / search" v={m.costPerSearch} set={set("costPerSearch")} min={0} max={1} step={0.01} money />
             <Lever label="Cost / enrichment" v={m.enrichCost} set={set("enrichCost")} min={0} max={1} step={0.01} money />
-            <Lever label="Fixed / mo (hosting)" v={m.fixedCosts} set={set("fixedCosts")} min={0} max={1000} step={5} money />
+            <Lever label="Vercel (hosting)" v={m.vercelCost} set={set("vercelCost")} min={0} max={200} step={5} money />
+            <Lever label="Supabase (database)" v={m.supabaseCost} set={set("supabaseCost")} min={0} max={200} step={5} money />
+            <Lever label="Claude subscription" v={m.claudeSubCost} set={set("claudeSubCost")} min={0} max={400} step={10} money />
+            <Lever label="Other fixed (domain, email)" v={m.otherFixed} set={set("otherFixed")} min={0} max={200} step={1} money />
             <Lever label="Stripe %" v={m.stripePct} set={set("stripePct")} min={0} max={6} step={0.1} />
           </Panel>
           <button
@@ -206,6 +243,102 @@ export default function PricingView() {
             </p>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Industry benchmarks + what-the-numbers-mean advice, in plain language. The
+// targets are the widely used SaaS rules of thumb, not laws: gross margin 70%+
+// (great software businesses run 75-85%), freemium free-to-paid conversion 2-5%,
+// and every paid tier profitable on its own.
+function HealthCard({ m, c }: { m: Model; c: ReturnType<typeof computed> }) {
+  const starterCost =
+    m.starterSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.starterPrice * (m.stripePct / 100) + m.stripeFlat;
+  const proCost =
+    m.proSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.proPrice * (m.stripePct / 100) + m.stripeFlat;
+  const starterNet = m.starterPrice - starterCost;
+  const proNet = m.proPrice - proCost;
+  const conv = m.freeUsers + c.paid > 0 ? (c.paid / (m.freeUsers + c.paid)) * 100 : 0;
+  const freeBurn = m.freeUsers * m.freeSearches * m.costPerSearch;
+
+  type Status = "good" | "warn" | "bad";
+  const rows: { name: string; value: string; target: string; status: Status; meaning: string }[] = [
+    {
+      name: "Gross margin",
+      value: `${Math.round(c.margin)}%`,
+      target: "70%+ (software standard)",
+      status: c.margin >= 70 ? "good" : c.margin >= 50 ? "warn" : "bad",
+      meaning:
+        c.margin >= 70
+          ? "Healthy: most of each dollar survives its own costs."
+          : "Usage costs eat too much of each dollar. Biggest levers: cost per search, or smaller search allowances per tier.",
+    },
+    {
+      name: "Free to paid conversion",
+      value: `${conv.toFixed(1)}%`,
+      target: "2 to 5% (freemium standard)",
+      status: conv >= 2 ? "good" : conv >= 1 ? "warn" : "bad",
+      meaning:
+        conv >= 2
+          ? "In the normal band for freemium products."
+          : "Below the freemium norm. Either the free tier gives too much away, or upgrading isn't tempting enough.",
+    },
+    {
+      name: "Starter tier per-user",
+      value: `${starterNet >= 0 ? "+" : ""}$${starterNet.toFixed(2)}`,
+      target: "positive",
+      status: starterNet >= 0 ? "good" : "bad",
+      meaning:
+        starterNet >= 0
+          ? "Every Starter subscriber adds money."
+          : "Each Starter LOSES money: the search allowance costs more than the price. Raise the price or shrink the allowance.",
+    },
+    {
+      name: "Pro tier per-user",
+      value: `${proNet >= 0 ? "+" : ""}$${proNet.toFixed(2)}`,
+      target: "positive",
+      status: proNet >= 0 ? "good" : "bad",
+      meaning:
+        proNet >= 0
+          ? "Every Pro subscriber adds money."
+          : "Each Pro LOSES money: the allowance costs more than the price. Growth makes this worse, fix before launch.",
+    },
+    {
+      name: "Free-tier spend",
+      value: fmt$(freeBurn) + "/mo",
+      target: "an amount you'd happily call marketing",
+      status: c.mrr === 0 ? "warn" : freeBurn <= c.mrr * 0.5 ? "good" : "warn",
+      meaning:
+        "Free users are your ad budget. Fine while it converts; cap free searches if this number outgrows its job.",
+    },
+  ];
+  const chip = (s: Status) =>
+    s === "good"
+      ? "bg-sage/15 text-sage-deep border-sage/40"
+      : s === "warn"
+        ? "bg-attention/10 text-attention border-attention/40"
+        : "bg-danger/10 text-danger border-danger/40";
+  const word = (s: Status) => (s === "good" ? "on target" : s === "warn" ? "watch" : "fix");
+  return (
+    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-soft">
+      <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+        How healthy is this? (vs industry standards)
+      </div>
+      <div className="mt-3 space-y-2.5">
+        {rows.map((r) => (
+          <div key={r.name} className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm">
+            <span className="w-44 shrink-0 font-semibold text-ink">{r.name}</span>
+            <span className="w-20 shrink-0 font-bold tabular-nums text-ink">{r.value}</span>
+            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${chip(r.status)}`}>
+              {word(r.status)}
+            </span>
+            <span className="text-xs text-body/50">aim: {r.target}</span>
+            <span className="w-full pl-0 text-[12.5px] leading-relaxed text-body/70 sm:w-auto sm:flex-1 sm:basis-full">
+              {r.meaning}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

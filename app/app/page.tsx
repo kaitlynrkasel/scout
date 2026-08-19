@@ -614,6 +614,23 @@ function isJobUseCaseClient(useCase: string): boolean {
   );
 }
 
+// A goal about PEOPLE to meet (alumni, mentors, "open to a chat") is a
+// networking search even when it lives in a job-hunt project. Without this, a
+// grad-school project's use case drags the engine into postings/employers mode
+// and it rejects everyone ("few active postings matched"). Postings words in
+// the goal keep jobs mode, the override only fires for unambiguous people-goals.
+function goalWantsPeopleNotPostings(goal: string): boolean {
+  const g = goal || "";
+  const peopley =
+    /\b(alumni|alumnus|alumna|mentors?|people|professionals?|graduates?|students?|open to (a )?(quick )?(chat|call|coffee)|coffee chat|networking|connect with)\b/i.test(
+      g
+    );
+  const postingy = /\b(openings?|postings?|positions?|apply|applications?|hiring|jobs?|internships?)\b/i.test(
+    g
+  );
+  return peopley && !postingy;
+}
+
 // Quick reasons offered when passing on a find (plus free-text "Other").
 const DENY_REASONS = [
   "Wrong industry",
@@ -5240,7 +5257,10 @@ function ScoutTool({
       // For job/internship searches, layer in the competitiveness + company-size
       // directives so the LLM narrows to the right tier of opportunity. The
       // per-search override wins over the profile setting.
-      const jobish = isJobUseCaseClient(activeUseCase);
+      const effectiveUseCase = goalWantsPeopleNotPostings(goal)
+        ? "networking"
+        : activeUseCase;
+      const jobish = isJobUseCaseClient(effectiveUseCase);
       // "na" (the default) = competitiveness isn't factored in; "" = inherit
       // the profile's setting; a level = explicit per-search override.
       const compLevel: Competitiveness =
@@ -5308,7 +5328,7 @@ function ScoutTool({
         body: JSON.stringify({
           goal: goalForApi,
           about: aboutForApi,
-          useCase: activeUseCase,
+          useCase: effectiveUseCase,
           feedback,
           // Reuse the plan from the understanding step (skips a 2nd decompose)
           // unless the user added detail, which warrants a fresh plan.
@@ -16862,13 +16882,14 @@ function TeamTab({
                         disabled={busy === "role-" + m.user_id}
                         className="scout-select rounded-lg border border-warm-border bg-surface px-2.5 py-1 text-xs font-semibold text-ink outline-none transition focus:border-coral disabled:opacity-50"
                       >
-                        {(isOwner ? ["admin", "editor", "viewer"] : ["editor", "viewer"]).map(
-                          (r) => (
-                            <option key={r} value={r}>
-                              {r[0].toUpperCase() + r.slice(1)}
-                            </option>
-                          )
-                        )}
+                        {(isOwner
+                          ? ["owner", "admin", "editor", "viewer"]
+                          : ["editor", "viewer"]
+                        ).map((r) => (
+                          <option key={r} value={r}>
+                            {r === "owner" ? "Co-owner" : r[0].toUpperCase() + r.slice(1)}
+                          </option>
+                        ))}
                       </select>
                     ) : (
                       <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-body/60">

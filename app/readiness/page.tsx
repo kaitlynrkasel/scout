@@ -158,7 +158,26 @@ function ReadinessInner() {
     );
 
   return (
-    <main className="mx-auto max-w-3xl px-5 pb-24 pt-10">
+    <div className="lg:grid lg:h-screen lg:grid-cols-[minmax(0,1fr)_minmax(500px,46%)] lg:overflow-hidden">
+      {/* Live Scout on the left (desktop): run the steps without leaving the
+          checklist. Same-origin embed, so the security headers allow it. */}
+      <div className="hidden border-r border-warm-border lg:flex lg:min-h-0 lg:flex-col">
+        <div className="flex items-center gap-2 border-b border-warm-border bg-surface px-4 py-2 text-xs">
+          <span className="font-bold text-ink">Scout, live</span>
+          <span className="text-body/50">do the steps right here</span>
+          <a
+            href="/app"
+            target="_blank"
+            rel="noreferrer"
+            className="ml-auto font-semibold text-accent hover:underline"
+          >
+            Open in its own tab
+          </a>
+        </div>
+        <iframe src="/app" title="Scout" className="min-h-0 w-full flex-1 bg-cream" />
+      </div>
+
+      <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-10 lg:h-screen lg:max-w-none lg:overflow-y-auto lg:px-8">
       <div className="kicker">Scout, before we go live</div>
       <h1 className="mt-2 font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Launch readiness
@@ -227,12 +246,34 @@ function ReadinessInner() {
                           className="flex w-full items-baseline gap-2 text-left"
                         >
                           <span className={`text-[10px] text-body/40 ${open ? "rotate-90" : ""}`}>▶</span>
-                          <span className="flex-1 text-sm font-bold leading-snug text-ink">{it.title}</span>
+                          {/* Done marker: verdict color at a glance. */}
+                          {c?.verdict && (
+                            <span
+                              aria-hidden
+                              className={`h-2.5 w-2.5 shrink-0 self-center rounded-full ${
+                                c.verdict === "ok"
+                                  ? "bg-sage"
+                                  : c.verdict === "warn"
+                                    ? "bg-attention"
+                                    : "bg-danger"
+                              }`}
+                            />
+                          )}
+                          <span
+                            className={`flex-1 text-sm font-bold leading-snug ${
+                              c?.verdict && !open ? "text-body/55" : "text-ink"
+                            }`}
+                          >
+                            {it.title}
+                          </span>
                         </button>
-                        <p className="ml-5 mt-1 text-[13px] leading-relaxed text-body/75">
-                          <b className="text-ink/80">Good looks like:</b> {it.good}
-                        </p>
-                        <div className="ml-5 mt-2.5 flex flex-wrap items-center gap-2">
+                        {/* Marked items fold down to one line; open to see detail. */}
+                        {(!c?.verdict || open) && (
+                          <p className="ml-5 mt-1 text-[13px] leading-relaxed text-body/75">
+                            <b className="text-ink/80">Good looks like:</b> {it.good}
+                          </p>
+                        )}
+                        <div className={`ml-5 flex flex-wrap items-center gap-2 ${c?.verdict && !open ? "mt-1.5" : "mt-2.5"}`}>
                           <span
                             className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
                               it.sev === "must"
@@ -310,7 +351,8 @@ function ReadinessInner() {
           ))}
         </div>
       ))}
-    </main>
+      </main>
+    </div>
   );
 }
 
