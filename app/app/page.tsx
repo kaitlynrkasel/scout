@@ -3814,7 +3814,20 @@ function ScoutTool({
 
   // Finds belonging to the active project (newest first), and the count still to work.
   // Finds tab can show one project or ALL projects (in the current company lens).
-  const [findsAllProjects, setFindsAllProjects] = useState(false);
+  const [findsAllProjects, setFindsAllProjects] = useState(() => {
+    try {
+      return typeof window !== "undefined" && localStorage.getItem("scout_all_projects") === "1";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("scout_all_projects", findsAllProjects ? "1" : "0");
+    } catch {
+      /* ignore */
+    }
+  }, [findsAllProjects]);
   const myFinds = findsAllProjects
     ? visibleFinds
     : activeProject
@@ -6136,8 +6149,14 @@ function ScoutTool({
         openCommand={() => setCmdOpen(true)}
         projects={visibleProjects}
         hasPersonal={hasPersonalProjects}
-        activeId={activeId}
-        onSelectProject={selectProject}
+        activeId={findsAllProjects ? "__all__" : activeId}
+        onSelectProject={(id: string) => {
+          if (id === "__all__") setFindsAllProjects(true);
+          else {
+            setFindsAllProjects(false);
+            selectProject(id);
+          }
+        }}
         companies={companies}
         activeCompanyId={activeCompanyId}
         onSelectCompany={selectCompany}
@@ -8547,7 +8566,12 @@ function SideNav({
             ariaLabel="Active project"
             value={activeId}
             onChange={onSelectProject}
-            options={projects.map((p) => ({ value: p.id, label: p.name }))}
+            options={[
+              ...(projects.length > 1
+                ? [{ value: "__all__", label: "All projects" }]
+                : []),
+              ...projects.map((p) => ({ value: p.id, label: p.name })),
+            ]}
           />
         ) : (
           <p className="px-2 text-[11px] leading-relaxed text-[color:var(--su-rail-muted)]">
