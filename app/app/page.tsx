@@ -6448,7 +6448,7 @@ function ScoutTool({
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col pt-[52px] md:pt-0">
+      <div className="flex min-w-0 flex-1 flex-col pt-[calc(52px+env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0">
       {/* Guest trial banner: everything is local until they make an account. */}
       {guest && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-warm-border bg-brown-tint/50 px-6 py-2.5 text-sm">
@@ -8788,7 +8788,7 @@ function SideNav({
     <>
       {/* Mobile top bar (hamburger + logo + search). Fixed, so it spans the
           full width above the content; the content column adds top padding. */}
-      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 backdrop-blur md:hidden">
+      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
         <button
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
@@ -8819,7 +8819,7 @@ function SideNav({
             className="absolute inset-0 bg-ink/40"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto p-3.5 shadow-xl">
+          <aside className="rail su-rail absolute left-0 top-0 flex h-full w-[236px] max-w-[82vw] flex-col gap-0.5 overflow-y-auto overscroll-contain p-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] pt-[calc(0.875rem+env(safe-area-inset-top))] shadow-xl">
             {navContent}
           </aside>
         </div>
