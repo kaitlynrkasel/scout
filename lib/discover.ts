@@ -791,6 +791,102 @@ function pickTrustedUrl(llmUrl: string, candUrl: string, candContent: string): s
   return cand || "";
 }
 
+// ---- Platform sweeps ----------------------------------------------------
+// Which public platforms are worth a dedicated domain-scoped pass for a given
+// goal. Ordinary search ranks articles about people above the people
+// themselves; scoping a query to one platform forces profile pages to the
+// surface. Capped at 3 platforms per search so a sweep stays a few extra
+// queries, not a second full search.
+//
+// Every entry is the search index's PUBLIC view of that site. Nothing here
+// logs in, and platforms whose content is walled (Facebook) or effectively
+// unindexed are deliberately absent, a sweep that returns login pages costs
+// credits and yields nothing.
+const PLATFORM_SWEEPS: {
+  key: string;
+  label: string;
+  domains: string[];
+  // When this platform is worth sweeping. Matched against goal + use case.
+  when: RegExp;
+  // Skip when the goal is clearly a different world (keeps music sweeps off a
+  // finance search, and vice versa).
+  unless?: RegExp;
+}[] = [
+  {
+    key: "linkedin",
+    label: "public LinkedIn profiles",
+    domains: ["linkedin.com"],
+    // The default professional sweep: any goal about people or companies.
+    when: /\b(alumni|alumnus|alumna|mentors?|people|professionals?|graduates?|students?|members?|founders?|owners?|executives?|managers?|directors?|recruiters?|hiring|coordinators?|supervisors?|agents?|producers?|marketers?|engineers?|designers?|analysts?|consultants?|company|companies|business|businesses|team|staff|firm|agency|agencies|label|labels|brand|brands|sponsors?|partners?|vendors?|suppliers?|shops?|stores?|restaurants?)\b/i,
+  },
+  {
+    key: "instagram",
+    label: "public Instagram profiles",
+    domains: ["instagram.com"],
+    when: /\b(artist|artists|musician|musicians|band|bands|creator|creators|influencer|influencers|photographer|photographers|model|models|dj|djs|singer|songwriter|rapper|makeup|stylist|chef|fitness|dancer|tattoo|boutique|salon|florist|baker|bakery)\b/i,
+    // Hiring/agency searches mention "designers" or "producers" as roles, that
+    // is a LinkedIn world, not an Instagram one.
+    unless: /\b(hiring|recruit|recruiters?|job|jobs|intern|internships?|apply|application|resume|candidates?)\b/i,
+  },
+  {
+    key: "music",
+    label: "public music profiles",
+    domains: ["bandcamp.com", "soundcloud.com", "songkick.com"],
+    when: /\b(music|musician|musicians|band|bands|album|albums|song|songs|playlist|playlists|record label|labels|touring|gig|gigs|sync|licensing|a&r|indie|singer|songwriter|rapper|dj|djs)\b/i,
+    // "Venue" and "booking" belong to plenty of non-music worlds (weddings,
+    // conferences, catering), so they no longer trigger a music sweep alone.
+    unless: /\b(wedding|weddings|conference|conferences|corporate|catering|banquet|reception)\b/i,
+  },
+  {
+    key: "tech",
+    label: "public developer profiles",
+    domains: ["github.com", "wellfound.com"],
+    when: /\b(engineer|engineers|developer|developers|programmer|programmers|software|technical|cto|devops|data scientist|machine learning|ml|ai|open source|startup|startups|founder|founders)\b/i,
+    unless: /\b(music|musician|band|artist|fashion|restaurant|realtor|real estate)\b/i,
+  },
+  {
+    key: "academic",
+    label: "university and program pages",
+    domains: ["edu"],
+    when: /\b(alumni|alumnus|alumna|graduate|graduates|masters?|mba|msel|phd|doctoral|professor|professors|faculty|academic|university|college|school|program|programs|admissions|fellowship|scholarship|research|researchers?|student|students)\b/i,
+  },
+  {
+    key: "press",
+    label: "journalist and writer profiles",
+    domains: ["muckrack.com", "substack.com", "medium.com"],
+    when: /\b(journalist|journalists|writer|writers|reporter|reporters|editor|editors|press|media|blogger|bloggers|critic|critics|columnist|newsletter|publication|magazine)\b/i,
+  },
+  {
+    key: "social",
+    label: "public X profiles",
+    domains: ["x.com"],
+    when: /\b(creator|creators|influencer|influencers|commentator|commentators|thought leader|community|public figure|journalist|founder|founders|investor|investors|vc)\b/i,
+  },
+];
+
+export function platformSweeps(
+  goal: string,
+  useCase: string,
+  about?: string
+): { key: string; label: string; domains: string[] }[] {
+  // Match on the goal first (what they asked for), with use case + about as
+  // weaker context, so "band members" sweeps music even from a generic profile.
+  const primary = `${goal || ""}`;
+  const context = `${goal || ""} ${useCase || ""} ${String(about || "").slice(0, 400)}`;
+  const picked: { key: string; label: string; domains: string[]; score: number }[] = [];
+  for (const p of PLATFORM_SWEEPS) {
+    if (p.unless?.test(primary)) continue;
+    // A goal-text hit outranks a context-only hit, so the most on-point
+    // platforms survive the cap below.
+    const score = p.when.test(primary) ? 2 : p.when.test(context) ? 1 : 0;
+    if (score) picked.push({ key: p.key, label: p.label, domains: p.domains, score });
+  }
+  return picked
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .map(({ key, label, domains }) => ({ key, label, domains }));
+}
+
 // Hosts that are review sites, directories, or aggregators, never a target's
 // own home. Surfacing one as the find's "website" (a Yelp listing, a
 // YellowPages page) points the user somewhere that isn't the company at all.
@@ -1531,22 +1627,26 @@ export async function discover(
   }
   await gather(queries);
 
-  // PEOPLE goals (alumni, mentors, specific professionals) get a dedicated
-  // sweep of PUBLIC LinkedIn profile pages via domain-scoped search queries,
-  // the densest public source of who-studied-what and who-works-where. This is
-  // the search index's public view of linkedin.com, no login, no scraping
-  // behind auth, so it carries none of the gated-data risk.
-  if (
-    !aborted() &&
-    /\b(alumni|alumnus|alumna|mentors?|people|professionals?|graduates?|students?|members?|veterans?)\b/i.test(
-      goal
-    )
-  ) {
-    const liQueries = Array.from(
-      new Set([goal.replace(/\s+/g, " ").trim().slice(0, 220), ...queries.slice(0, 2)])
-    ).slice(0, 3);
-    emit("Sweeping public LinkedIn profiles");
-    await gather(liQueries, { includeDomains: ["linkedin.com"] });
+  // ---- Platform sweeps -------------------------------------------------
+  // Ordinary web search ranks articles ABOUT people above the people
+  // themselves, so profile pages get buried. These extra passes are scoped to
+  // one platform at a time, which forces the index to hand back profiles.
+  // Everything here is the search index's PUBLIC view of those sites: no
+  // logins, no gated data, none of the ban/ToS exposure of scraping a session.
+  // Each sweep's results flow through the same extraction, fit scoring,
+  // location rules, and cross-user exposure caps as any other candidate.
+  const sweepPlan = platformSweeps(goal, useCase, about);
+  if (sweepPlan.length && !aborted()) {
+    // Same query text every time, only the domain scope changes, so a sweep is
+    // one cheap extra query per platform rather than a whole new search plan.
+    const sweepQueries = Array.from(
+      new Set([goal.replace(/\s+/g, " ").trim().slice(0, 220), ...queries.slice(0, 1)])
+    ).slice(0, 2);
+    for (const sweep of sweepPlan) {
+      if (aborted()) break;
+      emit(`Sweeping ${sweep.label}`);
+      await gather(sweepQueries, { includeDomains: sweep.domains });
+    }
   }
 
   // 3: extract structured records, dedupe by name/host, cap at maxItems.
