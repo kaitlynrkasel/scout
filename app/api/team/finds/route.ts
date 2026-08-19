@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { userFromReq } from "@/lib/supabaseAdmin";
-import { listSharedFinds, addSharedFinds, TeamError } from "@/lib/teams";
+import { listSharedFinds, addSharedFinds, publishFindsToTeam, TeamError } from "@/lib/teams";
 
 export const runtime = "nodejs";
 
@@ -19,17 +19,28 @@ export async function GET(req: NextRequest) {
 }
 
 // Add finds to a shared project (duplicates by prospect are ignored).
+//
+// Two shapes: pass `sharedProjectId` to add to a known project, or pass
+// `workspaceId` + `projectName` to publish into the project of that name,
+// opening one to the workspace if this is the first find under it.
 export async function POST(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
     const body = await req.json();
-    const r = await addSharedFinds(
-      u.id,
-      u.email,
-      String(body.sharedProjectId || ""),
-      Array.isArray(body.finds) ? body.finds : []
-    );
+    const finds = Array.isArray(body.finds) ? body.finds : [];
+    if (!body.sharedProjectId && body.workspaceId && body.projectName) {
+      return NextResponse.json(
+        await publishFindsToTeam(u.id, u.email, {
+          workspaceId: String(body.workspaceId),
+          projectName: String(body.projectName),
+          useCase: String(body.useCase || ""),
+          context: String(body.context || ""),
+          finds,
+        })
+      );
+    }
+    const r = await addSharedFinds(u.id, u.email, String(body.sharedProjectId || ""), finds);
     return NextResponse.json(r);
   } catch (e: any) {
     const status = e instanceof TeamError ? e.status : 500;
