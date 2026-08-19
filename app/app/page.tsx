@@ -508,6 +508,9 @@ interface Project {
   // shown only under "All companies". Lets one account keep several companies'
   // projects separate and filter Outreach/Dashboard by company.
   companyId?: string;
+  // "name|context" the last automatic category retune ran against, so the same
+  // wording never triggers a second inference call.
+  suggestKey?: string;
 }
 interface Category {
   id: string;
@@ -2874,19 +2877,95 @@ function ScoutTool({
     setCatId(seeded[0]?.id || "");
     setGoal(seeded[0]?.goal || "");
     resetResults();
+    // The seeds above inherit the PREVIOUS project's use case; retune them to
+    // what this project's NAME says it's for ("Grad School" should not open
+    // with Sync & Licensing). Async and best-effort.
+    void retuneProject(proj.id, nm, "");
   }
 
   function renameProject(id: string, name: string) {
     const nm = name.trim();
     if (!nm) return;
     saveProjects(projects.map((p) => (p.id === id ? { ...p, name: nm } : p)));
+    const proj = projects.find((p) => p.id === id);
+    void retuneProject(id, nm, proj?.context || "");
+  }
+
+  // Retune a project's use case + starter categories to what the project is
+  // actually FOR (inferred from its name/description). Fixes new projects
+  // inheriting the PREVIOUS project's use case, a "Grad School" project used
+  // to keep music categories like "Sync & Licensing". Only untouched seed
+  // categories (no finds, name+goal still exactly a stock suggestion) are
+  // replaced; anything the user edited or used is never touched. Best-effort
+  // and deduped by wording, so it runs at most once per name+description.
+  async function retuneProject(id: string, name: string, context: string) {
+    if (!getToken) return; // guests keep the static seeds
+    const keyNow = `${name.trim()}|${context.trim()}`;
+    const proj = projects.find((p) => p.id === id);
+    if (!name.trim() && !context.trim()) return;
+    if (proj?.suggestKey === keyNow) return;
+    // Names with no signal ("Untitled project") can't be inferred from alone.
+    if (!context.trim() && /^untitled/i.test(name.trim())) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const r = await fetch("/api/project-suggest", {
+        method: "POST",
+        headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+        body: JSON.stringify({ name, context }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.useCase || !Array.isArray(j.categories) || !j.categories.length) return;
+
+      // A category is a pristine seed only if nothing references it AND its
+      // name+goal still exactly match a stock suggestion.
+      const stock = new Set<string>();
+      for (const list of Object.values(SUGGESTED)) {
+        for (const s of list) stock.add(`${s.name}::${s.goal}`);
+      }
+      for (const s of GENERIC_SUGGESTIONS) stock.add(`${s.name}::${s.goal}`);
+      const used = new Set(finds.map((f) => f.categoryId).filter(Boolean));
+      const projCats = categories.filter((c) => c.projectId === id);
+      const pristine = new Set(
+        projCats
+          .filter((c) => !used.has(c.id) && stock.has(`${c.name}::${c.goal}`))
+          .map((c) => c.id)
+      );
+
+      const surviving = projCats.filter((c) => !pristine.has(c.id));
+      const survivingNames = new Set(surviving.map((c) => c.name.toLowerCase()));
+      const fresh: Category[] = j.categories
+        .filter((s: any) => !survivingNames.has(String(s.name).toLowerCase()))
+        .map((s: any, i: number) => ({
+          id: `sug-${id}-${Date.now()}-${i}`,
+          name: String(s.name),
+          goal: String(s.goal),
+          projectId: id,
+        }));
+
+      saveProjects(
+        projects.map((p) =>
+          p.id === id ? { ...p, useCase: String(j.useCase), suggestKey: keyNow } : p
+        )
+      );
+      if (pristine.size || fresh.length) {
+        saveCats([
+          ...categories.filter((c) => c.projectId !== id || !pristine.has(c.id)),
+          ...fresh,
+        ]);
+        // If the category currently loaded in the form was one of the replaced
+        // seeds, move the selection onto the first tailored one.
+        if (activeId === id && pristine.has(catId) && fresh.length) {
+          setCatId(fresh[0].id);
+          setGoal(fresh[0].goal);
+        }
+      }
+    } catch {
+      /* inference is a nicety; the seeds stay if it fails */
+    }
   }
 
   function removeProject(id: string) {
-    if (projects.length <= 1) {
-      setError("Keep at least one project. Add another first, then delete this one.");
-      return;
-    }
     const proj = projects.find((p) => p.id === id);
     const findCount = finds.filter((f) => f.projectId === id).length;
     const catCount = categories.filter((c) => c.projectId === id).length;
@@ -2899,9 +2978,23 @@ function ScoutTool({
       );
       if (!ok) return;
     }
-    const nextProjects = projects.filter((p) => p.id !== id);
+    let nextProjects = projects.filter((p) => p.id !== id);
+    let nextCats = categories.filter((c) => c.projectId !== id);
+    // Deleting the last project is allowed, the app just seeds a fresh blank
+    // one to land in (same as first run), since the form needs a project.
+    if (!nextProjects.length) {
+      const def: Project = {
+        id: `proj-${Date.now()}`,
+        name: "Untitled project",
+        useCase: "",
+        context: "",
+        ...(activeCompanyId ? { companyId: activeCompanyId } : {}),
+      };
+      nextProjects = [def];
+      nextCats = [...nextCats, ...seedForProject(def.id, def.useCase)];
+    }
     saveProjects(nextProjects);
-    saveCats(categories.filter((c) => c.projectId !== id));
+    saveCats(nextCats);
     saveFinds(finds.filter((f) => f.projectId !== id));
     if (activeId === id) selectProject(nextProjects[0].id);
   }
@@ -6376,6 +6469,15 @@ function ScoutTool({
                   <textarea
                     value={activeProject?.context || ""}
                     onChange={(e) => setProjectContext(activeId, e.target.value)}
+                    onBlur={() =>
+                      // Describing the project is the strongest signal of what
+                      // it's for; retune its untouched seed categories to match.
+                      void retuneProject(
+                        activeId,
+                        activeProject?.name || "",
+                        activeProject?.context || ""
+                      )
+                    }
                     rows={2}
                     placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                     className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
