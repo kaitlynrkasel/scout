@@ -1402,6 +1402,9 @@ function ScoutTool({
 
   // ---- Outreach state ----
   const [tourOpen, setTourOpen] = useState(false); // intro tour overlay open?
+  // `data-tour` id the tour is spotlighting, so the nav can reveal itself when a
+  // step points at something that only exists inside the mobile drawer.
+  const [tourTarget, setTourTarget] = useState<string | undefined>();
   const [importOpen, setImportOpen] = useState(false); // CSV import modal open?
   // Is the signed-in user on the owner allowlist? Drives whether the Account
   // tab shows an "Admin" link into /admin. The Insights view itself lives on
@@ -6226,6 +6229,7 @@ function ScoutTool({
       <SideNav
         tab={tab}
         setTab={setTab}
+        tourTarget={tourTarget}
         newFindCount={newFindCount}
         templatesCount={visibleTemplates.length}
         profileHasBio={!!profile.bio.trim()}
@@ -6271,6 +6275,7 @@ function ScoutTool({
         setTab={setTab as (t: string) => void}
         onClose={endTour}
         onFinish={endTour}
+        onTargetChange={setTourTarget}
       />
       <ImportOutreach
         open={importOpen}
@@ -8296,6 +8301,7 @@ function SideNav({
   accountEmail,
   onSwitchAccount,
   onAddAccount,
+  tourTarget,
 }: {
   tab: string;
   setTab: (t: any) => void;
@@ -8318,6 +8324,8 @@ function SideNav({
   accountEmail?: string;
   onSwitchAccount?: (email: string) => void;
   onAddAccount?: () => void;
+  /** `data-tour` id the guided tour is spotlighting right now, if any. */
+  tourTarget?: string;
 }) {
   // Account switcher menu (loaded from the local registry when opened).
   const [acctOpen, setAcctOpen] = useState(false);
@@ -8502,6 +8510,24 @@ function SideNav({
     setTab(k);
     setMobileOpen(false);
   };
+
+  // Half the tour's steps spotlight a nav item, and those aren't always on
+  // screen to point at: below `md` they live in the drawer, and Setup
+  // (Templates / Profile / Team) is a collapsed group by default on every
+  // width. Open whatever the current step needs. Declared after the tab effect
+  // above so that when a step switches tab *and* spotlights a nav item in the
+  // same commit, this one settles the drawer last.
+  useEffect(() => {
+    const isNav = !!tourTarget && tourTarget.startsWith("nav-");
+    setMobileOpen(isNav);
+    if (!isNav) return;
+    const key = tourTarget!.slice("nav-".length);
+    const group = NAV_GROUPS.find((g) => g.keys.includes(key));
+    // Expanded for the rest of the session but never written to
+    // scout_nav_groups — the tour shouldn't quietly rewrite a nav preference.
+    if (group) setOpenGroups((prev) => (prev[group.key] ? prev : { ...prev, [group.key]: true }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tourTarget]);
 
   // Espresso-rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the solid terracotta active pill.
