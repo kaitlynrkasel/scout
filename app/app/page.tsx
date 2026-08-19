@@ -6469,7 +6469,7 @@ function ScoutTool({
       <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
-          <main className="mx-auto w-full max-w-6xl px-6 pb-16 pt-8">
+          <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
           <div className="mb-6">
             <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
             <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Outreach</h1>
@@ -6515,11 +6515,11 @@ function ScoutTool({
 
             {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
             {profileComplete || guest ? (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
               <div
                 data-tour="project-switcher"
-                className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[300px_1fr]"
+                className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[300px_1fr] [&>*]:min-w-0"
               >
                 <div>
                   <Label>Project</Label>
@@ -6594,8 +6594,8 @@ function ScoutTool({
                   <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
                   <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
-                    Project options
-                    <span className="font-normal text-body/50">
+                    <span className="shrink-0 whitespace-nowrap">Project options</span>
+                    <span className="min-w-0 truncate font-normal text-body/50">
                       · profile, company, follow-up
                     </span>
                   </summary>
@@ -6657,7 +6657,7 @@ function ScoutTool({
 
               <div
                 data-tour="category-switcher"
-                className="grid gap-6 sm:grid-cols-[300px_1fr]"
+                className="grid gap-6 sm:grid-cols-[300px_1fr] [&>*]:min-w-0"
               >
                 <div>
                   <Label>Category of search</Label>
@@ -7627,7 +7627,7 @@ function ScoutTool({
       )}
 
       {tab === "account" && accountEmail && (
-        <main className="mx-auto max-w-3xl px-6 py-12">
+        <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="text-brown">account</span>
           </h1>
@@ -7644,7 +7644,7 @@ function ScoutTool({
 
           {/* Send from your email — connect the mailbox Scout sends outreach from. */}
           {!!getToken && (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
               <h2 className="text-base font-extrabold tracking-tight text-ink">
                 Send from your email
               </h2>
@@ -7685,7 +7685,7 @@ function ScoutTool({
           )}
 
           {isOwner && (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="max-w-md">
                   <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -8495,6 +8495,13 @@ function SideNav({
   useEffect(() => {
     setMobileOpen(false);
   }, [tab]);
+  // Every nav destination goes through this, so a tap always dismisses the
+  // drawer — including a tap on the screen you're already on, where the
+  // effect above wouldn't fire.
+  const goTab = (k: string) => {
+    setTab(k);
+    setMobileOpen(false);
+  };
 
   // Espresso-rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the solid terracotta active pill.
@@ -8561,7 +8568,13 @@ function SideNav({
         <b className="text-[16px] font-bold tracking-tight">Scout</b>
       </a>
 
-      <button onClick={openCommand} className="su-search mb-2.5">
+      <button
+        onClick={() => {
+          setMobileOpen(false);
+          openCommand();
+        }}
+        className="su-search mb-2.5"
+      >
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
         Search
         <span className="ml-auto text-[10px] text-[#8f8069]">⌘K</span>
@@ -8574,7 +8587,7 @@ function SideNav({
           ) =>
             railItem(it.key, it.label, it.icon, {
               active: tab === it.key,
-              onClick: () => setTab(it.key),
+              onClick: () => goTab(it.key),
               badge: it.badge,
               dot: it.dot,
               tour: `nav-${it.key}`,
@@ -8687,7 +8700,7 @@ function SideNav({
                 <circle cx="12" cy="8" r="3.5" />
                 <path d="M5 20a7 7 0 0 1 14 0" />
               </>,
-              { active: tab === "account", onClick: () => setTab("account") }
+              { active: tab === "account", onClick: () => goTab("account") }
             )}
           {hasAccount &&
             railItem(
@@ -8699,7 +8712,7 @@ function SideNav({
               </>,
               {
                 active: tab === "billing",
-                onClick: () => setTab("billing"),
+                onClick: () => goTab("billing"),
                 tag: billingTier && billingTier !== "free" ? billingTier : undefined,
               }
             )}
@@ -8710,11 +8723,11 @@ function SideNav({
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.9.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.9 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.9l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.9.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.9-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.9V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z" />
             </>,
-            { active: tab === "settings", onClick: () => setTab("settings") }
+            { active: tab === "settings", onClick: () => goTab("settings") }
           )}
         </div>
         {billingTier === "free" && hasAccount && (
-          <button onClick={() => setTab("billing")} className="su-up mt-3 w-full">
+          <button onClick={() => goTab("billing")} className="su-up mt-3 w-full">
             Upgrade to Pro
           </button>
         )}
@@ -10658,7 +10671,7 @@ function SpreadsheetTab({
   const COLS = "minmax(140px,1.4fr) minmax(120px,1.2fr) minmax(160px,1.4fr) minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 130px 150px 150px 40px";
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-6 pb-16 pt-8">
+    <main className="mx-auto w-full max-w-[1400px] px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Your pipeline, as a sheet</div>
@@ -11085,7 +11098,7 @@ function ManualTab({
   const [addOpen, setAddOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]); // names added this session
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 pb-16 pt-8">
+    <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
       <div className="kicker mb-2">Do it yourself</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Manual <span className="text-brown">outreach</span>
@@ -11763,7 +11776,7 @@ function FindsTab({
   };
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
+    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Your pipeline</div>
@@ -14449,7 +14462,7 @@ function DashboardTab({
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-8 py-10">
+    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
       <div className="flex items-center gap-4">
         <h1 className="font-display text-xl font-bold tracking-tight text-ink">Dashboard</h1>
@@ -15622,7 +15635,7 @@ function OutreachAdvice({
         Applied ✓
       </span>
     ) : (
-      <span className="flex shrink-0 items-center gap-1.5">
+      <span className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
         <button
           onClick={() => onApplyTip(tip)}
           className="rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
@@ -15814,7 +15827,7 @@ function OutreachAdvice({
                       key={t.title}
                       className="rounded-2xl border border-coral/30 bg-surface p-4 shadow-card"
                     >
-                      <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                         <div className="text-sm font-bold text-ink">{t.title}</div>
                         <ApplyTip tip={t.advice} />
                       </div>
@@ -15846,7 +15859,7 @@ function OutreachAdvice({
                   key={tip.title}
                   className="rounded-2xl border border-coral/30 bg-warm-bg/40 p-4 shadow-card"
                 >
-                  <div className="flex items-start justify-between gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                     <div className="text-sm font-bold text-ink">{tip.title}</div>
                     <ApplyTip tip={tip.body} />
                   </div>
@@ -15880,9 +15893,9 @@ function OutreachAdvice({
               key={tip.title}
               className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
             >
-              <div className="flex items-start justify-between gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div className="text-sm font-bold text-ink">{tip.title}</div>
-                <div className="flex shrink-0 items-center gap-1.5">
+                <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
                   <ApplyTip tip={tip.body} />
                   {tip.cta && (
                     <button
@@ -16684,7 +16697,7 @@ function TeamTab({
   const shareable = projects.filter((p) => !alreadyShared.has(p.name.toLowerCase()));
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
+    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="text-brown">team</span>
       </h1>
@@ -17628,7 +17641,7 @@ function FindPeek({
                 Open in Finds ↗
               </button>
             </div>
-            <div className="overflow-y-auto px-11 py-8">
+            <div className="overflow-y-auto px-5 py-6 sm:px-11 sm:py-8">
               <div className="grid h-12 w-12 place-items-center rounded-xl text-[15px] font-semibold text-white" style={{ backgroundColor: mo.color }}>
                 {mo.initials}
               </div>
@@ -17770,7 +17783,7 @@ function BillingTab({
   ];
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-8 py-10">
+    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Plan &amp; billing</h1>
 
       {billing && !billing.billingEnabled && (
@@ -18033,7 +18046,7 @@ function SettingsTab({
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         <span className="text-brown">Settings</span>
       </h1>
@@ -18042,7 +18055,7 @@ function SettingsTab({
       <div className="kicker mt-8">Display</div>
 
       {/* Appearance */}
-      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Appearance</h2>
         <div className="mt-4 inline-flex rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(
@@ -18075,7 +18088,7 @@ function SettingsTab({
       </section>
 
       {/* Introduction tour */}
-      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
             <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -18099,7 +18112,7 @@ function SettingsTab({
       <div className="kicker mt-10">Account</div>
 
       {/* Access code */}
-      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Access code</h2>
         {isComp ? (
           <p className="mt-1 flex items-center gap-2 text-sm leading-relaxed text-body">
@@ -18148,7 +18161,7 @@ function SettingsTab({
       </section>
 
       {/* Password */}
-      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Password</h2>
         <div className="mt-4 grid max-w-sm gap-3">
           <input
@@ -18201,7 +18214,7 @@ function SettingsTab({
       <div className="kicker mt-10">Sending</div>
 
       {/* Sending */}
-      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Sending</h2>
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
@@ -18237,7 +18250,7 @@ function SettingsTab({
       <div className="kicker mt-10">Your data</div>
 
       {/* Your data */}
-      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
             <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -18340,7 +18353,7 @@ function ListsTab({
     const reached = rows.filter((f) => f.status === "sent" || f.status === "replied").length;
     const replied = rows.filter((f) => f.status === "replied").length;
     return (
-      <main className="mx-auto w-full max-w-4xl px-6 py-12">
+      <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
         <button
           onClick={() => setOpenId("")}
           className="text-xs font-bold text-body/60 transition hover:text-accent"
@@ -18413,7 +18426,7 @@ function ListsTab({
 
   // ---- Home: every list as a card + create ----
   return (
-    <main className="mx-auto w-full max-w-4xl px-6 py-12">
+    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Share where things stand</div>
@@ -18726,7 +18739,7 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="kicker mb-2">Your voice</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
@@ -18749,8 +18762,8 @@ function TemplatesTab({
         </div>
       )}
 
-      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        <div className="grid gap-5 sm:grid-cols-[210px_1fr]">
+      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+        <div className="grid gap-5 sm:grid-cols-[210px_1fr] [&>*]:min-w-0">
           <div>
             <Label>Kind of outreach</Label>
             <select
@@ -19044,7 +19057,7 @@ function TemplatesTab({
       )}
 
       {/* -------- Email signatures -------- */}
-      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Email signatures</h2>
         <p className="mt-1 text-sm leading-relaxed text-body">
           Signed onto the end of every email Scout drafts (not DMs). Set a default,
@@ -19244,7 +19257,7 @@ function ConnectEmailCard({
 }) {
   const [choosing, setChoosing] = useState(false);
   return (
-    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -19319,7 +19332,7 @@ function MailboxCard({
   const label = provider === "gmail" ? "Gmail" : "Outlook";
   const mode = conn.sendMode || "draft";
   return (
-    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+    <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -19537,7 +19550,7 @@ function CompanyDetailsEditor({
   // profile-only company-name field so it's always editable.
   if (!workspaceId || (!loading && !found)) {
     return (
-      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Your company</h2>
         <div className="mt-4">
           <Label>Company name</Label>
@@ -19553,7 +19566,7 @@ function CompanyDetailsEditor({
   }
 
   return (
-    <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+    <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-extrabold tracking-tight text-ink">
           Your company
@@ -20176,7 +20189,7 @@ function ProfileTab({
   }
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-12">
+    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
       <div className="kicker mb-2">About you</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">profile</span>
@@ -20277,7 +20290,7 @@ function ProfileTab({
           {/* This person's role + specialization on the company. This IS a company
               member's whole profile — no personal fields, everything is company
               context that grounds how Scout searches and writes for the team. */}
-          <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+          <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
             {!companyRole.trim() && (
               <div className="mb-4 rounded-2xl border border-blue-deep/25 bg-blue-tint/40 p-3 text-sm text-blue-deep">
                 Welcome to the team! Tell Scout your role and what you specialize in,
@@ -20352,7 +20365,7 @@ function ProfileTab({
         </>
       )}
 
-      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+      <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         {/* Company accounts get their website + "what the company does" in the
             company card above — no second website here. Individuals start from a
             resume/LinkedIn. */}
@@ -20661,7 +20674,9 @@ function ProfileTab({
           <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
           </span>
-          <div className="min-w-0 flex-1">
+          {/* basis-48 so the "Manual tab" cue wraps to its own line on a phone
+              instead of squeezing this copy into a two-word column. */}
+          <div className="min-w-0 flex-1 basis-48">
             <div className="text-sm font-extrabold text-ink">
               Already reaching out somewhere else?
             </div>
@@ -20741,7 +20756,7 @@ function AccountCard({
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
+    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">

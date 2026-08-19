@@ -83,6 +83,16 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Phones: never let a stray wide row turn the whole page into a sideways
+   scroller. `clip` (not `hidden`) keeps sticky/fixed positioning intact, and
+   anything meant to scroll horizontally still does inside its own
+   overflow-x-auto container. */
+@media (max-width: 767px) {
+  body {
+    overflow-x: clip;
+  }
+}
+
 /* Smooth theme switch. Every color/border/shadow is driven by CSS variables, so
    flipping .dark normally snaps instantly. While toggling we add .theme-transition
    to <html> to cross-fade all color properties, then remove it so it never slows

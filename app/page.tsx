@@ -274,6 +274,10 @@ const CSS = `
     .st{border-left:none;border-top:1px solid var(--line);padding:22px 0 8px}
     .st:first-child{border-top:none;padding-top:8px}
     .contact .inner{grid-template-columns:1fr;gap:26px;padding:64px 0}
+    /* The footer's brand + link row doesn't fit one phone line; wrap it. */
+    .foot{flex-wrap:wrap;gap:10px 14px}
+    .foot .links{margin-left:0;flex-wrap:wrap;gap:10px 18px}
+    .foot .links a{padding:4px 0}
     .form .two{grid-template-columns:1fr}
     .h2{font-size:34px}
     .contact h2{font-size:40px}
