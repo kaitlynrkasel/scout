@@ -18,7 +18,26 @@ export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
-  const [adminTab, setAdminTab] = useState<"insights" | "concierge" | "index" | "pricing">("insights");
+  const [adminTab, setAdminTab] = useState<
+    "insights" | "concierge" | "index" | "pricing" | "readiness"
+  >("insights");
+  // Keyed /readiness link, fetched owner-only so the secret never ships in JS.
+  const [readinessPath, setReadinessPath] = useState("");
+  useEffect(() => {
+    if (adminTab !== "readiness" || readinessPath) return;
+    (async () => {
+      const token = await getToken();
+      if (!token) return;
+      try {
+        const r = await fetch("/api/readiness/link", {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const j = await r.json();
+        if (r.ok && j.path) setReadinessPath(j.path);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminTab]);
 
   useEffect(() => {
     if (!supabase) {
@@ -93,7 +112,7 @@ export default function AdminPage() {
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
           <nav className="ml-4 flex items-center gap-1">
-            {(["insights", "concierge", "index", "pricing"] as const).map((t) => (
+            {(["insights", "concierge", "index", "pricing", "readiness"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
@@ -117,6 +136,42 @@ export default function AdminPage() {
       </header>
       {adminTab === "insights" ? (
         <InsightsView getToken={getToken} />
+      ) : adminTab === "readiness" ? (
+        <main className="mx-auto w-full max-w-none px-0">
+          {readinessPath ? (
+            <>
+              <div className="flex items-center gap-3 border-b border-warm-border bg-surface px-6 py-2 text-xs">
+                <span className="font-bold text-ink">Launch readiness</span>
+                <span className="text-body/50">shared and live, marks save for everyone</span>
+                <button
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(window.location.origin + readinessPath);
+                    } catch {}
+                  }}
+                  className="ml-auto rounded-lg border border-warm-border px-2.5 py-1 font-semibold text-body transition hover:bg-warm-bg"
+                >
+                  Copy share link
+                </button>
+                <a
+                  href={readinessPath}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-accent hover:underline"
+                >
+                  Open full page
+                </a>
+              </div>
+              <iframe
+                src={readinessPath}
+                title="Launch readiness"
+                className="h-[calc(100vh-105px)] w-full bg-cream"
+              />
+            </>
+          ) : (
+            <p className="p-8 text-sm text-body/60">Loading the checklist…</p>
+          )}
+        </main>
       ) : adminTab === "pricing" ? (
         <main className="mx-auto w-full max-w-6xl px-6 py-10">
           <div className="mb-6">
