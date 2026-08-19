@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
+import { normNameKey, urlHostKey, sharedFindKey } from "@/lib/findKeys";
 import type { Draft, Opportunity, OutreachTemplate, SourceRef } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
 import AuthScreen from "./AuthScreen";
@@ -686,34 +687,6 @@ function bumpCustomDenyReason(text: string) {
 // stale stored draft (React state may not have flushed yet).
 type DraftOverride = { subject: string; body: string };
 
-// Same normalization the discover engine uses so IDs match across the boundary.
-// Strips role suffixes (", VP of…", " at Acme", " (Head of X)"), honorifics,
-// name suffixes, and middle names/initials, then keeps first + last token.
-// So "John Smith", "John J. Smith", "John Smith, Marketing Lead", and
-// "Dr. John Smith Jr" all collapse to "johnsmith".
-function normNameKey(s: string): string {
-  // Drop everything after the first role separator, then normalize what's left.
-  // People/orgs almost never have commas or pipes in their actual name; when
-  // they do appear, they always mark a role/title/company suffix that would
-  // otherwise poison the "last token" heuristic below.
-  const dropRoleSuffix = String(s || "")
-    .split(/[,|·•—–]|\s+[-–—]\s+|\s+\bat\b\s+|\s+\bfor\b\s+/i)[0]
-    .replace(/\([^)]*\)/g, " ");
-  const cleaned = dropRoleSuffix
-    .toLowerCase()
-    .replace(/\b(dr|mr|mrs|ms|prof|rev|hon|sir)\.?\s+/g, "")
-    .replace(/\b(jr|sr|ii|iii|iv|v|phd|md|esq|do|dds|rn|mba|cpa)\.?$/g, "")
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-  const parts = cleaned.split(" ").filter(Boolean);
-  if (parts.length <= 1) return parts[0] || "";
-  return parts[0] + parts[parts.length - 1];
-}
-function urlHostKey(u: string): string {
-  const m = String(u || "").match(/^https?:\/\/([^/?#]+)/i);
-  return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
-}
 // LinkedIn / Twitter / Instagram handles collapse to the same identity across
 // different articles, so we can dedup even when spellings of the name differ.
 function normHandleKey(h: string): string {
@@ -732,8 +705,9 @@ function normHandleKey(h: string): string {
 // merging (same person, different URL) is handled inside mergeFinds() so old
 // IDs don't break.
 function findKey(projectId: string, o: Opportunity): string {
-  return `${projectId}::${normNameKey(o.name)}::${urlHostKey(o.url)}`;
+  return `${projectId}::${sharedFindKey(o)}`;
 }
+
 
 // The most recent moment a find changed: found, drafted, or sent. Orders the
 // Outreach/Finds lists newest-activity-first so a fresh draft jumps to the top.
@@ -4014,7 +3988,41 @@ function ScoutTool({
       const merged = finds.map((f) => updates.get(f.id) || f);
       saveFinds([...fresh, ...merged]);
     }
+    if (fresh.length) publishFindsToTeam(fresh);
     return fresh.length;
+  }
+
+  // On a company lens, everything a search turns up belongs to the whole team:
+  // mirror it into the shared pipeline under the project it was found in, so a
+  // teammate sees it in that same project and under "All projects". The server
+  // opens the shared project to the workspace on the first find, so this works
+  // before anyone has explicitly shared anything. Best-effort and fire-and-
+  // forget — the local finds stand either way, and the next lens refresh
+  // reconciles anything that didn't land.
+  function publishFindsToTeam(fresh: Find[]) {
+    if (!teamLens || !getToken || !fresh.length) return;
+    const projectName = (projects.find((p) => p.id === activeId)?.name || "").trim();
+    if (!projectName) return;
+    const payload = fresh.map((f) => ({ opp: f.opp, status: f.status, dedupKey: sharedFindKey(f.opp) }));
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch("/api/team/finds", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({
+            workspaceId: teamLens,
+            projectName,
+            useCase: activeProject?.useCase || "",
+            context: activeProject?.context || "",
+            finds: payload,
+          }),
+        });
+      } catch {
+        /* the local finds stand; teammates catch up on the next lens refresh */
+      }
+    })();
   }
 
   // Merge pre-built Find records (from the CSV importer) into the existing
@@ -4616,7 +4624,7 @@ function ScoutTool({
               headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
               body: JSON.stringify({
                 sharedProjectId: shared.id,
-                finds: [{ opp, status: "new" }],
+                finds: [{ opp, status: "new", dedupKey: sharedFindKey(opp) }],
               }),
             });
           } catch {
@@ -11746,7 +11754,17 @@ function FindsTab({
   // Teammates' shared finds that you DON'T already have locally (your own copy
   // wins), respecting the status tab, the filters panel, and the person filter.
   const localNameKeys = new Set(finds.map((f) => normNameKey(f.opp?.name || "")));
+  // Scoped to the project selector the same way your own finds are: a teammate's
+  // find lands in the project it was found in, so it shows under that project
+  // and under "All projects" — not under every project at once.
+  const allProjectsView = activeProjectId === "__all__";
   const teamShown = (teamName ? teamFinds || [] : [])
+    .filter(
+      (f: any) =>
+        allProjectsView ||
+        String(f.__projectName || "").trim().toLowerCase() ===
+          String(projectName || "").trim().toLowerCase()
+    )
     .filter((f: any) => !localNameKeys.has(normNameKey(f.opp?.name || "")))
     .filter((f: any) =>
       filter === "pinned" ? false : filter === "all" ? true : f.status === filter

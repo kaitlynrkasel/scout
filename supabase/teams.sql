@@ -90,6 +90,14 @@ create table if not exists public.shared_projects (
   created_at timestamptz not null default now()
 );
 
+-- Projects created automatically when someone searches under a company lens are
+-- open to the WHOLE workspace: the point of a team pipeline is that a find one
+-- person turns up is a find everyone has. Explicitly shared projects keep their
+-- hand-picked member list, so restricting a project stays meaningful. Open
+-- projects also cover teammates who join LATER, which a membership row can't.
+alter table public.shared_projects
+  add column if not exists open_to_workspace boolean not null default false;
+
 create table if not exists public.shared_project_members (
   shared_project_id uuid not null references public.shared_projects(id) on delete cascade,
   user_id uuid not null,
@@ -180,6 +188,8 @@ as $$
   );
 $$;
 
+-- A caller reaches a shared project two ways: an explicit membership row, or
+-- the project being open to a workspace they belong to.
 create or replace function public.is_project_member(pid uuid)
 returns boolean language sql security definer stable
 set search_path = public
@@ -187,6 +197,11 @@ as $$
   select exists(
     select 1 from public.shared_project_members m
     where m.shared_project_id = pid and m.user_id = auth.uid()
+  ) or exists(
+    select 1
+    from public.shared_projects p
+    join public.workspace_members m on m.workspace_id = p.workspace_id
+    where p.id = pid and p.open_to_workspace and m.user_id = auth.uid()
   );
 $$;
 

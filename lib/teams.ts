@@ -5,6 +5,7 @@
 import { supabaseAdmin } from "./supabaseAdmin";
 import { gmailSendOrDraft } from "./gmail";
 import { outlookSendOrDraft } from "./outlook";
+import { sharedFindKey } from "./findKeys";
 
 export class TeamError extends Error {
   status: number;
@@ -39,7 +40,25 @@ async function assertProjectMember(uid: string, sharedProjectId: string) {
     .eq("shared_project_id", sharedProjectId)
     .eq("user_id", uid)
     .maybeSingle();
-  if (!data) throw new TeamError("You do not have access to this shared project.", 403);
+  if (data) return;
+  // No membership row — but a project opened to the workspace is reachable by
+  // every member of that workspace, including people who joined after it was
+  // created. Mirrors is_project_member() in supabase/teams.sql.
+  const { data: proj } = await db()
+    .from("shared_projects")
+    .select("workspace_id, open_to_workspace")
+    .eq("id", sharedProjectId)
+    .maybeSingle();
+  if (proj?.open_to_workspace) {
+    const { data: member } = await db()
+      .from("workspace_members")
+      .select("user_id")
+      .eq("workspace_id", proj.workspace_id)
+      .eq("user_id", uid)
+      .maybeSingle();
+    if (member) return;
+  }
+  throw new TeamError("You do not have access to this shared project.", 403);
 }
 
 // ---- Roles ----
@@ -652,6 +671,9 @@ export async function shareProject(
     context?: string;
     memberUserIds?: string[];
     finds?: any[];
+    // Open to every workspace member rather than a hand-picked list. Set when
+    // Scout auto-shares a project so an outreach find reaches the whole team.
+    openToWorkspace?: boolean;
   }
 ) {
   await assertRole(uid, opts.workspaceId, "editor");
@@ -665,8 +687,9 @@ export async function shareProject(
       name: nm,
       use_case: opts.useCase || "",
       context: opts.context || "",
+      open_to_workspace: !!opts.openToWorkspace,
     })
-    .select("id, workspace_id, owner_user_id, name, use_case, context, created_at")
+    .select("id, workspace_id, owner_user_id, name, use_case, context, open_to_workspace, created_at")
     .single();
   if (error || !proj) throw new TeamError(error?.message || "Could not share project.", 500);
 
@@ -696,18 +719,29 @@ export async function shareProject(
   return proj;
 }
 
-// Shared projects the caller can see, in a given workspace.
+// Shared projects the caller can see, in a given workspace: the ones they were
+// put on, plus every project open to the workspace (see open_to_workspace).
 export async function listSharedProjects(uid: string, workspaceId: string) {
   await assertWorkspaceMember(uid, workspaceId);
   const { data: mine } = await db()
     .from("shared_project_members")
     .select("shared_project_id")
     .eq("user_id", uid);
-  const ids = (mine || []).map((m: any) => m.shared_project_id);
+  const { data: open } = await db()
+    .from("shared_projects")
+    .select("id")
+    .eq("workspace_id", workspaceId)
+    .eq("open_to_workspace", true);
+  const ids = Array.from(
+    new Set([
+      ...(mine || []).map((m: any) => m.shared_project_id),
+      ...(open || []).map((p: any) => p.id),
+    ])
+  );
   if (!ids.length) return [];
   const { data: projs } = await db()
     .from("shared_projects")
-    .select("id, workspace_id, owner_user_id, name, use_case, context, created_at")
+    .select("id, workspace_id, owner_user_id, name, use_case, context, open_to_workspace, created_at")
     .eq("workspace_id", workspaceId)
     .in("id", ids);
   const { data: members } = await db()
@@ -928,7 +962,10 @@ export async function addSharedFinds(
     .filter((f) => f && f.opp)
     .map((f) => ({
       shared_project_id: sharedProjectId,
-      dedup_key: String(f.dedupKey || f.id || `${f.opp?.name || ""}`).slice(0, 400),
+      // Derived from the prospect, not from the caller: a live search, a manual
+      // add and the nightly cron all reach this function, and if they each keyed
+      // rows their own way the same person would land once per path.
+      dedup_key: String(f.dedupKey || sharedFindKey(f.opp) || f.opp?.name || "").slice(0, 400),
       opp: f.opp,
       status: f.status || "new",
       draft: f.draft || null,
@@ -947,6 +984,60 @@ export async function addSharedFinds(
     .upsert(rows, { onConflict: "shared_project_id,dedup_key", ignoreDuplicates: true })
     .select("id");
   return { added: (data || []).length };
+}
+
+// Publish finds a member just turned up into the team's shared pipeline, under
+// the shared project matching the local project's name — creating that project,
+// open to the whole workspace, the first time anyone searches under it.
+//
+// This is what makes an outreach find a TEAM find: without it the shared
+// pipeline only ever filled at project-creation, on scheduled auto-searches, and
+// on manual adds, so anything found by searching stayed on the finder's machine.
+export async function publishFindsToTeam(
+  uid: string,
+  email: string,
+  opts: {
+    workspaceId: string;
+    projectName: string;
+    useCase?: string;
+    context?: string;
+    finds: any[];
+  }
+) {
+  const nm = String(opts.projectName || "").trim();
+  if (!nm) throw new TeamError("The project needs a name.");
+  if (!Array.isArray(opts.finds) || !opts.finds.length) return { added: 0, sharedProjectId: "" };
+  await assertRole(uid, opts.workspaceId, "editor");
+
+  // Match the local project to a shared one by name, the same way the manual-add
+  // mirror does. Case-insensitive so "Internships" and "internships" are one
+  // pipeline rather than two.
+  const findByName = async () => {
+    const { data } = await db()
+      .from("shared_projects")
+      .select("id, name")
+      .eq("workspace_id", opts.workspaceId);
+    return (data || []).find(
+      (p: any) => String(p.name || "").trim().toLowerCase() === nm.toLowerCase()
+    );
+  };
+
+  let proj = await findByName();
+  if (!proj) {
+    const created = await shareProject(uid, email, {
+      workspaceId: opts.workspaceId,
+      name: nm,
+      useCase: opts.useCase || "",
+      context: opts.context || "",
+      openToWorkspace: true,
+    }).catch(() => null);
+    // Two teammates searching the same new project at once both try to create
+    // it; whoever lost the race just adopts the row that now exists.
+    proj = created || (await findByName());
+    if (!proj) throw new TeamError("Could not open a shared project for this.", 500);
+  }
+  const added = await addSharedFinds(uid, email, String(proj.id), opts.finds);
+  return { ...added, sharedProjectId: String(proj.id) };
 }
 
 // How many teammates must independently deny a shared find before it goes
