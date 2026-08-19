@@ -23,9 +23,14 @@ const CACHE_ENABLED =
   CACHE_MODE === "on" || (CACHE_MODE !== "off" && process.env.NODE_ENV !== "production");
 const CACHE_DIR = path.join(process.cwd(), ".scout-cache", "tavily");
 
-function cacheKey(query: string, maxResults: number, depth: string): string {
+function cacheKey(
+  query: string,
+  maxResults: number,
+  depth: string,
+  domains = ""
+): string {
   return createHash("sha1")
-    .update(`${query}::${maxResults}::${depth}`)
+    .update(`${query}::${maxResults}::${depth}::${domains}`)
     .digest("hex")
     .slice(0, 16);
 }
@@ -62,6 +67,9 @@ export interface TavilyOpts {
   // content per result, worth it for creator roundup articles, where the
   // whole point is extracting MANY names from one long listicle.
   depth?: "basic" | "advanced";
+  // Restrict results to these hosts (e.g. ["linkedin.com"] for a sweep of
+  // public profile pages). Passed straight through to Tavily.
+  includeDomains?: string[];
 }
 
 export async function tavilySearch(
@@ -74,7 +82,7 @@ export async function tavilySearch(
   const depth = opts.depth === "advanced" ? "advanced" : "basic";
 
   if (CACHE_ENABLED) {
-    const cached = await readCache(cacheKey(query, maxResults, depth));
+    const cached = await readCache(cacheKey(query, maxResults, depth, opts.includeDomains?.join(",") || ""));
     if (cached) return cached;
   }
 
@@ -91,6 +99,7 @@ export async function tavilySearch(
         query,
         max_results: maxResults,
         search_depth: depth,
+        ...(opts.includeDomains?.length ? { include_domains: opts.includeDomains } : {}),
       }),
     });
   } catch {
@@ -111,7 +120,7 @@ export async function tavilySearch(
     const data = await res.json();
     const results = (data?.results || []) as TavilyResult[];
     if (CACHE_ENABLED && results.length) {
-      await writeCache(cacheKey(query, maxResults, depth), query, results);
+      await writeCache(cacheKey(query, maxResults, depth, opts.includeDomains?.join(",") || ""), query, results);
     }
     return results;
   } catch {

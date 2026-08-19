@@ -1475,7 +1475,7 @@ export async function discover(
   // comes up empty.
   const candidates: TavilyResult[] = [];
   const seenLinks = new Set<string>();
-  async function gather(passQueries: string[]) {
+  async function gather(passQueries: string[], scope?: { includeDomains: string[] }) {
     // Collect each query's surviving results into its own bucket, then INTERLEAVE
     // them round-robin into `candidates`. Extraction reads candidates in order and
     // stops at maxItems, so a sequential fill let the first query (the raw goal,
@@ -1488,7 +1488,10 @@ export async function discover(
       if (aborted()) break; // user cancelled — stop spending searches
       const bucket: TavilyResult[] = [];
       emit(`Searching: "${q}"`);
-      const results = await tavilySearch(q, perQuery, { depth });
+      const results = await tavilySearch(q, perQuery, {
+        depth,
+        ...(scope?.includeDomains ? { includeDomains: scope.includeDomains } : {}),
+      });
       emit(`Found ${results.length} result${results.length === 1 ? "" : "s"} for "${q}"`);
       for (const r of results) {
         if (looksLikeAdvice(r.title, useCase, goal)) {
@@ -1527,6 +1530,24 @@ export async function discover(
     }
   }
   await gather(queries);
+
+  // PEOPLE goals (alumni, mentors, specific professionals) get a dedicated
+  // sweep of PUBLIC LinkedIn profile pages via domain-scoped search queries,
+  // the densest public source of who-studied-what and who-works-where. This is
+  // the search index's public view of linkedin.com, no login, no scraping
+  // behind auth, so it carries none of the gated-data risk.
+  if (
+    !aborted() &&
+    /\b(alumni|alumnus|alumna|mentors?|people|professionals?|graduates?|students?|members?|veterans?)\b/i.test(
+      goal
+    )
+  ) {
+    const liQueries = Array.from(
+      new Set([goal.replace(/\s+/g, " ").trim().slice(0, 220), ...queries.slice(0, 2)])
+    ).slice(0, 3);
+    emit("Sweeping public LinkedIn profiles");
+    await gather(liQueries, { includeDomains: ["linkedin.com"] });
+  }
 
   // 3: extract structured records, dedupe by name/host, cap at maxItems.
   const opps: Opportunity[] = [];
