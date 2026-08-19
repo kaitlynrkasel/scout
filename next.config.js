@@ -1,3 +1,9 @@
+// `next dev` compiles with eval-based source maps and talks to the HMR socket,
+// neither of which the production CSP allows — without these two exemptions the
+// dev server serves a page that never hydrates. They apply to `next dev` only;
+// `next build` sets NODE_ENV=production, so the shipped policy is unchanged.
+const isDev = process.env.NODE_ENV !== "production";
+
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
@@ -21,11 +27,11 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline'",
+              `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.supabase.co",
+              `connect-src 'self' https://*.supabase.co${isDev ? " ws://localhost:*" : ""}`,
               "frame-src 'self'",
               "frame-ancestors 'self'",
               "base-uri 'self'",
