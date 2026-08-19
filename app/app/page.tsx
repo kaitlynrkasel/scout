@@ -454,6 +454,7 @@ interface Profile {
   companyAbout?: string; // what the company does / who it serves
   companyIndustry?: string; // e.g. Music
   companyStage?: string; // Pre-seed / Startup / Growth / …
+  companyLocation?: string; // where the company is based — a regional preference, not a filter
   companyWorkspaceId?: string; // the Teams workspace this company maps to (created or joined)
   // Optional personalization. Stored locally only for now (the Supabase
   // `profiles` row keeps its original columns; these ride along in the browser's
@@ -1126,6 +1127,8 @@ function AuthedShell() {
       if (typeof raw.companyIndustry === "string")
         mergedExtras.companyIndustry = raw.companyIndustry;
       if (typeof raw.companyStage === "string") mergedExtras.companyStage = raw.companyStage;
+      if (typeof raw.companyLocation === "string")
+        mergedExtras.companyLocation = raw.companyLocation;
       if (typeof raw.companyWorkspaceId === "string")
         mergedExtras.companyWorkspaceId = raw.companyWorkspaceId;
       if (typeof raw.age === "number") mergedExtras.age = raw.age;
@@ -1912,6 +1915,7 @@ function ScoutTool({
         companyAbout: profile.companyAbout,
         companyIndustry: profile.companyIndustry,
         companyStage: profile.companyStage,
+        companyLocation: profile.companyLocation,
         companyWorkspaceId: profile.companyWorkspaceId,
         age: profile.age,
         eduStatus: profile.eduStatus,
@@ -1923,7 +1927,7 @@ function ScoutTool({
       },
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyLocation, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
@@ -2360,6 +2364,8 @@ function ScoutTool({
         if ((ws.industry || "") !== (profile.companyIndustry || ""))
           patch.companyIndustry = ws.industry || "";
         if ((ws.stage || "") !== (profile.companyStage || "")) patch.companyStage = ws.stage || "";
+        if ((ws.location || "") !== (profile.companyLocation || ""))
+          patch.companyLocation = ws.location || "";
         if (ws.name && ws.name !== profile.companyName) patch.companyName = ws.name;
         if (Object.keys(patch).length) patchProfile(patch);
       } catch {
@@ -3705,6 +3711,13 @@ function ScoutTool({
             : "",
           profile.companyStage
             ? `Company stage: ${profile.companyStage}`
+            : "",
+          // Phrased as a preference, not a requirement: the planner reads this
+          // and ranks the surrounding region up rather than excluding everywhere
+          // else. Someone based in Seattle wants PNW results first, not ONLY
+          // Seattle results.
+          profile.companyLocation
+            ? `Based in ${profile.companyLocation} — prefer opportunities in this area and the surrounding region, but do not exclude strong matches elsewhere`
             : "",
           profile.companyContribution
             ? `Their role / how they serve the company's work: ${profile.companyContribution}`
@@ -19500,6 +19513,7 @@ function CompanyDetailsEditor({
   const [website, setWebsite] = useState("");
   const [industry, setIndustry] = useState("");
   const [stage, setStage] = useState("");
+  const [location, setLocation] = useState("");
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -19528,6 +19542,7 @@ function CompanyDetailsEditor({
           setWebsite(ws.website || "");
           setIndustry(ws.industry || "");
           setStage(ws.stage || "");
+          setLocation(ws.location || "");
         }
       } catch {
         /* teams may not be set up; fall back to the profile name */
@@ -19562,7 +19577,15 @@ function CompanyDetailsEditor({
           "content-type": "application/json",
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ workspaceId: selectedWsId, name, about, website, industry, stage }),
+        body: JSON.stringify({
+          workspaceId: selectedWsId,
+          name,
+          about,
+          website,
+          industry,
+          stage,
+          location,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok) {
@@ -19650,6 +19673,21 @@ function CompanyDetailsEditor({
                 )
               )}
             </datalist>
+          </div>
+          <div className="mt-4">
+            <Label>Where is the company based? (optional)</Label>
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              disabled={!isOwner}
+              placeholder="e.g. Seattle, WA"
+              className={`${inputCls} disabled:opacity-70`}
+            />
+            <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+              Scout favors opportunities near here and across the surrounding
+              region. It never hides strong matches elsewhere — leave it blank if
+              location doesn&apos;t matter for this company.
+            </p>
           </div>
           <div className="mt-4">
             <Label>What does the company do?</Label>

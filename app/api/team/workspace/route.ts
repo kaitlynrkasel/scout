@@ -10,18 +10,20 @@ import {
 
 export const runtime = "nodejs";
 
-// Owner-only: edit the company's onboarding answers (name/about/industry/website).
+// Owner-only: edit the company's onboarding answers
+// (name/about/industry/website/stage/location).
 export async function PATCH(req: NextRequest) {
   const u = await userFromReq(req);
   if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   try {
-    const { workspaceId, name, about, website, industry, stage } = await req.json();
+    const { workspaceId, name, about, website, industry, stage, location } = await req.json();
     const ws = await updateWorkspaceDetails(u.id, String(workspaceId || ""), {
       name,
       about,
       website,
       industry,
       stage,
+      location,
     });
     return NextResponse.json({ workspace: ws });
   } catch (e: any) {

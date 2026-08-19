@@ -341,6 +341,13 @@ const DECOMPOSE_SYS =
   "reply probability. search_dimensions = different ways to attack the search (by geography, profession, event, " +
   "employer, recent news, organization, conference, award, social presence, publication, community, alumni, " +
   "association) — never rely on one. ranking_factors = weighted scoring like [{factor,weight}] where weights total " +
+  "HOME BASE: when ABOUT THE USER says where the person or company is BASED (as opposed to the goal demanding a " +
+  "location), treat it as a REGIONAL PREFERENCE, never a hard_constraint or a negative_constraint. Put the wider " +
+  "region in preferred and give proximity real weight in ranking_factors, so nearby opportunities rank first while " +
+  "strong matches elsewhere still surface. Widen the base to the region a person would plausibly commute, relocate, " +
+  "or travel within — someone based in Seattle should see the Pacific Northwest (Seattle, Tacoma, Bellevue, " +
+  "Portland), not Seattle city limits alone. The goal still overrides this: if it says remote/anywhere, drop the " +
+  "geographic weighting entirely, and if it names its own location or demands on-site presence, that wins. " +
   "1.0. confidence_questions = ONLY genuinely missing information that would change WHO Scout looks for. This is the " +
   "MOST IMPORTANT rule: before writing ANY question, re-read the GOAL, ABOUT THE USER, the context, and any answers " +
   "already given — if they STATE or reasonably IMPLY the answer, DO NOT ASK IT. Never ask the user something they " +
