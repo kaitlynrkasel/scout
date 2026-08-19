@@ -315,6 +315,10 @@ const DECOMPOSE_SYS =
   "AT LEAST 55-70 even when targeting specifics (company size, location, seniority, niche) are still open — those are " +
   "refinements that would sharpen results, not gaps in understanding — and an intentionally broad scope ('any industry', " +
   "'all companies') is a deliberate choice, never a missing constraint. Go 85+ when the goal is specific and self-contained. " +
+  "ONE EXCEPTION: when the goal is role-shaped (a hire, a role, a position, someone open to new work) and NOTHING in the " +
+  "goal or the ABOUT context settles WORK ARRANGEMENT — remote, hybrid, or on-site — cap understanding at 85 and make " +
+  "that your FIRST confidence_question. Where the work happens decides who qualifies, so not knowing it is a real gap in " +
+  "who to look for, not a refinement. " +
   "Only go below 30 when the goal is genuinely vague AND almost no context is provided. NEVER return 0 when a real " +
   "objective and any context are present; it does not start from zero. " +
   "Definitions: goal = the actual objective (e.g. 'find a guest speaker', not 'search Nashville artists'). " +
@@ -354,7 +358,17 @@ const DECOMPOSE_SYS =
   "internal contradiction (e.g. 'remote-only roles at an office I can go into daily', 'small startups with 10,000 " +
   "employees'), resolve it with the most plausible interpretation in the plan — but make your FIRST " +
   "confidence_question confirm that interpretation, with the plausible readings as its options; never silently pick " +
-  "one and ask about unrelated dimensions instead. Ask AT MOST 3, each a DISTINCT, decision-changing " +
+  "one and ask about unrelated dimensions instead. " +
+  "WORTH ASKING — the practical dimensions users most often leave out, and that genuinely change WHO qualifies: " +
+  "WORK ARRANGEMENT (remote / hybrid / on-site) whenever the target is a role, a hire, or someone taking a " +
+  "position; employment type (full-time, part-time, contract, freelance); experience level or seniority; " +
+  "availability or start timing; required credentials, licenses, or tools; organization size or stage; how far " +
+  "the person may be from a place when the work is place-bound; and audience or reach tier when the target is a " +
+  "creator, outlet, or venue. Before you finish, check this list against what the goal and profile already say. " +
+  "Work arrangement especially is almost never stated and almost always decides who qualifies for anything " +
+  "role-shaped — ask it unless the goal or profile already settles it. These beat a vaguer question about the " +
+  "same search, but they do NOT override the bans above: if the goal or profile already answers one, skip it. " +
+  "Ask AT MOST 3, each a DISTINCT, decision-changing " +
   "dimension that is truly unstated. Each is an OBJECT {question, options}: question is a short, plain " +
   "question; options is 2–5 concrete, mutually-exclusive answers the user can pick with one tap (real values like " +
   "'Within 25 miles','This city only','Anywhere remote' — never 'yes/no' unless the question is truly binary). " +
