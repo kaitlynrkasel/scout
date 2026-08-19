@@ -10,7 +10,7 @@ export function Logo({ size = 24 }: { size?: number }) {
 export function Nav() {
   return (
     <header className="sticky top-0 z-20 border-b border-warm-border bg-surface/85 backdrop-blur-md">
-      <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-3">
+      <div className="mx-auto flex max-w-6xl items-center gap-3 px-4 py-3 sm:px-6">
         <a href="/" className="flex items-center gap-2">
           <Logo />
           <span className="text-[16px] font-extrabold tracking-tight">
@@ -36,7 +36,7 @@ export function Nav() {
         </nav>
         <a
           href="/app"
-          className="ml-4 rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+          className="ml-auto rounded-xl bg-brand-gradient px-3.5 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 md:ml-4"
         >
           Open Scout
         </a>
@@ -48,23 +48,23 @@ export function Nav() {
 export function Footer() {
   return (
     <footer className="border-t border-warm-border bg-surface/70">
-      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-6 py-8 text-xs text-body/70">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-8 text-xs text-body/70 sm:px-6">
         <Logo size={18} />
         <span className="font-semibold">
           <span className="brand-text">Scout</span>
         </span>
         <span className="text-body/50">Reach the right people, in your own voice.</span>
-        <nav className="ml-auto flex flex-wrap gap-5 font-semibold text-body">
-          <a href="/analytics" className="hover:text-ink">
+        <nav className="flex flex-wrap gap-x-5 gap-y-1 font-semibold text-body sm:ml-auto">
+          <a href="/analytics" className="py-1.5 hover:text-ink">
             Proof
           </a>
-          <a href="/privacy" className="hover:text-ink">
+          <a href="/privacy" className="py-1.5 hover:text-ink">
             Privacy
           </a>
-          <a href="/terms" className="hover:text-ink">
+          <a href="/terms" className="py-1.5 hover:text-ink">
             Terms
           </a>
-          <a href="/app" className="hover:text-ink">
+          <a href="/app" className="py-1.5 hover:text-ink">
             Open Scout
           </a>
         </nav>

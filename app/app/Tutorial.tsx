@@ -28,6 +28,7 @@ export default function Tutorial({
   setTab,
   onClose,
   onFinish,
+  onTargetChange,
 }: {
   open: boolean;
   steps: TourStep[];
@@ -36,12 +37,22 @@ export default function Tutorial({
   onClose: () => void;
   /** Called when the user reaches the end of the tour. */
   onFinish: () => void;
+  /**
+   * Fires with the current step's target on every step change (and with
+   * undefined when the tour closes). The host uses it to reveal chrome the
+   * target lives in — on mobile the nav items are inside a drawer that has to
+   * be opened before there's anything to spotlight.
+   */
+  onTargetChange?: (target?: string) => void;
 }) {
   const [i, setI] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
   const [cardH, setCardH] = useState(0);
   const [reduceMotion, setReduceMotion] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  // Step index we've already scrolled into view, so following re-measures
+  // (scroll, resize) don't yank the page back.
+  const scrolledFor = useRef(-1);
 
   const step = steps[i];
   const isFirst = i === 0;
@@ -73,23 +84,72 @@ export default function Tutorial({
     if (open && step?.tab) setTab(step.tab);
   }, [open, i, step?.tab, setTab]);
 
+  // Ask the host to reveal this step's target before we try to measure it.
+  useEffect(() => {
+    onTargetChange?.(open ? step?.target : undefined);
+  }, [open, i, step?.target, onTargetChange]);
+
   // Measure the spotlight target (re-measures on step change, resize, scroll).
   useLayoutEffect(() => {
     if (!open) return;
     let raf = 0;
+    let tries = 0;
+
+    // A `data-tour` id can match more than one node: the nav renders its items
+    // twice, once in the desktop rail and once in the mobile drawer, and the
+    // one that doesn't apply is display:none. A hidden node still answers
+    // getBoundingClientRect — with zeros — so taking the first match blindly
+    // pinned the spotlight to a 0x0 box in the top-left corner. Take the copy
+    // that's actually on screen.
+    const findVisible = () => {
+      if (!step?.target) return null;
+      const els = document.querySelectorAll<HTMLElement>(`[data-tour="${step.target}"]`);
+      for (const el of Array.from(els)) {
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) return { el, r };
+      }
+      return null;
+    };
+
     const measure = () => {
       if (!step?.target) {
         setRect(null);
         return;
       }
-      const el = document.querySelector<HTMLElement>(`[data-tour="${step.target}"]`);
-      if (!el) {
-        setRect(null);
+      const hit = findVisible();
+      if (!hit) {
+        // The host may still be opening the drawer this target lives in. Give
+        // it a few frames before giving up and falling back to a centered card
+        // with no spotlight, which is at least never wrong.
+        if (tries < 12) {
+          tries++;
+          raf = requestAnimationFrame(measure);
+        } else {
+          setRect(null);
+        }
         return;
       }
-      const r = el.getBoundingClientRect();
+      tries = 0;
+
+      // Bring it into view once per step if it's under the fixed top bar, off
+      // the bottom, or too low to leave room for the card. Without this the
+      // spotlight lands off-screen and the card points at nothing.
+      if (scrolledFor.current !== i) {
+        scrolledFor.current = i;
+        const vh = window.innerHeight;
+        if (hit.r.top < 72 || hit.r.bottom > vh - 24) {
+          hit.el.scrollIntoView({
+            block: "center",
+            inline: "nearest",
+            behavior: reduceMotion ? "auto" : "smooth",
+          });
+        }
+      }
+
+      const r = hit.el.getBoundingClientRect();
       setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
     };
+
     // Two rAFs: let the tab switch above paint before we measure.
     raf = requestAnimationFrame(() => requestAnimationFrame(measure));
     window.addEventListener("resize", measure);
@@ -99,7 +159,7 @@ export default function Tutorial({
       window.removeEventListener("resize", measure);
       window.removeEventListener("scroll", measure, true);
     };
-  }, [open, i, step?.target, step?.tab]);
+  }, [open, i, step?.target, step?.tab, reduceMotion]);
 
   // Keyboard: Esc skips, arrows / Enter navigate.
   useEffect(() => {
@@ -126,24 +186,30 @@ export default function Tutorial({
   // Card placement. Everything is expressed as a pixel offset from a fixed 0,0
   // origin and applied via a GPU `translate`, so moving between the centered
   // intro and a spotlighted target is one smooth glide instead of a snap (and
-  // it never triggers layout). Beside the target when there's room, else below,
-  // else dead-center. Clamped to stay fully on screen.
+  // it never triggers layout). Beside the target when there's room, else below
+  // it, else above it, else dead-center. Clamped to stay fully on screen.
   const vw = typeof window !== "undefined" ? window.innerWidth : 1200;
   const vh = typeof window !== "undefined" ? window.innerHeight : 800;
   const cardW = Math.min(320, vw - 32);
+  const GAP = PAD + 14;
   let tx: number;
   let ty: number;
   if (rect) {
     const spaceRight = vw - (rect.left + rect.width);
     if (spaceRight > 360) {
-      tx = rect.left + rect.width + PAD + 14;
+      tx = rect.left + rect.width + GAP;
       ty = Math.max(16, rect.top - 8);
     } else {
+      // Narrow screens stack the card under the spotlight, or over it when the
+      // target sits low. Clamping a below-placement to the bottom of the screen
+      // would park the card on top of the thing it's pointing at.
       tx = Math.max(16, rect.left);
-      ty = rect.top + rect.height + PAD + 14;
+      const below = rect.top + rect.height + GAP;
+      const above = rect.top - GAP - cardH;
+      ty = below + cardH <= vh - 16 ? below : above >= 16 ? above : below;
     }
     tx = Math.min(tx, Math.max(16, vw - cardW - 16));
-    ty = Math.min(ty, Math.max(16, vh - cardH - 16));
+    ty = Math.max(16, Math.min(ty, Math.max(16, vh - cardH - 16)));
   } else {
     tx = (vw - cardW) / 2;
     ty = Math.max(16, (vh - cardH) / 2);

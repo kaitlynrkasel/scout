@@ -48,6 +48,15 @@ const nextConfig = {
           },
         ],
       },
+      {
+        // The service worker must be revalidated on every load, or a stale copy
+        // keeps serving an old shell after a deploy. Its cache names are
+        // versioned, but only if the browser fetches the new file.
+        source: "/sw.js",
+        headers: [
+          { key: "Cache-Control", value: "public, max-age=0, must-revalidate" },
+        ],
+      },
     ];
   },
 };

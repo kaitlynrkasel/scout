@@ -29,5 +29,17 @@ Rebrand to a **warm-brown + cream** palette with a **dusty-blue denim** counterp
   so the whole app shifts palette centrally.
 - The Scout **logo** is the owner's brushed dog-nose mark at `public/scout-logo.png`
   (also the favicon at `app/icon.png`). Every logo spot (sidebar, footer, landing
-  nav, avatar) points at that one asset; to update the mark, replace that file.
+  nav, avatar) points at that one asset; to update the mark, replace that file,
+  then run `python3 scripts/generate-pwa-icons.py` to redraw the home-screen icons
+  derived from it (`app/apple-icon.png`, `public/icons/*`).
 - Clickable design reference: `design/redesign-mock.html`.
+
+## Installable (PWA)
+Scout installs to a phone home screen and launches without browser chrome.
+`app/manifest.ts` is the manifest (start_url `/app`, standalone, cream splash);
+`public/sw.js` is the service worker (never caches `/api/*`, network-first pages
+falling back to `app/offline/page.tsx`, cache-first hashed build assets) and is
+registered by `app/pwa.tsx`, which also keeps `theme-color` in step with the
+`.dark` class. Mobile chrome pads itself with `env(safe-area-inset-*)` because
+`viewportFit: "cover"` lets the layout run under the notch. Bump `VERSION` in
+`public/sw.js` to retire every old cache on a deploy.

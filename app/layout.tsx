@@ -1,7 +1,8 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import { Pwa } from "./pwa";
 
 // Inter, a clean, neutral, highly legible UI sans in the spirit of Claude's
 // interface (whose actual face, Styrene, is proprietary). Full weight range,
@@ -38,6 +39,25 @@ export const metadata: Metadata = {
   title: "Scout | Find Your People",
   description:
     "Find the right people, get their contacts, and draft personalized outreach in your voice.",
+  applicationName: "Scout",
+  // Installed to an iOS home screen, Scout launches without Safari's chrome and
+  // draws its own title bar. "default" keeps the status bar legible on the cream
+  // canvas; the tint itself is the theme-color below, kept in sync by <Pwa />.
+  appleWebApp: {
+    capable: true,
+    title: "Scout",
+    statusBarStyle: "default",
+  },
+};
+
+// viewportFit: "cover" lets the layout reach under the notch and the home
+// indicator; the chrome that sits there pads itself back out with
+// env(safe-area-inset-*). Without it, installed iOS runs letterbox the app.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#f8f7f5",
 };
 
 // Apply the saved theme before first paint so dark mode doesn't flash light.
@@ -54,7 +74,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <Pwa />
+      </body>
     </html>
   );
 }
