@@ -1578,10 +1578,14 @@ function ScoutTool({
       /* ignore */
     }
   }, []);
+  // A solo account has no company lens to key the color by, so its pick lives
+  // in one reserved slot in the same map. Prefixed so it can't collide with a
+  // real company id (or with the "personal" lens a company account can select).
+  const SOLO_ACCENT_SLOT = "__solo__";
+  const accentSlot = activeCompanyId || SOLO_ACCENT_SLOT;
   function setCompanyAccent(key: string) {
-    if (!activeCompanyId) return;
     setCompanyColors((prev) => {
-      const next = { ...prev, [activeCompanyId]: key };
+      const next = { ...prev, [accentSlot]: key };
       try {
         localStorage.setItem("scout_company_colors", JSON.stringify(next));
       } catch {
@@ -1590,7 +1594,7 @@ function ScoutTool({
       return next;
     });
   }
-  const activeAccentKey = companyColors[activeCompanyId] || "";
+  const activeAccentKey = companyColors[accentSlot] || "";
   // Linked spreadsheets Scout re-reads automatically (level 2 of sheet import).
   const [syncedSheets, setSyncedSheets] = useState<SyncedSheet[]>([]);
   // Preview-proxy token: fetched once signed in, refreshed well inside its 6h
@@ -6153,6 +6157,8 @@ function ScoutTool({
       className="flex min-h-screen"
       style={appAccentStyle(activeAccentKey)}
       data-accent={activeAccentKey || undefined}
+      // Pale accents need the dark-on-light treatment (see globals.css).
+      data-accent-light={accentColor(activeAccentKey)?.light ? "" : undefined}
     >
       {/* Blocking first-run gate: you can't reach Scout until you pick
           individual vs company (and answer the company questions if company).
@@ -8101,34 +8107,45 @@ function GlobalScoutStatus({
 }
 
 /* ---------------- Sidebar navigation ---------------- */
-// Per-company accent colors, so you can tell which company's lens you're on at
-// a glance. When set, the color becomes the app's accent EVERYWHERE (primary
-// buttons, links, fit badges, the active nav pill) by overriding the brand
-// tokens on the app root. `rgb` is the space-separated triplet the --c-* tokens
-// use; `color` is the hex the gradient/pill use. "" = no accent (default brown).
-const COMPANY_ACCENTS: {
+// Accent colors — a company lens so you can tell at a glance which company
+// you're working in, and a solo account's own pick. When set, the color becomes
+// the app's accent EVERYWHERE (primary buttons, links, fit badges, the active
+// nav pill) by overriding the brand tokens on the app root.
+//
+// The two color roles are kept separate on purpose, because one hex can't play
+// both on a cream canvas:
+//   color / on — the swatch itself: `color` is the fill (button, active nav
+//                pill) and `on` is the text drawn on top of that fill.
+//   rgb / deep — space-separated triplets behind --c-brown/--c-brown-deep,
+//                which color accent TEXT (links, badges) against the cream
+//                page. For the pale accents these are a darkened form of the
+//                same hue: Sandy beige at full strength is unreadable at body
+//                text size.
+// "" = no accent (default brown).
+const ACCENT_COLORS: {
   key: string;
   label: string;
   color: string;
   on: string;
   rgb: string;
   deep: string;
+  /** Pale fill — needs dark text on it, and a dark select chevron. */
+  light?: boolean;
 }[] = [
   { key: "", label: "None", color: "", on: "", rgb: "", deep: "" },
-  { key: "teal", label: "Teal", color: "#35a79d", on: "#ffffff", rgb: "53 167 157", deep: "40 143 135" },
-  { key: "denim", label: "Denim", color: "#5785c1", on: "#ffffff", rgb: "87 133 193", deep: "55 102 164" },
-  { key: "plum", label: "Plum", color: "#a262bc", on: "#ffffff", rgb: "162 98 188", deep: "134 63 162" },
-  { key: "clay", label: "Clay", color: "#c9704a", on: "#ffffff", rgb: "201 112 74", deep: "169 82 45" },
-  { key: "gold", label: "Gold", color: "#af8c2c", on: "#ffffff", rgb: "175 140 44", deep: "146 116 32" },
-  { key: "rose", label: "Rose", color: "#c75778", on: "#ffffff", rgb: "199 87 120", deep: "173 52 88" },
-  { key: "forest", label: "Forest", color: "#3fa268", on: "#ffffff", rgb: "63 162 104", deep: "48 136 84" },
-  { key: "slate", label: "Slate", color: "#72869d", on: "#ffffff", rgb: "114 134 157", deep: "86 106 129" },
+  { key: "deep-ocean", label: "Deep ocean", color: "#0D2B45", on: "#ffffff", rgb: "13 43 69", deep: "8 27 44" },
+  { key: "ocean-teal", label: "Ocean teal", color: "#1E5A6E", on: "#ffffff", rgb: "30 90 110", deep: "22 68 81" },
+  { key: "seafoam", label: "Seafoam", color: "#6BA7A0", on: "#0D2B45", rgb: "53 112 106", deep: "44 92 87", light: true },
+  { key: "sandy", label: "Sandy beige", color: "#DCC8AA", on: "#0D2B45", rgb: "122 95 57", deep: "99 77 46", light: true },
+  { key: "sky", label: "Light sky", color: "#B7D4E6", on: "#0D2B45", rgb: "61 110 140", deep: "46 86 112", light: true },
 ];
 function accentColor(
   key: string
-): { color: string; on: string; rgb: string; deep: string } | null {
-  const a = COMPANY_ACCENTS.find((x) => x.key === key);
-  return a && a.color ? { color: a.color, on: a.on, rgb: a.rgb, deep: a.deep } : null;
+): { color: string; on: string; rgb: string; deep: string; light?: boolean } | null {
+  const a = ACCENT_COLORS.find((x) => x.key === key);
+  return a && a.color
+    ? { color: a.color, on: a.on, rgb: a.rgb, deep: a.deep, light: a.light }
+    : null;
 }
 // The CSS-var overrides that make a chosen accent the app-wide accent. Applied
 // to the app-root wrapper (which contains both the rail and the content), so it
@@ -8141,6 +8158,9 @@ function appAccentStyle(key: string): React.CSSProperties | undefined {
     ["--c-brown" as any]: a.rgb,
     ["--c-brown-deep" as any]: a.deep,
     ["--accent-solid" as any]: a.color,
+    // Text drawn on top of the accent fill. White on the dark accents, navy on
+    // the pale ones — without this, "Light sky" gets white-on-#B7D4E6 buttons.
+    ["--accent-on" as any]: a.on,
     ["--su-rail-active-bg" as any]: a.color,
     ["--su-rail-active-fg" as any]: a.on,
   } as React.CSSProperties;
@@ -20165,19 +20185,25 @@ function ProfileTab({
         </div>
       )}
 
-      {/* Per-company color. Picking one makes it Scout's accent everywhere while
-          you're on this company's lens (buttons, links, the active nav item),
-          so you can tell at a glance which company you're working in. */}
-      {kind === "company" && onSetAccent && activeCompanyId && activeCompanyId !== "personal" && (
+      {/* Accent color. Picking one makes it Scout's accent everywhere (buttons,
+          links, the active nav item). On a company account it's per-lens, so
+          you can tell at a glance which company you're working in; a solo
+          account gets the same picker for its own profile. */}
+      {onSetAccent &&
+        (kind === "company"
+          ? !!activeCompanyId && activeCompanyId !== "personal"
+          : true) && (
         <div className="mt-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-            Company color
+            {kind === "company" ? "Company color" : "Profile color"}
           </div>
           <p className="mt-0.5 text-xs text-body/70">
-            Sets Scout&apos;s accent color while you&apos;re on this company.
+            {kind === "company"
+              ? "Sets Scout's accent color while you're on this company."
+              : "Sets Scout's accent color across the app."}
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
-            {COMPANY_ACCENTS.map((a) => {
+            {ACCENT_COLORS.map((a) => {
               const selected = (accentKey || "") === a.key;
               return (
                 <button
@@ -20190,14 +20216,18 @@ function ProfileTab({
                   }`}
                   style={{
                     background: a.color || "var(--c-surface, #fff)",
-                    borderColor: a.color || "var(--c-warm-border)",
+                    // Pale swatches need a visible edge of their own against
+                    // the white card, not a border in their own color.
+                    borderColor: a.light
+                      ? "var(--c-warm-border)"
+                      : a.color || "var(--c-warm-border)",
                     // @ts-expect-error CSS custom prop
                     "--tw-ring-color": a.color || "#b8b0a2",
                   }}
                 >
                   {!a.color && <span className="text-[11px] text-body/50">×</span>}
                   {selected && a.color && (
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={a.on || "#fff"} strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round"><path d="M20 6 9 17l-5-5" /></svg>
                   )}
                 </button>
               );
