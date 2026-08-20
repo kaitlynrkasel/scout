@@ -20628,7 +20628,14 @@ function ProfileTab({
   async function readAndFill(text: string, keepBio = true, silent = false) {
     const t = (text || "").trim();
     if (!t) return;
-    if (keepBio) onBio(t);
+    if (keepBio) {
+      onBio(t);
+      // Show the text straight away, then break it into sections once that
+      // comes back, so a dropped resume never sits as one wall.
+      void autoSection(t).then((sectioned) => {
+        if (sectioned !== t) onBio(sectioned);
+      });
+    }
     if (!silent) {
       setNote("");
       setAutofilled(false);
@@ -20857,14 +20864,13 @@ function ProfileTab({
                   Use in searches &amp; drafts
                 </label>
               </div>
-              <textarea
+              <SectionedText
                 value={companyExpertise}
-                onChange={(e) => onCompanyExpertise(e.target.value)}
+                onChange={onCompanyExpertise}
                 rows={3}
+                dim={!useExpertise}
+                getToken={getToken}
                 placeholder="e.g. music licensing & sync deals; 8 yrs in A&R; relationships with indie labels. What you know best."
-                className={`w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 ${
-                  useExpertise ? "" : "opacity-60"
-                }`}
               />
               {/* Drop a resume to fill this in — Scout reads it into your experience. */}
               <div className="mt-2">
@@ -20872,7 +20878,13 @@ function ProfileTab({
                   label="Or drop your resume/CV here to fill this in"
                   accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
                   hint="PDF, image, Word, HTML, or text, we read it into your experience above"
-                  onText={(t) => onCompanyExpertise(String(t || "").trim().slice(0, 1500))}
+                  onText={(t) => {
+                    const raw = String(t || "").trim().slice(0, 4000);
+                    onCompanyExpertise(raw);
+                    void autoSection(raw).then((sectioned) => {
+                      if (sectioned !== raw) onCompanyExpertise(sectioned);
+                    });
+                  }}
                 />
               </div>
               {!useExpertise && (
@@ -21183,12 +21195,12 @@ function ProfileTab({
               )}
             </div>
           </div>
-          <textarea
+          <SectionedText
             value={bio}
-            onChange={(e) => onBio(e.target.value)}
+            onChange={onBio}
             rows={11}
+            getToken={getToken}
             placeholder="Paste anything that tells us who you are: your LinkedIn About section, a short bio, your company's about page, your experience. Scout reads it as you type and fills in your name, use case, and details automatically. The more you give, the more personal your outreach becomes."
-            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
           />
         </div>
         </>
@@ -21500,6 +21512,206 @@ function ProfileGate({ onSetup }: { onSetup: () => void }) {
         Set up your Profile
       </button>
     </section>
+  );
+}
+
+/* ---------------- Sectioned text ----------------
+ * A resume pasted into one box is a wall: you cannot see at a glance what Scout
+ * knows about you, and editing one job means scrolling through everything else.
+ * This shows one labelled box per section (Experience, Education, Skills, ...)
+ * while still storing ONE string, so every existing consumer of the profile
+ * (search grounding, drafting, the signature builder) keeps reading the same
+ * field it always did. The storage format is a "## Label" line above each
+ * block, which round-trips through this editor and still reads correctly to a
+ * model if it is ever consumed raw.
+ *
+ * Text with no "## " headings is shown as a single plain box, exactly as
+ * before, so nothing changes for someone who just types a paragraph. */
+type TextSection = { label: string; text: string };
+
+function parseSections(value: string): TextSection[] {
+  const v = String(value || "").replace(/\r/g, "");
+  if (!/^##\s*\S/m.test(v)) return [];
+  const out: TextSection[] = [];
+  let label = "";
+  let buf: string[] = [];
+  const flush = () => {
+    const text = buf.join("\n").trim();
+    if (label && text) out.push({ label, text });
+    buf = [];
+  };
+  for (const line of v.split("\n")) {
+    const m = line.match(/^##\s*(.+?)\s*$/);
+    if (m) {
+      flush();
+      label = m[1];
+    } else if (label) {
+      buf.push(line);
+    } else if (line.trim()) {
+      // Anything before the first heading is still the person's text; keep it
+      // rather than dropping it on the floor.
+      label = "Summary";
+      buf.push(line);
+    }
+  }
+  flush();
+  return out;
+}
+
+function serializeSections(sections: TextSection[]): string {
+  return sections
+    .filter((s) => s.label.trim() || s.text.trim())
+    .map((s) => `## ${s.label.trim() || "Other"}\n${s.text.trim()}`)
+    .join("\n\n");
+}
+
+// Break a freshly dropped document into labelled sections, best-effort. Returns
+// the original text unchanged if it is too short to have sections, already has
+// them, or the split could not be trusted. Short paragraphs stay one box: a
+// two-line bio in three labelled cards is worse than a two-line bio.
+async function autoSection(text: string): Promise<string> {
+  const t = String(text || "").trim();
+  if (t.length < 400 || parseSections(t).length) return t;
+  try {
+    const r = await fetch("/api/resume-sections", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: t }),
+    });
+    const j = await r.json().catch(() => ({}));
+    const got: TextSection[] = Array.isArray(j?.sections) ? j.sections : [];
+    return got.length ? serializeSections(got) : t;
+  } catch {
+    return t;
+  }
+}
+
+function SectionedText({
+  value,
+  onChange,
+  placeholder,
+  rows = 6,
+  dim = false,
+  getToken,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  rows?: number;
+  dim?: boolean;
+  getToken?: () => Promise<string | null>;
+}) {
+  const sections = parseSections(value);
+  const [splitting, setSplitting] = useState(false);
+  const [splitNote, setSplitNote] = useState("");
+  const boxCls = `w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 ${
+    dim ? "opacity-60" : ""
+  }`;
+
+  const setSection = (i: number, patch: Partial<TextSection>) => {
+    const next = sections.map((s, j) => (j === i ? { ...s, ...patch } : s));
+    onChange(serializeSections(next));
+  };
+  const removeSection = (i: number) => {
+    const next = sections.filter((_, j) => j !== i);
+    // Removing the last section drops back to a plain box rather than leaving
+    // an empty shell with no way to type into it.
+    onChange(next.length ? serializeSections(next) : "");
+  };
+  const addSection = () => {
+    onChange(serializeSections([...sections, { label: "New section", text: "" }]));
+  };
+
+  async function splitIntoSections() {
+    if (splitting || !value.trim()) return;
+    setSplitting(true);
+    setSplitNote("");
+    try {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      const token = getToken ? await getToken() : null;
+      if (token) headers.authorization = `Bearer ${token}`;
+      const r = await fetch("/api/resume-sections", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ text: value }),
+      });
+      const j = await r.json().catch(() => ({}));
+      const got: TextSection[] = Array.isArray(j?.sections) ? j.sections : [];
+      if (got.length) onChange(serializeSections(got));
+      else setSplitNote("Could not find clear sections in this, so it was left as it is.");
+    } catch {
+      setSplitNote("Could not split that just now.");
+    } finally {
+      setSplitting(false);
+    }
+  }
+
+  // No headings yet: one plain box, plus the offer to break it up.
+  if (!sections.length) {
+    return (
+      <>
+        <textarea
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={rows}
+          placeholder={placeholder}
+          className={boxCls}
+        />
+        {value.trim().length > 200 && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+            <button
+              onClick={splitIntoSections}
+              disabled={splitting}
+              className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:border-brown/40 hover:text-ink disabled:opacity-50"
+            >
+              {splitting ? "Splitting…" : "Split into sections"}
+            </button>
+            <span className="text-[11px] text-body/55">
+              Experience, Education, Skills and so on, each in its own box. Your
+              wording is not changed.
+            </span>
+          </div>
+        )}
+        {splitNote && <p className="mt-1.5 text-[11px] text-body/60">{splitNote}</p>}
+      </>
+    );
+  }
+
+  return (
+    <div className={`space-y-3 ${dim ? "opacity-60" : ""}`}>
+      {sections.map((s, i) => (
+        <div key={i} className="rounded-xl border border-warm-border bg-warm-bg/30 p-2.5">
+          <div className="mb-1.5 flex items-center gap-2">
+            <input
+              value={s.label}
+              onChange={(e) => setSection(i, { label: e.target.value })}
+              placeholder="Section name"
+              className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-[11px] font-bold uppercase tracking-wider text-body/70 outline-none transition focus:bg-surface focus:text-ink"
+            />
+            <button
+              onClick={() => removeSection(i)}
+              title={`Remove ${s.label || "this section"}`}
+              aria-label={`Remove ${s.label || "this section"}`}
+              className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-body/45 transition hover:bg-danger/10 hover:text-danger"
+            >
+              Remove
+            </button>
+          </div>
+          <textarea
+            value={s.text}
+            onChange={(e) => setSection(i, { text: e.target.value })}
+            rows={Math.min(12, Math.max(3, s.text.split("\n").length + 1))}
+            className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+          />
+        </div>
+      ))}
+      <button
+        onClick={addSection}
+        className="rounded-lg border border-dashed border-warm-border px-3 py-1.5 text-[11px] font-bold text-body/70 transition hover:border-brown/40 hover:text-ink"
+      >
+        Add a section
+      </button>
+    </div>
   );
 }
 
