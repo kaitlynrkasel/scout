@@ -5887,10 +5887,17 @@ function ScoutTool({
       const floor = baselineUnderstanding(goal, aboutForApi, asked.length);
       const stored = activeCategory?.understanding ?? 0;
       const blended = Math.max(0, Math.min(100, Math.max(modelU, floor, stored) + learnedBump(cf)));
-      return { understanding: blended, questions, plan: d.plan ?? null };
+      // modelU rides along with the blend because the two answer different
+      // questions. The blend is the ratcheted score — it only ever climbs, so a
+      // settled search's bar never lurches backwards. modelU is what Scout
+      // understands about this goal right now, and it's the one the caller has
+      // to fall back on once there are open questions: gating on a blend that
+      // remembers an old 100 would bury every question raised from then on.
+      return { understanding: blended, modelUnderstanding: modelU, questions, plan: d.plan ?? null };
     } catch {
       return {
         understanding: 100,
+        modelUnderstanding: 100,
         questions: [] as { question: string; options: string[] }[],
         plan: null,
       };
@@ -5934,19 +5941,27 @@ function ScoutTool({
     setGating(true);
     try {
       const u = await fetchUnderstanding(priorAnswers, priorAsked);
+      // The blend only ever climbs, which is right for a settled search but
+      // wrong the moment the planner raises a real question: a category that
+      // once scored 100 would sit on it forever, and the card would claim 100%
+      // while asking what it still doesn't know. So when there ARE questions,
+      // both the gate and the number fall back to Scout's current read.
+      const score = u.questions.length
+        ? Math.min(u.understanding, u.modelUnderstanding)
+        : u.understanding;
       // Remember the (cumulative) understanding so the next run shows the real %.
-      persistUnderstanding({ understanding: u.understanding });
+      persistUnderstanding({ understanding: score });
       // Cache a fully-understood pass so an unchanged re-run is free.
-      if (u.understanding >= UNDERSTAND_GATE || u.questions.length === 0) {
+      if (score >= UNDERSTAND_GATE || u.questions.length === 0) {
         understoodCache.current.set(cacheKey, {
           sig,
           plan: u.plan,
-          understanding: u.understanding,
+          understanding: score,
         });
         flashUnderstood();
         await runDiscover(u.plan, priorAnswers);
       } else {
-        setPlanGate({ ...u, priorAsked, priorAnswers });
+        setPlanGate({ ...u, understanding: score, priorAsked, priorAnswers });
       }
     } finally {
       setGating(false);
