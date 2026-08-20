@@ -754,11 +754,42 @@ html.dark .su-rail .su-logo img {
   background-color: var(--accent-solid) !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"), none !important;
+  /* These three are not optional. This same element also carries
+     .bg-brand-gradient, and the rule above it sets the `background` SHORTHAND
+     with !important, which resets repeat/position/size to their initial values.
+     The plain declarations on .scout-select-light then lose to that !important
+     reset, leaving a 16px chevron tiled across the whole control: the picker
+     rendered as a grid of arrows. Restore them at the same weight. */
+  background-repeat: no-repeat, no-repeat !important;
+  background-position: right 0.5rem center, center !important;
+  background-size: 16px 16px, cover !important;
 }
+/* The format picker glued to the "Draft ..." button is a chevron, not a label.
+   The button already names the format ("Draft linkedin message"), so letting
+   the select also paint its value made a long one overflow and sit on top of
+   the button text. Keep it a real <select> for keyboard and screen readers,
+   and hide only the value it paints on itself. */
+select.scout-kind-picker {
+  width: 1.9rem;
+  min-width: 1.9rem;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  color: transparent !important;
+  text-indent: -9999px; /* Firefox paints the value regardless of color */
+  background-position: center !important;
+}
+select.scout-kind-picker option {
+  color: #2b2723;
+  text-indent: 0;
+}
+
 /* Pale accents (Seafoam, Sandy beige, Light sky): the select's chevron is baked
    into a data URI, so it needs its own navy copy rather than a color token. */
 [data-accent-light] select.scout-select-light {
   color: var(--accent-on, #0d2b45) !important;
+  background-repeat: no-repeat, no-repeat !important;
+  background-position: right 0.5rem center, center !important;
+  background-size: 16px 16px, cover !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230D2B45' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E") !important;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230D2B45' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"), none !important;
 }

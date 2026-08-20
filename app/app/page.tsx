@@ -9456,11 +9456,7 @@ function FindsList({
                     o.name
                   )}
                 </span>
-                {o.fitScore != null && (
-                  <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
-                    {Math.round(o.fitScore * 100)}% fit
-                  </span>
-                )}
+                {o.fitScore != null && <FitPill fitScore={o.fitScore} />}
                 {o.targetType === "listing" && (
                   <span className="rounded-full bg-sage px-2 py-0.5 text-[10px] font-bold text-white">
                     Apply
@@ -10396,14 +10392,7 @@ function FindDetailModal({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="truncate text-lg font-bold text-ink">{o.name}</span>
-              {o.fitScore != null && (
-                <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
-                  {Math.round(o.fitScore * 100)}% fit
-                </span>
-              )}
-              <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
-                {o.channel}
-              </span>
+              {o.fitScore != null && <FitPill fitScore={o.fitScore} />}
               <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold capitalize text-body/80">
                 {find.status}
               </span>
@@ -12237,10 +12226,17 @@ function FindsTab({
   // find lands in the project it was found in, so it shows under that project
   // and under "All projects" — not under every project at once.
   const allProjectsView = activeProjectId === "__all__";
+  // Picking a person is an explicit "show me what THEY found", so it overrides
+  // the project scope. Shared projects are matched by name, so a teammate whose
+  // project is called something else files into a different one; scoping their
+  // finds to your project name would answer that question with an empty list
+  // and no reason why.
+  const personView = !!foundBy;
   const teamShown = (teamName ? teamFinds || [] : [])
     .filter(
       (f: any) =>
         allProjectsView ||
+        personView ||
         String(f.__projectName || "").trim().toLowerCase() ===
           String(projectName || "").trim().toLowerCase()
     )
@@ -12258,6 +12254,10 @@ function FindsTab({
       )
     )
   );
+  // How many each person has contributed, across every shared project, so the
+  // chips say who actually has finds rather than just who exists.
+  const teamPersonCount = (email: string) =>
+    (teamFinds || []).filter((f: any) => String(f.added_email || "") === email).length;
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
@@ -12410,9 +12410,21 @@ function FindsTab({
                 }`}
               >
                 {em === accountEmail ? "You" : (em || "").split("@")[0] || em}
+                {teamPersonCount(em) > 0 && (
+                  <span className={`ml-1.5 tabular-nums ${foundBy === em ? "text-white/80" : "text-body/50"}`}>
+                    {teamPersonCount(em)}
+                  </span>
+                )}
               </button>
             ))}
           </div>
+          {foundBy && foundBy !== accountEmail && (
+            <p className="mt-2 text-[11px] leading-relaxed text-body/60">
+              Showing everything {(foundBy || "").split("@")[0]} has found, across
+              every project, since a teammate files finds under their own project
+              names. Each row says which project it came from.
+            </p>
+          )}
         </div>
       )}
 
@@ -12471,15 +12483,18 @@ function FindsTab({
 
       {/* Status filter (the main control) + a quiet side group of view toggle,
           Filters, and Export — sub-options, pushed to the edge. */}
-      <div className={`${srcCounts.manual > 0 && srcCounts.scout > 0 ? "mt-3" : "mt-6"} flex flex-wrap items-center gap-x-4 gap-y-2`}>
-        <div className="flex flex-1 flex-wrap gap-2">
+      <div className={`${srcCounts.manual > 0 && srcCounts.scout > 0 ? "mt-3" : "mt-6"} flex items-center gap-3`}>
+        {/* One scrolling strip, never a wrap. Wrapping left a single orphaned
+            chip on a second line with the side controls stranded beside the
+            first, which is what made this toolbar look thrown together. */}
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {FIND_STATUSES.map((s) => {
             const on = filter === s.key;
             return (
               <button
                 key={s.key}
                 onClick={() => setFilter(s.key)}
-                className={`rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-semibold transition ${
                   on
                     ? "border-coral/50 bg-brand-gradient text-white"
                     : "border-warm-border bg-surface text-body hover:bg-warm-bg"
@@ -12495,6 +12510,14 @@ function FindsTab({
           })}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          {shown.length > 0 && !selectMode && (
+            <button
+              onClick={() => setSelectMode(true)}
+              className="mr-1 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg hover:text-ink"
+            >
+              Select
+            </button>
+          )}
           <div className="mr-1 inline-flex rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
             <button
               onClick={() => setView("list")}
@@ -12677,18 +12700,10 @@ function FindsTab({
         )}
       </div>
 
-      {/* Select toggle — turns the list into a multi-select for bulk actions. */}
-      {shown.length > 0 && (
+      {/* Bulk actions, once Select is on (the toggle itself lives in the toolbar
+          above, with the other view controls). */}
+      {shown.length > 0 && selectMode && (
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {!selectMode ? (
-            <button
-              onClick={() => setSelectMode(true)}
-              className="rounded-lg border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-            >
-              Select
-            </button>
-          ) : (
-            <>
               <button
                 onClick={() =>
                   setSelectedIds(
@@ -12710,8 +12725,6 @@ function FindsTab({
               >
                 Cancel
               </button>
-            </>
-          )}
         </div>
       )}
 
@@ -13374,11 +13387,7 @@ function FindCard({
             Bounced
           </span>
         )}
-        {o.fitScore != null && (
-          <span className="rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
-            {Math.round(o.fitScore * 100)}% fit
-          </span>
-        )}
+        {o.fitScore != null && <FitPill fitScore={o.fitScore} />}
         {o.sources && o.sources.length > 1 && (
           <span
             title={`Corroborated across ${o.sources.length} sources`}
@@ -13388,9 +13397,6 @@ function FindCard({
             {o.sources.length} sources
           </span>
         )}
-        <span className="rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-medium text-body">
-          {o.channel}
-        </span>
         {(() => {
           const via = find.foundVia || "search";
           // Person-centric: on your own account every search find was run by
@@ -14025,7 +14031,7 @@ function FindWorkflow({
               disabled={drafting}
               aria-label="Message format"
               title="Choose the message format"
-              className="scout-select scout-select-light h-full cursor-pointer border-l border-white/30 bg-brand-gradient px-1.5 py-1.5 text-xs font-bold text-white outline-none disabled:opacity-50"
+              className="scout-select scout-select-light scout-kind-picker cursor-pointer self-stretch border-l border-white/30 bg-brand-gradient text-xs font-bold text-white outline-none disabled:opacity-50"
             >
               {OUTREACH_KINDS.map((k) => (
                 <option key={k} value={k} className="text-ink">
@@ -15093,9 +15099,7 @@ function DashboardTab({
                         <div className="mt-3 flex flex-wrap items-center gap-3">
                           <span className="font-display text-[26px] font-extrabold leading-none text-ink">{spotlight.opp.name}</span>
                           {typeof spotlight.opp.fitScore === "number" && (
-                            <span className="rounded-full bg-success/15 px-2.5 py-1 text-xs font-bold text-success-deep">
-                              {Math.round(spotlight.opp.fitScore * 100)}% fit
-                            </span>
+                            <FitPill fitScore={spotlight.opp.fitScore} className="px-2.5 py-1 text-xs" />
                           )}
                         </div>
                         <div className="mt-1.5 text-sm text-muted">{roleLine(spotlight.opp)}</div>
@@ -21785,6 +21789,45 @@ function SectionedText({
         Add a section
       </button>
     </div>
+  );
+}
+
+/* ---------------- Fit ----------------
+ * A bare "38% fit" reads like a grade the user failed. The number is also
+ * falsely precise: it comes from a model's judgement, so 38 and 44 are not
+ * meaningfully different, and showing two digits invites people to treat them
+ * as if they were. Bands say the same thing in the language someone actually
+ * uses about a lead, and carry their own color so a list can be skimmed for
+ * the strong ones. The exact score stays on hover for anyone who wants it. */
+const FIT_BANDS: { min: number; label: string; cls: string }[] = [
+  { min: 85, label: "Perfect fit", cls: "bg-brand-gradient text-white" },
+  { min: 70, label: "Great fit", cls: "border border-sage/50 bg-sage/15 text-sage-deep" },
+  { min: 50, label: "Good fit", cls: "border border-blue-deep/30 bg-blue-tint/40 text-blue-deep" },
+  { min: 30, label: "Potential fit", cls: "border border-attention/40 bg-attention/10 text-attention" },
+  { min: 0, label: "Long shot", cls: "border border-warm-border bg-warm-bg text-body/70" },
+];
+
+function fitBand(fitScore: number): { label: string; cls: string; pct: number } {
+  const pct = Math.round(fitScore * 100);
+  const band = FIT_BANDS.find((b) => pct >= b.min) || FIT_BANDS[FIT_BANDS.length - 1];
+  return { label: band.label, cls: band.cls, pct };
+}
+
+function FitPill({
+  fitScore,
+  className = "px-2 py-0.5 text-[10px]",
+}: {
+  fitScore: number;
+  className?: string;
+}) {
+  const { label, cls, pct } = fitBand(fitScore);
+  return (
+    <span
+      title={`Scout scored this ${pct} out of 100 against your goal`}
+      className={`rounded-full font-bold ${cls} ${className}`}
+    >
+      {label}
+    </span>
   );
 }
 
