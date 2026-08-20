@@ -30,7 +30,26 @@ async function assertWorkspaceMember(uid: string, workspaceId: string) {
     .eq("user_id", uid)
     .maybeSingle();
   if (!data) throw new TeamError("You are not a member of this workspace.", 403);
-  return data.role as string;
+  return effectiveRole(uid, workspaceId, data.role as string);
+}
+
+// The person who created a company is always its owner, whatever the membership
+// row says. Only an owner can promote someone to owner, so a workspace whose
+// creator ends up on a lesser role can never be given one again: it is locked
+// out of invites, roles and deletion permanently. Found live on a real company
+// whose creator sat at editor with no owner on the workspace at all.
+async function effectiveRole(
+  uid: string,
+  workspaceId: string,
+  role: string
+): Promise<string> {
+  if (role === "owner") return role;
+  const { data } = await db()
+    .from("workspaces")
+    .select("created_by")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  return data && (data as any).created_by === uid ? "owner" : role;
 }
 
 async function assertProjectMember(uid: string, sharedProjectId: string) {
@@ -324,7 +343,12 @@ export async function getWorkspaceContext(uid: string, email: string) {
       .in("workspace_id", wsIds);
     workspaces = (wsRows || []).map((w: any) => ({
       ...w,
-      role: (memberships || []).find((m: any) => m.workspace_id === w.id)?.role || "editor",
+      // Same creator rule the guards use, so the UI shows the role the server
+      // will actually enforce rather than a lesser one that hides the controls.
+      role:
+        w.created_by === uid
+          ? "owner"
+          : (memberships || []).find((m: any) => m.workspace_id === w.id)?.role || "editor",
       members: (memberRows || []).filter((m: any) => m.workspace_id === w.id),
       pending: (pendingRows || []).filter((p: any) => p.workspace_id === w.id),
     }));

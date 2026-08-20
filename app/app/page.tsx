@@ -336,7 +336,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     tab: "dashboard",
     title: "You're all set",
-    body: "Start on the Outreach tab to run your first search. You can replay this tour anytime from Settings.",
+    body: "Start on the Scout tab to run your first search. You can replay this tour anytime from Settings.",
   },
 ];
 
@@ -1384,6 +1384,7 @@ const TABS = [
   "finds",
   "dashboard",
   "team",
+  "projects",
   "templates",
   "profile",
   "account",
@@ -3528,6 +3529,13 @@ function ScoutTool({
     const nm = name.trim();
     if (!nm) return;
     saveCats(categories.map((c) => (c.id === id ? { ...c, name: nm } : c)));
+  }
+
+  // The category's saved search text. Lives on the Projects tab, where a
+  // category is defined; the Scout tab only picks one and runs it.
+  function setCategoryGoal(id: string, goal: string) {
+    saveCats(categories.map((c) => (c.id === id ? { ...c, goal } : c)));
+    if (catId === id) setGoal(goal);
   }
 
   function removeCategory(id: string) {
@@ -6856,14 +6864,22 @@ function ScoutTool({
           </button>
         </div>
       )}
-      {/* Grows to fill the viewport so the footer sits at the bottom on short pages */}
-      <div ref={contentRef} className="flex flex-1 flex-col">
+      {/* Grows to fill the viewport so the footer sits at the bottom on short pages.
+          Scout gets a warmer canvas than the rest of the app: it is the screen
+          you come to do the work on, and the deeper ground makes the search card
+          read as the object on the page rather than blending into it. */}
+      <div
+        ref={contentRef}
+        className={`flex flex-1 flex-col transition-colors ${
+          tab === "outreach" ? "bg-brown-tint/45" : ""
+        }`}
+      >
 
       {tab === "outreach" && (
           <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
           <div className="mb-6">
             <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
-            <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Outreach</h1>
+            <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Scout</h1>
             {/* The company lens lives in the sidebar now; no duplicate here. */}
             {teamLens && (
               <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs">
@@ -6908,213 +6924,45 @@ function ScoutTool({
             {profileComplete || guest ? (
             <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
               {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
+              {/* Two toggles, nothing else. Defining a project or a category
+                  happens on the Projects tab; this screen is for choosing one
+                  and saying who you are after. */}
               <div
                 data-tour="project-switcher"
-                className="mb-6 grid gap-6 border-b border-warm-border pb-6 sm:grid-cols-[300px_1fr] [&>*]:min-w-0"
+                className="mb-6 grid gap-4 border-b border-warm-border pb-6 sm:grid-cols-2 [&>*]:min-w-0"
               >
                 <div>
                   <Label>Project</Label>
-                  {/* Same control as Category below: pick from the dropdown, tap
-                      the pencil to rename / add / remove. One consistent system. */}
-                  <div className="relative">
-                    <div className="flex items-center gap-2">
-                      <PrettySelect
-                        ariaLabel="Project"
-                        className="flex-1"
-                        value={activeId}
-                        onChange={selectProject}
-                        options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
-                      />
-                      <button
-                        onClick={() => setEditingProjects(true)}
-                        title="Rename, add, or remove projects"
-                        aria-label="Rename, add, or remove projects"
-                        className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-                      >
-                        <PencilIcon />
-                      </button>
-                    </div>
-                    {editingProjects && (
-                      <CategoryManager
-                        cats={visibleProjects}
-                        onAdd={addProject}
-                        onRename={renameProject}
-                        onRemove={removeProject}
-                        onClose={() => setEditingProjects(false)}
-                        title="Your projects"
-                        addPlaceholder="New project (e.g. a client or brand)"
-                        emptyText="No projects yet."
-                      />
-                    )}
-                  </div>
-                  <p className="mt-2.5 text-xs leading-relaxed text-body/70">
-                    A project is one workspace per client, brand, or goal. Tap the
-                    pencil to rename, add, or remove projects.
-                  </p>
-                </div>
-
-                <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <Label className="mb-0">What is this project for?</Label>
-                    <MicButton
-                      onAppend={(t) =>
-                        setProjectContext(activeId, joinSpoken(activeProject?.context || "", t))
-                      }
-                    />
-                  </div>
-                  <textarea
-                    value={activeProject?.context || ""}
-                    onChange={(e) => setProjectContext(activeId, e.target.value)}
-                    onBlur={() =>
-                      // Describing the project is the strongest signal of what
-                      // it's for; retune its untouched seed categories to match.
-                      void retuneProject(
-                        activeId,
-                        activeProject?.name || "",
-                        activeProject?.context || ""
-                      )
-                    }
-                    rows={2}
-                    placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
-                    className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                  <PrettySelect
+                    ariaLabel="Project"
+                    value={activeId}
+                    onChange={selectProject}
+                    options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
                   />
-
-                  {/* Per-project options tucked into a collapsible so the search
-                      form stays uncluttered; open it to tune profile/company
-                      grounding and auto follow-up. */}
-                  <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
-                  <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
-                    <span className="shrink-0 whitespace-nowrap">Project options</span>
-                    <span className="min-w-0 truncate font-normal text-body/50">
-                      · profile, company, follow-up
-                    </span>
-                  </summary>
-                  {/* Per-project: read my profile + learn from my other searches? */}
-                  <label className="mt-3 flex cursor-pointer items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={activeProject?.usesProfile !== false}
-                      onChange={(e) => setProjectUsesProfile(activeId, e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                    />
-                    <span className="text-xs leading-relaxed text-body/80">
-                      <span className="font-semibold text-ink">Use my personal profile for this project</span>
-                      <br />
-                      On, searches match your own field and learn from your other projects. Turn
-                      it off when this project isn&apos;t about you personally.
-                    </span>
-                  </label>
-
-                  {/* Company accounts: independent of the personal profile, so you
-                      can use company-only, personal-only, both, or neither. */}
-                  {profile.accountType === "company" && (
-                      <label className="mt-3 flex cursor-pointer items-start gap-2.5">
-                        <input
-                          type="checkbox"
-                          checked={activeProject?.usesCompany !== false}
-                          onChange={(e) => setProjectUsesCompany(activeId, e.target.checked)}
-                          className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                        />
-                        <span className="text-xs leading-relaxed text-body/80">
-                          <span className="font-semibold text-ink">Use my company for this project</span>
-                          <br />
-                          On, outreach represents {profile.companyName || "your company"}. Independent
-                          of the personal toggle, turn one off and the other on to pitch as the
-                          company only, or search as just yourself (e.g. your own internship hunt).
-                        </span>
-                      </label>
-                    )}
-
-                  {/* Auto follow-up sequence for this project's sends. */}
-                  <label className="mt-3 flex cursor-pointer items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={activeProject?.autoFollowUp === true}
-                      onChange={(e) => setProjectAutoFollowUp(activeId, e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                    />
-                    <span className="text-xs leading-relaxed text-body/80">
-                      <span className="font-semibold text-ink">Auto follow-up</span>
-                      <br />
-                      When you send a message from this project, Scout queues one follow-up 4 days
-                      later, and cancels it automatically if they reply or the address bounces.
-                      Needs a connected email in send mode.
-                    </span>
-                  </label>
-                  </details>
+                </div>
+                <div data-tour="category-switcher">
+                  <div className="mb-1.5 flex items-center justify-between gap-2">
+                    <Label className="mb-0">Category of search</Label>
+                    <button
+                      onClick={() => setTab("projects")}
+                      className="text-[11px] font-semibold text-accent transition hover:underline"
+                    >
+                      Manage projects
+                    </button>
+                  </div>
+                  <PrettySelect
+                    ariaLabel="Category of search"
+                    value={catId}
+                    onChange={selectCategory}
+                    options={[
+                      ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                      { value: "", label: "Custom search…" },
+                    ]}
+                  />
                 </div>
               </div>
 
-              <div
-                data-tour="category-switcher"
-                className="grid gap-6 sm:grid-cols-[300px_1fr] [&>*]:min-w-0"
-              >
-                <div>
-                  <Label>Category of search</Label>
-                  {/* Identical control to Project above: dropdown to switch,
-                      pencil to rename / add / remove. */}
-                  <div className="relative">
-                    <div className="flex items-center gap-2">
-                      <PrettySelect
-                        ariaLabel="Category of search"
-                        className="flex-1"
-                        value={catId}
-                        onChange={selectCategory}
-                        options={[
-                          ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                          { value: "", label: "Custom search…" },
-                        ]}
-                      />
-                      <button
-                        onClick={() => setEditingCats(true)}
-                        title="Rename, add, or remove categories"
-                        aria-label="Rename, add, or remove categories"
-                        className="shrink-0 rounded-lg border border-warm-border p-2.5 text-body/70 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-                      >
-                        <PencilIcon />
-                      </button>
-                    </div>
-                    {editingCats && (
-                      <CategoryManager
-                        cats={myCats}
-                        onAdd={addCategoryNamed}
-                        onRename={renameCategory}
-                        onRemove={removeCategory}
-                        onClose={() => setEditingCats(false)}
-                      />
-                    )}
-                  </div>
-                  <p className="mt-3 text-xs leading-relaxed text-body/70">
-                    {catId
-                      ? "Edits here save automatically to this category."
-                      : "Running this custom search saves it as a new category automatically."}{" "}
-                    Categories belong to{" "}
-                    <span className="font-semibold text-body">
-                      {activeProject?.name || "this project"}
-                    </span>
-                    . Tap the pencil to rename or remove them.
-                  </p>
-
-                  {/* Per-search options for this category — contact info wanted,
-                      plus auto finds (run on a schedule) + auto emails (get a
-                      digest), all tucked into one collapsible. */}
-                  {goal.trim() && (
-                    <AutoSearchPanel
-                      getToken={getToken}
-                      goal={goal}
-                      about={aboutForProject(activeProject)}
-                      useCase={activeUseCase}
-                      label={`${activeProject?.name || "Project"} · ${activeCatName || "search"}`}
-                      wantedChannels={wantedChannels}
-                      onToggleChannel={toggleWantedChannel}
-                      channelsSaved={!!catId}
-                      comp={searchComp}
-                      onComp={setSearchComp}
-                      profileComp={profile.competitiveness}
-                    />
-                  )}
-                </div>
+              <div className="grid gap-6 [&>*]:min-w-0">
 
                 <div>
                   <div className="mb-1 flex items-center justify-between gap-2">
@@ -7908,6 +7756,28 @@ function ScoutTool({
           projects={visibleProjects}
           categories={categories}
           activeProjectId={activeId}
+        />
+      )}
+
+      {tab === "projects" && (
+        <ProjectsTab
+          projects={visibleProjects}
+          categories={categories}
+          finds={finds}
+          activeId={activeId}
+          onSelect={selectProject}
+          onAdd={addProject}
+          onRename={renameProject}
+          onRemove={removeProject}
+          onSetContext={setProjectContext}
+          onAddCategory={addCategoryToProject}
+          onRenameCategory={renameCategory}
+          onRemoveCategory={removeCategory}
+          onSetCategoryGoal={setCategoryGoal}
+          getToken={getToken}
+          workspaceId={teamLens || undefined}
+          role={companies.find((c) => c.id === teamLens)?.role || ""}
+          onGoScout={() => setTab("outreach")}
         />
       )}
 
@@ -8756,7 +8626,7 @@ function SideNav({
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
     { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet", "lists"] },
-    { key: "setup", label: "Setup", keys: ["templates", "profile", "team"] },
+    { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
   // Drag-and-drop reordering of the nav items within a group, persisted per
@@ -8819,7 +8689,7 @@ function SideNav({
     },
     {
       key: "outreach",
-      label: "Outreach",
+      label: "Scout",
       icon: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />,
     },
     {
@@ -8858,6 +8728,16 @@ function SideNav({
         <>
           <path d="M8 6h13M8 12h13M8 18h13" />
           <path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" />
+        </>
+      ),
+    },
+    {
+      key: "projects",
+      label: "Projects",
+      icon: (
+        <>
+          <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2l1.8 2.2h8A2.5 2.5 0 0 1 21 9.7v7.8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z" />
+          <path d="M8 13.5h8" />
         </>
       ),
     },
@@ -11359,7 +11239,7 @@ function SpreadsheetTab({
           ) : view === "manual" ? (
             "No manual finds. Add a contact or import a sheet and they show up here."
           ) : (
-            "No Scout-found finds yet. Run a search on the Outreach tab."
+            "No Scout-found finds yet. Run a search on the Scout tab."
           )}
         </div>
       ) : (
@@ -16965,7 +16845,6 @@ function TeamTab({
   const [deleteConfirm, setDeleteConfirm] = useState("");
   const [showDelete, setShowDelete] = useState(false);
   const [sharedProjects, setSharedProjects] = useState<any[]>([]);
-  const [shareChoice, setShareChoice] = useState("");
   const [openId, setOpenId] = useState("");
   const [sharedFinds, setSharedFinds] = useState<any[]>([]);
   const [recs, setRecs] = useState<any[]>([]);
@@ -17209,37 +17088,6 @@ function TeamTab({
   const isOwner = workspace?.role === "owner";
   // Owner + admin can manage the roster (invite, set roles, weights).
   const canManage = workspace?.role === "owner" || workspace?.role === "admin";
-
-  // Share a local project (with its current finds) into the workspace.
-  const shareProject = () =>
-    run("share", async () => {
-      const p = projects.find((x) => x.id === shareChoice);
-      if (!p) throw new Error("Pick a project to share.");
-      const seed = finds
-        .filter((f) => f.projectId === p.id)
-        .map((f) => ({
-          dedupKey: f.id,
-          opp: f.opp,
-          status: f.status,
-          draft: f.draft || null,
-          requirements: f.requirements || null,
-          gmailThreadId: f.gmailThreadId || null,
-          denyReason: f.denyReason || null,
-        }));
-      await authFetch("/api/team/project", {
-        method: "POST",
-        body: JSON.stringify({
-          workspaceId: workspace.id,
-          name: p.name,
-          useCase: p.useCase,
-          context: p.context || "",
-          finds: seed,
-        }),
-      });
-      setNote(`Shared "${p.name}" with your Team${seed.length ? ` (${seed.length} finds)` : ""}.`);
-      setShareChoice("");
-      await loadCtx();
-    });
 
   const openProject = (id: string) =>
     run("open-" + id, async () => {
@@ -17768,6 +17616,72 @@ function TeamTab({
             )}
           </section>
 
+          {/* -------- What each role can do -------- */}
+          {canManage && (
+            <section className="mt-6">
+              <h2 className="text-lg font-bold text-ink">What each role can do</h2>
+              <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
+                Roles are set per person in the list above. Each one includes
+                everything the role below it can do.
+              </p>
+              <div className="mt-3 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
+                <table className="w-full min-w-[560px] border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-warm-border text-left">
+                      <th className="px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/60">
+                        Can they
+                      </th>
+                      {["Viewer", "Editor", "Admin", "Owner"].map((r) => (
+                        <th
+                          key={r}
+                          className="px-3 py-2.5 text-center text-[11px] font-bold uppercase tracking-wider text-body/60"
+                        >
+                          {r}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(
+                      [
+                        ["See the team's shared finds", true, true, true, true],
+                        ["Run searches and write drafts", false, true, true, true],
+                        ["Add finds to a shared project", false, true, true, true],
+                        ["Share a project with the team", false, true, true, true],
+                        ["Publish templates to the team", false, true, true, true],
+                        ["Invite people and set their role", false, false, true, true],
+                        ["Set how much a teammate's decisions count", false, false, false, true],
+                        ["Make someone else an owner", false, false, false, true],
+                        ["Delete the company", false, false, false, true],
+                      ] as const
+                    ).map((row) => (
+                      <tr key={row[0] as string} className="border-b border-warm-border/60 last:border-0">
+                        <td className="px-4 py-2.5 text-body">{row[0]}</td>
+                        {[row[1], row[2], row[3], row[4]].map((yes, i) => (
+                          <td key={i} className="px-3 py-2.5 text-center">
+                            {yes ? (
+                              <span className="font-bold text-sage-deep" title="Yes">
+                                Yes
+                              </span>
+                            ) : (
+                              <span className="text-body/30" title="No">
+                                No
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-2 text-xs leading-relaxed text-body/60">
+                An owner cannot be demoted by another owner, so a company can
+                never be left without one.
+              </p>
+            </section>
+          )}
+
           {/* -------- Shared projects -------- */}
           <section className="mt-6">
             <h2 className="text-lg font-bold text-ink">Shared projects</h2>
@@ -17848,30 +17762,15 @@ function TeamTab({
               </div>
             )}
 
-            {/* Share a project */}
+            {/* Sharing is a fact about a project, so it is decided on the
+                Projects tab while looking at the project itself, not here in a
+                list of people. */}
             {shareable.length > 0 && (
-              <div className="mt-4 flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4">
-                <span className="text-sm font-semibold text-ink">Share a project:</span>
-                <select
-                  value={shareChoice}
-                  onChange={(e) => setShareChoice(e.target.value)}
-                  className="scout-select min-w-[180px] rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-coral"
-                >
-                  <option value="">Pick a project…</option>
-                  {shareable.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  onClick={shareProject}
-                  disabled={!shareChoice || !!busy}
-                  className="rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-                >
-                  {busy === "share" ? "Sharing…" : "Share with team"}
-                </button>
-              </div>
+              <p className="mt-4 rounded-2xl border border-warm-border bg-surface px-4 py-3 text-sm text-body/75">
+                To share a project with the team, open the{" "}
+                <span className="font-semibold text-ink">Projects</span> tab and use
+                Share with team on the project you want.
+              </p>
             )}
           </section>
             </>
@@ -18054,7 +17953,7 @@ function CommandPalette({
     [
       ["dashboard", "Home"],
       ["finds", "Finds"],
-      ["outreach", "Outreach"],
+      ["outreach", "Scout"],
       ["templates", "Templates"],
       ["profile", "Profile"],
       ...(hasAccount
@@ -21792,6 +21691,365 @@ function SectionedText({
   );
 }
 
+/* ---------------- Projects tab ----------------
+ * Where a project is DEFINED: named, described, given its categories, deleted,
+ * and shared with the team. The Scout tab only picks one and runs it, so the
+ * two jobs stop competing for the same screen.
+ *
+ * Sharing lives here rather than on Team because sharing is a fact about a
+ * project, not about the roster: you decide it while looking at the project,
+ * not while looking at a list of people. */
+function ProjectsTab({
+  projects,
+  categories,
+  finds,
+  activeId,
+  onSelect,
+  onAdd,
+  onRename,
+  onRemove,
+  onSetContext,
+  onAddCategory,
+  onRenameCategory,
+  onRemoveCategory,
+  onSetCategoryGoal,
+  getToken,
+  workspaceId,
+  role,
+  onGoScout,
+}: {
+  projects: Project[];
+  categories: Category[];
+  finds: Find[];
+  activeId: string;
+  onSelect: (id: string) => void;
+  onAdd: (name: string) => void;
+  onRename: (id: string, name: string) => void;
+  onRemove: (id: string) => void;
+  onSetContext: (id: string, context: string) => void;
+  onAddCategory: (projectId: string, name: string, goal?: string) => void;
+  onRenameCategory: (id: string, name: string) => void;
+  onRemoveCategory: (id: string) => void;
+  onSetCategoryGoal: (id: string, goal: string) => void;
+  getToken?: () => Promise<string | null>;
+  workspaceId?: string;
+  role?: string;
+  onGoScout: () => void;
+}) {
+  const [openId, setOpenId] = useState(activeId);
+  const [newName, setNewName] = useState("");
+  const [newCat, setNewCat] = useState<Record<string, string>>({});
+  const [shared, setShared] = useState<{ id: string; name: string }[]>([]);
+  const [busy, setBusy] = useState("");
+  const [note, setNote] = useState("");
+
+  // Owners and admins are responsible for the whole workspace, so they see every
+  // shared project in it by default, not only the ones they were added to.
+  const privileged = role === "owner" || role === "admin";
+
+  useEffect(() => {
+    if (!workspaceId || !getToken) return;
+    let alive = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const r = await fetch(`/api/team/project?workspaceId=${workspaceId}`, {
+          headers: { authorization: `Bearer ${token}` },
+        });
+        const j = await r.json().catch(() => ({}));
+        if (alive && Array.isArray(j.projects))
+          setShared(j.projects.map((p: any) => ({ id: String(p.id), name: String(p.name || "") })));
+      } catch {
+        /* sharing state is a nicety; the rest of the tab works without it */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [workspaceId, getToken, busy]);
+
+  const sharedNames = new Set(shared.map((p) => p.name.trim().toLowerCase()));
+  const isShared = (p: Project) => sharedNames.has((p.name || "").trim().toLowerCase());
+
+  // Shared projects nobody on this account has a local copy of. For an owner or
+  // admin these are still their responsibility, so they are listed rather than
+  // hidden behind a teammate's account.
+  const localNames = new Set(projects.map((p) => (p.name || "").trim().toLowerCase()));
+  const teamOnly = privileged
+    ? shared.filter((p) => !localNames.has(p.name.trim().toLowerCase()))
+    : [];
+
+  async function share(p: Project) {
+    if (!workspaceId || !getToken) return;
+    setBusy(p.id);
+    setNote("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Sign in again.");
+      const seed = finds
+        .filter((f) => f.projectId === p.id)
+        .map((f) => ({
+          dedupKey: f.id,
+          opp: f.opp,
+          status: f.status,
+          draft: f.draft || null,
+          requirements: f.requirements || null,
+          gmailThreadId: f.gmailThreadId || null,
+          denyReason: f.denyReason || null,
+        }));
+      const r = await fetch("/api/team/project", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({
+          workspaceId,
+          name: p.name,
+          useCase: p.useCase,
+          context: p.context || "",
+          finds: seed,
+        }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error || "Could not share that project.");
+      setNote(
+        `Shared "${p.name}" with your team${seed.length ? `, along with ${seed.length} find${seed.length === 1 ? "" : "s"}` : ""}.`
+      );
+    } catch (e: any) {
+      setNote(e?.message || "Could not share that project.");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  return (
+    <main className="mx-auto w-full max-w-4xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+      <div className="kicker mb-2">Set up</div>
+      <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+        Projects
+      </h1>
+      <p className="mt-2 max-w-[62ch] text-sm leading-relaxed text-body">
+        A project is one workspace per client, brand, or goal. Its categories are
+        the searches you run inside it. Set them up here, then pick them on the{" "}
+        <button onClick={onGoScout} className="font-semibold text-accent hover:underline">
+          Scout
+        </button>{" "}
+        tab.
+      </p>
+
+      {note && (
+        <p className="mt-4 rounded-xl border border-warm-border bg-warm-bg/60 px-4 py-2.5 text-sm font-medium text-ink">
+          {note}
+        </p>
+      )}
+
+      {/* Add a project */}
+      <div className="mt-6 flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
+        <input
+          value={newName}
+          onChange={(e) => setNewName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && newName.trim()) {
+              onAdd(newName.trim());
+              setNewName("");
+            }
+          }}
+          placeholder="New project name, e.g. Grad School"
+          className="min-w-[200px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+        />
+        <button
+          onClick={() => {
+            if (!newName.trim()) return;
+            onAdd(newName.trim());
+            setNewName("");
+          }}
+          disabled={!newName.trim()}
+          className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+        >
+          Add project
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-3">
+        {projects.map((p) => {
+          const cats = categories.filter((c) => c.projectId === p.id);
+          const open = openId === p.id;
+          const findCount = finds.filter((f) => f.projectId === p.id).length;
+          return (
+            <div key={p.id} className="rounded-2xl border border-warm-border bg-surface shadow-card">
+              <div className="flex flex-wrap items-center gap-2 p-4">
+                <button
+                  onClick={() => setOpenId(open ? "" : p.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  <span className={`text-[10px] text-body/40 ${open ? "rotate-90" : ""}`}>▶</span>
+                  <span className="truncate text-sm font-bold text-ink">{p.name}</span>
+                  <span className="shrink-0 text-[11px] text-body/50">
+                    {cats.length} categor{cats.length === 1 ? "y" : "ies"} · {findCount} find
+                    {findCount === 1 ? "" : "s"}
+                  </span>
+                  {isShared(p) && (
+                    <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+                      Shared
+                    </span>
+                  )}
+                  {p.id === activeId && (
+                    <span className="shrink-0 rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
+                      Active
+                    </span>
+                  )}
+                </button>
+                {p.id !== activeId && (
+                  <button
+                    onClick={() => onSelect(p.id)}
+                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    Make active
+                  </button>
+                )}
+                {workspaceId && !isShared(p) && (
+                  <button
+                    onClick={() => share(p)}
+                    disabled={busy === p.id}
+                    title="Give the whole team this project and its finds"
+                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+                  >
+                    {busy === p.id ? "Sharing…" : "Share with team"}
+                  </button>
+                )}
+              </div>
+
+              {open && (
+                <div className="border-t border-warm-border p-4">
+                  <Label>Project name</Label>
+                  <input
+                    defaultValue={p.name}
+                    key={`${p.id}-${p.name}`}
+                    onBlur={(e) => {
+                      if (e.target.value.trim() && e.target.value !== p.name)
+                        onRename(p.id, e.target.value);
+                    }}
+                    className="w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+                  />
+
+                  <Label className="mt-4">What is this project for?</Label>
+                  <textarea
+                    defaultValue={p.context || ""}
+                    key={`${p.id}-ctx`}
+                    onBlur={(e) => {
+                      if (e.target.value !== (p.context || "")) onSetContext(p.id, e.target.value);
+                    }}
+                    rows={2}
+                    placeholder="e.g. a sustainable-fashion brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
+                    className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                  />
+
+                  <Label className="mt-5">Categories in this project</Label>
+                  <p className="-mt-1 mb-2 text-xs leading-relaxed text-body/65">
+                    Each one is a saved search: a name you will recognise, and the
+                    description of who it should find.
+                  </p>
+                  <div className="space-y-2">
+                    {cats.map((c) => (
+                      <div key={c.id} className="rounded-xl border border-warm-border bg-warm-bg/30 p-2.5">
+                        <div className="mb-1.5 flex items-center gap-2">
+                          <input
+                            defaultValue={c.name}
+                            key={`${c.id}-${c.name}`}
+                            onBlur={(e) => {
+                              if (e.target.value.trim() && e.target.value !== c.name)
+                                onRenameCategory(c.id, e.target.value);
+                            }}
+                            className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-xs font-bold text-ink outline-none transition focus:bg-surface"
+                          />
+                          <button
+                            onClick={() => onRemoveCategory(c.id)}
+                            className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-body/45 transition hover:bg-danger/10 hover:text-danger"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <textarea
+                          defaultValue={c.goal || ""}
+                          key={`${c.id}-goal`}
+                          onBlur={(e) => {
+                            if (e.target.value !== (c.goal || ""))
+                              onSetCategoryGoal(c.id, e.target.value);
+                          }}
+                          rows={2}
+                          placeholder="Who should this category find?"
+                          className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      value={newCat[p.id] || ""}
+                      onChange={(e) => setNewCat((s) => ({ ...s, [p.id]: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && (newCat[p.id] || "").trim()) {
+                          onAddCategory(p.id, (newCat[p.id] || "").trim());
+                          setNewCat((s) => ({ ...s, [p.id]: "" }));
+                        }
+                      }}
+                      placeholder="New category name"
+                      className="min-w-[180px] flex-1 rounded-lg border border-warm-border px-3 py-2 text-xs text-ink outline-none transition focus:border-coral"
+                    />
+                    <button
+                      onClick={() => {
+                        if (!(newCat[p.id] || "").trim()) return;
+                        onAddCategory(p.id, (newCat[p.id] || "").trim());
+                        setNewCat((s) => ({ ...s, [p.id]: "" }));
+                      }}
+                      disabled={!(newCat[p.id] || "").trim()}
+                      className="rounded-lg border border-warm-border px-3 py-2 text-xs font-bold text-body transition hover:bg-warm-bg disabled:opacity-50"
+                    >
+                      Add category
+                    </button>
+                  </div>
+
+                  <div className="mt-5 border-t border-warm-border pt-3">
+                    <button
+                      onClick={() => onRemove(p.id)}
+                      className="text-xs font-semibold text-body/50 transition hover:text-danger"
+                    >
+                      Delete this project
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {teamOnly.length > 0 && (
+        <section className="mt-8">
+          <h2 className="text-base font-extrabold text-ink">Everything else in this company</h2>
+          <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
+            You are an {role} here, so you see every shared project in the
+            company, including ones started by a teammate and not copied to your
+            own account.
+          </p>
+          <div className="mt-3 space-y-2">
+            {teamOnly.map((p) => (
+              <div
+                key={p.id}
+                className="flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{p.name}</span>
+                <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+                  Shared
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </main>
+  );
+}
+
 /* ---------------- Fit ----------------
  * A bare "38% fit" reads like a grade the user failed. The number is also
  * falsely precise: it comes from a model's judgement, so 38 and 44 are not
@@ -22189,7 +22447,7 @@ function ProjectsCategoriesEditor({
         A project is usually one client, brand, or goal you're working on. Describe
         what it's for, choose whether it uses your Profile, and manage its
         categories, the kinds of people you search for. Drag to reorder, click to
-        select and delete, or add your own. Synced with the Outreach tab.
+        select and delete, or add your own. Synced with the Scout tab.
       </p>
 
       <div className="space-y-3">
