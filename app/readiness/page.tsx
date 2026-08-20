@@ -62,6 +62,38 @@ function ReadinessInner() {
   const [checks, setChecks] = useState<Record<string, CheckRow>>({});
   const [status, setStatus] = useState<"loading" | "live" | "denied" | "notReady">("loading");
   const [openKey, setOpenKey] = useState("");
+  // Split position as a percentage of the window width (checklist column).
+  // Dragged with a real divider and remembered per device, because how much
+  // room each side deserves depends on what you are doing.
+  const [splitPct, setSplitPct] = useState(46);
+  const dragRef = useRef(false);
+  useEffect(() => {
+    try {
+      const v = Number(localStorage.getItem("scout_readiness_split"));
+      if (v >= 25 && v <= 80) setSplitPct(v);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    function move(e: PointerEvent) {
+      if (!dragRef.current) return;
+      const pct = Math.min(80, Math.max(25, (e.clientX / window.innerWidth) * 100));
+      setSplitPct(pct);
+    }
+    function up() {
+      if (!dragRef.current) return;
+      dragRef.current = false;
+      document.body.style.userSelect = "";
+      try {
+        localStorage.setItem("scout_readiness_split", String(Math.round(splitPct)));
+      } catch {}
+    }
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [splitPct]);
   const [me, setMe] = useState("");
   const meRef = useRef("");
   useEffect(() => {
@@ -158,7 +190,10 @@ function ReadinessInner() {
     );
 
   return (
-    <div className="lg:grid lg:h-screen lg:grid-cols-[minmax(500px,46%)_minmax(0,1fr)] lg:overflow-hidden">
+    <div
+      className="lg:grid lg:h-screen lg:overflow-hidden"
+      style={{ gridTemplateColumns: `minmax(0, ${splitPct}fr) 8px minmax(0, ${100 - splitPct}fr)` }}
+    >
       <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-10 lg:h-screen lg:max-w-none lg:overflow-y-auto lg:px-8">
       <div className="kicker">Scout, before we go live</div>
       <h1 className="mt-2 font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
@@ -347,6 +382,21 @@ function ReadinessInner() {
         </div>
       ))}
       </main>
+      {/* Drag to rebalance the two panes. */}
+      <div
+        role="separator"
+        aria-label="Drag to resize the panels"
+        title="Drag to resize"
+        onPointerDown={(e) => {
+          dragRef.current = true;
+          document.body.style.userSelect = "none";
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        }}
+        className="hidden cursor-col-resize items-center justify-center bg-warm-border/40 transition hover:bg-brown/40 lg:flex"
+      >
+        <span className="h-10 w-0.5 rounded-full bg-body/25" />
+      </div>
+
       {/* Live Scout on the right (desktop): run the steps without leaving the
           checklist. Same-origin embed, so the security headers allow it. */}
       <div className="hidden border-l border-warm-border lg:flex lg:min-h-0 lg:flex-col">

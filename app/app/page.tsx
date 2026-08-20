@@ -1379,6 +1379,14 @@ function ScoutTool({
     }
   }, [tab]);
 
+  // "All projects" is a Finds/Spreadsheet lens. Outreach runs ONE project at a
+  // time, so opening it with the all-projects lens on used to show empty
+  // pickers; clear the lens instead so the form always has a project.
+  useEffect(() => {
+    if (tab === "outreach" && findsAllProjects) setFindsAllProjects(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   // Small GSAP fade-and-lift on the main content whenever the active tab
   // changes (dashboard, finds, manual, …). useGSAP reverts the previous tween
   // before each run, so rapid switches stay clean. Respects reduced-motion.
@@ -3519,6 +3527,20 @@ function ScoutTool({
   // Templates shown under the current company lens: global templates (no project)
   // always apply; project-scoped ones show only when their project is in view.
   const visibleProjectIdSet = new Set(visibleProjects.map((p) => p.id));
+
+  // The active project must always be a REAL project inside the current company
+  // lens. Switching companies (or landing on "All projects") could otherwise
+  // leave activeId pointing at something not in the list, and every
+  // project-scoped form (Outreach's project + category pickers above all) fell
+  // back to an empty "Select..." with no way to recover except guessing.
+  useEffect(() => {
+    if (!hydrated) return;
+    if (!visibleProjects.length) return;
+    if (visibleProjects.some((p) => p.id === activeId)) return;
+    selectProject(visibleProjects[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, activeCompanyId, visibleProjects.length, activeId]);
+
   const visibleTemplates = activeCompanyId
     ? myTemplates.filter((t) => !t.projectId || visibleProjectIdSet.has(t.projectId))
     : myTemplates;
