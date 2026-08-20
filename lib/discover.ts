@@ -8,6 +8,7 @@ import { tavilySearch, TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
+import { pdlEnabled, goalToPdlFilters, pdlRosterSearch, pdlPeopleAsCandidates } from "./pdl";
 import type { Opportunity } from "./types";
 
 // ---- Auto-tunable fit-scoring clauses ----
@@ -1653,6 +1654,34 @@ export async function discover(
       if (aborted()) break;
       emit(`Sweeping ${sweep.label}`);
       await gather(sweepQueries, { includeDomains: sweep.domains });
+    }
+  }
+
+  // ---- Licensed roster pass ---------------------------------------------
+  // The open web only knows the people who left a public trace. When a goal
+  // names a hard filter a person-database can match exactly (a school, an
+  // employer, a title), consult the licensed directory for the rest of the
+  // roster. Capped like every other source so it informs results without
+  // dominating them, and every record still has to earn its place through the
+  // same extraction, fit scoring, location rules, and exposure caps.
+  if (pdlEnabled() && !aborted()) {
+    try {
+      const filters = await goalToPdlFilters(goal);
+      if (filters) {
+        const want = Math.min(12, Math.max(4, maxItems));
+        const { people, total } = await pdlRosterSearch(filters, want);
+        if (people.length) {
+          emit(
+            `Checking the people directory (${total.toLocaleString()} match this profile)`
+          );
+          for (const c of pdlPeopleAsCandidates(people)) {
+            if (c.url && candidates.some((x) => x.url === c.url)) continue;
+            candidates.push(c);
+          }
+        }
+      }
+    } catch {
+      /* directory is an extra source, never a dependency */
     }
   }
 

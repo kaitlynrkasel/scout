@@ -11,8 +11,10 @@
 //   - seen_count is confidence metadata, never a ranking boost
 //   - index candidates re-earn their place through the same fit scoring,
 //     location rules, and exposure caps as fresh web candidates
-// Privacy: ONLY public-web engine results are written. Manual/imported
-// contacts are user-private and must never be passed to upsertPeopleIndex.
+// Privacy: engine results (public web) are written here in full. Contacts a
+// user IMPORTS from their own spreadsheet only cross into the shared index
+// when they are published BUSINESS routes (see isBusinessContact); a private
+// individual's personal address never leaves the account that imported it.
 
 import { supabaseAdmin } from "./supabaseAdmin";
 import type { Opportunity } from "./types";
@@ -53,6 +55,38 @@ function mergeOpp(stored: any, fresh: Opportunity): any {
     url: fresh.url || stored?.url || "",
     location: fresh.location || stored?.location || "",
   };
+}
+
+// Imported/manual contacts: which ones may join the SHARED index.
+//
+// A user's spreadsheet is a mix of two very different things. Public BUSINESS
+// contact points (submissions@label.com, booking@venue.com, a magazine's tips
+// line) are the same category of data the web crawler already collects, and
+// they are published precisely so strangers can use them. A PRIVATE
+// individual's personal address or cell number is not: the user got that
+// through a relationship, and the person never agreed to be handed to other
+// accounts. Only the first kind crosses into the shared index; the second
+// stays private to the account that imported it (where it still powers dedupe
+// and the "more like this" learning signal).
+const ROLE_INBOX =
+  /^(info|contact|hello|hi|team|office|admin|support|help|press|media|pr|submissions?|submit|demos?|booking|bookings|bookme|music|editorial|tips|news|inquiries|enquiries|general|mail|sales|partnerships?|licensing|sync|talent|artists?)$/i;
+const FREEMAIL =
+  /^(gmail|yahoo|ymail|outlook|hotmail|live|msn|aol|icloud|me|mac|proton|protonmail|zoho|gmx|mail|pm|comcast|verizon|att|sbcglobal|cox|charter|bellsouth)\./i;
+
+// True when this contact reads as a published business route rather than a
+// person's private details.
+export function isBusinessContact(o: Opportunity): boolean {
+  const email = String(o.contactEmail || "").toLowerCase().trim();
+  if (!email) return false;
+  const [local, domain] = email.split("@");
+  if (!local || !domain) return false;
+  // A personal mailbox on a freemail domain is never a business route.
+  if (FREEMAIL.test(domain + ".")) return false;
+  // Role inboxes are published on purpose.
+  if (ROLE_INBOX.test(local)) return true;
+  // A named person's work address at a company is still that person's
+  // mailbox, keep it private. Only role-style inboxes qualify.
+  return false;
 }
 
 // Write path: fire-and-forget after a successful engine run. Errors are
@@ -155,4 +189,24 @@ export async function searchPeopleIndex(
   } catch {
     return []; // table missing or query error: searches proceed purely fresh
   }
+}
+
+
+// Imported/manual contacts headed for the SHARED index. Filters to published
+// business routes only (see isBusinessContact) and tags provenance so an
+// imported record is never mistaken for an engine-verified one. Everything
+// filtered out still lives in the importing user's own pipeline.
+export async function upsertImportedBusinessContacts(
+  opps: Opportunity[]
+): Promise<number> {
+  const shareable = (opps || []).filter(isBusinessContact);
+  if (!shareable.length) return 0;
+  await upsertPeopleIndex(
+    shareable.map((o) => ({
+      ...o,
+      whyItFits: o.whyItFits || "Listed as a public contact point for this organization.",
+      sourceTitle: o.sourceTitle || "Imported directory contact",
+    }))
+  );
+  return shareable.length;
 }

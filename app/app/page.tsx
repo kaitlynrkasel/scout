@@ -4064,6 +4064,24 @@ function ScoutTool({
       fresh.push({ ...f, foundVia: f.foundVia || "import" });
     }
     if (fresh.length || backfilled) saveFinds([...fresh, ...withRefs]);
+    // Published business contacts from an import (submissions@, booking@, a
+    // magazine's tips line) join the shared index, they are the same kind of
+    // public route the engine already collects. Personal addresses never do.
+    if (fresh.length && getToken) {
+      (async () => {
+        try {
+          const token = await getToken();
+          if (!token) return;
+          await fetch("/api/index/import", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ opps: fresh.map((f) => f.opp).slice(0, 200) }),
+          });
+        } catch {
+          /* the local import already succeeded; sharing is a bonus */
+        }
+      })();
+    }
     return fresh.length;
   }
 
