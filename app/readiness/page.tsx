@@ -261,8 +261,10 @@ function ReadinessInner() {
                 {s.items.map((it) => {
                   const c = checks[it.key];
                   const open = openKey === it.key;
-                  // Tested and not currently expanded = collapsed to one row.
-                  const folded = !!c?.verdict && !open;
+                  // Only a clean pass collapses. "Needs work" and "Broken"
+                  // stay open: they are the ones that need a note, and folding
+                  // them away hides the very thing someone has to come back to.
+                  const folded = c?.verdict === "ok" && !open;
                   return (
                     <div
                       key={it.key}
@@ -334,12 +336,17 @@ function ReadinessInner() {
                             {VERDICTS.map(({ v, label }) => (
                               <button
                                 key={v}
-                                onClick={() =>
+                                onClick={() => {
+                                  const next = c?.verdict === v ? "" : v;
                                   save(it.key, {
-                                    verdict: c?.verdict === v ? "" : v,
+                                    verdict: next,
                                     owner_name: meRef.current,
-                                  })
-                                }
+                                  });
+                                  // A pass tucks itself away; anything else
+                                  // opens so the note box is right there.
+                                  if (next === "ok") setOpenKey("");
+                                  else if (next) setOpenKey(it.key);
+                                }}
                                 className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
                                   c?.verdict === v
                                     ? v === "ok"
@@ -360,7 +367,7 @@ function ReadinessInner() {
                             </span>
                           )}
                         </div>
-                        {open && (
+                        {(open || c?.verdict === "warn" || c?.verdict === "bad") && (
                           <div className="ml-5 mt-3 border-t border-warm-border pt-3">
                             {it.steps && it.steps.length > 0 && (
                               <ol className="list-decimal space-y-1 pl-5 text-[13px] leading-relaxed text-body/80">

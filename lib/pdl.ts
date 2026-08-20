@@ -57,7 +57,9 @@ filters may contain any of: school (exact institution name), degree (e.g. "maste
 
 Rules: use lowercase. Only include a filter the goal actually states, never invent one. Prefer the school's formal name ("babson college", not "babson").
 
-A PROGRAM NAME IS NOT A MAJOR. Degree programs have marketing names ("Entrepreneurial Leadership", "Integrated Marketing", "Business Analytics") that almost nobody writes as their field of study, so putting one in the major filter matches nobody. When the goal names a program or its initials, set degree to the degree TYPE only ("master of science", "master of business administration", "bachelors") and leave major empty. Use major only when the goal names a plain field of study people actually list, like "computer science", "marketing", or "finance".`;
+SCHOOL MEANS THE PARENT INSTITUTION. Directories file people under the university, not under the named college inside it, so a named sub-school matches nobody. Strip it: "university of washington, foster school of business" becomes school "university of washington"; "berkeley haas school of business" becomes "university of california berkeley"; "wharton" becomes "university of pennsylvania". The exception is an institution that stands alone under its own name ("harvard business school", "juilliard"), which you may keep as written.
+
+A PROGRAM NAME IS NOT A MAJOR. Degree programs have marketing names ("Entrepreneurial Leadership", "Integrated Marketing", "Business Analytics") that almost nobody writes as their field of study, so putting one in the major filter matches nobody. When the goal names a program or its initials, set degree to the degree TYPE only ("master of science", "master of business administration", "bachelors") and leave major empty. Use major whenever the goal names a plain field of study people actually list, like "computer science", "marketing", "finance", or "entrepreneurship", even when the goal calls it a program ("the entrepreneurship masters program" is degree "master of science" plus major "entrepreneurship", because entrepreneurship is a real field people write down). The distinction is whether a person would ever type that phrase as their field of study, not whether the goal used the word "program".`;
 
 export async function goalToPdlFilters(goal: string): Promise<PdlFilters | null> {
   if (!goal.trim() || !process.env.ANTHROPIC_API_KEY) return null;
@@ -104,6 +106,19 @@ export interface PdlPerson {
   summary: string;
 }
 
+// "university of washington foster school of business" -> "university of
+// washington". Only trims a trailing named sub-school, and only when what
+// remains still names an institution, so "college of william and mary",
+// "harvard business school", and "babson college" are left alone.
+const SUB_SCHOOL = /\s+(?:[a-z.'\u2019-]+\s+)?(?:school|college|institute)\s+of\s+[a-z&\s]+$/i;
+function schoolRoot(school: string): string {
+  const s = school.trim();
+  if (!s || !SUB_SCHOOL.test(s)) return "";
+  const root = s.replace(SUB_SCHOOL, "").trim();
+  if (root.length < 6 || root === s) return "";
+  return /(university|college|institute|school)/i.test(root) ? root : "";
+}
+
 // Roster search with progressive relaxation: the most specific filter set
 // often matches nobody (a program's marketing name rarely matches how people
 // write their major), so drop the narrowest filters one at a time until the
@@ -119,7 +134,7 @@ export async function pdlRosterSearch(
   // lists differently). Drop them one at a time, narrowest first, and keep the
   // identity filters (school, company, title) that make the roster relevant.
   const SOFT: (keyof PdlFilters)[] = ["major", "industry", "locality", "region", "degree", "country"];
-  const attempts: PdlFilters[] = [filters];
+  const ladder: PdlFilters[] = [filters];
   let working: PdlFilters = { ...filters };
   for (const k of SOFT) {
     if (working[k] === undefined) continue;
@@ -127,7 +142,18 @@ export async function pdlRosterSearch(
     working = rest as PdlFilters;
     // Stop before we relax away the last identity filter.
     if (!working.school && !working.company && !working.title) break;
-    attempts.push({ ...working });
+    ladder.push({ ...working });
+  }
+  // Try each rung with the school as given, then with the parent institution.
+  // People are filed under the university, not under the named college inside
+  // it, so "university of washington foster school of business" matches nobody
+  // while "university of washington" matches tens of thousands. Measured: that
+  // one substitution took this exact search from 0 people to 608.
+  const root = schoolRoot(filters.school || "");
+  const attempts: PdlFilters[] = [];
+  for (const rung of ladder) {
+    attempts.push(rung);
+    if (root) attempts.push({ ...rung, school: root });
   }
   for (const attempt of attempts) {
     const out = await pdlRosterOnce(attempt, size);

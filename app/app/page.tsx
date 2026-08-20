@@ -3988,17 +3988,23 @@ function ScoutTool({
   // we don't refetch on every render or when flipping back to a seen category.
   const activeCategory = myCats.find((c) => c.id === catId);
   const activeCatName = activeCategory?.name || "";
+  // The project brief is what this search is actually FOR. It outranks the
+  // resume: someone whose background is music can be running a grad-school
+  // project, and an example drawn only from their history reads as a mistake.
+  const exProjectName = activeProject?.name || "";
+  const exProjectContext = activeProject?.context || "";
   const exampleCacheRef = useRef<Record<string, string>>({});
   const [dynExample, setDynExample] = useState("");
   useEffect(() => {
-    // Only personalize when we have something to personalize from.
-    if (!aboutText.trim()) {
+    // Only personalize when we have something to personalize from. A project
+    // brief or a named category counts, a resume is not required.
+    if (!aboutText.trim() && !exProjectContext.trim() && !activeCatName.trim()) {
       setDynExample("");
       return;
     }
     // Signature keeps the fetch stable: same inputs → cached example reused.
     const aboutSig = aboutText.slice(0, 400);
-    const key = `${ucKey(activeUseCase)}::${activeCatName.toLowerCase()}::${aboutSig}`;
+    const key = `${ucKey(activeUseCase)}::${activeCatName.toLowerCase()}::${exProjectName.toLowerCase()}::${exProjectContext.slice(0, 200)}::${aboutSig}`;
     const cached = exampleCacheRef.current[key];
     if (cached !== undefined) {
       setDynExample(cached);
@@ -4014,6 +4020,8 @@ function ScoutTool({
             category: activeCatName,
             useCase: activeUseCase,
             about: aboutText,
+            projectName: exProjectName,
+            projectContext: exProjectContext,
             salt: outreachSalt(accountEmail),
           }),
         });
@@ -4029,7 +4037,14 @@ function ScoutTool({
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeUseCase, activeCatName, aboutText, accountEmail]);
+  }, [
+    activeUseCase,
+    activeCatName,
+    aboutText,
+    accountEmail,
+    exProjectName,
+    exProjectContext,
+  ]);
   // What the goal textarea actually shows as its placeholder.
   const goalPlaceholder = dynExample
     ? `e.g. ${dynExample}`
