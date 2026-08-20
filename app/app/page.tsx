@@ -1599,6 +1599,10 @@ function ScoutTool({
   // The companies (Teams workspaces) this account belongs to, and which one is
   // the active lens. "" = All companies (show everything). Persisted per device.
   const [companies, setCompanies] = useState<{ id: string; name: string; role: string }[]>([]);
+  // Has the workspace lookup below settled yet? `companies` starts empty, so on
+  // its own it can't tell "still loading" from "belongs to nothing" — and the
+  // first-run gate must not fire on that ambiguity.
+  const [companiesLoaded, setCompaniesLoaded] = useState(false);
   const [activeCompanyId, setActiveCompanyId] = useState<string>("");
   // Per-company accent color (localStorage map, keyed by company id / lens).
   const [companyColors, setCompanyColors] = useState<Record<string, string>>({});
@@ -2397,10 +2401,18 @@ function ScoutTool({
     }
     let alive = true;
     (async () => {
-      if (!getToken) return;
+      // Every path has to mark this settled, or a signed-out or teams-less
+      // account would wait forever for a gate that never opens.
+      if (!getToken) {
+        setCompaniesLoaded(true);
+        return;
+      }
       try {
         const token = await getToken();
-        if (!token) return;
+        if (!token) {
+          if (alive) setCompaniesLoaded(true);
+          return;
+        }
         const res = await fetch("/api/team/workspace", {
           headers: { authorization: `Bearer ${token}` },
         });
@@ -2429,6 +2441,8 @@ function ScoutTool({
         }
       } catch {
         /* teams not configured — switcher just stays hidden */
+      } finally {
+        if (alive) setCompaniesLoaded(true);
       }
     })();
     return () => {
@@ -6261,7 +6275,12 @@ function ScoutTool({
           individual vs company (and answer the company questions if company).
           profileLoaded gates ScoutTool, so profile.accountType is already
           authoritative here, no flash for returning users. */}
-      {!profile.accountType && (
+      {/* Wait for the membership lookup before blocking anyone. Someone who
+          already belongs to a company gets accountType set for them by the
+          effect above, so they should never see this screen — but `companies`
+          starts empty, so rendering on `!accountType` alone put existing
+          teammates into a join flow they'd already completed. */}
+      {!profile.accountType && companiesLoaded && (
         <AccountOnboarding
           name={profile.name.trim().split(/\s+/)[0] || ""}
           onComplete={(patch) => {
