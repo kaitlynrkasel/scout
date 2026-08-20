@@ -588,7 +588,7 @@ interface Find {
   draftedAt?: number; // when a draft was last written for this find (drives ordering)
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
-  pinned?: boolean; // pinned to the top of the finds list
+  pinned?: boolean; // starred — floats to the top of whatever list it's in
   scheduledSendAt?: string; // ISO timestamp: when the queued send will fire (via cron)
   // Meeting / interview prep, factual highlights about the contact + outlet,
   // fetched via a fresh Tavily + Claude pass after the user updates status to
@@ -920,12 +920,13 @@ interface CommunityStats {
   } | null;
 }
 
-// "pinned" is a cross-cutting bucket, not a status: pinning a find moves it
-// into the Pinned tab and pulls it out of its status/all lists (a working
-// shortlist), rather than just floating it to the top of its current tab.
+// "pinned" is a cross-cutting bucket, not a status: starring a find floats it to
+// the top of whatever list it is already in, and the Pinned tab is a shortcut to
+// see only the starred ones. A starred find stays in its status list and in All
+// — starring marks a find, it doesn't file it somewhere else.
 type FindFilter = FindStatus | "all" | "pinned";
 const FIND_STATUSES: { key: FindFilter; label: string }[] = [
-  { key: "pinned", label: "Pinned" },
+  { key: "pinned", label: "Starred" },
   { key: "new", label: "New" },
   { key: "undecided", label: "Undecided" },
   { key: "drafted", label: "Drafted" },
@@ -4664,7 +4665,7 @@ function ScoutTool({
     const f = finds.find((x) => x.id === id);
     if (f) recordExposure(f.opp); // contacted -> feed the shared ledger
   }
-  // Pin/unpin a find so it sorts to the top of the list.
+  // Star/unstar a find so it sorts to the top of whatever list it's in.
   function togglePin(id: string) {
     saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
   }
@@ -12124,16 +12125,18 @@ function FindsTab({
   // (The Excel export moved to the Spreadsheet tab, which shows the same
   // pipeline as an editable grid and keeps its own richer exporter.)
 
-  // Pinned finds live in their own tab and are excluded from the status/all
-  // lists, so status counts count only the un-pinned ones. Counts respect the
-  // Source toggle so the chips always match the list below them.
+  // Starring a find floats it to the top of whatever list it is already in; it
+  // does NOT remove it from that list. The Pinned tab is just a shortcut to see
+  // only the starred ones, so a starred find is counted in its status and in
+  // All, exactly like any other. Counts respect the Source toggle so the chips
+  // always match the list below them.
   const srcFinds = finds.filter(bySrc);
   const counts: Record<string, number> = {
     pinned: srcFinds.filter((f) => f.pinned).length,
-    all: srcFinds.filter((f) => !f.pinned).length,
+    all: srcFinds.length,
   };
   for (const s of ["new", "undecided", "drafted", "sent", "replied", "denied"] as FindStatus[]) {
-    counts[s] = srcFinds.filter((f) => f.status === s && !f.pinned).length;
+    counts[s] = srcFinds.filter((f) => f.status === s).length;
   }
   const trackable = finds.some(
     (f) =>
@@ -12142,18 +12145,16 @@ function FindsTab({
       f.status !== "denied"
   );
   const shown = finds
-    .filter((f) =>
-      filter === "pinned"
-        ? f.pinned
-        : filter === "all"
-          ? !f.pinned
-          : f.status === filter && !f.pinned
-    )
+    .filter((f) => (filter === "pinned" ? f.pinned : filter === "all" ? true : f.status === filter))
     .filter(matchesFilters)
     // Your local finds are yours: hide them when filtering to a teammate.
     .filter(() => !foundBy || foundBy === (accountEmail || ""))
     .slice()
-    .sort(sortFns[sortBy] || sortFns.activity);
+    .sort(sortFns[sortBy] || sortFns.activity)
+    // Starred finds rise to the top of whichever sort is active, keeping their
+    // order relative to each other. Applied last so it wins over the sort
+    // without discarding it.
+    .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
 
   // ---- Team lens: the shared pipeline, merged in below your own finds ----
   // Teammates' shared finds that you DON'T already have locally (your own copy
@@ -12584,7 +12585,7 @@ function FindsTab({
                 onChange={(e) => setPinnedOnly(e.target.checked)}
                 className="h-4 w-4 accent-brown"
               />
-              Pinned only
+              Starred only
             </label>
 
             <div className="flex items-center justify-between border-t border-warm-border pt-3">
@@ -12659,7 +12660,7 @@ function FindsTab({
               </button>
             </>
           ) : filter === "pinned" ? (
-            "No pinned finds yet. Pin a find to move it here as your working shortlist."
+            "No starred finds yet. Tap the star on any find to move it to the top of the list."
           ) : (
             "Nothing in this list."
           )}
@@ -13368,15 +13369,22 @@ function FindCard({
         </button>
         <button
           onClick={onTogglePin}
-          title={find.pinned ? "Unpin, return to its status list" : "Pin, moves it to the Pinned tab"}
-          aria-label={find.pinned ? "Unpin find" : "Pin find to the Pinned tab"}
+          title={find.pinned ? "Unstar, return it to its place in the list" : "Star, moves it to the top of the list"}
+          aria-label={find.pinned ? "Unstar find" : "Star find to move it to the top"}
           aria-pressed={!!find.pinned}
           className={`shrink-0 rounded-lg border p-1 transition ${
             find.pinned
-              ? "border-coral/40 bg-coral/10 text-accent"
+              ? "border-coral/40 bg-coral/10"
               : "border-transparent text-body/40 hover:border-warm-border hover:bg-warm-bg hover:text-accent"
           }`}
+          // --c-brown is the brand token the chosen profile/company accent
+          // overrides, so a starred star wears the account's color. Set inline
+          // rather than via text-accent: the class is on the button but loses
+          // to something in the row's cascade, and the star's whole job is to
+          // be that color.
+          style={find.pinned ? { color: "rgb(var(--c-brown))" } : undefined}
         >
+          {/* fill="currentColor" so the star body takes the color set above. */}
           <svg
             width="14"
             height="14"
@@ -13387,8 +13395,7 @@ function FindCard({
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <path d="M12 17v5" />
-            <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
+            <path d="m12 2.5 2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.52l-5.88 3.09 1.12-6.55L2.48 9.42l6.58-.96z" />
           </svg>
         </button>
         </span>
