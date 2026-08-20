@@ -21972,6 +21972,18 @@ function ProjectsTab({
                     {busy === selected.id ? "Sharing…" : "Share with team"}
                   </button>
                 )}
+                {/* Up here with the project's other actions rather than in faint
+                    grey below the category editor, where you had to scroll past
+                    everything to find it. onRemove confirms first and names how
+                    many categories and finds go with it. */}
+                <button
+                  onClick={() => onRemove(selected.id)}
+                  title="Delete this project, its categories, and its finds"
+                  aria-label={`Delete ${selected.name}`}
+                  className="rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-body/50 transition hover:border-danger/30 hover:bg-danger/10 hover:text-danger"
+                >
+                  Delete
+                </button>
               </div>
 
               <Label>Project name</Label>
@@ -22062,14 +22074,6 @@ function ProjectsTab({
                 </button>
               </div>
 
-              <div className="mt-6 border-t border-warm-border pt-3">
-                <button
-                  onClick={() => onRemove(selected.id)}
-                  className="text-xs font-semibold text-body/50 transition hover:text-danger"
-                >
-                  Delete this project
-                </button>
-              </div>
             </div>
           )}
         </section>
