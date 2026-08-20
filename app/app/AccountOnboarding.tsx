@@ -163,6 +163,12 @@ export default function AccountOnboarding({
       companyName: res.name || picked?.name || "",
       companyRole: companyRole.trim(),
       companyContribution: companyContribution.trim(),
+      // Carry what the company IS across too, not just its name. The directory
+      // already returns these, and creating a company records them — joining one
+      // dropped them, so a teammate's drafts started with none of the context
+      // the founder had written down.
+      companyAbout: picked?.about || "",
+      companyIndustry: picked?.industry || "",
       companyWorkspaceId: selectedId,
     });
   }

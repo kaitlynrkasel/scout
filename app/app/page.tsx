@@ -1090,6 +1090,18 @@ function AuthedShell() {
             localExtras.companyExpertise = parsed.companyExpertise;
           if (typeof parsed.useExpertise === "boolean")
             localExtras.useExpertise = parsed.useExpertise;
+          // These four were written to localStorage by the browser-only era and
+          // read back off the server afterwards, but were never lifted out of
+          // localStorage in between — so anything only ever set on one machine
+          // never reached the account, and never reached a second device.
+          if (typeof parsed.companyAbout === "string")
+            localExtras.companyAbout = parsed.companyAbout;
+          if (typeof parsed.companyIndustry === "string")
+            localExtras.companyIndustry = parsed.companyIndustry;
+          if (typeof parsed.companyStage === "string")
+            localExtras.companyStage = parsed.companyStage;
+          if (typeof parsed.companyLocation === "string")
+            localExtras.companyLocation = parsed.companyLocation;
           if (typeof parsed.companyWorkspaceId === "string")
             localExtras.companyWorkspaceId = parsed.companyWorkspaceId;
           if (typeof parsed.age === "number") localExtras.age = parsed.age;
@@ -2425,6 +2437,26 @@ function ScoutTool({
         // on first load, so their profile is company-only, not individual).
         if (wss.length && profile.accountType !== "company") {
           patchProfile({ accountType: "company", companyWorkspaceId: wss[0].id });
+        }
+        // What the company IS — its name, what it does, its industry — lives on
+        // the workspace row, filled in by whoever created it. Joining only ever
+        // carried the name across, so a teammate's drafts were written without
+        // the context the founder supplied. Adopt it from the workspace the
+        // profile is pointed at, filling only blanks so nothing the user typed
+        // themselves is overwritten.
+        const mine = (data.workspaces || []).find(
+          (w: any) => w.id === (profile.companyWorkspaceId || wss[0]?.id)
+        );
+        if (mine) {
+          const fill: Partial<Profile> = {};
+          if (!profile.companyName?.trim() && mine.name) fill.companyName = mine.name;
+          if (!profile.companyAbout?.trim() && mine.about) fill.companyAbout = mine.about;
+          if (!profile.companyIndustry?.trim() && mine.industry)
+            fill.companyIndustry = mine.industry;
+          if (!profile.companyStage?.trim() && mine.stage) fill.companyStage = mine.stage;
+          if (!profile.companyLocation?.trim() && mine.location)
+            fill.companyLocation = mine.location;
+          if (Object.keys(fill).length) patchProfile(fill);
         }
         // Single-company account with no saved lens: default straight to that
         // company (there's no "All companies" to sit on), so its color + lens
