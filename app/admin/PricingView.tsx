@@ -52,6 +52,76 @@ const DEFAULTS: Model = {
 const fixedTotal = (m: Model) =>
   m.vercelCost + m.supabaseCost + m.claudeSubCost + m.otherFixed;
 
+
+// Real pricing shapes other software companies use, applied to Scout's own
+// costs so the comparison is apples to apples. Each one only overrides the
+// levers that define its strategy; everything else keeps your current numbers,
+// so switching between them shows what the STRATEGY does, not a different set
+// of assumptions.
+const SCENARIOS: {
+  key: string;
+  name: string;
+  who: string;
+  idea: string;
+  patch: Partial<Model>;
+}[] = [
+  {
+    key: "current",
+    name: "Yours now",
+    who: "whatever you have set",
+    idea: "Your current levers, untouched. Switch away and back to compare.",
+    patch: {},
+  },
+  {
+    key: "generous-free",
+    name: "Generous free",
+    who: "Notion, Canva, Spotify",
+    idea:
+      "Give a lot away so the product spreads by itself, and accept that the free tier is a real marketing cost. Works when free users recruit paid ones.",
+    patch: { freeUsers: 2000, freeSearches: 15, starterUsers: 60, proUsers: 20, starterPrice: 12, proPrice: 39 },
+  },
+  {
+    key: "tight-free",
+    name: "Tight free trial",
+    who: "Ahrefs, most sales tools",
+    idea:
+      "A small taste, then pay. Far cheaper per free user, and the people who convert are more serious, but you lose word-of-mouth reach.",
+    patch: { freeUsers: 300, freeSearches: 3, starterUsers: 60, proUsers: 25, starterPrice: 19, proPrice: 49 },
+  },
+  {
+    key: "single-price",
+    name: "One simple price",
+    who: "Basecamp, Superhuman",
+    idea:
+      "No tiers to explain: everyone pays the same, usage is generous, and the pricing page takes five seconds to read.",
+    patch: { starterUsers: 0, starterPrice: 0, proUsers: 90, proPrice: 30, proSearches: 120, freeUsers: 600, freeSearches: 5 },
+  },
+  {
+    key: "prosumer",
+    name: "Premium, fewer users",
+    who: "Clay, Apollo's top tiers",
+    idea:
+      "Charge properly for a tool that replaces expensive work. Fewer customers, much healthier margins, and enrichment becomes affordable per user.",
+    patch: { freeUsers: 250, freeSearches: 3, starterUsers: 20, starterPrice: 39, proUsers: 25, proPrice: 99, proSearches: 300, enrichPerPaid: 40 },
+  },
+  {
+    key: "usage",
+    name: "Pay for what you use",
+    who: "OpenAI, Twilio, AWS",
+    idea:
+      "A small base plus credits. Margins are safe by construction because heavy users pay more, but revenue is less predictable month to month.",
+    patch: { freeUsers: 800, freeSearches: 3, starterUsers: 70, starterPrice: 15, starterSearches: 40, proUsers: 25, proPrice: 45, proSearches: 150 },
+  },
+  {
+    key: "team",
+    name: "Sold to teams",
+    who: "Slack, Figma, Linear",
+    idea:
+      "Price per seat and land whole teams at once. Fewer accounts, far larger ones, and churn drops because a team is harder to unwind than one person.",
+    patch: { freeUsers: 400, freeSearches: 5, starterUsers: 15, starterPrice: 25, proUsers: 60, proPrice: 60, proSearches: 150, enrichPerPaid: 20 },
+  },
+];
+
 function computed(m: Model) {
   const paid = m.starterUsers + m.proUsers;
   const mrr = m.starterUsers * m.starterPrice + m.proUsers * m.proPrice;
@@ -102,6 +172,23 @@ export default function PricingView() {
     });
   };
   const c = useMemo(() => computed(m), [m]);
+  // Which scenario is showing. "current" means your own saved levers; the rest
+  // patch only their strategy's levers on top of a saved baseline, so you can
+  // always get back to exactly what you had.
+  const [scenario, setScenario] = useState("current");
+  const baselineRef = useRef<Model | null>(null);
+  function applyScenario(key: string) {
+    const sc = SCENARIOS.find((x) => x.key === key);
+    if (!sc) return;
+    if (key === "current") {
+      if (baselineRef.current) setM(baselineRef.current);
+      setScenario("current");
+      return;
+    }
+    if (!baselineRef.current) baselineRef.current = m;
+    setM({ ...(baselineRef.current || m), ...sc.patch });
+    setScenario(key);
+  }
 
   // Profit curve: scale the whole user mix 0x..2.5x, profit at each point.
   const curve = useMemo(() => {
@@ -140,6 +227,44 @@ export default function PricingView() {
           <p>Play pattern: change ONE lever, watch which tiles move. The advice box below the tiles explains what the current numbers are telling you.</p>
         </div>
       </details>
+
+      {/* Scenario switcher: how other companies would price this */}
+      <div className="rounded-2xl border border-warm-border bg-surface p-4 shadow-soft">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+          Try a different pricing strategy
+        </div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5">
+          {SCENARIOS.map((sc) => (
+            <button
+              key={sc.key}
+              onClick={() => applyScenario(sc.key)}
+              className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition ${
+                scenario === sc.key
+                  ? "border-brown bg-brown text-white"
+                  : "border-warm-border bg-surface text-body hover:border-brown/40 hover:text-ink"
+              }`}
+            >
+              {sc.name}
+            </button>
+          ))}
+        </div>
+        {(() => {
+          const sc = SCENARIOS.find((x) => x.key === scenario)!;
+          return (
+            <p className="mt-2.5 max-w-[80ch] text-[13px] leading-relaxed text-body/80">
+              <b className="text-ink">{sc.name}</b>
+              <span className="text-body/60"> · like {sc.who}</span>
+              <br />
+              {sc.idea}
+            </p>
+          );
+        })()}
+        <p className="mt-2 text-[11px] text-body/50">
+          Each strategy changes only its own levers and leaves the rest of your
+          numbers alone, so the difference you see is the strategy. Pick
+          &quot;Yours now&quot; to snap back to what you had.
+        </p>
+      </div>
 
       {/* Hero numbers */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

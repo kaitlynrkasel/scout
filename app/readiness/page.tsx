@@ -190,11 +190,26 @@ function ReadinessInner() {
     );
 
   return (
+    <>
+    <style>{`
+      /* Side-by-side as soon as there is room. This used to require a 1024px
+         window, so a normal Safari window on a laptop fell back to the stacked
+         phone layout. */
+      @media (min-width: 900px) {
+        .rd-split { display: grid; height: 100vh; overflow: hidden; }
+        .rd-pane { height: 100vh; overflow-y: auto; max-width: none; padding-left: 2rem; padding-right: 2rem; }
+        .rd-divider { display: flex; }
+        .rd-side { display: flex; min-height: 0; flex-direction: column; }
+      }
+      @media (max-width: 899px) {
+        .rd-divider, .rd-side { display: none; }
+      }
+    `}</style>
     <div
-      className="lg:grid lg:h-screen lg:overflow-hidden"
+      className="rd-split"
       style={{ gridTemplateColumns: `minmax(0, ${splitPct}fr) 8px minmax(0, ${100 - splitPct}fr)` }}
     >
-      <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-10 lg:h-screen lg:max-w-none lg:overflow-y-auto lg:px-8">
+      <main className="mx-auto w-full max-w-3xl px-5 pb-24 pt-10 rd-pane rd-main">
       <div className="kicker">Scout, before we go live</div>
       <h1 className="mt-2 font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Launch readiness
@@ -392,14 +407,14 @@ function ReadinessInner() {
           document.body.style.userSelect = "none";
           (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
         }}
-        className="hidden cursor-col-resize items-center justify-center bg-warm-border/40 transition hover:bg-brown/40 lg:flex"
+        className="rd-divider cursor-col-resize items-center justify-center bg-warm-border/40 transition hover:bg-brown/40"
       >
         <span className="h-10 w-0.5 rounded-full bg-body/25" />
       </div>
 
       {/* Live Scout on the right (desktop): run the steps without leaving the
           checklist. Same-origin embed, so the security headers allow it. */}
-      <div className="hidden border-l border-warm-border lg:flex lg:min-h-0 lg:flex-col">
+      <div className="rd-side border-l border-warm-border">
         <div className="flex items-center gap-2 border-b border-warm-border bg-surface px-4 py-2 text-xs">
           <span className="font-bold text-ink">Scout, live</span>
           <span className="text-body/50">do the steps right here</span>
@@ -416,6 +431,7 @@ function ReadinessInner() {
       </div>
 
     </div>
+    </>
   );
 }
 

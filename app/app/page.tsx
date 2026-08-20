@@ -668,6 +668,58 @@ function contactNameAddsInfo(o: Opportunity): boolean {
   return !title.includes(n.toLowerCase());
 }
 
+// A small identity mark for a find: the organization's own favicon when the
+// find has a website, falling back to initials on a color derived from the
+// name (so the same contact always gets the same color). Purely visual, it
+// makes a long list scannable by shape and color instead of text alone.
+const FIND_AVATAR_COLORS = ["#8a5f42", "#6f7a4e", "#5c402f", "#a9761f", "#77563b", "#525c37"];
+function FindAvatar({ opp, size = 34 }: { opp: Opportunity; size?: number }) {
+  const [logoFailed, setLogoFailed] = useState(false);
+  let host = "";
+  try {
+    if (opp.url) host = new URL(opp.url).hostname;
+  } catch {
+    /* not a usable URL, initials it is */
+  }
+  const label = String(opp.outlet || opp.name || "?").trim();
+  const letters =
+    label
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]?.toUpperCase() || "")
+      .join("") || "?";
+  const color =
+    FIND_AVATAR_COLORS[
+      Math.abs(
+        label.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
+      ) % FIND_AVATAR_COLORS.length
+    ];
+  const box = { width: size, height: size };
+  if (host && !logoFailed) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`}
+        alt=""
+        aria-hidden
+        onError={() => setLogoFailed(true)}
+        style={box}
+        className="shrink-0 rounded-lg border border-warm-border bg-white object-contain p-1"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      style={{ ...box, background: color }}
+      className="grid shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white"
+    >
+      {letters}
+    </span>
+  );
+}
+
 // Quick reasons offered when passing on a find (plus free-text "Other").
 const DENY_REASONS = [
   "Wrong industry",
@@ -3527,6 +3579,40 @@ function ScoutTool({
   // Templates shown under the current company lens: global templates (no project)
   // always apply; project-scoped ones show only when their project is in view.
   const visibleProjectIdSet = new Set(visibleProjects.map((p) => p.id));
+
+  // Contacts imported BEFORE the sharing rule shipped never reached the shared
+  // index. Push the published business routes among them once, so an existing
+  // spreadsheet upload counts the same as a new one. Local flag keeps it to a
+  // single pass per device.
+  useEffect(() => {
+    if (!hydrated || !getToken) return;
+    try {
+      if (localStorage.getItem("scout_index_backfilled") === "1") return;
+    } catch {
+      return;
+    }
+    const imported = finds
+      .filter((f) => f.foundVia === "import" || f.foundVia === "manual")
+      .map((f) => f.opp)
+      .filter((o) => o.contactEmail);
+    if (!imported.length) return;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        await fetch("/api/index/import", {
+          method: "POST",
+          headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+          body: JSON.stringify({ opps: imported.slice(0, 200) }),
+        });
+        localStorage.setItem("scout_index_backfilled", "1");
+      } catch {
+        /* try again next load */
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated, finds.length]);
+
 
   // The active project must always be a REAL project inside the current company
   // lens. Switching companies (or landing on "All projects") could otherwise
@@ -13061,6 +13147,9 @@ function FindCard({
         find.pinned ? "ring-1 ring-coral/30" : ""
       }`}
     >
+      <div className="flex items-start gap-3">
+        <FindAvatar opp={o} />
+        <div className="min-w-0 flex-1">
       <div className="flex flex-wrap items-center gap-2">
         {(() => {
           // Substance first: when we know the role/organization, THAT leads the
@@ -13159,6 +13248,7 @@ function FindCard({
             {localTimeLabel(recipientTz)} their time
           </span>
         )}
+        <span className="ml-auto flex shrink-0 items-center gap-1.5">
         <button
           onClick={onOpenDetail}
           title="Expand: full contact info, website preview, and flip through finds"
@@ -13196,15 +13286,17 @@ function FindCard({
             <path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z" />
           </svg>
         </button>
+        </span>
       </div>
 
       {(() => {
-        // The name sits under the substance line as the identity anchor. When
-        // there was no substance to lead with, the title already IS the name,
-        // so nothing is shown here.
-        return substanceLine(o) ? (
-          <div className="mt-0.5 text-[13px] text-body/75">{o.name}</div>
-        ) : null;
+        // Subheader: who this actually is. The organization and the named
+        // person belong on ONE line, they were splitting into two before.
+        if (!substanceLine(o)) return null;
+        const who = [o.name, contactNameAddsInfo(o) ? o.contactName : ""]
+          .filter(Boolean)
+          .join(" · ");
+        return <div className="mt-0.5 text-[13px] text-body/75">{who}</div>;
       })()}
       {/* Any channel the search explicitly requested gets its own labeled box
           below ("Requested contact info"), found or not, so leave it out of
@@ -13306,6 +13398,8 @@ function FindCard({
           {find.requirements}
         </div>
       )}
+        </div>
+      </div>
 
       <FindWorkflow
         find={find}

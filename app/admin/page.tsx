@@ -199,8 +199,10 @@ export default function AdminPage() {
             </h1>
             <p className="mt-1 text-sm text-body">
               The shared flywheel: every engine-found person, deduplicated,
-              compounding across searches. Public-web results only, users&apos;
-              manual and imported contacts never enter it.
+              compounding across searches. Public-web finds, plus published
+              business routes from uploaded spreadsheets (submissions@,
+              booking@, info@). A private individual&apos;s personal address
+              never enters it.
             </p>
           </div>
           <IndexView getToken={getToken} />
