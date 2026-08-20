@@ -37,7 +37,7 @@ export default function Privacy() {
           This policy explains what personal data Scout (&ldquo;Scout&rdquo;,
           &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, why, and the choices you have. It
           covers the Scout website at scout-source.com and the Scout web app. If you have
-          any questions, email <b>hello@scout-source.com</b>.
+          any questions, email <b>scout.source.contact@gmail.com</b>.
         </P>
 
         <H>Who we are</H>
@@ -45,7 +45,7 @@ export default function Privacy() {
           Scout is an outreach assistant that helps you find relevant people and
           opportunities and draft personalized messages in your own voice. For data-
           protection purposes, Scout is the controller of the personal data described
-          here. Contact us at hello@scout-source.com.
+          here. Contact us at scout.source.contact@gmail.com.
         </P>
 
         <H>Data we collect</H>
@@ -100,7 +100,7 @@ export default function Privacy() {
           the person, our lawful basis is our and your legitimate interest in relevant B2B
           and professional outreach, balanced against those individuals&rsquo; rights. Any
           person can ask us to stop processing their information or to be removed by
-          emailing hello@scout-source.com, and every outreach email includes a way to opt
+          emailing scout.source.contact@gmail.com, and every outreach email includes a way to opt
           out. You are responsible for contacting people lawfully (see our Terms).
         </P>
 
@@ -128,7 +128,7 @@ export default function Privacy() {
           We keep your account and content for as long as your account is active. You can
           delete finds, projects, and templates in the app, disconnect your mailbox at any
           time, and ask us to delete your account and associated data by emailing
-          hello@scout-source.com.
+          scout.source.contact@gmail.com.
         </P>
 
         <H>Your rights</H>
@@ -136,7 +136,7 @@ export default function Privacy() {
           Depending on where you live (including under UK/EU GDPR), you may have the right
           to access, correct, delete, or export your data, to object to or restrict certain
           processing, and to withdraw consent. To exercise any of these, email
-          hello@scout-source.com. You also have the right to complain to your local data-
+          scout.source.contact@gmail.com. You also have the right to complain to your local data-
           protection authority (in the UK, the ICO).
         </P>
 
@@ -164,7 +164,7 @@ export default function Privacy() {
 
         <H>Contact</H>
         <P>
-          Questions or requests: <b>hello@scout-source.com</b>. See also our{" "}
+          Questions or requests: <b>scout.source.contact@gmail.com</b>. See also our{" "}
           <a href="/terms" className="font-semibold text-accent hover:underline">
             Terms of Service
           </a>

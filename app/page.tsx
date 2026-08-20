@@ -412,12 +412,12 @@ const BODY = `
     <div class="kicker k">Contact us</div>
     <h2>Let's find <em>your people</em>.</h2>
     <p>Questions, press, or partnerships? Send a note and we'll get back within a day.</p>
-    <div class="em">Or email <b>hello@scout-source.com</b></div>
+    <div class="em">Or email <b>scout.source.contact@gmail.com</b></div>
   </div>
   <div class="form">
     <div class="two"><input class="inp" placeholder="Your name"><input class="inp" placeholder="Email"></div>
     <textarea class="inp" placeholder="What can we help with?"></textarea>
-    <a class="btn btn-t send" href="mailto:hello@scout-source.com">Send message →</a>
+    <a class="btn btn-t send" href="mailto:scout.source.contact@gmail.com">Send message →</a>
   </div>
 </div></section>
 

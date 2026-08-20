@@ -147,7 +147,7 @@ export default function Terms() {
 
         <H>Contact</H>
         <P>
-          Questions: <b>hello@scout-source.com</b>.
+          Questions: <b>scout.source.contact@gmail.com</b>.
         </P>
       </main>
       <Footer />
