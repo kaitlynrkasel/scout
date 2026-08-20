@@ -447,13 +447,19 @@ export default function AccountOnboarding({
                     className={inputCls}
                   >
                     <option value="">Select your company…</option>
+                    {/* A company you already belong to stays selectable. The
+                        join is an upsert keyed on (workspace, user), so picking
+                        it is a no-op on the server that simply carries your
+                        existing membership into the profile. Disabling these
+                        was a dead end for anyone whose only companies were ones
+                        they'd already joined. */}
                     {companies.map((c) => (
-                      <option key={c.id} value={c.id} disabled={c.alreadyMember}>
+                      <option key={c.id} value={c.id}>
                         {c.name}
                         {c.industry ? `, ${c.industry}` : ""}
                         {` (${c.memberCount} ${c.memberCount === 1 ? "member" : "members"})`}
                         {c.domainMatch ? " • matches your email" : ""}
-                        {c.alreadyMember ? " • already joined" : ""}
+                        {c.alreadyMember ? " • you're already a member" : ""}
                       </option>
                     ))}
                   </select>
@@ -462,6 +468,12 @@ export default function AccountOnboarding({
 
               {selectedId && (
                 <>
+                  {companies?.find((c) => c.id === selectedId)?.alreadyMember && (
+                    <p className="rounded-xl border border-sage/40 bg-sage/10 px-3.5 py-2.5 text-xs leading-relaxed text-body">
+                      You&apos;re already on this company. Confirming keeps your
+                      existing membership and just fills in your role.
+                    </p>
+                  )}
                   <div>
                     <label className={labelCls}>Your role at the company</label>
                     <input

@@ -214,7 +214,8 @@ export default function PricingView() {
               <Unit name="Pro" rev={m.proPrice} cost={m.proSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.proPrice * (m.stripePct / 100) + m.stripeFlat} />
             </div>
             {showTable && (
-              <table className="mt-4 w-full text-left text-xs tabular-nums">
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full min-w-[420px] text-left text-xs tabular-nums">
                 <thead>
                   <tr className="border-b border-warm-border text-body/50">
                     <th className="py-1 font-bold">Line</th>
@@ -236,6 +237,7 @@ export default function PricingView() {
                   </tr>
                 </tbody>
               </table>
+              </div>
             )}
             <p className="mt-3 text-[11px] leading-relaxed text-body/50">
               Free users cost {fmt$(m.freeUsers * m.freeSearches * m.costPerSearch)} a month at this mix, that is the
