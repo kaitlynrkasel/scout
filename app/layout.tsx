@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Pwa } from "./pwa";
+import { UpdateBanner } from "./UpdateBanner";
 
 // Inter, a clean, neutral, highly legible UI sans in the spirit of Claude's
 // interface (whose actual face, Styrene, is proprietary). Full weight range,
@@ -77,6 +78,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <Pwa />
+        <UpdateBanner />
       </body>
     </html>
   );

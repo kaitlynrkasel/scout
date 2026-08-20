@@ -4253,6 +4253,67 @@ function ScoutTool({
     return fresh.length;
   }
 
+  // Backfill: publish finds this account already has into the shared pipeline.
+  //
+  // Sharing only ever happened at the moment of a search, so every find made
+  // before a team lens existed (or while sharing was failing) lives nowhere but
+  // this browser. The team pipeline then reads as empty forever, which looks
+  // like sharing is broken rather than like there is nothing to show. Once per
+  // session per project, hand the server what is already here and let it dedupe;
+  // /api/team/finds ignores rows that duplicate a prospect already in the
+  // project, so running this again is free.
+  const backfilledRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!teamLens || !getToken || !finds.length) return;
+    const byProject = new Map<string, Find[]>();
+    for (const f of finds) {
+      if (!f.projectId) continue;
+      const list = byProject.get(f.projectId) || [];
+      list.push(f);
+      byProject.set(f.projectId, list);
+    }
+    let cancelled = false;
+    (async () => {
+      for (const [projectId, list] of byProject) {
+        const proj = projectsRef.current.find((p) => p.id === projectId);
+        const projectName = (proj?.name || "").trim();
+        if (!projectName) continue;
+        // Only this company's projects; a personal project is not the team's.
+        if ((proj?.companyId || primaryCompanyId) !== teamLens) continue;
+        const mark = `${teamLens}::${projectId}::${list.length}`;
+        if (backfilledRef.current.has(mark)) continue;
+        backfilledRef.current.add(mark);
+        try {
+          const token = await getToken();
+          if (!token || cancelled) return;
+          await fetch("/api/team/finds", {
+            method: "POST",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({
+              workspaceId: teamLens,
+              projectName,
+              useCase: proj?.useCase || "",
+              context: proj?.context || "",
+              finds: list.map((f) => ({
+                opp: f.opp,
+                status: f.status,
+                dedupKey: sharedFindKey(f.opp),
+              })),
+            }),
+          });
+        } catch {
+          // Best effort. A failed backfill leaves the local finds untouched and
+          // simply tries again next session.
+        }
+      }
+      if (!cancelled) refreshTeamLens();
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, finds.length, primaryCompanyId]);
+
   // On a company lens, everything a search turns up belongs to the whole team:
   // mirror it into the shared pipeline under the project it was found in, so a
   // teammate sees it in that same project and under "All projects".
@@ -7834,6 +7895,7 @@ function ScoutTool({
           onSetCategory={setFindCategory}
           onRemove={removeFind}
           onAddManual={addManualFind}
+          onGoImport={() => setTab("manual")}
           activeProjectId={activeId}
         />
       )}
@@ -10972,6 +11034,7 @@ function SpreadsheetTab({
   onSetCategory,
   onRemove,
   onAddManual,
+  onGoImport,
   activeProjectId,
 }: {
   finds: Find[];
@@ -10993,6 +11056,7 @@ function SpreadsheetTab({
     notes?: string;
     projectId?: string;
   }) => string | null;
+  onGoImport: () => void;
   activeProjectId: string;
 }) {
   const projName = (id: string) => projects.find((p) => p.id === id)?.name || "";
@@ -11124,6 +11188,15 @@ function SpreadsheetTab({
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {/* Importing is the way most people get their first rows in here, so
+              it belongs on the sheet, not only on the Manual tab where you have
+              to already know to look. */}
+          <button
+            onClick={onGoImport}
+            className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Import a spreadsheet
+          </button>
           <button
             onClick={() =>
               onAddManual({ name: "New contact", projectId: activeProjectId })
