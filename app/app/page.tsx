@@ -589,6 +589,7 @@ interface Find {
   lastFollowUpAt?: number; // when the most recent follow-up nudge was drafted/sent
   scanned?: boolean; // deep-scan has already run on this find's site
   pinned?: boolean; // starred — floats to the top of whatever list it's in
+  foundByEmail?: string; // a teammate's find, adopted into this pipeline (team lens)
   scheduledSendAt?: string; // ISO timestamp: when the queued send will fire (via cron)
   // Meeting / interview prep, factual highlights about the contact + outlet,
   // fetched via a fresh Tavily + Claude pass after the user updates status to
@@ -4262,6 +4263,46 @@ function ScoutTool({
     if (fresh.length) publishFindsToTeam(fresh);
     return fresh.length;
   }
+
+  // A teammate's find is your find. On a company lens the pipeline is shared by
+  // definition, so making someone claim each row before they could act on it
+  // added a step that answered no question: everyone could already see them, and
+  // the only thing "I'll take it" changed was whether the row was usable. They
+  // are adopted into the local pipeline as they arrive, keeping who found them
+  // so the Found-by filter still works, and from there they draft, sort, export
+  // and sync exactly like anything Scout turned up for you.
+  const adoptedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!teamLens || !teamFinds.length) return;
+    const localKeys = new Set(findsRef.current.map((f) => sharedFindKey(f.opp)));
+    const mine = (accountEmail || "").toLowerCase();
+    const fresh: Find[] = [];
+    for (const tf of teamFinds) {
+      const opp = tf?.opp as Opportunity | undefined;
+      if (!opp) continue;
+      const by = String(tf.added_email || "").toLowerCase();
+      if (by && by === mine) continue; // already yours, this is the copy you published
+      const key = sharedFindKey(opp);
+      if (!key || localKeys.has(key) || adoptedRef.current.has(key)) continue;
+      adoptedRef.current.add(key);
+      // Land it in the project of the same name when there is one, so it files
+      // where a teammate meant it to, and in the active project otherwise.
+      const named = String(tf.__projectName || "").trim().toLowerCase();
+      const home =
+        projectsRef.current.find((p) => p.name.trim().toLowerCase() === named) || null;
+      fresh.push({
+        id: findKey(home?.id || activeId, opp),
+        projectId: home?.id || activeId,
+        status: (tf.status as FindStatus) || "new",
+        opp,
+        addedAt: Date.now(),
+        foundVia: "team",
+        foundByEmail: tf.added_email || "",
+      });
+    }
+    if (fresh.length) saveFinds([...fresh, ...findsRef.current]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, teamFinds, accountEmail, activeId]);
 
   // Backfill: publish finds this account already has into the shared pipeline.
   //
@@ -11783,7 +11824,9 @@ function SiteTile({
   label?: string;
 }) {
   const [color, setColor] = useState("");
+  const [logoFailed, setLogoFailed] = useState(false);
   useEffect(() => {
+    setLogoFailed(false);
     if (!url) return;
     let alive = true;
     (async () => {
@@ -11803,34 +11846,97 @@ function SiteTile({
   const key = host || name || "";
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  const pose = {
-    width: `${52 + (h % 5) * 9}%`,
-    right: `${-4 + ((h >> 3) % 5) * 5}%`,
-    bottom: `${-8 + ((h >> 6) % 4) * 4}%`,
-    transform: `scaleX(${h % 2 ? 1 : -1}) rotate(${((h >> 9) % 5) - 2}deg)`,
-  };
+
+  // What goes on the tile, in descending order of "this is actually them":
+  // the platform mark for a profile page, then the company's own logo, then
+  // the Scout dog. The dog is the house fallback, not the default.
+  const platform = socialPlatform(url);
+  const favicon = host
+    ? `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(host)}`
+    : "";
+  const showLogo = !!favicon && !platform && !logoFailed;
+
+  // Sized by HEIGHT and anchored well inside the tile, so the whole dog is
+  // always visible. Sizing by width cropped him: the artwork is wider than it
+  // is tall, so a width big enough to read overflowed a 176px-tall tile and
+  // left only a haunch on screen.
+  const dogHeight = 58 + (h % 4) * 6;
+  const dogLeft = 26 + ((h >> 3) % 4) * 16;
+  const dogBottom = 8 + ((h >> 6) % 3) * 5;
+  const flip = h % 2 ? -1 : 1;
+  const tilt = ((h >> 9) % 5) - 2;
+
+  const maskStyle = (src: string): React.CSSProperties => ({
+    WebkitMaskImage: `url("${src}")`,
+    maskImage: `url("${src}")`,
+    WebkitMaskSize: "contain",
+    maskSize: "contain",
+    WebkitMaskRepeat: "no-repeat",
+    maskRepeat: "no-repeat",
+    WebkitMaskPosition: "center",
+    maskPosition: "center",
+  });
 
   return (
     <div
       className="relative h-44 w-full overflow-hidden border-b border-warm-border transition-colors duration-500"
       style={{ backgroundColor: color || "rgb(var(--c-brown-tint))" }}
     >
-      <div
-        aria-hidden
-        className="pointer-events-none absolute bg-white/25 transition-all duration-500 group-hover:bg-white/40"
-        style={{
-          ...pose,
-          aspectRatio: "2048 / 1578",
-          WebkitMaskImage: "url(/scout-dog.png)",
-          maskImage: "url(/scout-dog.png)",
-          WebkitMaskSize: "contain",
-          maskSize: "contain",
-          WebkitMaskRepeat: "no-repeat",
-          maskRepeat: "no-repeat",
-          WebkitMaskPosition: "center",
-          maskPosition: "center",
-        }}
-      />
+      {platform ? (
+        // A profile page. LinkedIn and the rest hotlink-protect their avatars,
+        // so a profile picture is not ours to show; the platform's own mark is
+        // the honest stand-in and says where this person was found.
+        <div className="absolute inset-0 grid place-items-center">
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            className="h-16 w-16 text-white/80 transition group-hover:text-white"
+            fill="currentColor"
+          >
+            {platform === "LinkedIn" ? (
+              <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.76-1.95C21.4 8.75 22 11.1 22 14.16V21h-4v-6.06c0-1.45-.03-3.31-2.02-3.31-2.02 0-2.33 1.58-2.33 3.21V21h-4V9Z" />
+            ) : platform === "Instagram" ? (
+              <path d="M12 2.2c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.8 3.8 0 0 1-1.38-.9 3.8 3.8 0 0 1-.9-1.38c-.16-.42-.36-1.06-.41-2.23C2.21 15.58 2.2 15.2 2.2 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.21 8.8 2.2 12 2.2Zm0 3.05A6.75 6.75 0 1 0 18.75 12 6.75 6.75 0 0 0 12 5.25Zm0 11.13A4.38 4.38 0 1 1 16.38 12 4.38 4.38 0 0 1 12 16.38Zm6.99-11.4a1.58 1.58 0 1 1-1.58-1.58 1.58 1.58 0 0 1 1.58 1.58Z" />
+            ) : (
+              <path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.65l-5.22-6.82-5.96 6.82H1.68l7.73-8.84L1.25 2.25h6.82l4.71 6.23 5.46-6.23Zm-1.16 17.52h1.83L7.08 4.13H5.11l11.97 15.64Z" />
+            )}
+          </svg>
+        </div>
+      ) : showLogo ? (
+        // The company's own logo, drawn as a mask so it reads as one white mark
+        // over their color rather than a clashing square of someone else's art.
+        <div className="absolute inset-0 grid place-items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={favicon} alt="" onError={() => setLogoFailed(true)} className="hidden" />
+          <span
+            aria-hidden
+            style={maskStyle(favicon)}
+            className="h-16 w-16 bg-white/85 transition group-hover:bg-white"
+          />
+        </div>
+      ) : (
+        // No logo to be had: the house mark. Traced from public/scout-dog.png
+        // and drawn as a white line, so re-trace that PNG if it ever changes.
+        <svg
+          aria-hidden
+          viewBox="0 0 100.0 88.39"
+          preserveAspectRatio="xMidYMid meet"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.7"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          className="pointer-events-none absolute w-auto text-white/70 transition-all duration-500 group-hover:text-white"
+          style={{
+            height: `${dogHeight}%`,
+            left: `${dogLeft}%`,
+            bottom: `${dogBottom}%`,
+            transform: `translateX(-50%) scaleX(${flip}) rotate(${tilt}deg)`,
+          }}
+        >
+          <path d="M69.3 0C70.5 -0.2 70.5 -0.2 71.5 0C72.6 0.2 74.5 0.9 75.7 1.5C76.8 2.1 77.5 2.7 78.7 3.7C79.8 4.8 81.3 6.9 82.4 7.9C83.5 8.8 83.3 9.1 85 9.4C86.8 9.6 91.3 9.2 92.9 9.4C94.5 9.5 94.3 10.4 94.8 10.1C95.2 9.9 95.1 8.5 95.5 7.9C95.9 7.2 96.8 6.6 97.4 6.4C98 6.1 98.8 6.1 99.3 6.4C99.7 6.7 100 7.7 100 8.2C100 8.8 99.8 9.2 99.3 9.7C98.7 10.3 96.9 10.9 96.6 11.6C96.4 12.3 97.6 13.1 97.8 13.9C97.9 14.6 97.9 15.2 97.8 16.1C97.6 17 97.3 18 96.6 19.1C96 20.2 95.4 21.3 94 22.8C92.6 24.4 90.9 26.4 88 28.5C85.1 30.5 78.2 33.5 76.4 35.2C74.6 37 77 37.3 77.2 39C77.3 40.6 77.4 42.8 77.2 45.3C76.9 47.9 76.3 51.7 75.7 54.3C75 56.9 75.1 56.9 73 61C71 65.2 64.9 76.2 63.3 79.4C61.7 82.6 63 80 63.3 80.5C63.6 81 64.6 81.4 65.2 82.4C65.7 83.4 69.2 85.8 66.7 86.5C64.2 87.2 52.9 87.6 50.2 86.5C47.5 85.4 50.3 81.5 50.6 79.8C50.8 78.1 51.6 77.2 51.7 76.4C51.7 75.6 51.3 74.7 50.9 74.9C50.6 75.2 49.8 76.7 49.4 77.9C49.1 79.2 49.7 81.5 48.7 82.4C47.7 83.3 44.5 83.3 43.4 83.1C42.4 83 42.9 82.1 42.3 81.6C41.8 81.2 40.9 80.7 40.1 80.5C39.3 80.3 37.3 81.5 37.5 80.5C37.6 79.6 40.3 76.5 40.8 74.9C41.4 73.3 41.3 72.2 40.8 71.2C40.4 70.1 39.6 69 38.2 68.5C36.8 68.1 33.7 68.4 32.6 68.5C31.5 68.7 31 69.2 31.5 69.3C31.9 69.4 33.9 69 35.2 69.3C36.5 69.6 38.7 70.1 39.3 71.2C40 72.2 39.7 74 39 75.7C38.2 77.3 34.8 80.3 34.8 81.3C34.9 82.3 38.2 81.4 39.3 81.6C40.4 81.9 40.9 82.1 41.6 82.8C42.3 83.4 43.3 84.6 43.4 85.4C43.6 86.1 43.1 86.8 42.3 87.3C41.5 87.8 40.4 88.2 38.6 88.4C36.7 88.6 34.6 88.7 31.1 88.4C27.6 88.1 21.4 86.8 17.6 86.5C13.8 86.2 9.6 87.4 8.2 86.5C6.9 85.6 10.2 82.8 9.4 81.3C8.6 79.7 4.9 79 3.4 77.2C1.8 75.3 0.6 72.7 0 70.4C-0.6 68.1 -0.5 65.6 0 63.3C0.5 61 1.9 58.2 3 56.6C4.1 54.9 4.9 54.2 6.4 53.2C7.9 52.1 10.1 50.9 12 50.2C13.9 49.4 14.7 49.2 17.6 48.7C20.5 48.2 26.7 47.8 29.6 47.2C32.5 46.6 33.7 45.9 35.2 44.9C36.7 44 37.7 42 38.6 41.6C39.5 41.1 39.6 42.2 40.4 42.3C41.3 42.4 42.4 42.7 43.8 42.3C45.3 41.9 47.5 41.1 49.1 40.1C50.6 39 52.1 37.3 53.2 36C54.2 34.6 54.8 33.4 55.4 31.8C56.1 30.3 56.6 28.2 56.9 26.6C57.2 25 57.4 23.3 57.3 22.5C57.2 21.7 56.8 21.8 56.6 21.7C56.3 21.7 56 21.1 55.8 22.1C55.6 23.1 55.7 26.2 55.4 27.7C55.2 29.3 55 30 54.3 31.5C53.6 32.9 52.3 35.1 51.3 36.3C50.3 37.6 49.6 38.1 48.3 39C47 39.8 45.1 41 43.4 41.2C41.8 41.4 39.5 40.8 38.6 40.1C37.7 39.4 37.9 38.3 38.2 37.1C38.5 35.8 38.6 35.3 40.4 32.6C42.3 29.9 47.6 23.3 49.4 21C51.3 18.7 50.6 19.4 51.7 18.7C52.8 18 55.6 17.3 56.2 16.9C56.8 16.4 56.1 16.1 55.4 16.1C54.7 16.1 52.7 16.9 52.1 16.9C51.4 16.9 51.6 16.9 51.7 16.1C51.7 15.4 51.9 13.6 52.4 12.4C52.9 11.1 53.4 10.1 54.7 8.6C56 7.1 58.7 4.6 60.3 3.4C61.9 2.2 62.5 2.1 64 1.5C65.5 0.9 68 0.2 69.3 0Z" />
+        </svg>
+      )}
       {(label || host) && (
         <span className="pointer-events-none absolute left-3 top-3 max-w-[80%] truncate rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
           {label || host}
@@ -11842,7 +11948,8 @@ function SiteTile({
         </span>
       )}
     </div>
-  );}
+  );
+}
 
 // Compact find tile for the grid view: leads with a live preview of the find's
 // page (routed through /api/site-preview so embedding isn't refused), then the
@@ -12175,8 +12282,13 @@ function FindsTab({
   const shown = finds
     .filter((f) => (filter === "pinned" ? f.pinned : filter === "all" ? true : f.status === filter))
     .filter(matchesFilters)
-    // Your local finds are yours: hide them when filtering to a teammate.
-    .filter(() => !foundBy || foundBy === (accountEmail || ""))
+    // Who found it. Teammates' finds are adopted into this same list and carry
+    // foundByEmail; anything without one is your own.
+    .filter((f) => {
+      if (!foundBy) return true;
+      const by = f.foundByEmail || accountEmail || "";
+      return by === foundBy;
+    })
     .slice()
     .sort(sortFns[sortBy] || sortFns.activity)
     // Starred finds rise to the top of whichever sort is active, keeping their
@@ -12184,46 +12296,21 @@ function FindsTab({
     // without discarding it.
     .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
 
-  // ---- Team lens: the shared pipeline, merged in below your own finds ----
-  // Teammates' shared finds that you DON'T already have locally (your own copy
-  // wins), respecting the status tab, the filters panel, and the person filter.
-  const localNameKeys = new Set(finds.map((f) => normNameKey(f.opp?.name || "")));
-  // Scoped to the project selector the same way your own finds are: a teammate's
-  // find lands in the project it was found in, so it shows under that project
-  // and under "All projects" — not under every project at once.
-  const allProjectsView = activeProjectId === "__all__";
-  // Picking a person is an explicit "show me what THEY found", so it overrides
-  // the project scope. Shared projects are matched by name, so a teammate whose
-  // project is called something else files into a different one; scoping their
-  // finds to your project name would answer that question with an empty list
-  // and no reason why.
-  const personView = !!foundBy;
-  const teamShown = (teamName ? teamFinds || [] : [])
-    .filter(
-      (f: any) =>
-        allProjectsView ||
-        personView ||
-        String(f.__projectName || "").trim().toLowerCase() ===
-          String(projectName || "").trim().toLowerCase()
-    )
-    .filter((f: any) => !localNameKeys.has(normNameKey(f.opp?.name || "")))
-    .filter((f: any) =>
-      filter === "pinned" ? false : filter === "all" ? true : f.status === filter
-    )
-    .filter((f: any) => !foundBy || (f.added_email || "") === foundBy)
-    .filter((f: any) => matchesFilters(f as Find));
-  // Everyone who has contributed a find, for the "Found by" filter chips.
+  // ---- Team lens: who found what ----
+  // Teammates' finds are adopted into `finds` as they arrive (see the adopt
+  // effect), so there is no second list to render here. All that is left is the
+  // roster for the Found-by chips.
   const teamPeople = Array.from(
     new Set(
       (accountEmail ? [accountEmail] : []).concat(
-        (teamFinds || []).map((f: any) => String(f.added_email || "")).filter(Boolean)
+        finds.map((f) => String(f.foundByEmail || "")).filter(Boolean)
       )
     )
   );
   // How many each person has contributed, across every shared project, so the
   // chips say who actually has finds rather than just who exists.
   const teamPersonCount = (email: string) =>
-    (teamFinds || []).filter((f: any) => String(f.added_email || "") === email).length;
+    finds.filter((f) => (f.foundByEmail || accountEmail || "") === email).length;
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
@@ -12347,9 +12434,9 @@ function FindsTab({
             </svg>
             <span className="font-extrabold text-ink">Shared finds</span>
             <span className="text-body/80">
-              You&apos;re on the <span className="font-semibold">{teamName}</span> lens: everyone
-              on the team sees this pipeline. A teammate&apos;s deny only flags a find for the
-              rest of you; it disappears once most of the team passes on it.
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens:
+              everything a teammate finds lands in this pipeline alongside your own,
+              ready to work on. Filter by who found it below.
             </span>
           </div>
           <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
@@ -12847,34 +12934,6 @@ function FindsTab({
             )
           )}
         </div>
-      )}
-
-      {/* Team lens: teammates' shared finds you don't have locally. Same status
-          tab + filters, with who-found-what attribution and deny votes. */}
-      {teamName && teamShown.length > 0 && (
-        <section className="mt-8">
-          <div className="mb-2 flex flex-wrap items-baseline gap-2">
-            <span className="text-xs font-extrabold uppercase tracking-wide text-body/60">
-              From your team
-            </span>
-            <span className="text-[11px] text-body/50">
-              shared finds added by teammates at {teamName}
-            </span>
-          </div>
-          <div className="space-y-2">
-            {teamShown.map((f: any) => (
-              <SharedFindRow
-                key={f.id}
-                f={f}
-                accountEmail={accountEmail || ""}
-                busy={teamBusyId === f.id}
-                onClaim={(claim) => onTeamPatch?.(f.id, { claim })}
-                onStatus={(status) => onTeamPatch?.(f.id, { status })}
-                emailShort={(e) => (e || "").split("@")[0] || e}
-              />
-            ))}
-          </div>
-        </section>
       )}
 
       {/* Bulk action bar — floats over the list while items are selected. */}
