@@ -107,16 +107,28 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-warm-bg">
       <header className="border-b border-warm-border bg-surface/70">
-        <div className="mx-auto flex max-w-6xl items-center gap-3 px-6 py-4">
+        {/* One row on a desktop; on a phone the title and the escape hatch share
+            the first row and the tabs drop to their own scrollable strip below.
+            As a single unwrapped row this was far wider than a phone screen,
+            which set the whole page scrolling sideways. */}
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7" />
+          <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7 shrink-0" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
-          <nav className="ml-4 flex items-center gap-1">
+          <Link
+            href="/app"
+            className="ml-auto shrink-0 whitespace-nowrap rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-brown-tint sm:order-last"
+          >
+            Back to the app
+          </Link>
+          {/* Full-bleed on mobile so the strip scrolls edge to edge instead of
+              looking clipped inside the page padding. */}
+          <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
             {(["insights", "concierge", "index", "pricing", "readiness"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-bold capitalize transition ${
+                className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold capitalize transition ${
                   adminTab === t
                     ? "bg-brown-tint text-brown-deep"
                     : "text-body hover:bg-brown-tint/50"
@@ -126,12 +138,6 @@ export default function AdminPage() {
               </button>
             ))}
           </nav>
-          <Link
-            href="/app"
-            className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-brown-tint"
-          >
-            Back to the app
-          </Link>
         </div>
       </header>
       {adminTab === "insights" ? (
@@ -173,7 +179,7 @@ export default function AdminPage() {
           )}
         </main>
       ) : adminTab === "pricing" ? (
-        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">Pricing model</span>
@@ -186,7 +192,7 @@ export default function AdminPage() {
           <PricingView />
         </main>
       ) : adminTab === "index" ? (
-        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">People index</span>
@@ -200,7 +206,7 @@ export default function AdminPage() {
           <IndexView getToken={getToken} />
         </main>
       ) : (
-        <main className="mx-auto w-full max-w-6xl px-6 py-10">
+        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">Concierge</span>

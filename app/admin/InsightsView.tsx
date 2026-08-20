@@ -244,8 +244,8 @@ export default function InsightsView({
             <p className="mt-1 text-xs text-body/70">
               Ranked by searches run, then finds saved.
             </p>
-            <div className="mt-3 max-h-80 overflow-y-auto">
-              <table className="w-full text-xs">
+            <div className="mt-3 max-h-80 overflow-auto">
+              <table className="w-full min-w-[420px] text-xs">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
                     <th className="py-1 pr-2">#</th>
@@ -310,8 +310,8 @@ export default function InsightsView({
               Every row in <code>user_state</code>. Missing testers ⇒ their state
               never hit Supabase.
             </p>
-            <div className="mt-3 max-h-64 overflow-y-auto">
-              <table className="w-full text-xs">
+            <div className="mt-3 max-h-64 overflow-auto">
+              <table className="w-full min-w-[420px] text-xs">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
                     <th className="py-1">User</th>
@@ -416,7 +416,9 @@ export default function InsightsView({
             <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
               Deny rate by use case
             </h2>
-            <table className="mt-3 w-full text-sm">
+            {/* Scrolls inside the card on a narrow screen instead of widening the page. */}
+            <div className="mt-3 overflow-x-auto">
+              <table className="w-full min-w-[360px] text-sm">
               <thead>
                 <tr className="text-left text-xs font-bold uppercase tracking-wide text-muted">
                   <th className="py-1">Use case</th>
@@ -449,6 +451,7 @@ export default function InsightsView({
                 )}
               </tbody>
             </table>
+            </div>
           </section>
 
           {/* Raw denial log with search */}
@@ -464,8 +467,8 @@ export default function InsightsView({
                 className="w-64 rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-brown"
               />
             </div>
-            <div className="mt-3 max-h-[520px] overflow-y-auto">
-              <table className="w-full text-xs">
+            <div className="mt-3 max-h-[520px] overflow-auto">
+              <table className="w-full min-w-[520px] text-xs">
                 <thead className="sticky top-0 bg-surface">
                   <tr className="text-left text-[10px] font-bold uppercase tracking-wide text-muted">
                     <th className="py-1">Name</th>
