@@ -634,6 +634,40 @@ function goalWantsPeopleNotPostings(goal: string): boolean {
   return peopley && !postingy;
 }
 
+// What actually makes a find worth opening: the role, the organization, and
+// the qualifier that answers "why is this person on my list" (MSEL '22, Class
+// of 2018, a beat, a genre). Titles alone are weak scanning material, two
+// unfamiliar names look identical, so the card leads the eye with this line.
+// Anything already said by the card's title is dropped so nothing repeats.
+function substanceLine(o: Opportunity): string {
+  const title = String(o.name || "").toLowerCase();
+  const parts = [o.contactRole, o.outlet, o.location]
+    .map((v) => String(v || "").trim())
+    .filter(Boolean)
+    // Drop a part the title already contains (the extractor often folds the
+    // company or credential into the name).
+    .filter((v) => !title.includes(v.toLowerCase()));
+  // Dedupe case-insensitively while keeping order.
+  const seen = new Set<string>();
+  return parts
+    .filter((v) => {
+      const k = v.toLowerCase();
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    })
+    .join(" · ");
+}
+
+// The contact's own name is worth showing only when it adds something the
+// title does not already say (a named person behind a company listing).
+function contactNameAddsInfo(o: Opportunity): boolean {
+  const n = String(o.contactName || "").trim();
+  if (!n) return false;
+  const title = String(o.name || "").toLowerCase();
+  return !title.includes(n.toLowerCase());
+}
+
 // Quick reasons offered when passing on a find (plus free-text "Other").
 const DENY_REASONS = [
   "Wrong industry",
@@ -12987,11 +13021,14 @@ function FindCard({
         </button>
       </div>
 
-      {(o.outlet || o.location) && (
-        <div className="mt-0.5 text-xs text-body/80">
-          {[o.outlet, o.location].filter(Boolean).join(" · ")}
-        </div>
-      )}
+      {(() => {
+        // Substance first: role and organization are what the eye scans for
+        // down a list of unfamiliar names.
+        const line = substanceLine(o);
+        return line ? (
+          <div className="mt-0.5 text-[13px] font-medium text-body">{line}</div>
+        ) : null;
+      })()}
       {/* Any channel the search explicitly requested gets its own labeled box
           below ("Requested contact info"), found or not, so leave it out of
           this compact line too, or it shows twice. */}
@@ -13001,7 +13038,8 @@ function FindCard({
         const showPhone = !!o.contactPhone && !wantedChannels.includes("phone");
         // Nothing left to show inline (e.g. a company search where every
         // channel is in the requested-info row below), skip the empty line.
-        if (!showEmail && !o.contactName && !showHandle && !showPhone) return null;
+        const showName = contactNameAddsInfo(o);
+        if (!showEmail && !showName && !showHandle && !showPhone) return null;
         return (
           <div className="mt-1 text-xs">
             {showEmail && (
@@ -13010,22 +13048,21 @@ function FindCard({
                 <ContactSourceLink src={o.contactSource} />
               </>
             )}
-            {o.contactName && (
+            {showName && (
               <span className="text-body">
                 {showEmail ? "  ·  " : ""}
                 {o.contactName}
-                {o.contactRole ? ` (${o.contactRole})` : ""}
               </span>
             )}
             {showHandle && (
               <span className="text-body/70">
-                {showEmail || o.contactName ? "  ·  " : ""}
+                {showEmail || showName ? "  ·  " : ""}
                 <ContactValue value={o.contactHandle} className="text-body/70" />
               </span>
             )}
             {showPhone && (
               <span className="text-body/70">
-                {showEmail || o.contactName || showHandle ? "  ·  " : ""}
+                {showEmail || showName || showHandle ? "  ·  " : ""}
                 <a
                   href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
                   className="text-body/70 underline-offset-2 hover:text-accent hover:underline"

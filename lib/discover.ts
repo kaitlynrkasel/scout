@@ -8,7 +8,7 @@ import { tavilySearch, TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
-import { pdlEnabled, goalToPdlFilters, pdlRosterSearch, pdlPeopleAsCandidates } from "./pdl";
+import { pdlEnabled, goalToPdlFilters, pdlRosterCached, pdlPeopleAsCandidates, type PdlFilters } from "./pdl";
 import type { Opportunity } from "./types";
 
 // ---- Auto-tunable fit-scoring clauses ----
@@ -1659,30 +1659,41 @@ export async function discover(
 
   // ---- Licensed roster pass ---------------------------------------------
   // The open web only knows the people who left a public trace. When a goal
-  // names a hard filter a person-database can match exactly (a school, an
-  // employer, a title), consult the licensed directory for the rest of the
-  // roster. Capped like every other source so it informs results without
-  // dominating them, and every record still has to earn its place through the
-  // same extraction, fit scoring, location rules, and exposure caps.
-  if (pdlEnabled() && !aborted()) {
+  // names a hard filter a person-directory can match exactly (a school, an
+  // employer, a title), the directory can supply the rest of the roster.
+  //
+  // Spend rule, both halves of it:
+  //   ONLY when necessary, the directory is skipped entirely for goals with no
+  //   hard filter, and every distinct roster is fetched once and then served
+  //   from cache, so repeat asks cost nothing.
+  //   ALWAYS when necessary, it runs whenever the goal IS roster-shaped and the
+  //   open web did not already produce a comfortable pool, and it runs again as
+  //   a rescue below if extraction still comes up short.
+  let rosterFilters: PdlFilters | null = null;
+  let rosterUsed = false;
+  const consultDirectory = async (want: number) => {
+    if (!pdlEnabled() || rosterUsed || aborted()) return;
     try {
-      const filters = await goalToPdlFilters(goal);
-      if (filters) {
-        const want = Math.min(12, Math.max(4, maxItems));
-        const { people, total } = await pdlRosterSearch(filters, want);
-        if (people.length) {
-          emit(
-            `Checking the people directory (${total.toLocaleString()} match this profile)`
-          );
-          for (const c of pdlPeopleAsCandidates(people)) {
-            if (c.url && candidates.some((x) => x.url === c.url)) continue;
-            candidates.push(c);
-          }
-        }
+      if (rosterFilters === null) rosterFilters = await goalToPdlFilters(goal);
+      if (!rosterFilters) return; // no hard filter, the web is the right tool
+      const { people, total, cached } = await pdlRosterCached(rosterFilters, want);
+      if (!people.length) return;
+      rosterUsed = true;
+      emit(
+        `Checking the people directory (${total.toLocaleString()} match this profile${cached ? ", from cache" : ""})`
+      );
+      for (const c of pdlPeopleAsCandidates(people)) {
+        if (c.url && candidates.some((x) => x.url === c.url)) continue;
+        candidates.push(c);
       }
     } catch {
-      /* directory is an extra source, never a dependency */
+      /* the directory is an extra source, never a dependency */
     }
+  };
+  // The web pass is the default source; consult the directory when it did not
+  // return a comfortable pool of its own (or returned nothing at all).
+  if (candidates.length < maxItems * 2) {
+    await consultDirectory(Math.min(12, Math.max(4, maxItems)));
   }
 
   // 3: extract structured records, dedupe by name/host, cap at maxItems.
@@ -2066,6 +2077,15 @@ export async function discover(
   }
 
   await extractFrom(0);
+
+  // Rescue pass: extraction can reject nearly everything the web returned (the
+  // "1 find" case). If the goal was roster-shaped and we still have less than
+  // half of what was asked for, consult the directory now and extract those.
+  if (!aborted() && opps.length < Math.ceil(maxItems / 2) && pdlEnabled() && !rosterUsed) {
+    const before = candidates.length;
+    await consultDirectory(Math.min(12, Math.max(6, maxItems)));
+    if (candidates.length > before) await extractFrom(before);
+  }
 
   // Nothing survived the specific pass? Widen the net once and try again, so a
   // very specific "who is this for" degrades to *some* real results instead of an

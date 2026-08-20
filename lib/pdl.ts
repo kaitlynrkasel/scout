@@ -15,7 +15,9 @@
 // Everything here is opt-in: with no PDL_API_KEY set, every function no-ops and
 // searches behave exactly as before.
 
+import { createHash } from "node:crypto";
 import { claudeJson, parseJsonLoose } from "./claude";
+import { supabaseAdmin } from "./supabaseAdmin";
 import type { Opportunity } from "./types";
 
 const BASE = "https://api.peopledatalabs.com/v5";
@@ -246,4 +248,71 @@ export async function pdlEnrich(opts: {
   } catch {
     return null;
   }
+}
+
+
+// ---- Spend discipline ---------------------------------------------------
+// A directory lookup costs credits, and the same roster gets requested over and
+// over (every user hunting Babson alumni wants the same 3,961 people). So each
+// distinct filter set is fetched ONCE and reused from cache after that. This is
+// what makes "only when necessary" true in practice: the API is called for a
+// roster nobody has asked for yet, and never again for one we already hold.
+const ROSTER_CACHE_DAYS = 30;
+
+function filterKey(f: PdlFilters, size: number): string {
+  const norm = Object.keys(f)
+    .sort()
+    .map((k) => `${k}=${(f as any)[k]}`)
+    .join("&");
+  return createHash("sha1").update(`${norm}::${size}`).digest("hex").slice(0, 24);
+}
+
+// Cache-first roster lookup. Returns the same shape as pdlRosterSearch, plus
+// whether the directory was actually called (for the admin usage view).
+export async function pdlRosterCached(
+  filters: PdlFilters,
+  size = 10
+): Promise<{ people: PdlPerson[]; total: number; cached: boolean }> {
+  const key = filterKey(filters, size);
+  const cutoff = new Date(Date.now() - ROSTER_CACHE_DAYS * 86400000).toISOString();
+  if (supabaseAdmin) {
+    try {
+      const { data } = await supabaseAdmin
+        .from("pdl_roster_cache")
+        .select("people, total, created_at, hits")
+        .eq("filter_key", key)
+        .gte("created_at", cutoff)
+        .maybeSingle();
+      if (data?.people) {
+        // Fire-and-forget usage bump, never blocks the search.
+        void supabaseAdmin
+          .from("pdl_roster_cache")
+          .update({ hits: (data.hits || 0) + 1, last_used_at: new Date().toISOString() })
+          .eq("filter_key", key);
+        return { people: data.people as PdlPerson[], total: data.total || 0, cached: true };
+      }
+    } catch {
+      /* cache miss on error, fall through to a live call */
+    }
+  }
+  const fresh = await pdlRosterSearch(filters, size);
+  if (fresh.people.length && supabaseAdmin) {
+    try {
+      await supabaseAdmin.from("pdl_roster_cache").upsert(
+        {
+          filter_key: key,
+          filters,
+          people: fresh.people,
+          total: fresh.total,
+          hits: 1,
+          created_at: new Date().toISOString(),
+          last_used_at: new Date().toISOString(),
+        },
+        { onConflict: "filter_key" }
+      );
+    } catch {
+      /* caching is a bonus, the result still stands */
+    }
+  }
+  return { ...fresh, cached: false };
 }
