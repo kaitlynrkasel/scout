@@ -272,10 +272,21 @@ export async function getWorkspaceContext(uid: string, email: string) {
 
   let workspaces: any[] = [];
   if (wsIds.length) {
-    const { data: wsRows } = await db()
+    // Resilient select: if the deployed schema predates any of the optional
+    // columns (a teams.sql that has not been re-run), PostgREST fails the whole
+    // query and returns null. That silently emptied the user's company list,
+    // which hides the company switcher entirely. Fall back to the columns that
+    // have always existed rather than losing the workspaces.
+    let { data: wsRows, error: wsErr } = await db()
       .from("workspaces")
       .select("id, name, about, website, industry, stage, location, created_by, created_at, comped")
       .in("id", wsIds);
+    if (wsErr) {
+      ({ data: wsRows } = await db()
+        .from("workspaces")
+        .select("id, name, created_by, created_at")
+        .in("id", wsIds));
+    }
     const { data: memberRows } = await db()
       .from("workspace_members")
       .select("workspace_id, user_id, email, role, weight")
