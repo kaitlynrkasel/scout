@@ -43,3 +43,13 @@ registered by `app/pwa.tsx`, which also keeps `theme-color` in step with the
 `.dark` class. Mobile chrome pads itself with `env(safe-area-inset-*)` because
 `viewportFit: "cover"` lets the layout run under the notch. Bump `VERSION` in
 `public/sw.js` to retire every old cache on a deploy.
+
+## Shipping
+Kaitlyn's standing call: **land it, don't ask.** Finished work goes all the way
+in — commit, PR, merge to `main`, which deploys to scout-source.com — without
+stopping for approval on the merge itself. Reverting a bad frontend change is
+cheaper than a round trip, so bias to shipping. Still verify before pushing
+(build, typecheck, whatever the change actually touches), still say plainly what
+landed and what wasn't verified, and still ask first for anything a revert
+can't undo: deleting data, sending mail from a real mailbox, or changes to
+billing.
