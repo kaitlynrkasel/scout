@@ -346,14 +346,18 @@ const DECOMPOSE_SYS =
   "reply probability. search_dimensions = different ways to attack the search (by geography, profession, event, " +
   "employer, recent news, organization, conference, award, social presence, publication, community, alumni, " +
   "association) — never rely on one. ranking_factors = weighted scoring like [{factor,weight}] where weights total " +
-  "HOME BASE: when ABOUT THE USER says where the person or company is BASED (as opposed to the goal demanding a " +
+  "1.0. " +
+  "HOME BASE: when ABOUT THE USER states where the person or company is BASED (as opposed to the goal demanding a " +
   "location), treat it as a REGIONAL PREFERENCE, never a hard_constraint or a negative_constraint. Put the wider " +
   "region in preferred and give proximity real weight in ranking_factors, so nearby opportunities rank first while " +
-  "strong matches elsewhere still surface. Widen the base to the region a person would plausibly commute, relocate, " +
-  "or travel within — someone based in Seattle should see the Pacific Northwest (Seattle, Tacoma, Bellevue, " +
-  "Portland), not Seattle city limits alone. The goal still overrides this: if it says remote/anywhere, drop the " +
-  "geographic weighting entirely, and if it names its own location or demands on-site presence, that wins. " +
-  "1.0. confidence_questions = ONLY genuinely missing information that would change WHO Scout looks for. This is the " +
+  "strong matches elsewhere still surface. Widen the stated base to its own metro area and the neighbouring cities " +
+  "within normal commuting or relocating distance OF THAT BASE, derived from the location the user actually gave. " +
+  "When NO base appears in the goal or the ABOUT context, apply NO geographic preference whatsoever: do not invent a " +
+  "city, region, or country, do not fall back to anywhere named in these instructions, and leave location out of " +
+  "required, preferred, hard_constraints and ranking_factors entirely. The goal still overrides all of this: if it " +
+  "says remote/anywhere, drop the geographic weighting, and if it names its own location or demands on-site " +
+  "presence, that wins. " +
+  "confidence_questions = ONLY genuinely missing information that would change WHO Scout looks for. This is the " +
   "MOST IMPORTANT rule: before writing ANY question, re-read the GOAL, ABOUT THE USER, the context, and any answers " +
   "already given — if they STATE or reasonably IMPLY the answer, DO NOT ASK IT. Never ask the user something they " +
   "just told you. Concrete bans: do NOT ask which industry when the goal names one or says 'any/all/various " +
