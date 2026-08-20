@@ -1036,7 +1036,7 @@ export async function publishFindsToTeam(
   const findByName = async () => {
     const { data } = await db()
       .from("shared_projects")
-      .select("id, name")
+      .select("id, name, open_to_workspace")
       .eq("workspace_id", opts.workspaceId);
     return (data || []).find(
       (p: any) => String(p.name || "").trim().toLowerCase() === nm.toLowerCase()
@@ -1045,17 +1045,35 @@ export async function publishFindsToTeam(
 
   let proj = await findByName();
   if (!proj) {
-    const created = await shareProject(uid, email, {
-      workspaceId: opts.workspaceId,
-      name: nm,
-      useCase: opts.useCase || "",
-      context: opts.context || "",
-      openToWorkspace: true,
-    }).catch(() => null);
-    // Two teammates searching the same new project at once both try to create
-    // it; whoever lost the race just adopts the row that now exists.
-    proj = created || (await findByName());
+    let created: any = null;
+    try {
+      created = await shareProject(uid, email, {
+        workspaceId: opts.workspaceId,
+        name: nm,
+        useCase: opts.useCase || "",
+        context: opts.context || "",
+        openToWorkspace: true,
+      });
+    } catch (e) {
+      // Two teammates searching the same new project at once both try to create
+      // it; whoever lost the race adopts the row that now exists. Anything else
+      // is a real failure and must not be reported as a mysterious 500.
+      created = await findByName();
+      if (!created) throw e;
+    }
+    proj = created;
     if (!proj) throw new TeamError("Could not open a shared project for this.", 500);
+  } else if (!proj.open_to_workspace) {
+    // The project exists but predates this feature, or was shared by hand to a
+    // few people. Publishing a search into it means the whole team is meant to
+    // see what turns up — an existing row must not quietly swallow the finds
+    // and show them to nobody. Opening it is the difference between the feature
+    // working and silently doing nothing.
+    const { error } = await db()
+      .from("shared_projects")
+      .update({ open_to_workspace: true })
+      .eq("id", proj.id);
+    if (error) throw new TeamError(error.message, 500);
   }
   const added = await addSharedFinds(uid, email, String(proj.id), opts.finds);
   return { ...added, sharedProjectId: String(proj.id) };

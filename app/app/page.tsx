@@ -2573,46 +2573,54 @@ function ScoutTool({
   const [teamSharedProjects, setTeamSharedProjects] = useState<{ id: string; name: string }[]>([]);
   const [teamTemplates, setTeamTemplates] = useState<any[]>([]);
   const [teamFindsBusyId, setTeamFindsBusyId] = useState("");
+  // Set when publishing a search into the shared pipeline fails, so the person
+  // searching learns their team got nothing instead of assuming it worked.
+  const [teamShareNote, setTeamShareNote] = useState("");
   const teamLens =
     activeCompanyId && activeCompanyId !== "personal" ? activeCompanyId : "";
   const teamLensName = companies.find((c) => c.id === teamLens)?.name || "";
+  // Load the workspace's shared projects, their pipelines, and its template
+  // library. Split out of the effect so a publish can call it straight after
+  // writing, rather than leaving the team section stale until the next tab
+  // switch happens to re-run the effect.
+  async function refreshTeamLens(alive = () => true) {
+    // Fetched on ANY tab (not just Finds): searches consult this for the
+    // teammate-deny guardrail, so it must be warm before a search runs.
+    if (!teamLens || !getToken) {
+      setTeamFinds([]);
+      setTeamTemplates([]);
+      setTeamSharedProjects([]);
+      return;
+    }
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const h = { authorization: `Bearer ${token}` };
+      const pr = await fetch(`/api/team/project?workspaceId=${teamLens}`, { headers: h });
+      const pdata = await pr.json().catch(() => ({}));
+      if (alive())
+        setTeamSharedProjects(
+          (pdata.projects || []).map((p: any) => ({ id: String(p.id), name: String(p.name || "") }))
+        );
+      const all: any[] = [];
+      for (const p of pdata.projects || []) {
+        const fr = await fetch(`/api/team/finds?projectId=${p.id}`, { headers: h });
+        const fdata = await fr.json().catch(() => ({}));
+        for (const f of fdata.finds || []) all.push({ ...f, __projectName: p.name });
+      }
+      if (alive()) setTeamFinds(all);
+      // The workspace's communal template library rides along.
+      const tr = await fetch(`/api/team/templates?workspaceId=${teamLens}`, { headers: h });
+      const tdata = await tr.json().catch(() => ({}));
+      if (alive() && Array.isArray(tdata.templates)) setTeamTemplates(tdata.templates);
+    } catch {
+      /* teams not configured — the Finds tab just shows your own finds */
+    }
+  }
+  // Re-runs on tab switches so the Finds tab always shows fresh votes.
   useEffect(() => {
     let alive = true;
-    (async () => {
-      // Fetched on ANY tab (not just Finds): searches consult this for the
-      // teammate-deny guardrail, so it must be warm before a search runs.
-      // Re-runs on tab switches so the Finds tab always shows fresh votes.
-      if (!teamLens || !getToken) {
-        setTeamFinds([]);
-        setTeamTemplates([]);
-        setTeamSharedProjects([]);
-        return;
-      }
-      try {
-        const token = await getToken();
-        if (!token) return;
-        const h = { authorization: `Bearer ${token}` };
-        const pr = await fetch(`/api/team/project?workspaceId=${teamLens}`, { headers: h });
-        const pdata = await pr.json().catch(() => ({}));
-        if (alive)
-          setTeamSharedProjects(
-            (pdata.projects || []).map((p: any) => ({ id: String(p.id), name: String(p.name || "") }))
-          );
-        const all: any[] = [];
-        for (const p of pdata.projects || []) {
-          const fr = await fetch(`/api/team/finds?projectId=${p.id}`, { headers: h });
-          const fdata = await fr.json().catch(() => ({}));
-          for (const f of fdata.finds || []) all.push({ ...f, __projectName: p.name });
-        }
-        if (alive) setTeamFinds(all);
-        // The workspace's communal template library rides along.
-        const tr = await fetch(`/api/team/templates?workspaceId=${teamLens}`, { headers: h });
-        const tdata = await tr.json().catch(() => ({}));
-        if (alive && Array.isArray(tdata.templates)) setTeamTemplates(tdata.templates);
-      } catch {
-        /* teams not configured — the Finds tab just shows your own finds */
-      }
-    })();
+    refreshTeamLens(() => alive);
     return () => {
       alive = false;
     };
@@ -4215,11 +4223,12 @@ function ScoutTool({
 
   // On a company lens, everything a search turns up belongs to the whole team:
   // mirror it into the shared pipeline under the project it was found in, so a
-  // teammate sees it in that same project and under "All projects". The server
-  // opens the shared project to the workspace on the first find, so this works
-  // before anyone has explicitly shared anything. Best-effort and fire-and-
-  // forget — the local finds stand either way, and the next lens refresh
-  // reconciles anything that didn't land.
+  // teammate sees it in that same project and under "All projects".
+  //
+  // Failures are SHOWN, not swallowed. This started out fire-and-forget on the
+  // reasoning that the local finds stand either way — but the local finds
+  // standing is exactly what makes a failure invisible: the person searching
+  // sees a perfectly normal result list and has no idea their team got nothing.
   function publishFindsToTeam(fresh: Find[]) {
     if (!teamLens || !getToken || !fresh.length) return;
     const projectName = (projects.find((p) => p.id === activeId)?.name || "").trim();
@@ -4229,7 +4238,7 @@ function ScoutTool({
       try {
         const token = await getToken();
         if (!token) return;
-        await fetch("/api/team/finds", {
+        const res = await fetch("/api/team/finds", {
           method: "POST",
           headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
           body: JSON.stringify({
@@ -4240,8 +4249,21 @@ function ScoutTool({
             finds: payload,
           }),
         });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          setTeamShareNote(
+            data?.error
+              ? `Your team can't see these yet: ${data.error}`
+              : "Your team can't see these yet — sharing them failed."
+          );
+          return;
+        }
+        setTeamShareNote("");
+        // Pull the shared pipeline again so the team section reflects what just
+        // landed, instead of waiting for the next tab switch to notice.
+        refreshTeamLens();
       } catch {
-        /* the local finds stand; teammates catch up on the next lens refresh */
+        setTeamShareNote("Your team can't see these yet — sharing them failed.");
       }
     })();
   }
@@ -7282,6 +7304,23 @@ function ScoutTool({
                   {error}
                 </div>
               ))}
+
+            {/* The search itself worked and the finds are saved locally — this
+                says only that the team copy didn't land, which is otherwise
+                completely invisible from this screen. */}
+            {teamShareNote && (
+              <div className="mt-5 flex items-start gap-3 rounded-2xl border border-attention/30 bg-attention/10 px-4 py-3 text-sm text-ink">
+                <span className="flex-1">
+                  {teamShareNote} Your own finds are saved.
+                </span>
+                <button
+                  onClick={() => setTeamShareNote("")}
+                  className="shrink-0 text-xs font-semibold text-body/60 transition hover:text-ink"
+                >
+                  Dismiss
+                </button>
+              </div>
+            )}
 
             {discovering && (
               <div ref={searchingRef} className="mt-8 flex items-start gap-3 scroll-mt-24">
