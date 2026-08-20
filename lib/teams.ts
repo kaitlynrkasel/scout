@@ -44,11 +44,13 @@ async function assertProjectMember(uid: string, sharedProjectId: string) {
   // No membership row — but a project opened to the workspace is reachable by
   // every member of that workspace, including people who joined after it was
   // created. Mirrors is_project_member() in supabase/teams.sql.
-  const { data: proj } = await db()
+  const hasOpen = await hasOpenToWorkspace();
+  const projRes = await db()
     .from("shared_projects")
-    .select("workspace_id, open_to_workspace")
+    .select(hasOpen ? "workspace_id, open_to_workspace" : "workspace_id")
     .eq("id", sharedProjectId)
     .maybeSingle();
+  const proj = projRes.data as any;
   if (proj?.open_to_workspace) {
     const { data: member } = await db()
       .from("workspace_members")
@@ -59,6 +61,27 @@ async function assertProjectMember(uid: string, sharedProjectId: string) {
     if (member) return;
   }
   throw new TeamError("You do not have access to this shared project.", 403);
+}
+
+// ---- Optional columns ----
+// shared_projects.open_to_workspace is added by a later supabase/teams.sql.
+// PostgREST fails the ENTIRE query on one unknown column, so on a database that
+// has not run that migration every team query returned null and the callers
+// read it as "there is nothing here": teammates' finds never appeared and
+// sharing a project failed outright, both silently. Probe the column once and
+// shape the queries to the schema that is actually present. Without it the team
+// still works, scoped to people explicitly put on a project, and publishFinds
+// says why instead of doing nothing.
+let openColCache: boolean | null = null;
+export async function hasOpenToWorkspace(): Promise<boolean> {
+  if (openColCache !== null) return openColCache;
+  const { error } = await db().from("shared_projects").select("open_to_workspace").limit(1);
+  openColCache = !error;
+  return openColCache;
+}
+const PROJ_BASE = "id, workspace_id, owner_user_id, name, use_case, context, created_at";
+async function projSelect(): Promise<string> {
+  return (await hasOpenToWorkspace()) ? `${PROJ_BASE}, open_to_workspace` : PROJ_BASE;
 }
 
 // ---- Roles ----
@@ -700,6 +723,7 @@ export async function shareProject(
   await assertRole(uid, opts.workspaceId, "editor");
   const nm = String(opts.name || "").trim();
   if (!nm) throw new TeamError("The project needs a name.");
+  const hasOpen = await hasOpenToWorkspace();
   const { data: proj, error } = await db()
     .from("shared_projects")
     .insert({
@@ -708,10 +732,10 @@ export async function shareProject(
       name: nm,
       use_case: opts.useCase || "",
       context: opts.context || "",
-      open_to_workspace: !!opts.openToWorkspace,
+      ...(hasOpen ? { open_to_workspace: !!opts.openToWorkspace } : {}),
     })
-    .select("id, workspace_id, owner_user_id, name, use_case, context, open_to_workspace, created_at")
-    .single();
+    .select(await projSelect())
+    .single<any>();
   if (error || !proj) throw new TeamError(error?.message || "Could not share project.", 500);
 
   // Members: always the owner, plus any chosen workspace members.
@@ -748,11 +772,15 @@ export async function listSharedProjects(uid: string, workspaceId: string) {
     .from("shared_project_members")
     .select("shared_project_id")
     .eq("user_id", uid);
-  const { data: open } = await db()
-    .from("shared_projects")
-    .select("id")
-    .eq("workspace_id", workspaceId)
-    .eq("open_to_workspace", true);
+  const open: any[] | null = (await hasOpenToWorkspace())
+    ? ((
+        await db()
+          .from("shared_projects")
+          .select("id")
+          .eq("workspace_id", workspaceId)
+          .eq("open_to_workspace", true)
+      ).data as any[] | null)
+    : null;
   const ids = Array.from(
     new Set([
       ...(mine || []).map((m: any) => m.shared_project_id),
@@ -760,11 +788,12 @@ export async function listSharedProjects(uid: string, workspaceId: string) {
     ])
   );
   if (!ids.length) return [];
-  const { data: projs } = await db()
+  const projsRes = await db()
     .from("shared_projects")
-    .select("id, workspace_id, owner_user_id, name, use_case, context, open_to_workspace, created_at")
+    .select(await projSelect())
     .eq("workspace_id", workspaceId)
     .in("id", ids);
+  const projs = projsRes.data as any[] | null;
   const { data: members } = await db()
     .from("shared_project_members")
     .select("shared_project_id, user_id, email")
@@ -1033,12 +1062,13 @@ export async function publishFindsToTeam(
   // Match the local project to a shared one by name, the same way the manual-add
   // mirror does. Case-insensitive so "Internships" and "internships" are one
   // pipeline rather than two.
+  const hasOpen = await hasOpenToWorkspace();
   const findByName = async () => {
-    const { data } = await db()
+    const res = await db()
       .from("shared_projects")
-      .select("id, name, open_to_workspace")
+      .select(hasOpen ? "id, name, open_to_workspace" : "id, name")
       .eq("workspace_id", opts.workspaceId);
-    return (data || []).find(
+    return ((res.data || []) as any[]).find(
       (p: any) => String(p.name || "").trim().toLowerCase() === nm.toLowerCase()
     );
   };
@@ -1063,7 +1093,7 @@ export async function publishFindsToTeam(
     }
     proj = created;
     if (!proj) throw new TeamError("Could not open a shared project for this.", 500);
-  } else if (!proj.open_to_workspace) {
+  } else if (hasOpen && !(proj as any).open_to_workspace) {
     // The project exists but predates this feature, or was shared by hand to a
     // few people. Publishing a search into it means the whole team is meant to
     // see what turns up — an existing row must not quietly swallow the finds

@@ -2240,6 +2240,18 @@ function ScoutTool({
       localStorage.setItem(FINDS_KEY, JSON.stringify(n));
     } catch {}
   };
+  // Always-current copies of the lists that async work writes back wholesale.
+  // saveCats/saveProjects take a whole array, so anything that awaits a network
+  // call and then saves a list it derived BEFORE the await silently erases
+  // whatever the user did in between (a category typed while a retune was in
+  // flight vanished on save). Read these after an await, never the captured
+  // state. Assigned during render, so they are the latest committed values.
+  const catsRef = useRef<Category[]>(categories);
+  catsRef.current = categories;
+  const projectsRef = useRef<Project[]>(projects);
+  projectsRef.current = projects;
+  const findsRef = useRef<Find[]>(finds);
+  findsRef.current = finds;
   const saveCoaching = (n: string[]) => {
     setCoaching(n);
     try {
@@ -3157,8 +3169,12 @@ function ScoutTool({
         for (const s of list) stock.add(`${s.name}::${s.goal}`);
       }
       for (const s of GENERIC_SUGGESTIONS) stock.add(`${s.name}::${s.goal}`);
-      const used = new Set(finds.map((f) => f.categoryId).filter(Boolean));
-      const projCats = categories.filter((c) => c.projectId === id);
+      // Post-await: the user may have added or renamed a category while this
+      // request was in flight, so work from the live lists, not the captured ones.
+      const liveCats = catsRef.current;
+      const liveProjects = projectsRef.current;
+      const used = new Set(findsRef.current.map((f) => f.categoryId).filter(Boolean));
+      const projCats = liveCats.filter((c) => c.projectId === id);
       const pristine = new Set(
         projCats
           .filter((c) => !used.has(c.id) && stock.has(`${c.name}::${c.goal}`))
@@ -3177,13 +3193,13 @@ function ScoutTool({
         }));
 
       saveProjects(
-        projects.map((p) =>
+        liveProjects.map((p) =>
           p.id === id ? { ...p, useCase: String(j.useCase), suggestKey: keyNow } : p
         )
       );
       if (pristine.size || fresh.length) {
         saveCats([
-          ...categories.filter((c) => c.projectId !== id || !pristine.has(c.id)),
+          ...liveCats.filter((c) => c.projectId !== id || !pristine.has(c.id)),
           ...fresh,
         ]);
         // If the category currently loaded in the form was one of the replaced
