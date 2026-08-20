@@ -277,15 +277,17 @@ export async function getWorkspaceContext(uid: string, email: string) {
     // query and returns null. That silently emptied the user's company list,
     // which hides the company switcher entirely. Fall back to the columns that
     // have always existed rather than losing the workspaces.
-    let { data: wsRows, error: wsErr } = await db()
+    const full = await db()
       .from("workspaces")
       .select("id, name, about, website, industry, stage, location, created_by, created_at, comped")
       .in("id", wsIds);
-    if (wsErr) {
-      ({ data: wsRows } = await db()
+    let wsRows: any[] | null = full.data as any[] | null;
+    if (full.error) {
+      const minimal = await db()
         .from("workspaces")
         .select("id, name, created_by, created_at")
-        .in("id", wsIds));
+        .in("id", wsIds);
+      wsRows = minimal.data as any[] | null;
     }
     const { data: memberRows } = await db()
       .from("workspace_members")
