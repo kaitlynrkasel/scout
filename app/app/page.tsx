@@ -1392,7 +1392,9 @@ const TABS = [
   "billing",
   "manual",
   "spreadsheet",
-  "lists",
+  // "lists" is deliberately absent: the Lists tab is pulled until it is good
+  // enough to ship. Saved lists are untouched in state, and ListsTab still
+  // exists, so putting it back is re-adding this entry and its nav item.
 ] as const;
 type TabId = (typeof TABS)[number];
 
@@ -6876,7 +6878,7 @@ function ScoutTool({
       >
 
       {tab === "outreach" && (
-          <main className="mx-auto w-full max-w-6xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+          <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
           <div className="mb-6">
             <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
             <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Scout</h1>
@@ -7748,17 +7750,6 @@ function ScoutTool({
         />
       )}
 
-      {tab === "lists" && (
-        <ListsTab
-          lists={lists}
-          onSave={saveLists}
-          finds={visibleFinds}
-          projects={visibleProjects}
-          categories={categories}
-          activeProjectId={activeId}
-        />
-      )}
-
       {tab === "projects" && (
         <ProjectsTab
           projects={visibleProjects}
@@ -7906,7 +7897,7 @@ function ScoutTool({
       )}
 
       {tab === "account" && accountEmail && (
-        <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+        <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="text-brown">account</span>
           </h1>
@@ -8625,7 +8616,7 @@ function SideNav({
   const BOTTOM_TABS = ["dashboard", "outreach", "finds", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet", "lists"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
     { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
@@ -8690,7 +8681,10 @@ function SideNav({
     {
       key: "outreach",
       label: "Scout",
-      icon: <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />,
+      // The Scout mark itself, traced from public/scout-logo.png and drawn as
+      // line art so it sits in the same visual family as the other nav icons.
+      // Regenerate by re-tracing that PNG if the logo ever changes.
+      icon: <path d="M5.85 3.36C6.36 3.29 7.27 3.33 7.7 3.36C8.13 3.38 7.78 3.28 8.42 3.52C9.07 3.76 10.89 4.59 11.56 4.8C12.23 5.02 11.73 5.03 12.44 4.8C13.15 4.58 14.87 3.68 15.82 3.44C16.77 3.2 17.59 3.32 18.15 3.36C18.71 3.4 18.85 3.52 19.2 3.68C19.54 3.84 19.92 4.07 20.24 4.32C20.56 4.58 20.86 4.86 21.12 5.21C21.39 5.56 21.66 5.89 21.85 6.41C22.04 6.94 22.2 7.79 22.25 8.34C22.3 8.89 22.25 9.24 22.17 9.71C22.09 10.18 22.01 10.58 21.77 11.16C21.53 11.73 21.35 12.84 20.72 13.17C20.09 13.49 18.57 13.17 17.99 13.09C17.41 13 17.37 12.88 17.27 12.68C17.16 12.48 17.16 12.19 17.35 11.88C17.53 11.57 18.16 11.17 18.39 10.83C18.62 10.5 18.69 10.18 18.71 9.87C18.74 9.56 18.7 9.28 18.55 8.99C18.4 8.69 18.1 8.32 17.83 8.1C17.56 7.89 17.27 7.75 16.94 7.7C16.62 7.65 16.17 7.71 15.9 7.78C15.63 7.85 15.56 7.9 15.34 8.1C15.11 8.3 14.71 8.74 14.53 8.99C14.36 9.23 14.34 9.19 14.29 9.55C14.24 9.91 14.17 10.54 14.21 11.16C14.25 11.77 14.44 12.8 14.53 13.25C14.63 13.69 14.57 13.57 14.77 13.81C14.97 14.05 15.3 14.49 15.74 14.69C16.18 14.89 16.81 14.95 17.43 15.01C18.04 15.08 19.34 14.81 19.44 15.1C19.53 15.38 18.58 16.14 17.99 16.7C17.4 17.27 16.81 17.83 15.9 18.47C14.99 19.11 13.22 20.2 12.52 20.56C11.83 20.92 11.92 20.66 11.72 20.64C11.52 20.63 11.83 20.78 11.32 20.48C10.81 20.19 9.57 19.53 8.66 18.87C7.75 18.22 6.53 17.17 5.85 16.54C5.17 15.91 4.44 15.35 4.56 15.1C4.68 14.84 5.96 15.08 6.57 15.01C7.19 14.95 7.82 14.89 8.26 14.69C8.7 14.49 9 14.18 9.23 13.81C9.45 13.43 9.53 13.05 9.63 12.44C9.72 11.84 9.82 10.77 9.79 10.19C9.76 9.62 9.66 9.33 9.47 8.99C9.28 8.64 8.95 8.32 8.66 8.1C8.38 7.89 8.1 7.75 7.78 7.7C7.46 7.65 7 7.71 6.73 7.78C6.47 7.85 6.39 7.9 6.17 8.1C5.96 8.3 5.6 8.72 5.45 8.99C5.3 9.25 5.29 9.45 5.29 9.71C5.29 9.96 5.21 10.12 5.45 10.51C5.69 10.9 6.52 11.68 6.73 12.04C6.95 12.4 6.8 12.52 6.73 12.68C6.67 12.84 6.56 12.92 6.33 13C6.1 13.09 5.88 13.14 5.37 13.17C4.86 13.19 3.8 13.5 3.28 13.17C2.75 12.83 2.49 11.8 2.23 11.16C1.98 10.51 1.83 9.82 1.75 9.31C1.67 8.8 1.68 8.58 1.75 8.1C1.82 7.62 1.96 6.9 2.15 6.41C2.34 5.93 2.61 5.56 2.88 5.21C3.14 4.86 3.47 4.56 3.76 4.32C4.05 4.08 4.3 3.92 4.64 3.76C4.99 3.6 5.34 3.42 5.85 3.36Z" />,
     },
     {
       key: "finds",
@@ -8717,17 +8711,6 @@ function SideNav({
         <>
           <rect x="3" y="3" width="18" height="18" rx="2" />
           <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
-        </>
-      ),
-    },
-    {
-      key: "lists",
-      label: "Lists",
-      // Checklist rows, a status board at a glance.
-      icon: (
-        <>
-          <path d="M8 6h13M8 12h13M8 18h13" />
-          <path d="m3 6 1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2" />
         </>
       ),
     },
@@ -11045,7 +11028,7 @@ function SpreadsheetTab({
   const COLS = "minmax(140px,1.4fr) minmax(120px,1.2fr) minmax(160px,1.4fr) minmax(110px,1fr) minmax(120px,1fr) minmax(110px,1fr) 130px 150px 150px 40px";
 
   return (
-    <main className="mx-auto w-full max-w-[1400px] px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+    <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Your pipeline, as a sheet</div>
@@ -11481,7 +11464,7 @@ function ManualTab({
   const [addOpen, setAddOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]); // names added this session
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+    <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Do it yourself</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Manual <span className="text-brown">outreach</span>
@@ -11777,6 +11760,90 @@ function socialPlatform(url?: string): string {
   return "";
 }
 
+// The image half of a grid card. NOT a screenshot: a live thumbnail of someone
+// else's homepage is mostly whitespace, cropped at an arbitrary scroll point,
+// and forty of them read as noise rather than as a list. Instead the tile is a
+// flat block of the site's own brand color with the Scout dog in white over it,
+// which identifies the find just as well and lets the grid stay calm.
+//
+// The dog is drawn as a CSS mask of the real artwork so it takes any color, and
+// its size, position and flip are derived from the hostname, so cards differ
+// from each other but a given site always looks the same.
+function SiteTile({
+  url,
+  name,
+  host,
+  label,
+}: {
+  url: string;
+  name: string;
+  host: string;
+  // What the chip says. A profile URL gets "LinkedIn profile @jane-doe", since
+  // the bare hostname would just read "linkedin.com" on every such card.
+  label?: string;
+}) {
+  const [color, setColor] = useState("");
+  useEffect(() => {
+    if (!url) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch(`/api/site-color?url=${encodeURIComponent(url)}`);
+        const j = await r.json();
+        if (alive && j?.color) setColor(String(j.color));
+      } catch {
+        /* the neutral ground below is a fine resting state */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [url]);
+
+  const key = host || name || "";
+  let h = 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+  const pose = {
+    width: `${52 + (h % 5) * 9}%`,
+    right: `${-4 + ((h >> 3) % 5) * 5}%`,
+    bottom: `${-8 + ((h >> 6) % 4) * 4}%`,
+    transform: `scaleX(${h % 2 ? 1 : -1}) rotate(${((h >> 9) % 5) - 2}deg)`,
+  };
+
+  return (
+    <div
+      className="relative h-44 w-full overflow-hidden border-b border-warm-border transition-colors duration-500"
+      style={{ backgroundColor: color || "rgb(var(--c-brown-tint))" }}
+    >
+      <div
+        aria-hidden
+        className="pointer-events-none absolute bg-white/25 transition-all duration-500 group-hover:bg-white/40"
+        style={{
+          ...pose,
+          aspectRatio: "2048 / 1578",
+          WebkitMaskImage: "url(/scout-dog.png)",
+          maskImage: "url(/scout-dog.png)",
+          WebkitMaskSize: "contain",
+          maskSize: "contain",
+          WebkitMaskRepeat: "no-repeat",
+          maskRepeat: "no-repeat",
+          WebkitMaskPosition: "center",
+          maskPosition: "center",
+        }}
+      />
+      {(label || host) && (
+        <span className="pointer-events-none absolute left-3 top-3 max-w-[80%] truncate rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+          {label || host}
+        </span>
+      )}
+      {url && (
+        <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/35 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+          Open site
+        </span>
+      )}
+    </div>
+  );}
+
 // Compact find tile for the grid view: leads with a live preview of the find's
 // page (routed through /api/site-preview so embedding isn't refused), then the
 // name, fit, role, and status. Clicking anywhere opens the full detail.
@@ -11790,7 +11857,6 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
   try {
     host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
   } catch {}
-  const mono = monogram(o.name || host);
   const platform = socialPlatform(o.url);
   const profileHandle = socialHandle(o.url);
   return (
@@ -11798,67 +11864,21 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
       onClick={onOpen}
       className="group flex flex-col overflow-hidden rounded-2xl border border-warm-border bg-surface text-left transition hover:border-clay hover:shadow-soft"
     >
-      <div className="relative h-44 w-full overflow-hidden border-b border-warm-border bg-warm-bg/40">
-        {o.url && isSocialProfileUrl(o.url) ? (
-          // A profile page, which can never render in the frame. Show the person
-          // instead of the site's refusal: monogram, name, role, where they are.
-          <>
-            <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 px-4 text-center">
-              <span
-                className="grid h-16 w-16 shrink-0 place-items-center rounded-full text-xl font-bold text-white"
-                style={{ background: mono.color }}
-                aria-hidden
-              >
-                {mono.initials}
-              </span>
-              {/* The handle, not the name — the name and role are already in the
-                  card body directly below, so repeating them here would fill the
-                  cover with the same two lines twice. */}
-              {profileHandle && (
-                <span className="line-clamp-1 text-xs font-semibold text-body/70">
-                  {profileHandle}
-                </span>
-              )}
-              {o.location && (
-                <span className="line-clamp-1 text-[11px] text-body/50">{o.location}</span>
-              )}
-            </div>
-            <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full border border-warm-border bg-surface/90 px-2 py-1 text-[10px] font-bold text-body/70">
-              {platform ? `${platform} profile` : "Profile"}
-            </span>
-            <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
-              Open site
-            </span>
-          </>
-        ) : o.url ? (
-          <>
-            <iframe
-              src={previewSrc(o.url)}
-              title={`Preview of ${host || o.name}`}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              sandbox="allow-scripts"
-              tabIndex={-1}
-              aria-hidden
-              className="pointer-events-none h-[250%] w-[250%] origin-top-left scale-[0.4] border-0 bg-white"
-            />
-            <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
-              Open site
-            </span>
-          </>
-        ) : (
-          <div className="flex h-full w-full items-center justify-center px-4 text-center text-xs text-body/50">
-            No page to preview yet
-          </div>
-        )}
-      </div>
+      <SiteTile
+        url={o.url}
+        name={o.name}
+        host={host}
+        label={
+          isSocialProfileUrl(o.url)
+            ? [platform ? `${platform} profile` : "Profile", profileHandle].filter(Boolean).join(" · ")
+            : host
+        }
+      />
       <div className="p-4">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{o.name}</span>
-          {fit != null && (
-            <span className="shrink-0 rounded-full bg-success/15 px-2 py-0.5 text-[11px] font-bold text-success-deep">
-              {fit}%
-            </span>
+          {typeof o.fitScore === "number" && (
+            <FitPill fitScore={o.fitScore} className="shrink-0 px-2 py-0.5 text-[10px]" />
           )}
         </div>
         {role && <div className="mt-1 truncate text-xs text-muted">{role}</div>}
@@ -12249,7 +12269,7 @@ function FindsTab({
   };
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Your pipeline</div>
@@ -14986,7 +15006,7 @@ function DashboardTab({
   );
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
       {/* Wraps rather than squeezing: at 390px the title, the toggle and the CTA
           can't share a line, and the CTA was breaking mid-label. On a phone it
@@ -17190,7 +17210,7 @@ function TeamTab({
   const shareable = projects.filter((p) => !alreadyShared.has(p.name.toLowerCase()));
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         Your <span className="text-brown">team</span>
       </h1>
@@ -18327,7 +18347,7 @@ function BillingTab({
   ];
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-8 sm:px-8 sm:py-10">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">Plan &amp; billing</h1>
 
       {billing && !billing.billingEnabled && (
@@ -18590,7 +18610,7 @@ function SettingsTab({
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         <span className="text-brown">Settings</span>
       </h1>
@@ -18901,7 +18921,7 @@ function ListsTab({
     const reached = rows.filter((f) => f.status === "sent" || f.status === "replied").length;
     const replied = rows.filter((f) => f.status === "replied").length;
     return (
-      <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+      <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
         <button
           onClick={() => setOpenId("")}
           className="text-xs font-bold text-body/60 transition hover:text-accent"
@@ -18974,7 +18994,7 @@ function ListsTab({
 
   // ---- Home: every list as a card + create ----
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="kicker mb-2">Share where things stand</div>
@@ -19287,7 +19307,7 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">Your voice</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
@@ -20769,7 +20789,7 @@ function ProfileTab({
   }
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
+    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">About you</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">profile</span>
@@ -21835,6 +21855,11 @@ function ProjectsTab({
     };
   }, [workspaceId, getToken, busy]);
 
+  const selected = projects.find((p) => p.id === openId) || null;
+  const selectedCats = selected
+    ? categories.filter((c) => c.projectId === selected.id)
+    : [];
+
   const sharedNames = new Set(shared.map((p) => p.name.trim().toLowerCase()));
   const isShared = (p: Project) => sharedNames.has((p.name || "").trim().toLowerCase());
 
@@ -21888,7 +21913,7 @@ function ProjectsTab({
   }
 
   return (
-    <main className="mx-auto w-full max-w-4xl px-4 pb-16 pt-6 sm:px-6 sm:pt-8">
+    <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Set up</div>
       <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Projects
@@ -21908,210 +21933,240 @@ function ProjectsTab({
         </p>
       )}
 
-      {/* Add a project */}
-      <div className="mt-6 flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4 shadow-card">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newName.trim()) {
-              onAdd(newName.trim());
-              setNewName("");
-            }
-          }}
-          placeholder="New project name, e.g. Grad School"
-          className="min-w-[200px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
-        />
-        <button
-          onClick={() => {
-            if (!newName.trim()) return;
-            onAdd(newName.trim());
-            setNewName("");
-          }}
-          disabled={!newName.trim()}
-          className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-        >
-          Add project
-        </button>
-      </div>
-
-      <div className="mt-4 space-y-3">
-        {projects.map((p) => {
-          const cats = categories.filter((c) => c.projectId === p.id);
-          const open = openId === p.id;
-          const findCount = finds.filter((f) => f.projectId === p.id).length;
-          return (
-            <div key={p.id} className="rounded-2xl border border-warm-border bg-surface shadow-card">
-              <div className="flex flex-wrap items-center gap-2 p-4">
-                <button
-                  onClick={() => setOpenId(open ? "" : p.id)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <span className={`text-[10px] text-body/40 ${open ? "rotate-90" : ""}`}>▶</span>
-                  <span className="truncate text-sm font-bold text-ink">{p.name}</span>
-                  <span className="shrink-0 text-[11px] text-body/50">
-                    {cats.length} categor{cats.length === 1 ? "y" : "ies"} · {findCount} find
-                    {findCount === 1 ? "" : "s"}
-                  </span>
-                  {isShared(p) && (
-                    <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
-                      Shared
-                    </span>
-                  )}
-                  {p.id === activeId && (
-                    <span className="shrink-0 rounded-full bg-brand-gradient px-2 py-0.5 text-[10px] font-bold text-white">
-                      Active
-                    </span>
-                  )}
-                </button>
-                {p.id !== activeId && (
+      {/* Editor on the left, the list of projects on the right. Picking one on
+          the right pulls its details up on the left, so the list stays put as a
+          fixed point of reference instead of every row expanding in place and
+          pushing the others down the page. */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] [&>*]:min-w-0">
+        {/* ---- Editor ---- */}
+        <section>
+          {!selected ? (
+            <div className="rounded-3xl border border-dashed border-warm-border bg-surface/50 p-10 text-center">
+              <p className="text-sm font-semibold text-ink">Pick a project to edit</p>
+              <p className="mx-auto mt-1 max-w-[42ch] text-sm leading-relaxed text-body/70">
+                Choose one from the list, or add a new one, and its name,
+                description and categories open here.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-7">
+              <div className="mb-5 flex flex-wrap items-center gap-2">
+                <h2 className="min-w-0 flex-1 truncate font-display text-xl font-bold text-ink">
+                  {selected.name}
+                </h2>
+                {selected.id !== activeId && (
                   <button
-                    onClick={() => onSelect(p.id)}
-                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                    onClick={() => onSelect(selected.id)}
+                    className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
                   >
                     Make active
                   </button>
                 )}
-                {workspaceId && !isShared(p) && (
+                {workspaceId && !isShared(selected) && (
                   <button
-                    onClick={() => share(p)}
-                    disabled={busy === p.id}
+                    onClick={() => share(selected)}
+                    disabled={busy === selected.id}
                     title="Give the whole team this project and its finds"
-                    className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg disabled:opacity-50"
+                    className="rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
                   >
-                    {busy === p.id ? "Sharing…" : "Share with team"}
+                    {busy === selected.id ? "Sharing…" : "Share with team"}
                   </button>
                 )}
               </div>
 
-              {open && (
-                <div className="border-t border-warm-border p-4">
-                  <Label>Project name</Label>
-                  <input
-                    defaultValue={p.name}
-                    key={`${p.id}-${p.name}`}
-                    onBlur={(e) => {
-                      if (e.target.value.trim() && e.target.value !== p.name)
-                        onRename(p.id, e.target.value);
-                    }}
-                    className="w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
-                  />
+              <Label>Project name</Label>
+              <input
+                defaultValue={selected.name}
+                key={`${selected.id}-${selected.name}`}
+                onBlur={(e) => {
+                  if (e.target.value.trim() && e.target.value !== selected.name)
+                    onRename(selected.id, e.target.value);
+                }}
+                className="w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+              />
 
-                  <Label className="mt-4">What is this project for?</Label>
-                  <textarea
-                    defaultValue={p.context || ""}
-                    key={`${p.id}-ctx`}
-                    onBlur={(e) => {
-                      if (e.target.value !== (p.context || "")) onSetContext(p.id, e.target.value);
-                    }}
-                    rows={2}
-                    placeholder="e.g. a sustainable-fashion brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
-                    className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
-                  />
+              <Label className="mt-4">What is this project for?</Label>
+              <textarea
+                defaultValue={selected.context || ""}
+                key={`${selected.id}-ctx`}
+                onBlur={(e) => {
+                  if (e.target.value !== (selected.context || ""))
+                    onSetContext(selected.id, e.target.value);
+                }}
+                rows={3}
+                placeholder="e.g. a sustainable-fashion brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
+                className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+              />
 
-                  <Label className="mt-5">Categories in this project</Label>
-                  <p className="-mt-1 mb-2 text-xs leading-relaxed text-body/65">
-                    Each one is a saved search: a name you will recognise, and the
-                    description of who it should find.
-                  </p>
-                  <div className="space-y-2">
-                    {cats.map((c) => (
-                      <div key={c.id} className="rounded-xl border border-warm-border bg-warm-bg/30 p-2.5">
-                        <div className="mb-1.5 flex items-center gap-2">
-                          <input
-                            defaultValue={c.name}
-                            key={`${c.id}-${c.name}`}
-                            onBlur={(e) => {
-                              if (e.target.value.trim() && e.target.value !== c.name)
-                                onRenameCategory(c.id, e.target.value);
-                            }}
-                            className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-xs font-bold text-ink outline-none transition focus:bg-surface"
-                          />
-                          <button
-                            onClick={() => onRemoveCategory(c.id)}
-                            className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-body/45 transition hover:bg-danger/10 hover:text-danger"
-                          >
-                            Remove
-                          </button>
-                        </div>
-                        <textarea
-                          defaultValue={c.goal || ""}
-                          key={`${c.id}-goal`}
-                          onBlur={(e) => {
-                            if (e.target.value !== (c.goal || ""))
-                              onSetCategoryGoal(c.id, e.target.value);
-                          }}
-                          rows={2}
-                          placeholder="Who should this category find?"
-                          className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <input
-                      value={newCat[p.id] || ""}
-                      onChange={(e) => setNewCat((s) => ({ ...s, [p.id]: e.target.value }))}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter" && (newCat[p.id] || "").trim()) {
-                          onAddCategory(p.id, (newCat[p.id] || "").trim());
-                          setNewCat((s) => ({ ...s, [p.id]: "" }));
-                        }
+              <Label className="mt-6">Categories in this project</Label>
+              <p className="-mt-1 mb-2.5 text-xs leading-relaxed text-body/65">
+                Each one is a saved search: a name you will recognise, and the
+                description of who it should find.
+              </p>
+              <div className="space-y-2">
+                {selectedCats.map((c) => (
+                  <div key={c.id} className="rounded-xl border border-warm-border bg-warm-bg/30 p-2.5">
+                    <div className="mb-1.5 flex items-center gap-2">
+                      <input
+                        defaultValue={c.name}
+                        key={`${c.id}-${c.name}`}
+                        onBlur={(e) => {
+                          if (e.target.value.trim() && e.target.value !== c.name)
+                            onRenameCategory(c.id, e.target.value);
+                        }}
+                        className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-xs font-bold text-ink outline-none transition focus:bg-surface"
+                      />
+                      <button
+                        onClick={() => onRemoveCategory(c.id)}
+                        className="shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold text-body/45 transition hover:bg-danger/10 hover:text-danger"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                    <textarea
+                      defaultValue={c.goal || ""}
+                      key={`${c.id}-goal`}
+                      onBlur={(e) => {
+                        if (e.target.value !== (c.goal || "")) onSetCategoryGoal(c.id, e.target.value);
                       }}
-                      placeholder="New category name"
-                      className="min-w-[180px] flex-1 rounded-lg border border-warm-border px-3 py-2 text-xs text-ink outline-none transition focus:border-coral"
+                      rows={2}
+                      placeholder="Who should this category find?"
+                      className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
                     />
-                    <button
-                      onClick={() => {
-                        if (!(newCat[p.id] || "").trim()) return;
-                        onAddCategory(p.id, (newCat[p.id] || "").trim());
-                        setNewCat((s) => ({ ...s, [p.id]: "" }));
-                      }}
-                      disabled={!(newCat[p.id] || "").trim()}
-                      className="rounded-lg border border-warm-border px-3 py-2 text-xs font-bold text-body transition hover:bg-warm-bg disabled:opacity-50"
-                    >
-                      Add category
-                    </button>
                   </div>
-
-                  <div className="mt-5 border-t border-warm-border pt-3">
-                    <button
-                      onClick={() => onRemove(p.id)}
-                      className="text-xs font-semibold text-body/50 transition hover:text-danger"
-                    >
-                      Delete this project
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {teamOnly.length > 0 && (
-        <section className="mt-8">
-          <h2 className="text-base font-extrabold text-ink">Everything else in this company</h2>
-          <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
-            You are an {role} here, so you see every shared project in the
-            company, including ones started by a teammate and not copied to your
-            own account.
-          </p>
-          <div className="mt-3 space-y-2">
-            {teamOnly.map((p) => (
-              <div
-                key={p.id}
-                className="flex flex-wrap items-center gap-2 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
-              >
-                <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{p.name}</span>
-                <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
-                  Shared
-                </span>
+                ))}
               </div>
-            ))}
-          </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                  value={newCat[selected.id] || ""}
+                  onChange={(e) => setNewCat((v) => ({ ...v, [selected.id]: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && (newCat[selected.id] || "").trim()) {
+                      onAddCategory(selected.id, (newCat[selected.id] || "").trim());
+                      setNewCat((v) => ({ ...v, [selected.id]: "" }));
+                    }
+                  }}
+                  placeholder="New category name"
+                  className="min-w-[180px] flex-1 rounded-lg border border-warm-border px-3 py-2 text-xs text-ink outline-none transition focus:border-coral"
+                />
+                <button
+                  onClick={() => {
+                    if (!(newCat[selected.id] || "").trim()) return;
+                    onAddCategory(selected.id, (newCat[selected.id] || "").trim());
+                    setNewCat((v) => ({ ...v, [selected.id]: "" }));
+                  }}
+                  disabled={!(newCat[selected.id] || "").trim()}
+                  className="rounded-lg border border-warm-border px-3 py-2 text-xs font-bold text-body transition hover:bg-warm-bg disabled:opacity-50"
+                >
+                  Add category
+                </button>
+              </div>
+
+              <div className="mt-6 border-t border-warm-border pt-3">
+                <button
+                  onClick={() => onRemove(selected.id)}
+                  className="text-xs font-semibold text-body/50 transition hover:text-danger"
+                >
+                  Delete this project
+                </button>
+              </div>
+            </div>
+          )}
         </section>
-      )}
+
+        {/* ---- The list ---- */}
+        <aside className="lg:sticky lg:top-6 lg:self-start">
+          <div className="flex items-center gap-2 rounded-2xl border border-warm-border bg-surface p-2 shadow-card">
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && newName.trim()) {
+                  onAdd(newName.trim());
+                  setNewName("");
+                }
+              }}
+              placeholder="New project name"
+              className="min-w-0 flex-1 rounded-xl border-0 bg-transparent px-2.5 py-2 text-sm text-ink outline-none"
+            />
+            <button
+              onClick={() => {
+                if (!newName.trim()) return;
+                onAdd(newName.trim());
+                setNewName("");
+              }}
+              disabled={!newName.trim()}
+              className="shrink-0 rounded-xl bg-brand-gradient px-3 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
+            >
+              Add
+            </button>
+          </div>
+
+          <div className="mt-3 space-y-1.5">
+            {projects.map((p) => {
+              const cats = categories.filter((c) => c.projectId === p.id).length;
+              const findCount = finds.filter((f) => f.projectId === p.id).length;
+              const on = openId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => setOpenId(p.id)}
+                  className={`w-full rounded-xl border px-3.5 py-2.5 text-left transition ${
+                    on
+                      ? "border-brown/40 bg-brown-tint/50 shadow-card"
+                      : "border-warm-border bg-surface hover:border-brown/30 hover:bg-warm-bg/50"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">
+                      {p.name}
+                    </span>
+                    {p.id === activeId && (
+                      <span className="shrink-0 rounded-full bg-brand-gradient px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white">
+                        Active
+                      </span>
+                    )}
+                    {isShared(p) && (
+                      <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sage-deep">
+                        Shared
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-0.5 text-[11px] text-body/55">
+                    {cats} categor{cats === 1 ? "y" : "ies"} · {findCount} find
+                    {findCount === 1 ? "" : "s"}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {teamOnly.length > 0 && (
+            <div className="mt-6">
+              <div className="kicker mb-1.5">Elsewhere in this company</div>
+              <p className="mb-2 text-[11px] leading-relaxed text-body/60">
+                You are an {role} here, so you see every shared project, including
+                ones a teammate started and you have no copy of.
+              </p>
+              <div className="space-y-1.5">
+                {teamOnly.map((p) => (
+                  <div
+                    key={p.id}
+                    className="flex items-center gap-2 rounded-xl border border-dashed border-warm-border px-3.5 py-2.5"
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-body">
+                      {p.name}
+                    </span>
+                    <span className="shrink-0 rounded-full border border-sage/50 bg-sage/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sage-deep">
+                      Shared
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </aside>
+      </div>
     </main>
   );
 }

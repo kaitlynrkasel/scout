@@ -156,6 +156,10 @@ h1, h2, h3, .font-display {
    whole column. */
 .rail {
   background-color: rgb(var(--c-surface-2));
+  /* A real edge, not a guess at one. The rail and the canvas are close in tone,
+     so without this the app read as one undivided sheet and the content looked
+     like it was floating rather than sitting in a column of its own. */
+  border-right: 1px solid rgb(var(--c-brown) / 0.22);
 }
 
 /* Solid Mystic Navy pill for the active nav item. Fixed in both themes (the blue
