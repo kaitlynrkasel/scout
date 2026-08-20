@@ -21,6 +21,7 @@ interface Model {
   costPerSearch: number;
   enrichPerPaid: number;
   enrichCost: number;
+  utilizationPct: number;
   vercelCost: number;
   supabaseCost: number;
   claudeSubCost: number;
@@ -41,6 +42,9 @@ const DEFAULTS: Model = {
   costPerSearch: 0.15,
   enrichPerPaid: 0,
   enrichCost: 0.25,
+  // Share of the monthly allowance a typical subscriber actually uses.
+  // Allowances are a ceiling, not a forecast: most SaaS sees 20-40%.
+  utilizationPct: 35,
   vercelCost: 20, // Vercel Pro
   supabaseCost: 25, // Supabase Pro
   claudeSubCost: 100, // the Claude subscription that builds and runs Scout
@@ -126,22 +130,34 @@ function computed(m: Model) {
   const paid = m.starterUsers + m.proUsers;
   const mrr = m.starterUsers * m.starterPrice + m.proUsers * m.proPrice;
   const stripeFees = mrr * (m.stripePct / 100) + paid * m.stripeFlat;
-  const searches =
+  // An allowance is a CEILING, not a forecast. Costing every plan at 100% of
+  // its allowance is the worst case, not the expected case, and it made
+  // healthy tiers look like they lose money. Expected usage drives the real
+  // numbers; the worst case is reported alongside as the exposure.
+  const util = Math.max(0, Math.min(100, m.utilizationPct)) / 100;
+  const maxSearches =
     m.freeUsers * m.freeSearches +
     m.starterUsers * m.starterSearches +
     m.proUsers * m.proSearches;
+  const searches = maxSearches * util;
   const searchCost = searches * m.costPerSearch;
-  const enrich = paid * m.enrichPerPaid * m.enrichCost;
+  const enrich = paid * m.enrichPerPaid * m.enrichCost * util;
   const variable = searchCost + enrich + stripeFees;
   const fixed = fixedTotal(m);
   const profit = mrr - variable - fixed;
   const margin = mrr > 0 ? ((mrr - variable) / mrr) * 100 : 0;
+  // Everyone maxes out their plan in the same month: the number that tells you
+  // whether the allowances themselves are safe.
+  const worstVariable =
+    maxSearches * m.costPerSearch + paid * m.enrichPerPaid * m.enrichCost + stripeFees;
+  const worstProfit = mrr - worstVariable - fixed;
+  const worstMargin = mrr > 0 ? ((mrr - worstVariable) / mrr) * 100 : 0;
   // Everything except fixed costs scales linearly with the user mix, so
   // profit(t) = t * marginAtScale1 - fixed. Breakeven t solves profit = 0.
   const scaleMargin = mrr - variable;
   const breakevenT = scaleMargin > 0 ? fixed / scaleMargin : Infinity;
   const breakevenPaid = Number.isFinite(breakevenT) ? Math.ceil(breakevenT * paid) : null;
-  return { paid, mrr, stripeFees, searches, searchCost, enrich, variable, profit, margin, scaleMargin, breakevenPaid };
+  return { paid, mrr, stripeFees, searches, maxSearches, searchCost, enrich, variable, profit, margin, util, worstProfit, worstMargin, scaleMargin, breakevenPaid };
 }
 
 const fmt$ = (n: number) =>
@@ -224,6 +240,7 @@ export default function PricingView() {
           <p><b className="text-ink">Gross margin</b>: of every revenue dollar, how much is left after the costs that scale with usage (searches, enrichment, card fees). It measures whether the product itself is profitable, before rent-like fixed costs.</p>
           <p><b className="text-ink">Breakeven</b>: how many paying users you need before profit crosses zero, keeping today's mix of tiers and prices.</p>
           <p><b className="text-ink">Per-user economics</b>: what one user of each tier nets you per month. If a tier is negative, every new subscriber on it loses you money, growth makes things worse, not better.</p>
+          <p><b className="text-ink">Typical usage</b>: what share of a plan's allowance a subscriber really uses in a month. Allowances are a ceiling, not a forecast, so costing everyone at 100% makes healthy plans look unprofitable. Most software sees 20 to 40%.</p>
           <p>Play pattern: change ONE lever, watch which tiles move. The advice box below the tiles explains what the current numbers are telling you.</p>
         </div>
       </details>
@@ -268,7 +285,12 @@ export default function PricingView() {
 
       {/* Hero numbers */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Tile label="Monthly profit" value={fmt$(c.profit)} tone={c.profit >= 0 ? "good" : "bad"} sub={c.profit >= 0 ? "after every cost" : "loss at this mix"} />
+        <Tile
+          label="Monthly profit"
+          value={fmt$(c.profit)}
+          tone={c.profit >= 0 ? "good" : "bad"}
+          sub={`at ${Math.round(c.util * 100)}% usage · ${fmt$(c.worstProfit)} if everyone maxed out`}
+        />
         <Tile label="MRR" value={fmt$(c.mrr)} sub={`${c.paid} paying of ${m.freeUsers + c.paid} users`} />
         <Tile label="Gross margin" value={`${Math.round(c.margin)}%`} sub="revenue minus variable costs" />
         <Tile
@@ -299,6 +321,7 @@ export default function PricingView() {
             <Lever label="Searches / Starter" v={m.starterSearches} set={set("starterSearches")} min={0} max={300} step={5} />
             <Lever label="Searches / Pro" v={m.proSearches} set={set("proSearches")} min={0} max={1000} step={10} />
             <Lever label="Enrichments / paid user" v={m.enrichPerPaid} set={set("enrichPerPaid")} min={0} max={200} step={5} />
+            <Lever label="Typical usage (% of allowance)" v={m.utilizationPct} set={set("utilizationPct")} min={5} max={100} step={5} />
           </Panel>
           <Panel title="Costs">
             <Lever label="Cost / search" v={m.costPerSearch} set={set("costPerSearch")} min={0} max={1} step={0.01} money />
@@ -334,9 +357,9 @@ export default function PricingView() {
               </button>
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-3 text-sm">
-              <Unit name="Free user" rev={0} cost={m.freeSearches * m.costPerSearch} />
-              <Unit name="Starter" rev={m.starterPrice} cost={m.starterSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.starterPrice * (m.stripePct / 100) + m.stripeFlat} />
-              <Unit name="Pro" rev={m.proPrice} cost={m.proSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.proPrice * (m.stripePct / 100) + m.stripeFlat} />
+              <Unit name="Free user" rev={0} cost={m.freeSearches * m.costPerSearch * c.util} />
+              <Unit name="Starter" rev={m.starterPrice} cost={m.starterSearches * m.costPerSearch * c.util + m.enrichPerPaid * m.enrichCost * c.util + m.starterPrice * (m.stripePct / 100) + m.stripeFlat} />
+              <Unit name="Pro" rev={m.proPrice} cost={m.proSearches * m.costPerSearch * c.util + m.enrichPerPaid * m.enrichCost * c.util + m.proPrice * (m.stripePct / 100) + m.stripeFlat} />
             </div>
             {showTable && (
               <div className="mt-4 overflow-x-auto">
@@ -365,7 +388,7 @@ export default function PricingView() {
               </div>
             )}
             <p className="mt-3 text-[11px] leading-relaxed text-body/50">
-              Free users cost {fmt$(m.freeUsers * m.freeSearches * m.costPerSearch)} a month at this mix, that is the
+              Free users cost {fmt$(m.freeUsers * m.freeSearches * m.costPerSearch * c.util)} a month at this mix, that is the
               marketing budget the free tier really is. Everything scales except Fixed.
             </p>
           </div>
@@ -381,13 +404,13 @@ export default function PricingView() {
 // and every paid tier profitable on its own.
 function HealthCard({ m, c }: { m: Model; c: ReturnType<typeof computed> }) {
   const starterCost =
-    m.starterSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.starterPrice * (m.stripePct / 100) + m.stripeFlat;
+    m.starterSearches * m.costPerSearch * c.util + m.enrichPerPaid * m.enrichCost * c.util + m.starterPrice * (m.stripePct / 100) + m.stripeFlat;
   const proCost =
-    m.proSearches * m.costPerSearch + m.enrichPerPaid * m.enrichCost + m.proPrice * (m.stripePct / 100) + m.stripeFlat;
+    m.proSearches * m.costPerSearch * c.util + m.enrichPerPaid * m.enrichCost * c.util + m.proPrice * (m.stripePct / 100) + m.stripeFlat;
   const starterNet = m.starterPrice - starterCost;
   const proNet = m.proPrice - proCost;
   const conv = m.freeUsers + c.paid > 0 ? (c.paid / (m.freeUsers + c.paid)) * 100 : 0;
-  const freeBurn = m.freeUsers * m.freeSearches * m.costPerSearch;
+  const freeBurn = m.freeUsers * m.freeSearches * m.costPerSearch * c.util;
 
   type Status = "good" | "warn" | "bad";
   const rows: { name: string; value: string; target: string; status: Status; meaning: string }[] = [
@@ -430,6 +453,16 @@ function HealthCard({ m, c }: { m: Model; c: ReturnType<typeof computed> }) {
         proNet >= 0
           ? "Every Pro subscriber adds money."
           : "Each Pro LOSES money: the allowance costs more than the price. Growth makes this worse, fix before launch.",
+    },
+    {
+      name: "If everyone maxed out",
+      value: `${fmt$(c.worstProfit)}/mo`,
+      target: "still positive",
+      status: c.worstProfit >= 0 ? "good" : c.profit >= 0 ? "warn" : "bad",
+      meaning:
+        c.worstProfit >= 0
+          ? "Even if every subscriber used their whole allowance in one month, you would still make money. The allowances are safe."
+          : "Profitable at normal usage, but a month where everyone used their full allowance would cost you money. Shrink the allowances or raise the price to close that gap.",
     },
     {
       name: "Free-tier spend",

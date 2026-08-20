@@ -697,16 +697,36 @@ function FindAvatar({ opp, size = 34 }: { opp: Opportunity; size?: number }) {
     ];
   const box = { width: size, height: size };
   if (host && !logoFailed) {
+    const src = `https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`;
+    // The logo is drawn as a MASK filled with the app's accent color, so a list
+    // of finds reads as one system instead of a row of clashing brand colors.
+    // The accent token follows whatever color the account (or company lens) is
+    // set to, so these recolor with the rest of the app. The <img> behind it is
+    // invisible and exists only to detect a logo that fails to load, which
+    // falls back to initials; both use the same URL, so it is one request.
+    const mask = {
+      WebkitMaskImage: `url("${src}")`,
+      maskImage: `url("${src}")`,
+      WebkitMaskSize: "contain",
+      maskSize: "contain",
+      WebkitMaskRepeat: "no-repeat",
+      maskRepeat: "no-repeat",
+      WebkitMaskPosition: "center",
+      maskPosition: "center",
+    } as React.CSSProperties;
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={`https://www.google.com/s2/favicons?sz=64&domain=${encodeURIComponent(host)}`}
-        alt=""
+      <span
         aria-hidden
-        onError={() => setLogoFailed(true)}
         style={box}
-        className="shrink-0 rounded-lg border border-warm-border bg-white object-contain p-1"
-      />
+        className="relative grid shrink-0 place-items-center rounded-lg border border-warm-border bg-warm-bg/60"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" onError={() => setLogoFailed(true)} className="hidden" />
+        <span
+          style={{ ...mask, width: size - 12, height: size - 12 }}
+          className="bg-brown"
+        />
+      </span>
     );
   }
   return (
