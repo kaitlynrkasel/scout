@@ -1042,6 +1042,19 @@ function isJobSearch(useCase: string, goal: string): boolean {
 const GENERIC_EMAIL =
   /^(careers?|jobs?|hr|recruit(ing|ment)?|talent|info|hello|contact|apply|applications?|resumes?|staffing|people|hiring|admin|support|team|noreply|no-reply)@/i;
 
+// Is there an actual way to reach this person? A contact VALUE — an address, a
+// number, a handle — not the `channel` label, which is only the extractor's
+// guess at a route ("Website Form", "Company Portal") and is routinely set on
+// results carrying no contact detail at all. A profile URL doesn't count
+// either: a bio page you can read is not a way to get in touch.
+function hasAnyContact(o: Opportunity): boolean {
+  return (
+    !!String(o.contactEmail || "").trim() ||
+    !!String(o.contactPhone || "").trim() ||
+    !!String(o.contactHandle || "").trim()
+  );
+}
+
 function hasPersonalEmail(o: Opportunity): boolean {
   return (
     !!o.contactEmail &&
@@ -1336,7 +1349,7 @@ async function extract(
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
     `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), ` +
     `name (WHO this find is — when the target is a specific named individual, this MUST be that PERSON'S name, e.g. "Stacy Blythe" or "Stacy Blythe, EVP of Promotion", NEVER the company, page headline, or article title like "Big Loud Records, Executive Promotions & Hires". If a real person is named anywhere as the target or the point of contact, title the find by them and put their employer in outlet. Use a company/organization name here ONLY when there is genuinely no specific person), outlet (org/company/publication), ` +
-    `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown), ` +
+    `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown — this is a LABEL for the route, and on its own it is not a way to reach anyone: a result whose only contact information is a channel of "Website Form" or "Company Portal" is DROPPED before the user ever sees it, so spend the effort finding a real address, number, or handle in the source and put it in the fields below), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
     `contact_phone (a phone number ONLY if it appears verbatim in the result, for local businesses / lead-gen this is often listed; leave empty otherwise, never invent one), ` +
     `socials (an array of the TARGET'S OWN social profile URLs that appear verbatim in the source — Instagram, Facebook, LinkedIn, TikTok, X/Twitter, YouTube, Threads, SoundCloud, Spotify — up to 6; return the full URLs exactly as shown, never guess or construct a handle that is not printed, empty array if none), ` +
@@ -2185,7 +2198,15 @@ export async function discover(
   const jobSearch = isJobSearch(useCase, goal);
   let enrichSearches = 0;
   if (!aborted()) {
-    const needContact = opps.filter((o) => !hasPersonalEmail(o)).slice(0, 6);
+    // Only a few enrichment lookups fit in the time budget, so they go to the
+    // finds that need them MOST: anyone with no contact detail at all is about
+    // to be dropped by the reachability gate below, while someone who already
+    // has a generic inbox is merely being upgraded. Losing a real match to a
+    // spent budget is worse than missing a nicer address on one we keep.
+    const needContact = opps
+      .filter((o) => !hasPersonalEmail(o))
+      .sort((a, b) => Number(hasAnyContact(a)) - Number(hasAnyContact(b)))
+      .slice(0, 6);
     enrichSearches = needContact.length * 2;
     if (needContact.length)
       emit(`Chasing contacts for ${needContact.length} strong ${needContact.length === 1 ? "match" : "matches"}…`);
@@ -2228,6 +2249,24 @@ export async function discover(
   for (const o of opps) {
     if (o.scores)
       o.scores.reachability = reachabilityFrom(o.contactEmail, o.contactHandle, o.contactPhone);
+  }
+
+  // Reachability gate: never surface someone with no way to contact them.
+  // Deliberately placed AFTER Phase 2 enrichment, so anyone whose address was
+  // about to be found still gets that chance — and deliberately keyed on an
+  // actual contact VALUE rather than the `channel` label, which is only ever
+  // the extractor's guess at how you might get in touch. A team bio page
+  // yielding channel "Website Form" and nothing else is exactly the case this
+  // exists to stop: it reads as reachable and isn't.
+  {
+    const before = opps.length;
+    for (let i = opps.length - 1; i >= 0; i--) {
+      if (!hasAnyContact(opps[i])) {
+        logSkip(opps[i].name, opps[i].url, "no way to contact them — no email, phone, or handle");
+        opps.splice(i, 1);
+      }
+    }
+    if (opps.length < before) skippedNotFit += before - opps.length;
   }
 
   // Minimum-fit floor: never surface a near-zero match. A fit at or below 0.1
