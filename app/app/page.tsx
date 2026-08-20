@@ -13040,13 +13040,41 @@ function FindCard({
       }`}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={onOpenDetail}
-          title="Open details, contact info, and a website preview"
-          className="text-left font-semibold text-ink underline-offset-2 transition hover:text-accent hover:underline"
-        >
-          {o.name}
-        </button>
+        {(() => {
+          // Substance first: when we know the role/organization, THAT leads the
+          // card, because scanning a list of unfamiliar names tells you nothing
+          // about which opportunity is worth opening. The name stays right
+          // beneath it as the identity anchor. Rendered as a real link so
+          // right-click and cmd-click can open the source in a new tab; a plain
+          // left-click still opens the detail view.
+          const lead = substanceLine(o) || o.name;
+          const inner = (
+            <span className="text-left font-semibold text-ink underline-offset-2 transition group-hover/title:text-accent group-hover/title:underline">
+              {lead}
+            </span>
+          );
+          return o.url ? (
+            <a
+              href={o.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => {
+                // Let the browser handle new-tab intents; plain clicks open details.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                e.preventDefault();
+                onOpenDetail();
+              }}
+              title="Click for details, right-click or cmd-click to open their site in a new tab"
+              className="group/title"
+            >
+              {inner}
+            </a>
+          ) : (
+            <button onClick={onOpenDetail} title="Open details" className="group/title">
+              {inner}
+            </button>
+          );
+        })()}
         <FindStatusBadge status={find.status} onStatus={onStatus} />
         {find.bounced && (
           <span
@@ -13149,11 +13177,11 @@ function FindCard({
       </div>
 
       {(() => {
-        // Substance first: role and organization are what the eye scans for
-        // down a list of unfamiliar names.
-        const line = substanceLine(o);
-        return line ? (
-          <div className="mt-0.5 text-[13px] font-medium text-body">{line}</div>
+        // The name sits under the substance line as the identity anchor. When
+        // there was no substance to lead with, the title already IS the name,
+        // so nothing is shown here.
+        return substanceLine(o) ? (
+          <div className="mt-0.5 text-[13px] text-body/75">{o.name}</div>
         ) : null;
       })()}
       {/* Any channel the search explicitly requested gets its own labeled box
