@@ -6504,7 +6504,7 @@ function ScoutTool({
       )}
       {/* Concierge: hand-picked finds just landed. */}
       {seededNote && (
-        <div className="fixed bottom-4 left-4 z-50 flex max-w-sm items-start gap-3 rounded-2xl border border-sage/40 bg-surface/95 p-4 shadow-xl backdrop-blur">
+        <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom))] left-4 right-4 z-50 flex items-start gap-3 rounded-2xl border border-sage/40 bg-surface/95 p-4 shadow-xl backdrop-blur md:bottom-4 md:right-auto md:max-w-sm">
           <div className="min-w-0 flex-1">
             <div className="text-sm font-extrabold text-ink">{seededNote}</div>
             <button
@@ -6527,7 +6527,7 @@ function ScoutTool({
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col pt-[calc(52px+env(safe-area-inset-top))] pb-[env(safe-area-inset-bottom)] md:pt-0 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col pt-[calc(52px+env(safe-area-inset-top))] pb-[calc(52px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0">
       {/* One-time nudge to install to the home screen (phones only, and only
           where the browser can actually do it). */}
       <InstallBanner />
@@ -8169,7 +8169,7 @@ function GlobalScoutStatus({
   }, [startedAt]);
 
   return (
-    <div className="fixed bottom-6 right-6 z-40 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface/95 py-2 pl-3.5 pr-2 shadow-soft backdrop-blur">
+    <div className="fixed bottom-[calc(64px+env(safe-area-inset-bottom))] right-4 z-40 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface/95 py-2 pl-3.5 pr-2 shadow-soft backdrop-blur md:bottom-6 md:right-6">
       <button
         onClick={onGo}
         title="Back to Outreach"
@@ -8423,6 +8423,10 @@ function SideNav({
       } catch {}
       return n;
     });
+  // The four destinations of the daily loop. Kept to four plus "More" — past
+  // five, tab labels stop fitting on a narrow phone and each target shrinks.
+  const BOTTOM_TABS = ["dashboard", "outreach", "finds", "templates"];
+
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
     { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet", "lists"] },
     { key: "setup", label: "Setup", keys: ["templates", "profile", "team"] },
@@ -8605,6 +8609,57 @@ function SideNav({
     if (group) setOpenGroups((prev) => (prev[group.key] ? prev : { ...prev, [group.key]: true }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tourTarget]);
+
+  // Anything flagged on a screen that isn't in the bottom bar surfaces on
+  // "More", so a badge can't hide behind the drawer.
+  const hiddenBadge = items
+    .filter((i) => !BOTTOM_TABS.includes(i.key))
+    .reduce((n, i) => n + (i.badge || 0), 0);
+
+  // One cell of the mobile bottom bar: stacked icon over label, sized to a full
+  // 44pt touch target (Apple's HIG floor, and WCAG 2.5.5 AAA) rather than the
+  // 24px WCAG 2.2 AA minimum, since these are the app's most-tapped controls.
+  const tabBarItem = (
+    key: string,
+    label: string,
+    icon: React.ReactNode,
+    active: boolean,
+    onClick: () => void,
+    badge?: number
+  ) => (
+    <button
+      key={key}
+      onClick={onClick}
+      aria-current={active ? "page" : undefined}
+      className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition ${
+        active ? "text-brown-deep" : "text-body/60"
+      }`}
+    >
+      <span className="relative">
+        <svg
+          width="21"
+          height="21"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={active ? 2.2 : 1.8}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+        >
+          {icon}
+        </svg>
+        {!!badge && badge > 0 && (
+          <span className="absolute -right-2 -top-1 min-w-[15px] rounded-full bg-brown px-1 text-center text-[9px] font-bold leading-[15px] text-white">
+            {badge > 9 ? "9+" : badge}
+          </span>
+        )}
+      </span>
+      <span className={`text-[10px] leading-none ${active ? "font-bold" : "font-semibold"}`}>
+        {label}
+      </span>
+    </button>
+  );
 
   // Espresso-rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the solid terracotta active pill.
@@ -8892,15 +8947,6 @@ function SideNav({
       {/* Mobile top bar (hamburger + logo + search). Fixed, so it spans the
           full width above the content; the content column adds top padding. */}
       <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
-        <button
-          onClick={() => setMobileOpen(true)}
-          aria-label="Open menu"
-          className="rounded-lg p-2 text-body transition hover:bg-warm-bg"
-        >
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M3 6h18M3 12h18M3 18h18" />
-          </svg>
-        </button>
         <a href="/" aria-label="Scout home" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/scout-logo.png" alt="Scout" width={20} height={20} className="h-5 w-5" />
@@ -8909,7 +8955,7 @@ function SideNav({
         <button
           onClick={openCommand}
           aria-label="Search"
-          className="ml-auto rounded-lg p-2 text-muted transition hover:bg-warm-bg"
+          className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-muted transition hover:bg-warm-bg"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
         </button>
@@ -8927,6 +8973,36 @@ function SideNav({
           </aside>
         </div>
       )}
+
+      {/* Mobile bottom tab bar. Research on one-handed use is blunt about this:
+          the top-left corner is the hardest place on a phone for a thumb to
+          reach, and a hidden menu costs an extra tap plus most of the
+          discoverability of what's behind it. The daily loop lives down here
+          within thumb reach; everything else is one tap into "More", which
+          opens the same drawer the hamburger used to. */}
+      <nav
+        aria-label="Main"
+        className="fixed inset-x-0 bottom-0 z-40 flex border-t border-warm-border bg-surface-2/95 pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
+      >
+        {BOTTOM_TABS.map((key) => {
+          const it = items.find((i) => i.key === key);
+          if (!it) return null;
+          return tabBarItem(it.key, it.label, it.icon, tab === it.key, () => goTab(it.key), it.badge);
+        })}
+        {tabBarItem(
+          "more",
+          "More",
+          <>
+            <circle cx="5" cy="12" r="1.6" />
+            <circle cx="12" cy="12" r="1.6" />
+            <circle cx="19" cy="12" r="1.6" />
+          </>,
+          mobileOpen,
+          () => setMobileOpen(true),
+          // Surface anything waiting on a screen that isn't in the bar.
+          hiddenBadge
+        )}
+      </nav>
 
       {/* Desktop sidebar */}
       <aside className="rail su-rail sticky top-0 hidden h-screen w-[236px] shrink-0 flex-col gap-0.5 overflow-y-auto p-3.5 md:flex">
@@ -14580,12 +14656,15 @@ function DashboardTab({
   return (
     <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-8 sm:py-10">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
-      <div className="flex items-center gap-4">
+      {/* Wraps rather than squeezing: at 390px the title, the toggle and the CTA
+          can't share a line, and the CTA was breaking mid-label. On a phone it
+          drops to its own full-width row, which is also the easier tap. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="font-display text-xl font-bold tracking-tight text-ink">Dashboard</h1>
         {dashToggle}
         <button
           onClick={goOutreach}
-          className="ml-auto inline-flex items-center gap-2 rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
+          className="ml-auto inline-flex w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep sm:w-auto"
         >
           Start scouting
         </button>

@@ -786,3 +786,30 @@ html.dark .su-rail .su-logo img {
 @media (prefers-reduced-motion: reduce) {
   .scout-fade-in { animation: none; }
 }
+
+/* ---- Mobile form fields: 16px, or iOS zooms the page ----
+   Safari on iOS zooms the whole viewport whenever a focused field renders below
+   16px, and leaves the layout scaled after the keyboard closes. The other way
+   out — pinning the viewport with user-scalable=no — kills pinch-zoom and fails
+   WCAG 1.4.4, so the fields carry the size instead. Scoped below `md` so the
+   desktop density is untouched. `!important` because the size otherwise comes
+   from Tailwind's text-sm / text-xs utilities, which outrank a plain element
+   selector. Checkboxes and radios are excluded: they have no text to zoom into
+   and some are sized in em. */
+@media (max-width: 767px) {
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Tap feedback that doesn't flash a grey box over the whole control (iOS paints
+   one by default on any element with a click handler). */
+@media (pointer: coarse) {
+  button,
+  a,
+  [role="button"] {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
