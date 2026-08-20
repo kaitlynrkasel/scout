@@ -10133,10 +10133,7 @@ function FindDetailModal({
   // Social/profile links (LinkedIn, IG, X, etc.) can't be previewed in an iframe,
   // so the preview pane would just show the "blocks automated previews" card. For
   // those, show a real person-details panel instead of a dead preview.
-  const socialProfile =
-    /(?:linkedin\.com\/in|linkedin\.com\/company|instagram\.com|(?:twitter|x)\.com|facebook\.com|tiktok\.com|threads\.net|youtube\.com\/@)/i.test(
-      o.url || ""
-    );
+  const socialProfile = isSocialProfileUrl(o.url);
   // Every place Scout found this person, with a snippet. Falls back to the single
   // source when the older `sources` array isn't present.
   const sourceRows =
@@ -11745,6 +11742,41 @@ function AddContactModal({
   );
 }
 
+// Social and profile pages can't be previewed. LinkedIn and the rest refuse the
+// automated fetch outright (the proxy comes back 999/403) and refuse the embed
+// on top of that, so an iframe here only ever renders the "this site blocks
+// automated previews" card — a grey box where a person should be. Both the
+// detail modal and the grid tile ask this, so the answer is defined once.
+const SOCIAL_PROFILE_RE =
+  /(?:linkedin\.com\/in|linkedin\.com\/company|instagram\.com|(?:twitter|x)\.com|facebook\.com|tiktok\.com|threads\.net|youtube\.com\/@)/i;
+function isSocialProfileUrl(url?: string): boolean {
+  return SOCIAL_PROFILE_RE.test(String(url || ""));
+}
+// The handle out of a profile URL — "in/elizabeth-bada" reads as @elizabeth-bada.
+// Shown on the tile because the name and role already sit right below it.
+function socialHandle(url?: string): string {
+  try {
+    const path = new URL(String(url || "")).pathname.replace(/\/+$/, "");
+    const last = path.split("/").filter(Boolean).pop() || "";
+    return last ? `@${decodeURIComponent(last)}` : "";
+  } catch {
+    return "";
+  }
+}
+
+// Which platform, for labelling the card ("Their LinkedIn").
+function socialPlatform(url?: string): string {
+  const u = String(url || "").toLowerCase();
+  if (/linkedin\.com/.test(u)) return "LinkedIn";
+  if (/instagram\.com/.test(u)) return "Instagram";
+  if (/(?:twitter|x)\.com/.test(u)) return "X";
+  if (/facebook\.com/.test(u)) return "Facebook";
+  if (/tiktok\.com/.test(u)) return "TikTok";
+  if (/threads\.net/.test(u)) return "Threads";
+  if (/youtube\.com/.test(u)) return "YouTube";
+  return "";
+}
+
 // Compact find tile for the grid view: leads with a live preview of the find's
 // page (routed through /api/site-preview so embedding isn't refused), then the
 // name, fit, role, and status. Clicking anywhere opens the full detail.
@@ -11758,13 +11790,47 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
   try {
     host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
   } catch {}
+  const mono = monogram(o.name || host);
+  const platform = socialPlatform(o.url);
+  const profileHandle = socialHandle(o.url);
   return (
     <button
       onClick={onOpen}
       className="group flex flex-col overflow-hidden rounded-2xl border border-warm-border bg-surface text-left transition hover:border-clay hover:shadow-soft"
     >
       <div className="relative h-44 w-full overflow-hidden border-b border-warm-border bg-warm-bg/40">
-        {o.url ? (
+        {o.url && isSocialProfileUrl(o.url) ? (
+          // A profile page, which can never render in the frame. Show the person
+          // instead of the site's refusal: monogram, name, role, where they are.
+          <>
+            <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 px-4 text-center">
+              <span
+                className="grid h-16 w-16 shrink-0 place-items-center rounded-full text-xl font-bold text-white"
+                style={{ background: mono.color }}
+                aria-hidden
+              >
+                {mono.initials}
+              </span>
+              {/* The handle, not the name — the name and role are already in the
+                  card body directly below, so repeating them here would fill the
+                  cover with the same two lines twice. */}
+              {profileHandle && (
+                <span className="line-clamp-1 text-xs font-semibold text-body/70">
+                  {profileHandle}
+                </span>
+              )}
+              {o.location && (
+                <span className="line-clamp-1 text-[11px] text-body/50">{o.location}</span>
+              )}
+            </div>
+            <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full border border-warm-border bg-surface/90 px-2 py-1 text-[10px] font-bold text-body/70">
+              {platform ? `${platform} profile` : "Profile"}
+            </span>
+            <span className="pointer-events-none absolute right-2 top-2 inline-flex items-center gap-1 rounded-full bg-ink/80 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
+              Open site
+            </span>
+          </>
+        ) : o.url ? (
           <>
             <iframe
               src={previewSrc(o.url)}
