@@ -125,7 +125,9 @@ function friendlyProgress(m: string): string {
   if (/^skipped\b/i.test(s)) return ""; // per-candidate rejections are noise
   if (/\b(target_type|is_relevant|fit_score|is_listing|components?|undefined|null)\b/i.test(s))
     return "";
-  return s;
+  // Belt and braces for messages emitted by an older server: a step is a
+  // glance, never a paragraph.
+  return s.length > 90 ? `${s.slice(0, 90).trim()}…` : s;
 }
 
 // Replace em/en dashes with commas at render time, so text scouted before the
@@ -7065,8 +7067,8 @@ function ScoutTool({
                 are after, in display type on the ground itself. */}
             {profileComplete || guest ? (
             <section
-              className={`scout-stage px-5 pb-10 pt-8 transition-[min-height] duration-700 ease-in-out sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow ? "min-h-0" : "min-h-[calc(100vh-40px)]"
+              className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
+                stageHasWorkBelow ? "" : "min-h-[calc(100vh-40px)]"
               }`}
             >
               <div className="w-full max-w-[1400px]">
@@ -7385,7 +7387,7 @@ function ScoutTool({
                 min-height transition above is what makes it fold up to reveal
                 this section the moment a search starts. */}
             {stageHasWorkBelow && (
-            <div className="scout-results scout-fade-in flex-1 px-5 pb-16 sm:px-8 xl:px-12">
+            <div className="scout-results scout-reveal flex-1 px-5 pb-16 sm:px-8 xl:px-12">
 
             {error &&
               (apiReason ? (

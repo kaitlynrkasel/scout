@@ -876,6 +876,17 @@ select.scout-kind-picker option {
     transform: none;
   }
 }
+/* The work area arriving: a long, quiet fade, no movement. The stage above it
+   simply resizes; animating that fold read as the whole page lurching. */
+@keyframes scout-reveal {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.scout-reveal { animation: scout-reveal 1.1s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .scout-reveal { animation: none; }
+}
+
 .scout-rise {
   animation: scout-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

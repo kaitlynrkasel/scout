@@ -1635,12 +1635,16 @@ export async function discover(
     for (const q of passQueries) {
       if (aborted()) break; // user cancelled — stop spending searches
       const bucket: TavilyResult[] = [];
-      emit(`Searching: "${q}"`);
+      // The first query is the raw goal plus every clarifying answer, a full
+      // paragraph; echoing it verbatim made the progress log an unreadable
+      // wall. Show a clipped label and never repeat it on the result line.
+      const qLabel = q.length > 72 ? `${q.slice(0, 72).trim()}…` : q;
+      emit(`Searching: ${qLabel}`);
       const results = await tavilySearch(q, perQuery, {
         depth,
         ...(scope?.includeDomains ? { includeDomains: scope.includeDomains } : {}),
       });
-      emit(`Found ${results.length} result${results.length === 1 ? "" : "s"} for "${q}"`);
+      emit(`Found ${results.length} result${results.length === 1 ? "" : "s"}`);
       for (const r of results) {
         if (looksLikeAdvice(r.title, useCase, goal)) {
           logSkip(r.title, r.url, "title looks like advice / how-to");
