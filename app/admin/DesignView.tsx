@@ -1172,11 +1172,20 @@ export function LiveEditPanel({
   changes: LiveChange[];
   setChanges: React.Dispatch<React.SetStateAction<LiveChange[]>>;
 }) {
-  const [sel, setSel] = useState<HTMLElement | null>(null);
+  // Shift-click builds a multi-selection; every edit applies to all of it.
+  const [sels, setSels] = useState<HTMLElement[]>([]);
+  const sel = sels[0] || null; // the panel reads the first as representative
   const [, bump] = useState(0);
   const [copied, setCopied] = useState(false);
-  const selRef = useRef<HTMLElement | null>(null);
-  selRef.current = sel;
+  const selRef = useRef<HTMLElement[]>([]);
+  selRef.current = sels;
+  // Undo/redo: each action stores how to put things back. Text and style edits
+  // both flow through here, so cmd+Z walks everything.
+  // Steps carry a gesture id so one cmd+Z reverses a whole group action
+  // (dragging five selected cards is one undo, not five).
+  const undoRef = useRef<{ el: HTMLElement; prop: string; prev: string; next: string; g: number }[]>([]);
+  const redoRef = useRef<{ el: HTMLElement; prop: string; prev: string; next: string; g: number }[]>([]);
+  const gestureRef = useRef(0);
 
   const record = (el: HTMLElement, prop: string, value: string) => {
     const selector = cssPath(el);
@@ -1186,15 +1195,55 @@ export function LiveEditPanel({
       { selector, prop, value, label },
     ]);
   };
+  const pushUndo = (el: HTMLElement, prop: string, prev: string, next: string, g?: number) => {
+    undoRef.current.push({ el, prop, prev, next, g: g ?? ++gestureRef.current });
+    if (undoRef.current.length > 200) undoRef.current.shift();
+    redoRef.current = [];
+  };
+  const applyRaw = (el: HTMLElement, prop: string, value: string) => {
+    if (prop === "text") el.innerText = value;
+    else (el.style as any)[prop] = value;
+    record(el, prop, value);
+  };
+  const undo = () => {
+    const last = undoRef.current[undoRef.current.length - 1];
+    if (!last) return;
+    while (undoRef.current.length && undoRef.current[undoRef.current.length - 1].g === last.g) {
+      const step = undoRef.current.pop()!;
+      redoRef.current.push(step);
+      applyRaw(step.el, step.prop, step.prev);
+    }
+    bump((n) => n + 1);
+  };
+  const redo = () => {
+    const last = redoRef.current[redoRef.current.length - 1];
+    if (!last) return;
+    while (redoRef.current.length && redoRef.current[redoRef.current.length - 1].g === last.g) {
+      const step = redoRef.current.pop()!;
+      undoRef.current.push(step);
+      applyRaw(step.el, step.prop, step.next);
+    }
+    bump((n) => n + 1);
+  };
 
-  // Wire the iframe document: outline on hover, select on click, drag to move.
+  // Snap to grid: drags land on an 8px grid unless free-drag is on.
+  const [snap, setSnap] = useState(true);
+  const snapRef = useRef(true);
+  snapRef.current = snap;
+
+  // Wire the iframe document: outline on hover, click selects (shift-click
+  // adds), drag moves the whole selection (snapped or free), keyboard runs
+  // the usual commands.
   useEffect(() => {
     const frame = frameRef.current;
     const doc = frame?.contentDocument;
     if (!doc) return;
     const OUTLINE = "2px solid #377ec0";
+    const SELECTED = "3px solid #f7891f";
     let hovered: HTMLElement | null = null;
-    let drag: { el: HTMLElement; sx: number; sy: number; ox: number; oy: number } | null = null;
+    let drag:
+      | { els: { el: HTMLElement; ox: number; oy: number }[]; sx: number; sy: number; moved: boolean }
+      | null = null;
 
     const readOffset = (el: HTMLElement): [number, number] => {
       const m = /translate\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/.exec(
@@ -1202,17 +1251,27 @@ export function LiveEditPanel({
       );
       return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0, 0];
     };
+    const setOffset = (el: HTMLElement, x: number, y: number) => {
+      el.style.transform = `translate(${x}px, ${y}px)`;
+    };
+    const grid = (v: number) => (snapRef.current ? Math.round(v / 8) * 8 : v);
+    const paint = (list: HTMLElement[]) => {
+      for (const el of list) el.style.outline = SELECTED;
+    };
+    const clearPaint = (list: HTMLElement[]) => {
+      for (const el of list) el.style.outline = "";
+    };
 
     const over = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
       if (!t || t === doc.body || t === hovered) return;
-      if (hovered && hovered !== selRef.current) hovered.style.outline = "";
+      if (hovered && !selRef.current.includes(hovered)) hovered.style.outline = "";
       hovered = t;
-      if (t !== selRef.current) t.style.outline = OUTLINE;
+      if (!selRef.current.includes(t)) t.style.outline = OUTLINE;
     };
     const out = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (t && t !== selRef.current) t.style.outline = "";
+      if (t && !selRef.current.includes(t)) t.style.outline = "";
       if (hovered === t) hovered = null;
     };
     const down = (e: MouseEvent) => {
@@ -1220,31 +1279,122 @@ export function LiveEditPanel({
       if (!t || t === doc.body) return;
       e.preventDefault();
       e.stopPropagation();
-      if (selRef.current && selRef.current !== t) selRef.current.style.outline = "";
-      setSel(t);
-      t.style.outline = "3px solid #f7891f";
-      const [ox, oy] = readOffset(t);
-      drag = { el: t, sx: e.clientX, sy: e.clientY, ox, oy };
+      let next: HTMLElement[];
+      if (e.shiftKey) {
+        // Shift-click toggles membership without dropping the rest.
+        next = selRef.current.includes(t)
+          ? selRef.current.filter((x) => x !== t)
+          : [...selRef.current, t];
+      } else if (selRef.current.includes(t)) {
+        next = selRef.current; // dragging an already-selected group keeps it
+      } else {
+        clearPaint(selRef.current);
+        next = [t];
+      }
+      setSels(next);
+      paint(next);
+      drag = {
+        els: next.map((el) => {
+          const [ox, oy] = readOffset(el);
+          return { el, ox, oy };
+        }),
+        sx: e.clientX,
+        sy: e.clientY,
+        moved: false,
+      };
     };
     const move = (e: MouseEvent) => {
       if (!drag) return;
       const dx = e.clientX - drag.sx;
       const dy = e.clientY - drag.sy;
-      if (Math.abs(dx) + Math.abs(dy) < 3) return;
-      drag.el.style.transform = `translate(${drag.ox + dx}px, ${drag.oy + dy}px)`;
+      if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
+      drag.moved = true;
+      for (const d of drag.els) setOffset(d.el, grid(d.ox + dx), grid(d.oy + dy));
     };
     const up = () => {
-      if (drag) {
-        const [x, y] = readOffset(drag.el);
-        if (x || y) record(drag.el, "transform", `translate(${x}px, ${y}px)`);
+      if (drag?.moved) {
+        const g = ++gestureRef.current;
+        for (const d of drag.els) {
+          const [x, y] = readOffset(d.el);
+          pushUndo(d.el, "transform", `translate(${d.ox}px, ${d.oy}px)`, `translate(${x}px, ${y}px)`, g);
+          record(d.el, "transform", `translate(${x}px, ${y}px)`);
+        }
         bump((n) => n + 1);
       }
       drag = null;
     };
     const kill = (e: Event) => {
-      // In edit mode a click must select, never navigate or submit.
       e.preventDefault();
       e.stopPropagation();
+    };
+    const key = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      // cmd+Z / cmd+shift+Z
+      if (mod && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (e.shiftKey) redo();
+        else undo();
+        return;
+      }
+      // cmd+A: select everything LIKE the current selection (same tag +
+      // classes), the useful reading of select-all on a page.
+      if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        const cur = selRef.current[0];
+        if (!cur) return;
+        const likeSel = cur.className
+          ? `${cur.tagName.toLowerCase()}.${String(cur.className).trim().split(/\s+/).slice(0, 3).join(".")}`
+          : cur.tagName.toLowerCase();
+        let matches: HTMLElement[] = [];
+        try {
+          matches = Array.from(doc.querySelectorAll(likeSel)) as HTMLElement[];
+        } catch {
+          matches = Array.from(doc.getElementsByTagName(cur.tagName)) as HTMLElement[];
+        }
+        clearPaint(selRef.current);
+        const next = matches.slice(0, 60);
+        setSels(next);
+        paint(next);
+        return;
+      }
+      if (e.key === "Escape") {
+        clearPaint(selRef.current);
+        setSels([]);
+        return;
+      }
+      if ((e.key === "Delete" || e.key === "Backspace") && selRef.current.length) {
+        e.preventDefault();
+        const gHide = ++gestureRef.current;
+        for (const el of selRef.current) {
+          pushUndo(el, "display", el.style.display || "", "none", gHide);
+          el.style.display = "none";
+          record(el, "display", "none");
+        }
+        bump((n) => n + 1);
+        return;
+      }
+      // Arrow nudge: 1px, or 10px with shift (grid stays out of nudges, they
+      // ARE the fine control).
+      const arrows: Record<string, [number, number]> = {
+        ArrowLeft: [-1, 0],
+        ArrowRight: [1, 0],
+        ArrowUp: [0, -1],
+        ArrowDown: [0, 1],
+      };
+      if (arrows[e.key] && selRef.current.length) {
+        e.preventDefault();
+        const step = e.shiftKey ? 10 : 1;
+        const gN = ++gestureRef.current;
+        for (const el of selRef.current) {
+          const [x, y] = readOffset(el);
+          const nx = x + arrows[e.key][0] * step;
+          const ny = y + arrows[e.key][1] * step;
+          pushUndo(el, "transform", `translate(${x}px, ${y}px)`, `translate(${nx}px, ${ny}px)`, gN);
+          setOffset(el, nx, ny);
+          record(el, "transform", `translate(${nx}px, ${ny}px)`);
+        }
+        bump((n) => n + 1);
+      }
     };
     doc.addEventListener("mouseover", over, true);
     doc.addEventListener("mouseout", out, true);
@@ -1253,6 +1403,8 @@ export function LiveEditPanel({
     doc.addEventListener("mouseup", up, true);
     doc.addEventListener("click", kill, true);
     doc.addEventListener("submit", kill, true);
+    doc.addEventListener("keydown", key, true);
+    window.addEventListener("keydown", key, true);
     return () => {
       doc.removeEventListener("mouseover", over, true);
       doc.removeEventListener("mouseout", out, true);
@@ -1261,17 +1413,22 @@ export function LiveEditPanel({
       doc.removeEventListener("mouseup", up, true);
       doc.removeEventListener("click", kill, true);
       doc.removeEventListener("submit", kill, true);
+      doc.removeEventListener("keydown", key, true);
+      window.removeEventListener("keydown", key, true);
       if (hovered) hovered.style.outline = "";
-      if (selRef.current) selRef.current.style.outline = "";
+      clearPaint(selRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [frameRef, frameRef.current?.contentDocument]);
 
   const style = sel ? (frameRef.current?.contentWindow?.getComputedStyle(sel) as CSSStyleDeclaration | undefined) : undefined;
   const apply = (prop: string, value: string) => {
-    if (!sel) return;
-    (sel.style as any)[prop] = value;
-    record(sel, prop, value);
+    const g = ++gestureRef.current;
+    for (const el of sels) {
+      const prev = prop === "text" ? el.innerText : (el.style as any)[prop] || "";
+      pushUndo(el, prop, prev, value, g);
+      applyRaw(el, prop, value);
+    }
     bump((n) => n + 1);
   };
   const toHex = (rgb: string): string => {
@@ -1286,12 +1443,25 @@ export function LiveEditPanel({
     <div className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-warm-border bg-surface p-4">
       {!sel ? (
         <p className="text-sm leading-relaxed text-body/70">
-          Click anything in the page to select it. Drag it to move it. Its text
-          and styles open here.
+          Click anything to select it, shift-click to add more, drag to move
+          (snapped to an 8px grid, toggleable). Cmd+Z undoes, cmd+shift+Z
+          redoes, cmd+A selects everything like the selection, arrows nudge
+          (shift for 10px), delete hides, esc deselects.
         </p>
       ) : (
         <>
-          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">Selected</div>
+          <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-body/60">
+            Selected{sels.length > 1 ? ` (${sels.length})` : ""}
+            <label className="ml-auto flex cursor-pointer items-center gap-1 font-semibold normal-case tracking-normal">
+              <input
+                type="checkbox"
+                checked={snap}
+                onChange={(e) => setSnap(e.target.checked)}
+                className="h-3 w-3 accent-brown"
+              />
+              Snap to grid
+            </label>
+          </div>
           <div className="mt-1 truncate rounded-lg bg-warm-bg px-2.5 py-1.5 text-xs font-semibold text-ink">
             {(sel.innerText || sel.tagName).trim().slice(0, 46) || sel.tagName}
           </div>
@@ -1303,9 +1473,9 @@ export function LiveEditPanel({
                 defaultValue={sel.innerText}
                 key={cssPath(sel)}
                 onBlur={(e) => {
-                  if (!sel) return;
-                  sel.innerText = e.target.value;
-                  record(sel, "text", e.target.value);
+                  if (!sel || sels.length !== 1) return;
+                  pushUndo(sel, "text", sel.innerText, e.target.value);
+                  applyRaw(sel, "text", e.target.value);
                 }}
                 rows={3}
                 className="mt-1 w-full resize-y rounded-lg border border-warm-border px-2.5 py-2 text-sm text-ink outline-none focus:border-brown"
@@ -1397,7 +1567,9 @@ export function LiveEditPanel({
           <button
             onClick={() => {
               setChanges([]);
-              setSel(null);
+              setSels([]);
+              undoRef.current = [];
+              redoRef.current = [];
               frameRef.current?.contentWindow?.location.reload();
             }}
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
