@@ -1483,7 +1483,11 @@ function ScoutTool({
   guest,
   onCreateAccount,
 }: ScoutToolProps) {
-  const [tab, setTab] = useState<TabId>("dashboard");
+  // Scout is the landing screen. The app exists to get you from "I need to
+  // reach someone" to a drafted message, and every screen between the two is a
+  // click that didn't need to happen. The dashboard is a look back at work
+  // already done, so it's a place you choose, not the place you arrive.
+  const [tab, setTab] = useState<TabId>("outreach");
 
   // Mirror the active tab in the URL hash (#finds, #templates, …) so a refresh
   // reopens the screen you were on instead of dropping you back on the
@@ -1506,8 +1510,8 @@ function ScoutTool({
   }, []);
 
   useEffect(() => {
-    // Skip until the restore above has run, or the default "dashboard" would
-    // overwrite the hash we're about to read.
+    // Skip until the restore above has run, or the default tab would overwrite
+    // the hash we're about to read.
     if (!tabRestored.current) return;
     if (window.location.hash === `#${tab}`) return;
     try {
@@ -9312,7 +9316,9 @@ function SideNav({
     });
   // The four destinations of the daily loop. Kept to four plus "More" — past
   // five, tab labels stop fitting on a narrow phone and each target shrinks.
-  const BOTTOM_TABS = ["dashboard", "outreach", "finds", "templates"];
+  // Ordered by how often you reach for them, not by hierarchy: start a search,
+  // work the results, then look back at the numbers.
+  const BOTTOM_TABS = ["outreach", "finds", "dashboard", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
     { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
