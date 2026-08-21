@@ -1587,7 +1587,10 @@ function ScoutTool({
   // different one again — a new colour combo every time you scout. Deep tones
   // only, so the white stage text always holds.
   useEffect(() => {
-    const deeps = ["#19455e", "#1f2f6e", "#0e5f5f", "#8e1d64", "#5b4aa8", "#28527a"];
+    // Muted deep tones only: full-screen colour has to sit quiet behind white
+    // text, so every deal is dark and low-saturation (the bright magenta made
+    // people seasick).
+    const deeps = ["#19455e", "#232d55", "#11504b", "#5d2a44", "#453a66", "#2c4a63"];
     // Guaranteed different from the LAST visit, not merely random: with six
     // options a plain draw repeats one time in six, which reads as "it didn't
     // change". Remember the previous deal and exclude it.
