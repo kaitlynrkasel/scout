@@ -299,6 +299,9 @@ export default function DesignView({
 }) {
   // Two rooms: the token playground, and the full drag-and-drop page editor.
   const [mode, setMode] = useState<"playground" | "editor">("playground");
+  // Inside the editor overlay: the live site first, blocks only behind Edit.
+  const [editorView, setEditorView] = useState<"preview" | "edit">("preview");
+  const [previewPath, setPreviewPath] = useState<"/" | "/app">("/");
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
   const [copied, setCopied] = useState(false);
@@ -427,7 +430,7 @@ export default function DesignView({
         {(
           [
             ["playground", "Tokens and palettes"],
-            ["editor", "Page editor"],
+            ["editor", "Website preview and editor"],
           ] as const
         ).map(([m, label]) => (
           <button
@@ -446,22 +449,73 @@ export default function DesignView({
         // Full screen: an editor in a centered column wastes the one thing an
         // editor needs, room. Fixed overlay over the whole viewport; Close
         // drops back to the tokens view.
+        // Opens as the REAL website (live iframe, same as the readiness tab),
+        // so you always know where you are. Edit in the top bar swaps to the
+        // block editor; the mockup blocks are the editable stand-in, the
+        // preview is the truth.
         <div className="fixed inset-0 z-[80] flex flex-col bg-warm-bg">
           <div className="flex items-center gap-3 border-b border-warm-border bg-surface px-4 py-2">
-            <span className="text-sm font-extrabold text-ink">Page editor</span>
-            <span className="hidden text-xs text-body/55 sm:block">
-              Drag blocks from the rail, edit every color and word on the right.
-              Publish saves here and copies JSON; the live site is not touched.
-            </span>
+            <span className="text-sm font-extrabold text-ink">Design</span>
+            <div className="inline-flex gap-1 rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
+              {(
+                [
+                  ["preview", "Preview"],
+                  ["edit", "Edit"],
+                ] as const
+              ).map(([v, label]) => (
+                <button
+                  key={v}
+                  onClick={() => setEditorView(v)}
+                  className={`rounded-md px-3 py-1 text-xs font-bold transition ${
+                    editorView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {editorView === "preview" ? (
+              <div className="inline-flex gap-1">
+                {(
+                  [
+                    ["/", "Landing"],
+                    ["/app", "App"],
+                  ] as const
+                ).map(([path, label]) => (
+                  <button
+                    key={path}
+                    onClick={() => setPreviewPath(path)}
+                    className={`rounded-md px-2.5 py-1 text-xs font-semibold transition ${
+                      previewPath === path ? "text-ink underline underline-offset-4" : "text-body/60 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <span className="hidden text-xs text-body/55 sm:block">
+                Drag blocks, edit every color and word on the right. Publish
+                saves here and copies JSON; the live site is not touched.
+              </span>
+            )}
             <button
               onClick={() => setMode("playground")}
               className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
             >
-              Close editor
+              Close
             </button>
           </div>
           <div className="min-h-0 flex-1">
-            <PageEditor fill />
+            {editorView === "preview" ? (
+              <iframe
+                src={previewPath}
+                title="Scout, live"
+                className="h-full w-full border-0 bg-cream"
+              />
+            ) : (
+              <PageEditor fill />
+            )}
           </div>
         </div>
       )}
