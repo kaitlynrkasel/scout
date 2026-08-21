@@ -1587,7 +1587,7 @@ function ScoutTool({
   // different one again — a new colour combo every time you scout. Deep tones
   // only, so the white stage text always holds.
   useEffect(() => {
-    const deeps = ["#19455e", "#3a41d9", "#0e5f5f", "#8e1d64", "#5b4aa8", "#28527a"];
+    const deeps = ["#19455e", "#1f2f6e", "#0e5f5f", "#8e1d64", "#5b4aa8", "#28527a"];
     const i = Math.floor(Math.random() * deeps.length);
     let j = Math.floor(Math.random() * (deeps.length - 1));
     if (j >= i) j++;
@@ -9420,14 +9420,14 @@ function SideNav({
   // company denim. There is deliberately no single main accent.
   const TAB_IDEA: Record<string, string> = {
     dashboard: "#19455e",
-    outreach: "#5e69ff",
+    outreach: "#19455e",
     manual: "#4e9c9c",
     finds: "#4e9c9c",
     spreadsheet: "#4e9c9c",
-    projects: "#5e69ff",
+    projects: "#19455e",
     templates: "#aa2377",
     profile: "#aa2377",
-    team: "#19455e",
+    team: "#5b4aa8",
     account: "#19455e",
     billing: "#19455e",
     settings: "#19455e",

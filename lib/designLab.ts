@@ -58,11 +58,11 @@ export const SIX_ON_WHITE: Palette = {
   surface: "#ffffff",
   ink: "#10293a",
   ideas: {
-    search: "#5e69ff", // cobalt
+    search: "#19455e", // navy — the colour of work starting
     person: "#4e9c9c", // aquamarine
     voice: "#aa2377", // hot pink
     connect: "#f87c47", // naranja — the conversation, out and back
-    shared: "#19455e", // denim
+    shared: "#5b4aa8", // violet — the company's colour
   },
 };
 
