@@ -12629,10 +12629,14 @@ function FindGridCard({
   find,
   onOpen,
   onTogglePin,
+  shared = false,
 }: {
   find: Find;
   onOpen: () => void;
   onTogglePin: () => void;
+  // On a team lens every card names its finder — including "you", so your
+  // own searches read apart from the team's at a glance.
+  shared?: boolean;
 }) {
   const o = find.opp;
   const fit = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
@@ -12721,14 +12725,21 @@ function FindGridCard({
         <div className="mt-3 flex items-center justify-between gap-2">
           <span className="flex min-w-0 items-center gap-1.5">
             <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
-            {find.foundByEmail && (
+            {find.foundByEmail ? (
               <span
                 title={`Found by ${find.foundByEmail}`}
                 className="truncate rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold text-body/60"
               >
                 {find.foundByEmail.split("@")[0]}
               </span>
-            )}
+            ) : shared ? (
+              <span
+                title="You found this one"
+                className="truncate rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold text-body/60"
+              >
+                you
+              </span>
+            ) : null}
           </span>
           <span className="shrink-0 text-xs font-bold text-brown-deep">Open →</span>
         </div>
@@ -13553,6 +13564,7 @@ function FindsTab({
               <FindGridCard
                 key={f.id}
                 find={f}
+                shared={!!teamLens}
                 onOpen={() => setDetailId(f.id)}
                 onTogglePin={() => onTogglePin(f.id)}
               />

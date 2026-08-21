@@ -1022,9 +1022,9 @@ select.scout-kind-picker option {
   z-index: -1;
   pointer-events: none;
   background: radial-gradient(
-    360px 360px at var(--mx, 50%) var(--my, 35%),
-    rgb(var(--dash-tint, 143 188 180) / 0.5) 0%,
-    transparent 72%
+    150px 150px at var(--mx, 50%) var(--my, 35%),
+    rgb(var(--dash-tint, 143 188 180) / 0.55) 0%,
+    transparent 70%
   );
   opacity: var(--glow, 0);
   transition: opacity 1.1s ease;
