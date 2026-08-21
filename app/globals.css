@@ -813,19 +813,22 @@ select.scout-kind-picker option {
    ========================================================================== */
 .scout-stage {
   background:
-    radial-gradient(70% 42% at 22% 12%, rgb(var(--dash-tint, 143 188 180) / 0.44) 0%, transparent 74%),
-    radial-gradient(64% 40% at 86% 30%, rgb(var(--dash-tint2, 217 161 180) / 0.38) 0%, transparent 74%),
-    radial-gradient(58% 36% at 50% 58%, rgb(255 255 255 / 0.65) 0%, transparent 72%),
-    radial-gradient(70% 42% at 14% 86%, rgb(var(--dash-tint3, 224 180 138) / 0.36) 0%, transparent 74%),
-    radial-gradient(60% 38% at 88% 92%, rgb(var(--dash-tint, 143 188 180) / 0.3) 0%, transparent 74%),
-    #f9f6ee;
+    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
+    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
+    radial-gradient(70% 50% at 46% 52%, rgb(255 255 255 / 0.5) 0%, transparent 72%),
+    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
+    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
+    #f8f4ea;
   background-attachment: fixed;
   color: rgb(var(--c-ink));
 }
 /* The stage markup was written for a dark room (white/cream utilities
    everywhere). On the light field those remap to ink so every label, pill,
    and bullet keeps its contrast without touching 200 call sites. */
-.scout-stage .text-cream { color: rgb(var(--c-ink)); }
+.scout-stage .text-cream,
+.scout-stage [class*="text-cream/"] { color: rgb(var(--c-ink)); }
+/* Toggle pills need a visible shell on the light field. */
+.scout-stage [class*="bg-white/"] { border-color: rgb(var(--c-ink) / 0.2); }
 .scout-stage .text-white,
 .scout-stage [class*="text-white/"] { color: rgb(var(--c-ink) / 0.75); }
 .scout-stage [class*="border-white/"] { border-color: rgb(var(--c-ink) / 0.25); }
@@ -1027,12 +1030,12 @@ select.scout-kind-picker option {
      fresh each visit), kept subtle: low alphas over warm cream so the colour
      reads as atmosphere behind the text, never a wall of one hue. */
   background:
-    radial-gradient(70% 42% at 22% 12%, rgb(var(--dash-tint, 143 188 180) / 0.44) 0%, transparent 74%),
-    radial-gradient(64% 40% at 86% 30%, rgb(var(--dash-tint2, 217 161 180) / 0.38) 0%, transparent 74%),
-    radial-gradient(58% 36% at 50% 58%, rgb(255 255 255 / 0.65) 0%, transparent 72%),
-    radial-gradient(70% 42% at 14% 86%, rgb(var(--dash-tint3, 224 180 138) / 0.36) 0%, transparent 74%),
-    radial-gradient(60% 38% at 88% 92%, rgb(var(--dash-tint, 143 188 180) / 0.3) 0%, transparent 74%),
-    #f9f6ee;
+    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
+    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
+    radial-gradient(70% 50% at 46% 52%, rgb(255 255 255 / 0.5) 0%, transparent 72%),
+    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
+    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
+    #f8f4ea;
   background-attachment: fixed;
 }
 /* Film grain over the whole surface, content included — that is the look.
