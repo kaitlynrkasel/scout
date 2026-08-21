@@ -249,13 +249,13 @@ select.scout-select-light {
 
   /* Sidebar rail — a clean, light neutral panel (low contrast with the white
      content). Dark text on it; a soft neutral-brown pill marks the active item. */
-  --su-rail-bg: #f1efeb; /* light neutral sidebar */
-  --su-rail-fg: #6a6152; /* inactive nav text */
-  --su-rail-fg-strong: #3b342c; /* logo, hovered / active text */
-  --su-rail-muted: #938a7b; /* kicker, search placeholder, counts */
-  --su-rail-line: rgba(60, 50, 40, 0.08);
-  --su-rail-hover: rgba(60, 50, 40, 0.045);
-  --su-rail-inset: rgba(60, 50, 40, 0.04);
+  --su-rail-bg: #fcfcfd; /* white sandpaper */
+  --su-rail-fg: #5d6470; /* inactive nav text */
+  --su-rail-fg-strong: #1f2530; /* logo, hovered / active text */
+  --su-rail-muted: #8b93a1; /* kicker, search placeholder, counts */
+  --su-rail-line: rgba(25, 35, 55, 0.09);
+  --su-rail-hover: rgba(25, 35, 55, 0.05);
+  --su-rail-inset: rgba(25, 35, 55, 0.04);
   --su-rail-active-bg: #19455e; /* navy active pill */
   --su-rail-active-fg: #f8f6f2;
 }
@@ -286,7 +286,11 @@ html.dark {
 
 /* ---- Rail (soft tan, monotone) ---- */
 .su-rail {
-  background: var(--su-rail-bg);
+  background-color: var(--su-rail-bg);
+  /* White sandpaper: a whisper of the same noise the dashboard grain uses,
+     baked at low opacity so the column reads as textured paper, not beige. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  background-size: 200px 200px;
   color: var(--su-rail-fg);
   border-right: 1px solid var(--su-rail-line);
 }
@@ -808,7 +812,7 @@ select.scout-kind-picker option {
    else in the app inherits a dark canvas.
    ========================================================================== */
 .scout-stage {
-  background: #19455e;
+  background: var(--stage-bg, #19455e);
   color: #f2f6fa;
 }
 .dark .scout-stage {
@@ -821,7 +825,7 @@ select.scout-kind-picker option {
    browns that failed to match, with a visible seam where they meet. One room,
    one colour; the light cards inside carry the separation instead. */
 .scout-results {
-  background: #19455e;
+  background: var(--results-bg, #163a4e);
 }
 .dark .scout-results {
   background: #102c3c;
@@ -978,10 +982,10 @@ select.scout-kind-picker option {
      Alphas stay low so text always wins. */
   /* Four quiet blobs, one per region, lots of open paper between. */
   background:
-    radial-gradient(1000px 480px at 20% 4%, rgb(224 105 158 / 0.2) 0%, rgb(247 137 31 / 0.1) 45%, transparent 85%),
-    radial-gradient(800px 620px at 84% 30%, rgb(55 126 192 / 0.15) 0%, transparent 84%),
-    radial-gradient(900px 680px at 10% 82%, rgb(196 213 68 / 0.14) 0%, rgb(18 186 170 / 0.08) 50%, transparent 85%),
-    radial-gradient(860px 560px at 90% 94%, rgb(122 90 168 / 0.13) 0%, transparent 84%),
+    radial-gradient(1000px 480px at 20% 4%, rgb(224 105 158 / 0.34) 0%, rgb(247 137 31 / 0.18) 45%, transparent 85%),
+    radial-gradient(800px 620px at 84% 30%, rgb(55 126 192 / 0.26) 0%, transparent 84%),
+    radial-gradient(900px 680px at 10% 82%, rgb(196 213 68 / 0.26) 0%, rgb(18 186 170 / 0.14) 50%, transparent 85%),
+    radial-gradient(860px 560px at 90% 94%, rgb(122 90 168 / 0.24) 0%, transparent 84%),
     #fdfbf6;
   background-attachment: fixed;
 }
@@ -996,7 +1000,7 @@ select.scout-kind-picker option {
   border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 240px 240px;
-  opacity: 0.5;
+  opacity: 0.65;
   mix-blend-mode: overlay;
 }
 .dark .dash-stage {

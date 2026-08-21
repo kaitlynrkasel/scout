@@ -1583,6 +1583,25 @@ function ScoutTool({
       priorAnswers?: string;
     } | null
   >(null);
+  // Every visit deals the stage a different accent, and the results shelf a
+  // different one again — a new colour combo every time you scout. Deep tones
+  // only, so the white stage text always holds.
+  useEffect(() => {
+    const deeps = ["#19455e", "#3a41d9", "#0e5f5f", "#8e1d64", "#5b4aa8", "#28527a"];
+    const i = Math.floor(Math.random() * deeps.length);
+    let j = Math.floor(Math.random() * (deeps.length - 1));
+    if (j >= i) j++;
+    const shade = (hex: string) => {
+      const n = parseInt(hex.slice(1), 16);
+      const f = (c: number) => Math.max(0, Math.round(c * 0.82));
+      return `#${[f((n >> 16) & 255), f((n >> 8) & 255), f(n & 255)]
+        .map((c) => c.toString(16).padStart(2, "0"))
+        .join("")}`;
+    };
+    document.documentElement.style.setProperty("--stage-bg", deeps[i]);
+    document.documentElement.style.setProperty("--results-bg", shade(deeps[j]));
+  }, []);
+
   const gateCancelRef = useRef(false);
   const [gating, setGating] = useState(false); // the understanding pass is running
   // Per-session cache of the last understanding pass, keyed by category, so we
@@ -9366,8 +9385,9 @@ function SideNav({
       onClick={onClick}
       aria-current={active ? "page" : undefined}
       className={`relative flex min-h-[52px] flex-1 flex-col items-center justify-center gap-1 px-1 py-1.5 transition ${
-        active ? "text-brown-deep" : "text-body/60"
+        active ? "" : "text-body/60"
       }`}
+      style={active ? { color: TAB_IDEA[key] || "rgb(var(--c-brown-deep))" } : undefined}
     >
       <span className="relative">
         <svg
@@ -9395,8 +9415,25 @@ function SideNav({
     </button>
   );
 
-  // Espresso-rail nav row. Renders one uppercase item with icon, optional
-  // count badge / signal dot, and the solid terracotta active pill.
+  // Colour by meaning: each tab's active pill wears the colour of the IDEA
+  // that tab is about — searching cobalt, people teal, your-voice magenta,
+  // company denim. There is deliberately no single main accent.
+  const TAB_IDEA: Record<string, string> = {
+    dashboard: "#19455e",
+    outreach: "#5e69ff",
+    manual: "#4e9c9c",
+    finds: "#4e9c9c",
+    spreadsheet: "#4e9c9c",
+    projects: "#5e69ff",
+    templates: "#aa2377",
+    profile: "#aa2377",
+    team: "#19455e",
+    account: "#19455e",
+    billing: "#19455e",
+    settings: "#19455e",
+  };
+  // Rail nav row. Renders one uppercase item with icon, optional
+  // count badge / signal dot, and the idea-coloured active pill.
   const railItem = (
     key: string,
     label: string,
@@ -9425,6 +9462,11 @@ function SideNav({
       className={`su-navitem ${opts.active ? "su-active" : ""} ${
         opts.draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
       }`}
+      style={
+        opts.active && TAB_IDEA[key]
+          ? { backgroundColor: TAB_IDEA[key], color: "#ffffff" }
+          : undefined
+      }
     >
       <svg
         width="15"
@@ -19475,7 +19517,7 @@ function SettingsTab({
   }
 
   return (
-    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         <span className="text-brown">Settings</span>
       </h1>
@@ -20204,7 +20246,7 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   return (
-    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">Your voice</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
@@ -21686,7 +21728,7 @@ function ProfileTab({
   }
 
   return (
-    <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">About you</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">profile</span>
