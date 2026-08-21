@@ -262,6 +262,14 @@ const SIG_KEY = "scout_signature"; // email signature appended to drafts
 const TOUR_KEY = "scout_tutorial_seen"; // "1" once the intro tour is finished or skipped
 const AUTOSCHED_KEY = "scout_auto_schedule"; // "1" → after-hours sends auto-queue for the next business hour
 const LISTS_KEY = "scout_lists"; // saved status lists (the stakeholder-friendly Lists tab)
+// Ids of projects and categories this user deleted. The company-lens sync folds
+// the workspace's shared structure in as a UNION and never replaces, which is
+// what keeps a teammate's categories from being lost — but it also means a
+// project you delete is handed straight back on the next pull. A delete has to
+// outlive the blob that still remembers it, so the ids are kept here and
+// filtered out of every merge. Capped so it can't grow without bound.
+const DELETED_KEY = "scout_deleted_ids";
+const DELETED_CAP = 500;
 
 // Short-lived token gating /api/site-preview (iframes can't send auth
 // headers, so the token rides the query string). Module-level: the app shell
@@ -1949,6 +1957,29 @@ function ScoutTool({
       setDismissedAdvice(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
     } catch {}
 
+    // A delete has to survive a reload too: the server's copy of this user's
+    // state can still hold the project if the debounced save hadn't landed when
+    // they closed the tab. Filter both sources through the tombstones before
+    // anything else looks at them.
+    {
+      const gone = deletedIds();
+      const goneP = new Set(gone.projects);
+      const goneC = new Set(gone.categories);
+      if (goneP.size || goneC.size) {
+        const keptP = projs.filter((p) => !goneP.has(String(p.id)));
+        const keptC = cats.filter(
+          (c: any) => !goneC.has(String(c.id)) && !goneP.has(String(c.projectId))
+        );
+        // Write the cleaned lists back rather than only filtering the read, or
+        // the deleted row keeps sitting in storage and gets pushed out to the
+        // workspace blob again on the next sync.
+        if (keptP.length !== projs.length) saveProjectsRaw(keptP);
+        if (keptC.length !== cats.length) saveCats(keptC);
+        projs = keptP;
+        cats = keptC;
+      }
+    }
+
     if (!projs.length) {
       // First run under the projects model. Create one empty project that
       // invites the user to name it and set their own use case, no seeded
@@ -3231,6 +3262,32 @@ function ScoutTool({
     }
   }
 
+  // Deleted ids, read straight from localStorage so the sync effect and the
+  // delete path can never disagree about what's gone.
+  function deletedIds(): { projects: string[]; categories: string[] } {
+    try {
+      const raw = JSON.parse(localStorage.getItem(DELETED_KEY) || "{}");
+      return {
+        projects: Array.isArray(raw.projects) ? raw.projects.map(String) : [],
+        categories: Array.isArray(raw.categories) ? raw.categories.map(String) : [],
+      };
+    } catch {
+      return { projects: [], categories: [] };
+    }
+  }
+  function recordDeleted(projectIds: string[], categoryIds: string[]) {
+    try {
+      const cur = deletedIds();
+      const next = {
+        projects: Array.from(new Set([...cur.projects, ...projectIds])).slice(-DELETED_CAP),
+        categories: Array.from(new Set([...cur.categories, ...categoryIds])).slice(-DELETED_CAP),
+      };
+      localStorage.setItem(DELETED_KEY, JSON.stringify(next));
+    } catch {
+      /* localStorage unavailable — the delete still stands for this session */
+    }
+  }
+
   function removeProject(id: string) {
     const proj = projects.find((p) => p.id === id);
     const findCount = finds.filter((f) => f.projectId === id).length;
@@ -3251,6 +3308,12 @@ function ScoutTool({
       );
       if (!ok) return;
     }
+    // Tombstone the project and its categories first, so a lens sync landing
+    // mid-delete can't fold them back in.
+    recordDeleted(
+      [id],
+      categories.filter((c) => c.projectId === id).map((c) => c.id)
+    );
     let nextProjects = projects.filter((p) => p.id !== id);
     let nextCats = categories.filter((c) => c.projectId !== id);
     // Deleting the last project is allowed, the app just seeds a fresh blank
@@ -3877,8 +3940,17 @@ function ScoutTool({
         });
         const j = await r.json().catch(() => ({}));
         if (!alive) return;
-        const bp: any[] = Array.isArray(j.state?.projects) ? j.state.projects : [];
-        const bc: any[] = Array.isArray(j.state?.categories) ? j.state.categories : [];
+        // Drop anything this user deleted before it reaches the union. Without
+        // this the merge hands a deleted project straight back.
+        const gone = deletedIds();
+        const goneP = new Set(gone.projects);
+        const goneC = new Set(gone.categories);
+        const bp: any[] = (Array.isArray(j.state?.projects) ? j.state.projects : []).filter(
+          (p: any) => !goneP.has(String(p?.id))
+        );
+        const bc: any[] = (Array.isArray(j.state?.categories) ? j.state.categories : []).filter(
+          (c: any) => !goneC.has(String(c?.id)) && !goneP.has(String(c?.projectId))
+        );
         if (bp.length === 0 && bc.length === 0) {
           wsSyncedSig.current = ""; // nothing shared — push effect will seed it
           return;
