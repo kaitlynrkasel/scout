@@ -10481,6 +10481,128 @@ function looksLikeApplication(url?: string): boolean {
  * in-page preview of their website you can expand/contract (or drag to resize),
  * and a prominent link to the application when the target is a job posting.
  * Read-only: the draft/send actions stay on the card behind it. */
+// Ask Scout about one find, instead of opening the posting and reading it
+// yourself. Answers come from /api/find-chat, which re-reads the find's page
+// and is told to say when the page doesn't cover something rather than
+// answering from what postings like this usually say.
+function AskAboutFind({ opp }: { opp: Opportunity }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [turns, setTurns] = useState<{ role: "user" | "scout"; text: string; grounded?: boolean }[]>([]);
+
+  async function ask(e?: React.FormEvent) {
+    e?.preventDefault();
+    const question = q.trim();
+    if (!question || busy) return;
+    setErr("");
+    setBusy(true);
+    const history = turns.map((t) => ({ role: t.role === "user" ? "user" : "scout", text: t.text }));
+    setTurns((prev) => [...prev, { role: "user", text: question }]);
+    setQ("");
+    try {
+      const res = await fetch("/api/find-chat", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ opp, question, history }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data?.error || "Couldn't answer that.");
+      setTurns((prev) => [
+        ...prev,
+        { role: "scout", text: String(data.answer || ""), grounded: data.grounded !== false },
+      ]);
+    } catch (e: any) {
+      setErr(e?.message || "Couldn't answer that.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center gap-1.5 rounded-xl border border-warm-border px-3 py-2 text-xs font-bold text-body transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+          <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l1.9-5.2A8.4 8.4 0 0 1 12 3a8.4 8.4 0 0 1 9 8.5z" />
+        </svg>
+        Ask about this
+      </button>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-warm-border bg-warm-bg/40 p-3.5">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+          Ask about this find
+        </span>
+        <button
+          onClick={() => setOpen(false)}
+          className="ml-auto text-[11px] font-semibold text-body/50 transition hover:text-ink"
+        >
+          Close
+        </button>
+      </div>
+
+      {turns.length === 0 && (
+        <p className="mb-2.5 text-xs leading-relaxed text-body/70">
+          Scout re-reads {opp.url ? "the page" : "what it found"} and answers from
+          what&apos;s actually there. Try &ldquo;does this need prior experience?&rdquo;
+          or &ldquo;is it paid?&rdquo;
+        </p>
+      )}
+
+      {turns.length > 0 && (
+        <div className="mb-2.5 space-y-2.5">
+          {turns.map((t, i) => (
+            <div key={i} className={t.role === "user" ? "text-right" : ""}>
+              <div
+                className={`inline-block max-w-[92%] rounded-xl px-3 py-2 text-sm leading-relaxed ${
+                  t.role === "user"
+                    ? "bg-brand-gradient text-white"
+                    : "border border-warm-border bg-surface text-body"
+                }`}
+              >
+                {t.text}
+              </div>
+              {/* Say plainly when the page didn't cover it, so a hedged answer
+                  isn't mistaken for a confirmed one. */}
+              {t.role === "scout" && t.grounded === false && (
+                <div className="mt-1 text-[11px] font-semibold text-attention">
+                  Not stated on the page — worth checking with them directly.
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {busy && <div className="mb-2 text-xs font-semibold text-body/60">Reading the page…</div>}
+      {err && <div className="mb-2 text-xs font-semibold text-danger">{err}</div>}
+
+      <form onSubmit={ask} className="flex items-center gap-2">
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Ask anything about this find…"
+          className="min-w-0 flex-1 rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+        />
+        <button
+          type="submit"
+          disabled={busy || !q.trim()}
+          className="shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
+        >
+          Ask
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function FindDetailModal({
   find,
   onClose,
@@ -11149,6 +11271,8 @@ function FindDetailModal({
                 <p className="text-sm leading-relaxed text-body">{cleanDash(o.whyItFits)}</p>
               </div>
             )}
+
+            <AskAboutFind opp={o} />
 
             {/* Per-signal probabilistic breakdown (why they rank). */}
             {o.scores &&
