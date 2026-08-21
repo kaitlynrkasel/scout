@@ -16,9 +16,9 @@
   --c-ink: 56 50 43; /* soft neutral dark brown (not near-black) */
   --c-body: 94 86 72;
   --c-muted: 115 106 93; /* holds 4.5:1 on white */
-  --c-brown: 122 96 72; /* neutral brown — primary accent */
-  --c-brown-deep: 92 70 52; /* hover / links */
-  --c-brown-tint: 239 233 225;
+  --c-brown: 94 105 255; /* cobalt — primary accent (the Searching colour) */
+  --c-brown-deep: 58 65 217; /* hover / links */
+  --c-brown-tint: 231 233 255;
   --c-clay: 201 187 170;
   --c-coffee: 58 51 43;
   --c-success: 111 122 91; /* muted olive — positive signals only */
@@ -32,14 +32,14 @@
   --c-blue-tint: 236 229 220; /* soft neutral fill */
   --c-slate: 122 96 72; /* alias → neutral brown */
   --c-sage: 122 96 72; /* alias → neutral brown */
-  --c-sage-deep: 92 70 52; /* alias → deep neutral brown */
-  --c-cream: 248 247 245; /* page canvas — near-white */
+  --c-sage-deep: 25 69 94; /* alias → denim */
+  --c-cream: 251 251 253; /* page canvas — near-white */
   --c-surface: 255 255 255; /* cards — white */
   --c-surface-2: 241 239 235; /* light sidebar / inset */
   --c-warm-bg: 243 241 236; /* hover fill */
   --c-warm-border: 234 231 225; /* soft hairline */
-  --brand-a: #7a6048;
-  --brand-b: #5c4634;
+  --brand-a: #5e69ff;
+  --brand-b: #3a41d9;
 }
 
 html.dark {
@@ -49,9 +49,9 @@ html.dark {
   --c-ink: 240 236 230;
   --c-body: 198 190 178;
   --c-muted: 156 148 136;
-  --c-brown: 168 140 112;
-  --c-brown-deep: 146 120 94;
-  --c-brown-tint: 54 46 38;
+  --c-brown: 138 146 255;
+  --c-brown-deep: 172 178 255;
+  --c-brown-tint: 42 45 84;
   --c-clay: 110 100 88;
   --c-coffee: 240 236 230;
   --c-success: 150 160 120;
@@ -64,14 +64,14 @@ html.dark {
   --c-blue-tint: 58 50 42; /* deep neutral fill */
   --c-slate: 168 140 112;
   --c-sage: 168 140 112; /* alias → neutral brown */
-  --c-sage-deep: 205 190 172; /* alias → soft brown */
+  --c-sage-deep: 150 190 214; /* alias → soft denim */
   --c-cream: 28 25 21;
   --c-surface: 38 34 29;
   --c-surface-2: 33 29 25;
   --c-warm-bg: 48 43 37;
   --c-warm-border: 60 54 47;
-  --brand-a: #a8896f;
-  --brand-b: #8a6f57;
+  --brand-a: #7d86ff;
+  --brand-b: #5e69ff;
 }
 
 body {
@@ -166,7 +166,7 @@ h1, h2, h3, .font-display {
    tokens are light tints that flip for dark, so they can't carry white text) —
    white text reads cleanly on the navy. */
 .nav-active {
-  background-color: #7a6048;
+  background-color: #19455e;
   color: #f8f6f2;
 }
 html.dark .nav-active {
@@ -221,9 +221,9 @@ select.scout-select {
    layer the chevron OVER the brand gradient here (and keep a solid navy
    fallback) to guarantee the picker stays dark and its default format shows. */
 select.scout-select-light {
-  background-color: #7a6048;
+  background-color: #3a41d9;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"),
-    linear-gradient(120deg, #8a6f57 0%, #7a6048 100%);
+    linear-gradient(120deg, #5e69ff 0%, #3a41d9 100%);
   background-repeat: no-repeat, no-repeat;
   background-position: right 0.5rem center, center;
   background-size: 16px 16px, cover;
@@ -240,8 +240,8 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-terra: #7a6048; /* neutral brown accent */
-  --su-terra-deep: #5c4634; /* deep neutral brown — text / links */
+  --su-terra: #5e69ff; /* cobalt accent */
+  --su-terra-deep: #3a41d9; /* deep cobalt — text / links */
   --su-tan: #f1efeb; /* light stat band */
   --su-tan-line: #e4e0d8;
   --su-ghost: rgba(56, 50, 43, 0.05); /* ghost outline-word stroke */
@@ -256,7 +256,7 @@ select.scout-select-light {
   --su-rail-line: rgba(60, 50, 40, 0.08);
   --su-rail-hover: rgba(60, 50, 40, 0.045);
   --su-rail-inset: rgba(60, 50, 40, 0.04);
-  --su-rail-active-bg: #7a6048; /* neutral brown active pill */
+  --su-rail-active-bg: #19455e; /* navy active pill */
   --su-rail-active-fg: #f8f6f2;
 }
 html.dark {
@@ -808,11 +808,11 @@ select.scout-kind-picker option {
    else in the app inherits a dark canvas.
    ========================================================================== */
 .scout-stage {
-  background: #5c4634;
-  color: #f6efe6;
+  background: #19455e;
+  color: #f2f6fa;
 }
 .dark .scout-stage {
-  background: #3a2c23;
+  background: #102c3c;
 }
 
 /* The work area below the composer. This used to sit one shade deeper than the
@@ -821,10 +821,10 @@ select.scout-kind-picker option {
    browns that failed to match, with a visible seam where they meet. One room,
    one colour; the light cards inside carry the separation instead. */
 .scout-results {
-  background: #5c4634;
+  background: #19455e;
 }
 .dark .scout-results {
-  background: #3a2c23;
+  background: #102c3c;
 }
 
 /* The two toggles. Rounded, translucent, sitting on the ground rather than in
@@ -974,14 +974,17 @@ select.scout-kind-picker option {
      hue, with real paper between them. Fixed attachment sizes them to the
      viewport, not the page, so a tall dashboard doesn't stretch one orb into
      an all-over wash, and the field holds still while the page scrolls. */
+  /* Blobs, not polka dots: stretched ellipses that lean into each other and
+     share soft connecting washes, so the colour reads as one drifting field.
+     Alphas stay low so text always wins. */
   background:
-    radial-gradient(480px 400px at 12% 10%, rgb(224 105 158 / 0.5) 0%, rgb(240 79 82 / 0.44) 40%, rgb(247 137 31 / 0.3) 65%, transparent 78%),
-    radial-gradient(420px 360px at 88% 16%, rgb(55 126 192 / 0.42) 0%, rgb(84 96 172 / 0.3) 55%, transparent 76%),
-    radial-gradient(360px 320px at 74% 58%, rgb(18 186 170 / 0.34) 0%, transparent 72%),
-    radial-gradient(440px 380px at 8% 78%, rgb(196 213 68 / 0.4) 0%, rgb(18 186 170 / 0.2) 60%, transparent 78%),
-    radial-gradient(400px 340px at 92% 90%, rgb(122 90 168 / 0.36) 0%, rgb(224 105 158 / 0.22) 58%, transparent 76%),
-    radial-gradient(340px 300px at 42% 34%, rgb(247 137 31 / 0.26) 0%, rgb(255 215 71 / 0.18) 55%, transparent 74%),
-    #fdf9f0;
+    radial-gradient(900px 420px at 22% 6%, rgb(224 105 158 / 0.22) 0%, rgb(240 79 82 / 0.16) 40%, transparent 85%),
+    radial-gradient(700px 560px at 76% 22%, rgb(55 126 192 / 0.18) 0%, rgb(84 96 172 / 0.1) 55%, transparent 85%),
+    radial-gradient(1100px 500px at 48% 40%, rgb(247 137 31 / 0.12) 0%, rgb(255 215 71 / 0.08) 50%, transparent 88%),
+    radial-gradient(800px 640px at 14% 74%, rgb(196 213 68 / 0.16) 0%, rgb(18 186 170 / 0.1) 55%, transparent 86%),
+    radial-gradient(760px 520px at 88% 78%, rgb(122 90 168 / 0.15) 0%, rgb(224 105 158 / 0.08) 55%, transparent 86%),
+    radial-gradient(1200px 700px at 55% 96%, rgb(18 186 170 / 0.1) 0%, transparent 85%),
+    #fdfbf6;
   background-attachment: fixed;
 }
 /* Film grain over the whole surface, content included — that is the look.

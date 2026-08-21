@@ -15689,7 +15689,7 @@ function DashboardTab({
       .sort((a, b) => b.total - a.total);
 
     const bar = (n: number, max: number) =>
-      `<div style="height:10px;border-radius:5px;background:#7a6048;width:${Math.max(
+      `<div style="height:10px;border-radius:5px;background:#5e69ff;width:${Math.max(
         2,
         Math.round((n / max) * 100)
       )}%"></div>`;
@@ -15747,10 +15747,10 @@ function DashboardTab({
   @page { margin: 20mm; }
   * { box-sizing: border-box; }
   body { font: 13px/1.55 -apple-system, "Segoe UI", Inter, sans-serif; color: #2b2723; margin: 0; }
-  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 3px solid #5c4634; padding-bottom: 12px; }
-  header h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0; color: #5c4634; }
+  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 3px solid #3a41d9; padding-bottom: 12px; }
+  header h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0; color: #3a41d9; }
   header .date { margin-left: auto; color: #8a8073; font-size: 12px; }
-  h2 { font-size: 15px; color: #5c4634; margin: 26px 0 10px; border-bottom: 1px solid #e6e0d6; padding-bottom: 5px; }
+  h2 { font-size: 15px; color: #3a41d9; margin: 26px 0 10px; border-bottom: 1px solid #e6e0d6; padding-bottom: 5px; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .stat { border: 1px solid #e6e0d6; border-radius: 10px; padding: 12px 14px; }
   .stat .v { font-size: 22px; font-weight: 800; }
