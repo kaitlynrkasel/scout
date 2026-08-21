@@ -116,7 +116,7 @@ export default function AdminPage() {
             the first row and the tabs drop to their own scrollable strip below.
             As a single unwrapped row this was far wider than a phone screen,
             which set the whole page scrolling sideways. */}
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
+        <div className="flex w-full flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/scout-logo.png" alt="Scout" width={28} height={28} className="h-7 w-7 shrink-0" />
           <span className="text-lg font-extrabold tracking-tight text-ink">Scout · Admin</span>
@@ -184,7 +184,7 @@ export default function AdminPage() {
           )}
         </main>
       ) : adminTab === "design" ? (
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <main className="w-full px-4 py-8 sm:px-6 sm:py-10 xl:px-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">Design</span>
@@ -197,7 +197,7 @@ export default function AdminPage() {
           <DesignView getToken={getToken} />
         </main>
       ) : adminTab === "pricing" ? (
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <main className="w-full px-4 py-8 sm:px-6 sm:py-10 xl:px-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">Pricing model</span>
@@ -210,7 +210,7 @@ export default function AdminPage() {
           <PricingView />
         </main>
       ) : adminTab === "index" ? (
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <main className="w-full px-4 py-8 sm:px-6 sm:py-10 xl:px-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">People index</span>
@@ -226,7 +226,7 @@ export default function AdminPage() {
           <IndexView getToken={getToken} />
         </main>
       ) : (
-        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+        <main className="w-full px-4 py-8 sm:px-6 sm:py-10 xl:px-10">
           <div className="mb-6">
             <h1 className="text-3xl font-extrabold tracking-tight text-ink">
               <span className="brand-text">Concierge</span>
