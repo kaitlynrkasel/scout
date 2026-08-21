@@ -4,6 +4,7 @@
 // `guest_searches` table (service role only); see supabase/guest_searches.sql.
 
 import { supabaseAdmin } from "./supabaseAdmin";
+import { withinRateLimit } from "./rateLimit";
 
 export const GUEST_DAILY_CAP = 3;
 
@@ -21,12 +22,20 @@ function today(): string {
 // Read-only pre-check: does this IP still have trial searches left today?
 export async function guestSearchAllowed(ip: string): Promise<boolean> {
   if (!supabaseAdmin) return true; // unmetered when there's no service role
-  const { data } = await supabaseAdmin
+  const { data, error } = await supabaseAdmin
     .from("guest_searches")
     .select("count")
     .eq("ip", ip)
     .eq("day", today())
     .maybeSingle();
+  if (error) {
+    // The metering table is missing or unreachable. This used to fail OPEN,
+    // which on the live database (where guest_searches.sql had not been run)
+    // meant unlimited anonymous engine runs on our API bill. Fall back to an
+    // in-memory per-IP cap instead: it resets on redeploy, but a leaky cap
+    // beats no cap, and the durable table takes over the moment it exists.
+    return withinRateLimit(`guestday:${ip}`, GUEST_DAILY_CAP, 24 * 60 * 60 * 1000);
+  }
   return Number(data?.count || 0) < GUEST_DAILY_CAP;
 }
 
