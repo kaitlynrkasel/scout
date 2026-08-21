@@ -1583,6 +1583,7 @@ function ScoutTool({
       priorAnswers?: string;
     } | null
   >(null);
+  const gateCancelRef = useRef(false);
   const [gating, setGating] = useState(false); // the understanding pass is running
   // Per-session cache of the last understanding pass, keyed by category, so we
   // don't burn an API call re-understanding an inquiry that hasn't changed since
@@ -6233,6 +6234,10 @@ function ScoutTool({
   // Cancel an in-flight search but keep the finds already scouted (runDiscover
   // catches the abort and finalizes with whatever streamed in).
   function stopDiscover() {
+    // Also covers the understanding phase: startScout checks this flag after
+    // the understanding call returns and goes no further.
+    gateCancelRef.current = true;
+    setGating(false);
     discoverAbort.current?.abort();
   }
 
@@ -6441,8 +6446,10 @@ function ScoutTool({
       return;
     }
     setGating(true);
+    gateCancelRef.current = false;
     try {
       const u = await fetchUnderstanding(priorAnswers, priorAsked);
+      if (gateCancelRef.current) return; // cancelled while reading the goal
       // The blend only ever climbs, which is right for a settled search but
       // wrong the moment the planner raises a real question: a category that
       // once scored 100 would sit on it forever, and the card would claim 100%
@@ -7399,7 +7406,7 @@ function ScoutTool({
                 >
                   {discovering ? "Scouting…" : gating ? "Understanding…" : "Scout"}
                 </button>
-                {discovering && (
+                {(discovering || gating) && (
                   <button
                     onClick={stopDiscover}
                     title="Stop this run. Scout keeps whatever it has already found."
@@ -7412,7 +7419,7 @@ function ScoutTool({
                 )}
                 {/* Understanding phase status, so it never looks frozen while
                     Scout reads the goal before searching. */}
-                {gating && (
+                {gating && !stageHasWorkBelow && (
                   <div className="scout-fade-in flex min-w-0 flex-1 items-center gap-2.5">
                     <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/15">
                       <div className="scout-indeterminate h-full w-1/2 rounded-full bg-cream" />

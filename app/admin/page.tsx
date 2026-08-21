@@ -128,7 +128,7 @@ export default function AdminPage() {
           </Link>
           {/* Full-bleed on mobile so the strip scrolls edge to edge instead of
               looking clipped inside the page padding. */}
-          <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
+          <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
             {(["insights", "concierge", "index", "pricing", "design", "readiness"] as const).map((t) => (
               <button
                 key={t}
