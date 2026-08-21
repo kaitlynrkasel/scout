@@ -827,6 +827,27 @@ select.scout-kind-picker option {
 /* The stage markup was written for a dark room (white/cream utilities
    everywhere). On the light field those remap to ink so every label, pill,
    and bullet keeps its contrast without touching 200 call sites. */
+.scout-stage {
+  position: relative;
+  isolation: isolate;
+}
+.scout-stage::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: radial-gradient(
+    240px 210px at var(--mx, 50%) var(--my, 35%),
+    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.5) 0%,
+    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.32) 30%,
+    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.14) 55%,
+    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.04) 75%,
+    transparent 92%
+  );
+  opacity: var(--glow, 0);
+  transition: opacity 1.1s ease;
+}
 .scout-stage .text-cream,
 .scout-stage [class*="text-cream/"] { color: rgb(var(--c-ink)); }
 /* Toggle pills need a visible shell on the light field. */

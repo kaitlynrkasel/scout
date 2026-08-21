@@ -205,6 +205,47 @@ async function copyToClipboard(text: string): Promise<boolean> {
 
 // A compact, aggregate "people like you" directive for the query planner, derived
 // from the cohort patterns. Empty when there's no real cohort yet.
+// The colour field leans toward the cursor. Shared by the dashboard and the
+// Scout stage: blends the three dealt tints by closeness to the field's own
+// anchors and relaxes ~3s after the mouse rests. Timers per element.
+const glowTimers = new WeakMap<HTMLElement, number>();
+function handleFieldGlow(e: React.MouseEvent<HTMLElement>) {
+  const el = e.currentTarget;
+  const r = el.getBoundingClientRect();
+  const x = e.clientX - r.left;
+  const y = e.clientY - r.top;
+  el.style.setProperty("--mx", `${x}px`);
+  el.style.setProperty("--my", `${y}px`);
+  const nx = x / Math.max(1, r.width);
+  const ny = y / Math.max(1, r.height);
+  const cs = getComputedStyle(document.documentElement);
+  const trip = (name: string, fb: string) =>
+    (cs.getPropertyValue(name).trim() || fb).split(/\s+/).map(Number);
+  const tintsRGB = [
+    trip("--dash-tint", "143 188 180"),
+    trip("--dash-tint2", "217 161 180"),
+    trip("--dash-tint3", "224 180 138"),
+  ];
+  const anchors = [
+    [0.28, 0.06],
+    [0.9, 0.34],
+    [0.08, 0.96],
+  ];
+  const w = anchors.map(([ax, ay]) => 1 / (0.02 + (nx - ax) ** 2 + (ny - ay) ** 2));
+  const wsum = w[0] + w[1] + w[2];
+  const mix = [0, 1, 2].map((c) =>
+    Math.round((w[0] * tintsRGB[0][c] + w[1] * tintsRGB[1][c] + w[2] * tintsRGB[2][c]) / wsum)
+  );
+  el.style.setProperty("--glow-tint", mix.join(" "));
+  el.style.setProperty("--glow", "1");
+  const prev = glowTimers.get(el);
+  if (prev) window.clearTimeout(prev);
+  glowTimers.set(
+    el,
+    window.setTimeout(() => el.style.setProperty("--glow", "0"), 3000)
+  );
+}
+
 function cohortHintFrom(community: CommunityStats | null): string {
   const c = community?.cohort;
   if (!c) return "";
@@ -7348,6 +7389,7 @@ function ScoutTool({
                 are after, in display type on the ground itself. */}
             {profileComplete || guest ? (
             <section
+              onMouseMove={handleFieldGlow}
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
                 stageHasWorkBelow ? "" : "flex flex-1"
               }`}
@@ -11584,24 +11626,74 @@ function FindDetailModal({
                   className="h-full w-full"
                 />
                 {previewFailed && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-warm-bg/95 p-6 text-center">
-                    <div className="max-w-xs">
-                      <div className="text-sm font-bold text-ink">
-                        This site can&apos;t be previewed here
+                  <div className="absolute inset-0 overflow-y-auto bg-warm-bg/95 p-6">
+                    {/* No preview is not an empty pane: everything Scout
+                        gathered stands in for the page. */}
+                    <div className="mx-auto max-w-lg">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-bold text-ink">
+                            This site can&apos;t be previewed here
+                          </div>
+                          <p className="mt-0.5 text-xs leading-relaxed text-body/70">
+                            {heavyPortal
+                              ? `${host || "This"} is a full application portal that only loads in its own tab.`
+                              : `${host || "The site"} blocks embedding or is too slow to preview.`}
+                          </p>
+                        </div>
+                        <a
+                          href={o.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+                        >
+                          Open in new tab ↗
+                        </a>
                       </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                        {heavyPortal
-                          ? `${host || "This"} is a full application portal that only loads properly in its own tab.`
-                          : `${host || "The site"} blocks embedding or is too slow to preview. Open it in a new tab, everything else (draft, scan for contact) still works.`}
-                      </p>
-                      <a
-                        href={o.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-3 inline-block rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-                      >
-                        Open in new tab ↗
-                      </a>
+                      {o.whyItFits && (
+                        <div className="mt-5">
+                          <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                            Why it fits
+                          </div>
+                          <p className="text-sm leading-relaxed text-body">{cleanDash(o.whyItFits)}</p>
+                        </div>
+                      )}
+                      {(o.criteria || []).length > 0 && (
+                        <div className="mt-4 space-y-1.5 border-t border-warm-border pt-3">
+                          {(o.criteria || []).map((c) => (
+                            <div key={c.ask} className="flex items-baseline gap-3">
+                              <span className="w-24 shrink-0 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                                {c.ask}
+                              </span>
+                              <span className="text-sm font-semibold text-ink">{c.answer}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {(o.sources || []).length > 0 && (
+                        <div className="mt-4">
+                          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                            Where Scout found this
+                          </div>
+                          <div className="space-y-2.5">
+                            {(o.sources || []).slice(0, 4).map((sc, i) => (
+                              <div key={i} className="rounded-xl border border-warm-border bg-surface p-3">
+                                <a
+                                  href={sc.url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                                >
+                                  {sc.title || sc.url} ↗
+                                </a>
+                                {sc.snippet && (
+                                  <p className="mt-1 text-xs leading-relaxed text-body/70">{sc.snippet}</p>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -16115,50 +16207,9 @@ ${body}
     setReportOpen(false);
   }
 
-  // The ground leans toward the cursor: a soft glow of the day's tint
-  // follows the mouse and fades back out after ~3s of stillness.
-  const glowIdle = useRef<number | null>(null);
-  const onGlowMove = (e: React.MouseEvent<HTMLElement>) => {
-    const el = e.currentTarget;
-    const r = el.getBoundingClientRect();
-    const x = e.clientX - r.left;
-    const y = e.clientY - r.top;
-    el.style.setProperty("--mx", `${x}px`);
-    el.style.setProperty("--my", `${y}px`);
-    // Glow in the colour of the ground under the cursor, blended smoothly:
-    // weight the three dealt tints by closeness to the same anchors the field
-    // gradient paints, so crossing a boundary is a fade, never a snap.
-    const nx = x / Math.max(1, r.width);
-    const ny = y / Math.max(1, r.height);
-    const cs = getComputedStyle(document.documentElement);
-    const trip = (name: string, fb: string) =>
-      (cs.getPropertyValue(name).trim() || fb).split(/\s+/).map(Number);
-    const tintsRGB = [
-      trip("--dash-tint", "143 188 180"),
-      trip("--dash-tint2", "217 161 180"),
-      trip("--dash-tint3", "224 180 138"),
-    ];
-    const anchors = [
-      [0.28, 0.06],
-      [0.9, 0.34],
-      [0.08, 0.96],
-    ];
-    const w = anchors.map(([ax, ay]) => 1 / (0.02 + (nx - ax) ** 2 + (ny - ay) ** 2));
-    const wsum = w[0] + w[1] + w[2];
-    const mix = [0, 1, 2].map((c) =>
-      Math.round((w[0] * tintsRGB[0][c] + w[1] * tintsRGB[1][c] + w[2] * tintsRGB[2][c]) / wsum)
-    );
-    el.style.setProperty("--glow-tint", mix.join(" "));
-    el.style.setProperty("--glow", "1");
-    if (glowIdle.current) window.clearTimeout(glowIdle.current);
-    glowIdle.current = window.setTimeout(() => {
-      el.style.setProperty("--glow", "0");
-    }, 3000);
-  };
-
   return (
     <main
-      onMouseMove={onGlowMove}
+      onMouseMove={handleFieldGlow}
       className="dash-stage w-full flex-1 px-5 py-8 sm:px-8 sm:py-10 xl:px-12"
     >
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
