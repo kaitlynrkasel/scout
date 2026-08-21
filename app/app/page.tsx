@@ -12548,11 +12548,10 @@ function SiteTile({
           {label || host}
         </span>
       )}
-      {url && (
-        <span className="pointer-events-none absolute right-2 top-2 rounded-full bg-black/35 px-2 py-1 text-[10px] font-bold text-white opacity-0 transition group-hover:opacity-100">
-          Open site
-        </span>
-      )}
+      {/* No hover "Open site" chip here any more. It sat at right-2 top-2, which
+          is where the star goes, so the two overlapped on hover — and the card
+          already carries an "Open" in its footer, so the chip was a second copy
+          of an action that was already on screen. */}
     </div>
   );
 }
