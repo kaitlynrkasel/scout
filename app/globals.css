@@ -837,6 +837,7 @@ select.scout-kind-picker option {
 .scout-stage [class*="bg-white/"] { background-color: rgb(255 255 255 / 0.6); }
 /* The cream Scout button becomes the navy CTA so it still reads as THE button. */
 .scout-stage .bg-cream { background: rgb(var(--c-brown)); }
+.scout-stage [class*="bg-cream/"] { background: #7a6048; }
 .scout-stage .bg-cream.text-brown-deep,
 .scout-stage .bg-cream .text-brown-deep { color: #ffffff; }
 .scout-stage .hover\:bg-white:hover { background: rgb(var(--c-brown-deep)); }
@@ -859,14 +860,14 @@ select.scout-kind-picker option {
    a box, and wide enough to read as a choice rather than a form field. */
 .stage-toggle {
   border-radius: 9999px;
-  border: 1px solid rgb(var(--c-ink) / 0.22);
-  background: rgb(255 255 255 / 0.55);
-  color: rgb(var(--c-ink));
+  border: 1px solid rgb(122 96 72 / 0.4);
+  background: #7a6048; /* the logo's brown: the neutral for chrome */
+  color: #f8f4ec;
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .stage-toggle:hover {
-  background: rgb(255 255 255 / 0.8);
-  border-color: rgb(var(--c-ink) / 0.4);
+  background: #5c4634;
+  border-color: rgb(92 70 52 / 0.5);
 }
 
 /* The ask itself: no border, no fill, no focus ring. Just words on the ground. */

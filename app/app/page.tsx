@@ -16125,13 +16125,30 @@ ${body}
     const y = e.clientY - r.top;
     el.style.setProperty("--mx", `${x}px`);
     el.style.setProperty("--my", `${y}px`);
-    // Glow in the colour of the region under the cursor, not always the lead
-    // tint: match the same corners the ground gradient paints.
+    // Glow in the colour of the ground under the cursor, blended smoothly:
+    // weight the three dealt tints by closeness to the same anchors the field
+    // gradient paints, so crossing a boundary is a fade, never a snap.
     const nx = x / Math.max(1, r.width);
     const ny = y / Math.max(1, r.height);
-    const region =
-      ny < 0.45 ? (nx < 0.55 ? "--dash-tint" : "--dash-tint2") : nx < 0.5 ? "--dash-tint3" : "--dash-tint";
-    el.style.setProperty("--glow-tint", `var(${region})`);
+    const cs = getComputedStyle(document.documentElement);
+    const trip = (name: string, fb: string) =>
+      (cs.getPropertyValue(name).trim() || fb).split(/\s+/).map(Number);
+    const tintsRGB = [
+      trip("--dash-tint", "143 188 180"),
+      trip("--dash-tint2", "217 161 180"),
+      trip("--dash-tint3", "224 180 138"),
+    ];
+    const anchors = [
+      [0.28, 0.06],
+      [0.9, 0.34],
+      [0.08, 0.96],
+    ];
+    const w = anchors.map(([ax, ay]) => 1 / (0.02 + (nx - ax) ** 2 + (ny - ay) ** 2));
+    const wsum = w[0] + w[1] + w[2];
+    const mix = [0, 1, 2].map((c) =>
+      Math.round((w[0] * tintsRGB[0][c] + w[1] * tintsRGB[1][c] + w[2] * tintsRGB[2][c]) / wsum)
+    );
+    el.style.setProperty("--glow-tint", mix.join(" "));
     el.style.setProperty("--glow", "1");
     if (glowIdle.current) window.clearTimeout(glowIdle.current);
     glowIdle.current = window.setTimeout(() => {
