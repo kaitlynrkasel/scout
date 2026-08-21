@@ -812,9 +812,29 @@ select.scout-kind-picker option {
    else in the app inherits a dark canvas.
    ========================================================================== */
 .scout-stage {
-  background: var(--stage-bg, #19455e);
-  color: #f2f6fa;
+  background:
+    radial-gradient(70% 42% at 22% 12%, rgb(var(--dash-tint, 143 188 180) / 0.44) 0%, transparent 74%),
+    radial-gradient(64% 40% at 86% 30%, rgb(var(--dash-tint2, 217 161 180) / 0.38) 0%, transparent 74%),
+    radial-gradient(58% 36% at 50% 58%, rgb(255 255 255 / 0.65) 0%, transparent 72%),
+    radial-gradient(70% 42% at 14% 86%, rgb(var(--dash-tint3, 224 180 138) / 0.36) 0%, transparent 74%),
+    radial-gradient(60% 38% at 88% 92%, rgb(var(--dash-tint, 143 188 180) / 0.3) 0%, transparent 74%),
+    #f9f6ee;
+  background-attachment: fixed;
+  color: rgb(var(--c-ink));
 }
+/* The stage markup was written for a dark room (white/cream utilities
+   everywhere). On the light field those remap to ink so every label, pill,
+   and bullet keeps its contrast without touching 200 call sites. */
+.scout-stage .text-cream { color: rgb(var(--c-ink)); }
+.scout-stage .text-white,
+.scout-stage [class*="text-white/"] { color: rgb(var(--c-ink) / 0.75); }
+.scout-stage [class*="border-white/"] { border-color: rgb(var(--c-ink) / 0.25); }
+.scout-stage [class*="bg-white/"] { background-color: rgb(255 255 255 / 0.6); }
+/* The cream Scout button becomes the navy CTA so it still reads as THE button. */
+.scout-stage .bg-cream { background: rgb(var(--c-brown)); }
+.scout-stage .bg-cream.text-brown-deep,
+.scout-stage .bg-cream .text-brown-deep { color: #ffffff; }
+.scout-stage .hover\:bg-white:hover { background: rgb(var(--c-brown-deep)); }
 .dark .scout-stage {
   background: #102c3c;
 }
@@ -825,8 +845,10 @@ select.scout-kind-picker option {
    browns that failed to match, with a visible seam where they meet. One room,
    one colour; the light cards inside carry the separation instead. */
 .scout-results {
-  background: var(--results-bg, #163a4e);
+  background: #ffffff;
+  border-top: 1px solid rgb(var(--c-warm-border));
 }
+.dark .scout-results { background: rgb(var(--c-surface)); }
 .dark .scout-results {
   background: #102c3c;
 }
@@ -992,6 +1014,8 @@ select.scout-kind-picker option {
      deliberately do NOT stretch: that produced tall skinny cards with empty
      bellies, worse than a ragged row bottom.) */
   .dash-stage { grid-auto-flow: dense; row-gap: 0; }
+  .dash-stage > [data-stretch] { display: flex; flex-direction: column; }
+  .dash-stage > [data-stretch] > :last-child { flex: 1 1 auto; }
   .dash-stage > section.mt-10 { margin-top: 2.25rem; }
 }
 .dash-stage {
@@ -1023,7 +1047,7 @@ select.scout-kind-picker option {
   pointer-events: none;
   background: radial-gradient(
     150px 150px at var(--mx, 50%) var(--my, 35%),
-    rgb(var(--dash-tint, 143 188 180) / 0.55) 0%,
+    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.55) 0%,
     transparent 70%
   );
   opacity: var(--glow, 0);

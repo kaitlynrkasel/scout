@@ -20,6 +20,14 @@ export function ActivityChart({
   height?: number;
   unit?: string;
 }) {
+  // Relevance and time scaling: drop the leading weeks from before anything
+  // happened (keep at least two points so a line can exist), and when nothing
+  // has ever been SENT, drop that series and its legend entirely instead of
+  // drawing a flat zero along the floor.
+  const firstLive = data.findIndex((d) => d.sent > 0 || d.added > 0);
+  if (firstLive > 0 && data.length - firstLive >= 2) data = data.slice(firstLive);
+  const anySent = data.some((d) => d.sent > 0);
+
   const W = 720;
   const H = height;
   const padL = 8;
@@ -64,20 +72,37 @@ export function ActivityChart({
         {gridY.map((gy, i) => (
           <line key={i} x1={padL} x2={W - padR} y1={gy} y2={gy} stroke="#eceae4" strokeWidth="1" />
         ))}
-        <path d={area} fill="url(#activity-fill)" />
+        {anySent && <path d={area} fill="url(#activity-fill)" />}
         <path d={line("added")} fill="none" stroke="#c8b899" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="1 5" />
-        <path d={line("sent")} fill="none" stroke="#7c5837" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        {anySent && (
+          <path d={line("sent")} fill="none" stroke="#7c5837" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
         {n > 0 && (
           <>
-            <circle cx={x(last)} cy={y(data[last].sent)} r="7" fill="#7c5837" fillOpacity="0.14" />
-            <circle cx={x(last)} cy={y(data[last].sent)} r="3.5" fill="#7c5837" stroke="#fff" strokeWidth="1.5" />
+            <circle
+              cx={x(last)}
+              cy={y(anySent ? data[last].sent : data[last].added)}
+              r="7"
+              fill="#7c5837"
+              fillOpacity="0.14"
+            />
+            <circle
+              cx={x(last)}
+              cy={y(anySent ? data[last].sent : data[last].added)}
+              r="3.5"
+              fill="#7c5837"
+              stroke="#fff"
+              strokeWidth="1.5"
+            />
           </>
         )}
       </svg>
       <figcaption className="mt-2 flex items-center gap-4 text-xs text-muted">
-        <span className="flex items-center gap-1.5">
-          <span className="h-0.5 w-3 rounded-full bg-brown" aria-hidden />Sent
-        </span>
+        {anySent && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-0.5 w-3 rounded-full bg-brown" aria-hidden />Sent
+          </span>
+        )}
         <span className="flex items-center gap-1.5">
           <span className="h-0.5 w-3 rounded-full bg-clay" aria-hidden />Found
         </span>

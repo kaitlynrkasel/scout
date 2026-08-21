@@ -1620,7 +1620,7 @@ function ScoutTool({
   // EVERY time the dashboard is opened (tab switches included), never the
   // same lead twice in a row.
   useEffect(() => {
-    if (tab !== "dashboard") return;
+    if (tab !== "dashboard" && tab !== "outreach") return;
     const tints = [
       "154 176 139", // sage
       "147 174 203", // sky
@@ -13688,7 +13688,7 @@ function FindsTab({
               <FindGridCard
                 key={f.id}
                 find={f}
-                shared={!!teamName}
+shared={shown.some((x) => !!x.foundByEmail)}
                 onOpen={() => setDetailId(f.id)}
                 onTogglePin={() => onTogglePin(f.id)}
               />
@@ -16121,8 +16121,17 @@ ${body}
   const onGlowMove = (e: React.MouseEvent<HTMLElement>) => {
     const el = e.currentTarget;
     const r = el.getBoundingClientRect();
-    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
-    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+    const x = e.clientX - r.left;
+    const y = e.clientY - r.top;
+    el.style.setProperty("--mx", `${x}px`);
+    el.style.setProperty("--my", `${y}px`);
+    // Glow in the colour of the region under the cursor, not always the lead
+    // tint: match the same corners the ground gradient paints.
+    const nx = x / Math.max(1, r.width);
+    const ny = y / Math.max(1, r.height);
+    const region =
+      ny < 0.45 ? (nx < 0.55 ? "--dash-tint" : "--dash-tint2") : nx < 0.5 ? "--dash-tint3" : "--dash-tint";
+    el.style.setProperty("--glow-tint", `var(${region})`);
     el.style.setProperty("--glow", "1");
     if (glowIdle.current) window.clearTimeout(glowIdle.current);
     glowIdle.current = window.setTimeout(() => {
@@ -16313,22 +16322,42 @@ ${body}
               impactful numbers and what Scout is learning about you; the
               pipeline itself lives on Finds. */}
           <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-3xl border border-white/60 bg-white/40 backdrop-blur-md sm:grid-cols-3 xl:grid-cols-6">
-            {(
-              [
-                [String(finds.length), "Finds", newThisWeek > 0 ? `+${newThisWeek} this week` : ""],
-                [String(pipe.sent), "Messages sent", ""],
-                [replyRatePct === "·" ? "0%" : replyRatePct, "Reply rate", ""],
-                [onTarget != null ? `${onTarget}%` : "0%", "On-target", ""],
-                [String(activity.searches), "Searches run", ""],
+            {(() => {
+              // Relevance first: a zero is dead air, so each slot is filled by
+              // the first stat that has something to say. A brand-new account
+              // (nothing searched, nothing found) keeps the classic six so the
+              // band shows what WILL live here.
+              const brandNew = finds.length === 0 && activity.searches === 0;
+              const cand: [string, string, string, boolean][] = [
+                [String(finds.length), "Finds", newThisWeek > 0 ? `+${newThisWeek} this week` : "", finds.length > 0],
+                [String(pipe.sent), "Messages sent", "", pipe.sent > 0],
+                [replyRatePct === "·" ? "0%" : replyRatePct, "Reply rate", "", learned.replyRate != null && learned.replyRate > 0],
+                [onTarget != null ? `${onTarget}%` : "0%", "On-target", "", onTarget != null && onTarget > 0],
+                [String(activity.searches), "Searches run", "", activity.searches > 0],
                 // Estimate: ~15 min to source + vet a lead by hand, ~10 more
                 // to write the personal note Scout drafts.
                 [
                   String(Math.max(1, Math.round((finds.length * 15 + activity.drafts * 10) / 60))),
                   "Hours saved scouting",
                   "",
+                  finds.length > 0 || activity.drafts > 0,
                 ],
-              ] as const
-            ).map(([v, label, sub], i) => (
+                [String(activity.drafts), "Drafts written", "", activity.drafts > 0],
+                [String(pipe.new), "New to review", "", pipe.new > 0],
+                [String(learned.decided), "Decisions made", "", learned.decided > 0],
+                [String(pipe.replied), "Replies", "", pipe.replied > 0],
+                [
+                  strongThisWeek > 0 ? String(strongThisWeek) : "0",
+                  "Strong matches this week",
+                  "",
+                  strongThisWeek > 0,
+                ],
+              ];
+              const chosen = brandNew
+                ? cand.slice(0, 6)
+                : cand.filter((c) => c[3]).slice(0, 6);
+              return chosen;
+            })().map(([v, label, sub], i) => (
               <div key={label} className="relative p-6">
                 <div className="font-display text-[38px] font-bold leading-none tabular-nums text-ink">
                   {v}
@@ -16483,7 +16512,7 @@ ${body}
 
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
-        <section data-jig="7" className="mt-10">
+        <section data-jig="7" data-stretch className="mt-10">
           <h2 className="text-lg font-semibold tracking-tight text-ink">Your fit and preferences</h2>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">

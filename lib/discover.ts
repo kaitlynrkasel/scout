@@ -136,6 +136,11 @@ function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
   if (avoid.length) {
     s +=
       "\n\nREJECTED BEFORE, the user passed on these; treat the reasons as firm rules and steer away from similar results. " +
+      "WHOSE RULE IS IT: on a shared pipeline some of these decisions were made by TEAMMATES whose circumstances differ. " +
+      "Before applying a reason, check it against ABOUT THE USER: a reason grounded in the DECIDER'S own eligibility or " +
+      "stage of life (\"it isn't for high schoolers\" from a high schooler, \"requires a degree I don't have\") binds only " +
+      "when it is also true of THIS user; a reason about the target itself (industry, genre, location, quality, ethics) " +
+      "binds everyone. " +
       "When a reason names a subject, genre, or industry the user does not want (\"I don't want to work in country music\"), " +
       "that is a HARD filter: any result squarely in that world is is_relevant false, not merely a low fit_score:\n" +
       avoid.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n");
