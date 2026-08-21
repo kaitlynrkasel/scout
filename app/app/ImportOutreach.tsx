@@ -17,7 +17,7 @@ import {
   type SheetTab,
 } from "@/lib/sheetImport";
 import type { Opportunity } from "@/lib/types";
-import { MicButton, joinSpoken } from "./dictate";
+import { MicButton } from "./dictate";
 
 // Local mirrors of the Find / Project / FindStatus shapes from page.tsx. The
 // component just needs enough to build records and drop them back in via the
@@ -835,9 +835,8 @@ export default function ImportOutreach({
                                   className="w-full rounded-lg border border-warm-border px-3 py-1.5 text-xs text-ink outline-none focus:border-coral"
                                 />
                                 <MicButton
-                                  onAppend={(t) =>
-                                    setUOther((p) => ({ ...p, [i]: joinSpoken(p[i] || "", t) }))
-                                  }
+                                  value={uOther[i] || ""}
+                                  onChange={(v) => setUOther((p) => ({ ...p, [i]: v }))}
                                 />
                               </div>
                             )}

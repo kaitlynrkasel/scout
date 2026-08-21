@@ -16,7 +16,7 @@ import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import { InstallBanner, InstallCard } from "./InstallScout";
 import ImportOutreach from "./ImportOutreach";
-import { MicButton, joinSpoken } from "./dictate";
+import { MicButton } from "./dictate";
 import {
   fetchSheetRows,
   rowsToFinds,
@@ -7295,7 +7295,7 @@ function ScoutTool({
                           rows={goal.length > 90 ? 3 : 2}
                           className="stage-ask font-display w-full text-[26px] font-bold leading-snug tracking-[-0.01em] sm:text-[34px]"
                         />
-                        <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} light />
+                        <MicButton value={goal} onChange={setGoal} light />
                       </div>
                       <div className="mt-1 h-px w-full bg-white/15" />
                       <p className="mt-2 text-xs text-white/45">
@@ -7828,7 +7828,8 @@ function ScoutTool({
                       className="min-h-[42px] max-h-32 min-w-0 flex-1 resize-none rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
                     />
                     <MicButton
-                      onAppend={(t) => setRedraftInstruction((g) => joinSpoken(g, t))}
+                      value={redraftInstruction}
+                      onChange={setRedraftInstruction}
                     />
                     <button
                       onClick={reviseAllDrafts}
@@ -20162,7 +20163,7 @@ function TemplatesTab({
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
               <Label className="mb-0">Show us how you write it</Label>
-              <MicButton onAppend={(t) => setText(joinSpoken(text, t))} />
+              <MicButton value={text} onChange={setText} />
             </div>
             <FileDrop
               label="Drop a cover letter or example file, or click to upload"
@@ -22058,7 +22059,7 @@ function ProfileTab({
           <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
             <Label className="mb-0">Resume, LinkedIn, or bio</Label>
             <div className="flex items-center gap-1.5">
-              <MicButton onAppend={(t) => onBio(joinSpoken(bio, t))} />
+              <MicButton value={bio} onChange={onBio} />
               {parsing && (
                 <span className="flex items-center gap-1.5 text-xs font-semibold text-accent">
                   <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-coral" />
@@ -23590,9 +23591,8 @@ function ProjectsCategoriesEditor({
                 <div className="mb-1 flex items-center justify-between gap-2">
                   <Label className="mb-0">What is this project for?</Label>
                   <MicButton
-                    onAppend={(t) =>
-                      onSetProjectContext(p.id, joinSpoken(p.context || "", t))
-                    }
+                    value={p.context || ""}
+                    onChange={(v) => onSetProjectContext(p.id, v)}
                   />
                 </div>
                 <textarea

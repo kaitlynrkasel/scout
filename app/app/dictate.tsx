@@ -10,23 +10,44 @@ export function joinSpoken(prev: string, add: string): string {
 }
 
 // Voice dictation button using the browser's built-in Web Speech API (no external
-// service). Renders nothing on browsers that don't support it. Calls onAppend with
-// each finalized phrase so the caller can add it to a text field.
+// service). Renders nothing on browsers that don't support it.
+//
+// The button drives the FIELD, not itself. It used to take an onAppend callback
+// that fired only on finalized phrases, and painted the in-progress words into
+// its own label beside the mic icon — so you watched your sentence form next to
+// the button instead of in the box you were dictating into, and whatever hadn't
+// finalized when recognition stopped was thrown away.
+//
+// Taking `value` + `onChange` instead fixes both. The committed text is held in
+// baseRef; every result re-emits base + the live interim, so revisions from the
+// speech engine replace cleanly rather than duplicating, the words appear in the
+// field as you speak, and they are ordinary field text — they stay until you
+// delete them.
 export function MicButton({
-  onAppend,
+  value,
+  onChange,
   className = "",
   light = false,
 }: {
-  onAppend: (text: string) => void;
+  value: string;
+  onChange: (next: string) => void;
   className?: string;
   // For dark grounds (the Scout stage): light strokes instead of the warm greys.
   light?: boolean;
 }) {
   const [listening, setListening] = useState(false);
-  // The words being heard right now, shown live so dictation never looks dead.
-  const [heard, setHeard] = useState("");
   const [supported, setSupported] = useState(false);
   const recRef = useRef<any>(null);
+  // Text as it stood before the current phrase — finals are folded in here, and
+  // the live interim is appended to it on every emit.
+  const baseRef = useRef("");
+  const interimRef = useRef("");
+  // The field's current value, readable from inside the recognition callbacks
+  // without making them stale.
+  const valueRef = useRef(value);
+  valueRef.current = value;
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
 
   useEffect(() => {
     const SR =
@@ -52,23 +73,33 @@ export function MicButton({
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
         if (r.isFinal && r[0]?.transcript) {
-          onAppend(r[0].transcript.trim());
+          baseRef.current = joinSpoken(baseRef.current, r[0].transcript.trim());
           interim = "";
         } else if (r[0]?.transcript) {
           interim += r[0].transcript;
         }
       }
-      setHeard(interim.trim().slice(-60));
+      interimRef.current = interim.trim();
+      // Always emit base + interim, never an append. The speech engine revises
+      // interim results as it hears more, so appending would stack every draft
+      // of the phrase on top of the last.
+      onChangeRef.current(joinSpoken(baseRef.current, interimRef.current));
     };
-    rec.onend = () => {
+    // Recognition stops on its own after a pause. Anything still interim at that
+    // moment is real speech the user said, so it's committed rather than dropped.
+    const settle = () => {
+      if (interimRef.current) {
+        baseRef.current = joinSpoken(baseRef.current, interimRef.current);
+        interimRef.current = "";
+        onChangeRef.current(baseRef.current);
+      }
       setListening(false);
-      setHeard("");
     };
-    rec.onerror = () => {
-      setListening(false);
-      setHeard("");
-    };
+    rec.onend = settle;
+    rec.onerror = settle;
     recRef.current = rec;
+    baseRef.current = valueRef.current || "";
+    interimRef.current = "";
     try {
       rec.start();
       setListening(true);
@@ -113,7 +144,7 @@ export function MicButton({
         <rect x="9" y="2" width="6" height="12" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
       </svg>
-      {listening ? (heard ? `“${heard}”` : "Listening…") : "Dictate"}
+      {listening ? "Listening…" : "Dictate"}
     </button>
   );
 }
