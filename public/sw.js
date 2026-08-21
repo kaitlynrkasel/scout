@@ -102,3 +102,54 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(cacheFirst(request, ASSETS).catch(() => fetch(request)));
   }
 });
+
+/* ---- Notifications ------------------------------------------------------
+ *
+ * The only part of Scout that runs when Scout isn't open. Kept deliberately
+ * dumb: show what the server said, and on tap focus an existing window rather
+ * than piling up new ones.
+ */
+
+self.addEventListener("push", (event) => {
+  let data = {};
+  try {
+    data = event.data ? event.data.json() : {};
+  } catch {
+    // A push with no payload, or one we can't parse, still deserves to show
+    // something rather than being swallowed.
+    data = {};
+  }
+  const title = data.title || "Scout";
+  const options = {
+    body: data.body || "",
+    icon: "/icons/icon-192.png",
+    badge: "/icons/icon-192.png",
+    // Same tag replaces rather than stacks, so ten new finds is one line.
+    tag: data.tag || "scout",
+    data: { url: data.url || "/app" },
+  };
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const target = (event.notification.data && event.notification.data.url) || "/app";
+  event.waitUntil(
+    (async () => {
+      const all = await self.clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      // Reuse a window that's already open — a second copy of the app is never
+      // what someone wants from tapping a notification.
+      for (const client of all) {
+        if (client.url.includes(self.location.origin)) {
+          await client.focus();
+          if ("navigate" in client) await client.navigate(target).catch(() => {});
+          return;
+        }
+      }
+      await self.clients.openWindow(target);
+    })()
+  );
+});

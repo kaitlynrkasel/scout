@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -15,6 +15,12 @@ import { Reveal, CountUp, FadeIn } from "./motion";
 import { ActivityChart, PipelineBar, MatchGauge, Sparkline } from "./charts";
 import Tutorial, { type TourStep } from "./Tutorial";
 import { InstallBanner, InstallCard } from "./InstallScout";
+import {
+  disablePush,
+  enablePush,
+  installedToHomeScreen,
+  permission,
+} from "@/lib/pushClient";
 import ImportOutreach from "./ImportOutreach";
 import { MicButton } from "./dictate";
 import {
@@ -8586,6 +8592,7 @@ function ScoutTool({
           onExport={exportMyData}
           onRedeem={redeemCode}
           isComp={!!billing?.comp}
+          getToken={getToken}
         />
       )}
 
@@ -19916,12 +19923,66 @@ function SettingsTab({
   onExport,
   onRedeem,
   isComp,
+  getToken,
 }: {
   onStartTour: () => void;
   onExport: () => void;
   onRedeem: (code: string) => Promise<string>;
   isComp: boolean;
+  getToken?: () => Promise<string | null>;
 }) {
+  // Everything here talks to owner-scoped routes, so each call carries the
+  // session token.
+  const authFetch = useCallback(
+    async (url: string, init: RequestInit = {}) => {
+      const token = getToken ? await getToken() : null;
+      return fetch(url, {
+        ...init,
+        headers: {
+          ...(init.headers || {}),
+          ...(token ? { authorization: `Bearer ${token}` } : {}),
+        },
+      });
+    },
+    [getToken]
+  );
+  // ---- Notifications ----
+  const [pushOn, setPushOn] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
+  const [pushNote, setPushNote] = useState("");
+  const [pushReady, setPushReady] = useState<boolean | null>(null); // server has keys?
+  const [standalone, setStandalone] = useState(true);
+  useEffect(() => {
+    setStandalone(installedToHomeScreen() || !/iPhone|iPad|iPod/.test(navigator.userAgent));
+    (async () => {
+      try {
+        const res = await authFetch("/api/push/subscribe");
+        const j = await res.json().catch(() => ({}));
+        setPushReady(!!j?.configured);
+        setPushOn((j?.devices || 0) > 0 && permission() === "granted");
+      } catch {
+        setPushReady(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function togglePush(next: boolean) {
+    setPushBusy(true);
+    setPushNote("");
+    const err = next
+      ? await enablePush(process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || "", authFetch)
+      : await disablePush(authFetch);
+    setPushBusy(false);
+    if (err) {
+      setPushNote(err);
+      return;
+    }
+    setPushOn(next);
+    setPushNote(next ? "Notifications are on for this device." : "Turned off for this device.");
+    window.setTimeout(() => setPushNote(""), 3000);
+  }
+
   // Theme mirrors the .dark class on <html>; persisted to scout_theme and
   // applied pre-paint by the inline script in layout.tsx.
   const [dark, setDark] = useState(false);
@@ -20056,6 +20117,53 @@ function SettingsTab({
             );
           })}
         </div>
+      </section>
+
+      {/* Notifications */}
+      <section className="mt-4 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <h2 className="text-base font-extrabold tracking-tight text-ink">
+              Notifications
+            </h2>
+            <p className="mt-1.5 text-sm leading-relaxed text-body">
+              Scout can tell you when new finds land and when a scheduled
+              message actually goes out — the two things that happen while the
+              app is closed.
+            </p>
+          </div>
+          {pushReady !== false && standalone && (
+            <button
+              onClick={() => togglePush(!pushOn)}
+              disabled={pushBusy}
+              className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold shadow-soft transition disabled:opacity-50 ${
+                pushOn
+                  ? "border border-warm-border text-body hover:bg-warm-bg"
+                  : "bg-brand-gradient text-white hover:opacity-90"
+              }`}
+            >
+              {pushBusy ? "…" : pushOn ? "Turn off" : "Turn on"}
+            </button>
+          )}
+        </div>
+
+        {/* iOS only offers notifications to an installed app, so say that
+            rather than showing a button that can't work. */}
+        {!standalone && (
+          <p className="mt-4 border-t border-warm-border pt-4 text-sm leading-relaxed text-body/80">
+            On iPhone and iPad, notifications only work once Scout is added to
+            your home screen. Add it from the Share menu above, open it from
+            there, and this turns on.
+          </p>
+        )}
+        {pushReady === false && (
+          <p className="mt-4 border-t border-warm-border pt-4 text-sm leading-relaxed text-body/80">
+            Notifications aren&apos;t configured on the server yet.
+          </p>
+        )}
+        {pushNote && (
+          <p className="mt-3 text-xs font-semibold text-success-deep">{pushNote}</p>
+        )}
       </section>
 
       {/* Introduction tour */}
