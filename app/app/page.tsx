@@ -4112,6 +4112,40 @@ function ScoutTool({
     exProjectContext,
   ]);
   // What the goal textarea actually shows as its placeholder.
+  // Custom search with nothing typed: the project description already says
+  // what this project is for, so distill IT into bullet points instead of
+  // presenting a giant empty text box. Once per project+description; the
+  // result lands in `goal`, so editing a bullet works exactly like a saved
+  // category and running it still saves a category as before.
+  const projSeedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (tab !== "outreach" || catId || goal.trim()) return;
+    const ctx = (activeProject?.context || "").trim();
+    if (ctx.length < 30) return;
+    const key = `${activeId}::${ctx}`;
+    if (projSeedRef.current.has(key)) return;
+    projSeedRef.current.add(key);
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/goal-bullets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ goal: ctx }),
+        });
+        const j = await r.json().catch(() => ({}));
+        const got: string[] = Array.isArray(j?.bullets) ? j.bullets : [];
+        if (alive && got.length >= 2 && !goal.trim() && !catId) setGoal(got.join("; "));
+      } catch {
+        /* the empty ask stays typeable */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, catId, activeId, activeProject?.context]);
+
   // Is there anything to show under the Scout composer? Until the first run
   // there is not, and the stage owns the whole screen; the moment a search
   // starts (or results/drafts/errors exist) it folds up to a band and the
@@ -7172,11 +7206,10 @@ function ScoutTool({
                       : "mt-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0"
                   }
                 >
-                  {catId ? (
-                    // A saved category is a defined search, so show it as what
-                    // it IS: a few bullet points of who it finds, not a chat
-                    // bar to retype. Click a bullet to edit, add one to
-                    // sharpen; the joined bullets are the goal the engine runs.
+                  {catId || goal.trim() ? (
+                    // Any defined search, saved category or a custom one seeded
+                    // from the project description, shows as what it IS: bullet
+                    // points, not a chat bar. Click to edit, add to sharpen.
                     <StageBullets goal={goal} onGoal={setGoal} />
                   ) : (
                     <>
@@ -22726,7 +22759,7 @@ function ProjectsTab({
                           if (e.target.value.trim() && e.target.value !== c.name)
                             onRenameCategory(c.id, e.target.value);
                         }}
-                        className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 text-xs font-bold text-ink outline-none transition focus:bg-surface"
+                        className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-bold text-ink outline-none transition focus:border-coral"
                       />
                       <button
                         onClick={() => onRemoveCategory(c.id)}
