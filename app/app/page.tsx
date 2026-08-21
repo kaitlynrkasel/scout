@@ -1614,6 +1614,27 @@ function ScoutTool({
     };
     document.documentElement.style.setProperty("--stage-bg", deeps[i]);
     document.documentElement.style.setProperty("--results-bg", shade(deeps[j]));
+    // The dashboard ground alternates through soft mid-tones the same way:
+    // sage, sky, blush, apricot, lilac, seafoam — never the same one twice
+    // in a row.
+    const tints = [
+      "154 176 139", // sage
+      "147 174 203", // sky
+      "217 161 180", // blush
+      "224 180 138", // apricot
+      "169 156 196", // lilac
+      "143 188 180", // seafoam
+    ];
+    let lastT = -1;
+    try {
+      lastT = tints.indexOf(localStorage.getItem("scout_dash_last") || "");
+    } catch {}
+    const tp = tints.map((_, k) => k).filter((k) => k !== lastT);
+    const ti = tp[Math.floor(Math.random() * tp.length)];
+    try {
+      localStorage.setItem("scout_dash_last", tints[ti]);
+    } catch {}
+    document.documentElement.style.setProperty("--dash-tint", tints[ti]);
   }, []);
 
   const gateCancelRef = useRef(false);
@@ -16160,7 +16181,7 @@ ${body}
       <section data-jig="5" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
         {insights.length ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <div className={`mt-4 grid gap-3 ${insights.length > 2 ? "sm:grid-cols-2" : ""}`}>
             {insights.map((ins) => (
               <div
                 key={ins.text}
@@ -16173,7 +16194,13 @@ ${body}
                   <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18" /></svg>
                 </span>
                 <div>
-                  <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
+                  <p
+                    className={`leading-relaxed text-ink ${
+                      insights.length === 1 ? "text-base" : "text-sm"
+                    }`}
+                  >
+                    {ins.text}
+                  </p>
                   <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-body/50">
                     {ins.basis}
                   </p>

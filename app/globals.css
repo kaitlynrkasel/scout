@@ -988,28 +988,24 @@ select.scout-kind-picker option {
   .dash-stage > [data-jig="5"] { grid-column: span 5; }
   .dash-stage > [data-jig="6"] { grid-column: span 6; }
   .dash-stage > [data-jig="7"] { grid-column: span 7; }
-  /* Fill each row: dense packing lets a later short piece slide up into a
-     gap, and stretched sections share the row's bottom line instead of
-     leaving a lake of empty ground beside a taller neighbour. */
+  /* Dense packing lets a later short piece slide up into a gap. (Sections
+     deliberately do NOT stretch: that produced tall skinny cards with empty
+     bellies, worse than a ragged row bottom.) */
   .dash-stage { grid-auto-flow: dense; }
-  .dash-stage > [data-jig] { display: flex; flex-direction: column; }
-  .dash-stage > [data-jig] > :last-child { flex: 1 1 auto; }
 }
 .dash-stage {
   /* Aura orbs, scattered like prints on a wall: each one compact, its own
      hue, with real paper between them. Fixed attachment sizes them to the
      viewport, not the page, so a tall dashboard doesn't stretch one orb into
      an all-over wash, and the field holds still while the page scrolls. */
-  /* Blobs, not polka dots: stretched ellipses that lean into each other and
-     share soft connecting washes, so the colour reads as one drifting field.
-     Alphas stay low so text always wins. */
-  /* Four quiet blobs, one per region, lots of open paper between. */
+  /* One colour field, not floating orbs: the ground is mostly THE colour of
+     the day (a soft mid-tone dealt fresh each visit, --dash-tint), breathing
+     back to warm cream at the corners, like a printed gradient. */
   background:
-    radial-gradient(1000px 480px at 20% 4%, rgb(224 105 158 / 0.34) 0%, rgb(247 137 31 / 0.18) 45%, transparent 85%),
-    radial-gradient(800px 620px at 84% 30%, rgb(55 126 192 / 0.26) 0%, transparent 84%),
-    radial-gradient(900px 680px at 10% 82%, rgb(196 213 68 / 0.26) 0%, rgb(18 186 170 / 0.14) 50%, transparent 85%),
-    radial-gradient(860px 560px at 90% 94%, rgb(122 90 168 / 0.24) 0%, transparent 84%),
-    #fdfbf6;
+    radial-gradient(120% 55% at 50% 36%, rgb(var(--dash-tint, 143 188 180) / 0.85) 0%, rgb(var(--dash-tint, 143 188 180) / 0.55) 48%, transparent 78%),
+    radial-gradient(90% 50% at 88% 88%, rgb(var(--dash-tint, 143 188 180) / 0.6) 0%, transparent 75%),
+    radial-gradient(70% 40% at 6% 74%, rgb(var(--dash-tint, 143 188 180) / 0.45) 0%, transparent 72%),
+    #f5f0e1;
   background-attachment: fixed;
 }
 /* Film grain over the whole surface, content included — that is the look.
