@@ -23,9 +23,23 @@ export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
-  const [adminTab, setAdminTab] = useState<
-    "insights" | "concierge" | "index" | "pricing" | "design" | "readiness"
-  >("insights");
+  // The tab lives in the URL hash so a refresh (or a shared link) lands on
+  // the same tab instead of snapping back to Insights.
+  type AdminTab = "insights" | "concierge" | "index" | "pricing" | "design" | "readiness";
+  const ADMIN_TABS: AdminTab[] = ["insights", "concierge", "index", "pricing", "design", "readiness"];
+  const [adminTab, setAdminTabState] = useState<AdminTab>(() => {
+    if (typeof window !== "undefined") {
+      const h = window.location.hash.replace("#", "") as AdminTab;
+      if (ADMIN_TABS.includes(h)) return h;
+    }
+    return "insights";
+  });
+  const setAdminTab = (t: AdminTab) => {
+    setAdminTabState(t);
+    try {
+      window.history.replaceState(null, "", `#${t}`);
+    } catch {}
+  };
   // Keyed /readiness link, fetched owner-only so the secret never ships in JS.
   const [readinessPath, setReadinessPath] = useState("");
   useEffect(() => {

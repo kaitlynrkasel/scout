@@ -228,6 +228,16 @@
                 "Press Dictate, speak a sentence, watch the words appear while speaking."
               ],
               "key": "setup::dictation-shows-your-words-as-you-speak"
+            },
+            {
+              "sev": "should",
+              "title": "Add your LinkedIn lands on the adding step",
+              "good": "The dashboard checklist's Add your LinkedIn button opens Profile AND scrolls to the resume/LinkedIn drop zone, not just the top of the tab.",
+              "steps": [
+                "Click Add your LinkedIn from the dashboard checklist.",
+                "You should arrive with the upload area centred on screen."
+              ],
+              "key": "setup::add-your-linkedin-lands-on-the-adding-step"
             }
           ]
         },
@@ -1590,6 +1600,27 @@
                 "Set a tier's search allowance high enough that the tier loses money.",
                 "Confirm the health card flags that tier with a plain-language explanation."
               ]
+            },
+            {
+              "sev": "should",
+              "title": "The design lab makes, saves, and paints palettes",
+              "good": "Make a palette has colour/range/punch sliders; click locks a swatch, double-click opens the colour wheel; Keep it and Save this palette store locally without shipping; Edit colours in the website editor paints the live frame per palette or per element.",
+              "steps": [
+                "Build a palette, lock one swatch, shuffle: locked colour survives.",
+                "Save it, reload: it's still listed.",
+                "Open Website preview and editor, Edit colours: click a palette, then click one element and recolour just it."
+              ],
+              "key": "trial-admin::the-design-lab-makes-saves-and-paints-palettes"
+            },
+            {
+              "sev": "should",
+              "title": "Admin remembers which tab you were on",
+              "good": "Refreshing /admin stays on the same tab (the tab lives in the URL hash), instead of snapping back to Insights.",
+              "steps": [
+                "Open Design, refresh: still on Design.",
+                "Share the URL with the hash: it opens on that tab."
+              ],
+              "key": "trial-admin::admin-remembers-which-tab-you-were-on"
             }
           ]
         },
@@ -1680,6 +1711,65 @@
                 "Open Settings and confirm the group labels are present and each card sits under a sensible one."
               ],
               "key": "feel::settings-reads-as-organized-categories"
+            },
+            {
+              "sev": "must",
+              "title": "The brown is gone everywhere except the logo",
+              "good": "Every screen is whites and bright pops now: cool navy ink on white, no beige surfaces, no espresso dark mode. The dog logo keeps its brown, and brown may appear only as the neutral for things outside the five idea colours.",
+              "steps": [
+                "Click through every tab in light AND dark mode.",
+                "Any beige panel, brown button, or espresso dark surface is a fail."
+              ],
+              "key": "feel::the-brown-is-gone-everywhere-except-the-logo"
+            },
+            {
+              "sev": "must",
+              "title": "Colour follows meaning",
+              "good": "Active nav pills wear their tab's idea colour: Scout/Projects navy, Manual/Finds/Spreadsheet teal, Templates/Profile magenta, Team violet. There is deliberately no single main accent.",
+              "steps": [
+                "Click through the nav and check each active pill's colour against the idea map.",
+                "Check the phone bottom bar does the same."
+              ],
+              "key": "feel::colour-follows-meaning"
+            },
+            {
+              "sev": "should",
+              "title": "The Scout stage deals a new colour every visit",
+              "good": "Refreshing or reopening the Scout tab always shows a DIFFERENT deep tone than last time (never repeats back-to-back), with a second colour on the results shelf. All deals are dark and muted; nothing bright enough to be unpleasant.",
+              "steps": [
+                "Refresh the Scout tab five times; the room colour must change every time.",
+                "Confirm white text stays readable on every deal."
+              ],
+              "key": "feel::the-scout-stage-deals-a-new-colour-every-visit"
+            },
+            {
+              "sev": "should",
+              "title": "Dashboard: aura blobs, grain on the ground only",
+              "good": "The dashboard ground is white with soft blended colour blobs and film grain, and the grain textures ONLY the background: buttons, cards, and text are clean. The ground runs all the way to the footer.",
+              "steps": [
+                "Look closely at the Start scouting button and stat card: no speckle.",
+                "Scroll to the bottom: no hard cutoff above the footer."
+              ],
+              "key": "feel::dashboard-aura-blobs-grain-on-the-ground-only"
+            },
+            {
+              "sev": "should",
+              "title": "Dashboard is a mosaic, not rows",
+              "good": "On a wide screen, sections pair up side by side sharing horizontal lines (learned + preferences, activity + what-makes-yours-special) with no lakes of empty space. Below 1280px everything stacks.",
+              "steps": [
+                "View at full width and at laptop width.",
+                "A section sitting alone with a huge empty area beside it is a fail."
+              ],
+              "key": "feel::dashboard-is-a-mosaic-not-rows"
+            },
+            {
+              "sev": "could",
+              "title": "Empty sections stay off the page",
+              "good": "You vs the community does not render at all until enough people share the use case; no placeholder card promising future data.",
+              "steps": [
+                "With a small cohort, confirm the section is absent entirely."
+              ],
+              "key": "feel::empty-sections-stay-off-the-page"
             }
           ]
         }
