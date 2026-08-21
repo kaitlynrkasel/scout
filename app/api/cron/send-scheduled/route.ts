@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, gmailThreadsWithReplies } from "@/lib/gmail";
 import { outlookSendOrDraft, outlookConversationsWithReplies } from "@/lib/outlook";
 import { signUnsub } from "@/lib/unsubscribe";
+import { sendToUser } from "@/lib/push";
 
 // Public base URL for one-click unsubscribe links from the cron (no request
 // origin available here). Falls back to the production domain.
@@ -173,6 +174,15 @@ export async function GET(req: NextRequest) {
       // blob, updating that safely is a big diff, so we skip it here. On
       // next login the client's own status-badge on that find can be
       // re-checked, or the send tracker (Gmail thread id) will catch replies.
+
+      // Tell them it went, since a scheduled send fires with the app closed
+      // by definition. Swallowed on failure inside sendToUser.
+      void sendToUser(String(row.user_id), {
+        title: row.is_followup ? "Follow-up sent" : "Message sent",
+        body: `Your message to ${String(row.to_addr || "them")} just went out.`,
+        url: "/app",
+        tag: "sent",
+      });
 
       sent++;
       results.push({ id, status: "sent" });

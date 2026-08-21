@@ -10,6 +10,7 @@ import { draftFor } from "@/lib/draft";
 import { sharedPipelineExclusions, addSharedFinds } from "@/lib/teams";
 import { searchPeopleIndex, upsertPeopleIndex } from "@/lib/peopleIndex";
 import type { Opportunity } from "@/lib/types";
+import { sendToUser } from "@/lib/push";
 
 export const runtime = "nodejs";
 export const maxDuration = 300; // discover chains several Tavily + Claude passes
@@ -180,6 +181,19 @@ export async function GET(req: NextRequest) {
           }))
         );
       }
+
+      // A notification for finds that landed while Scout was closed — the
+      // whole point of the installed app. Independent of the email digest:
+      // someone can want a buzz without wanting mail. Never allowed to break
+      // the run, so failures are swallowed inside sendToUser.
+      void sendToUser(String(s.user_id), {
+        title: `${opps.length} new ${opps.length === 1 ? "find" : "finds"}`,
+        body: `Scout found ${opps.length === 1 ? "someone" : "people"} for "${String(
+          s.label || s.goal
+        ).slice(0, 60)}". Tap to review.`,
+        url: "/app",
+        tag: "new-finds",
+      });
 
       // "Auto-emails" is optional: when off, the finds still land in Finds
       // (seeded above) but we skip the digest.
