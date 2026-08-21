@@ -16,9 +16,9 @@
   --c-ink: 31 37 48; /* cool near-navy ink */
   --c-body: 77 85 99;
   --c-muted: 112 120 134; /* holds 4.5:1 on white */
-  --c-brown: 94 105 255; /* cobalt — primary accent (the Searching colour) */
-  --c-brown-deep: 58 65 217; /* hover / links */
-  --c-brown-tint: 231 233 255;
+  --c-brown: 25 69 94; /* Scout navy — the brand accent */
+  --c-brown-deep: 16 44 60; /* hover / links */
+  --c-brown-tint: 223 233 240;
   --c-clay: 199 203 232;
   --c-coffee: 30 34 44;
   --c-success: 111 122 91; /* muted olive — positive signals only */
@@ -38,8 +38,8 @@
   --c-surface-2: 247 248 250; /* light sidebar / inset */
   --c-warm-bg: 245 246 249; /* hover fill */
   --c-warm-border: 229 231 238; /* soft hairline */
-  --brand-a: #5e69ff;
-  --brand-b: #3a41d9;
+  --brand-a: #2e5a78;
+  --brand-b: #19455e;
 }
 
 html.dark {
@@ -49,9 +49,9 @@ html.dark {
   --c-ink: 235 239 245;
   --c-body: 178 186 198;
   --c-muted: 138 146 158;
-  --c-brown: 138 146 255;
-  --c-brown-deep: 172 178 255;
-  --c-brown-tint: 42 45 84;
+  --c-brown: 122 164 196;
+  --c-brown-deep: 168 200 224;
+  --c-brown-tint: 26 43 56;
   --c-clay: 84 92 118;
   --c-coffee: 235 239 245;
   --c-success: 150 160 120;
@@ -70,8 +70,8 @@ html.dark {
   --c-surface-2: 30 33 42;
   --c-warm-bg: 36 40 50;
   --c-warm-border: 53 58 71;
-  --brand-a: #7d86ff;
-  --brand-b: #5e69ff;
+  --brand-a: #4a7ea0;
+  --brand-b: #2e5a78;
 }
 
 body {
@@ -221,9 +221,9 @@ select.scout-select {
    layer the chevron OVER the brand gradient here (and keep a solid navy
    fallback) to guarantee the picker stays dark and its default format shows. */
 select.scout-select-light {
-  background-color: #3a41d9;
+  background-color: #19455e;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"),
-    linear-gradient(120deg, #5e69ff 0%, #3a41d9 100%);
+    linear-gradient(120deg, #2e5a78 0%, #19455e 100%);
   background-repeat: no-repeat, no-repeat;
   background-position: right 0.5rem center, center;
   background-size: 16px 16px, cover;
@@ -240,8 +240,8 @@ select.scout-select-light {
    dark-mode override so the whole thing follows the theme.
    ========================================================================== */
 :root {
-  --su-terra: #5e69ff; /* cobalt accent */
-  --su-terra-deep: #3a41d9; /* deep cobalt — text / links */
+  --su-terra: #19455e; /* Scout navy accent */
+  --su-terra-deep: #102c3c; /* deep navy — text / links */
   --su-tan: #f1efeb; /* light stat band */
   --su-tan-line: #e4e0d8;
   --su-ghost: rgba(56, 50, 43, 0.05); /* ghost outline-word stroke */
