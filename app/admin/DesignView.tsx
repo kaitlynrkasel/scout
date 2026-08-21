@@ -302,6 +302,8 @@ export default function DesignView({
   // Inside the editor overlay: the live site first, blocks only behind Edit.
   const [editorView, setEditorView] = useState<"preview" | "edit">("preview");
   const [previewPath, setPreviewPath] = useState<"/" | "/app">("/");
+  const liveFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
   const [copied, setCopied] = useState(false);
@@ -474,7 +476,7 @@ export default function DesignView({
                 </button>
               ))}
             </div>
-            {editorView === "preview" ? (
+            {true ? (
               <div className="inline-flex gap-1">
                 {(
                   [
@@ -493,10 +495,11 @@ export default function DesignView({
                   </button>
                 ))}
               </div>
-            ) : (
-              <span className="hidden text-xs text-body/55 sm:block">
-                Drag blocks, edit every color and word on the right. Publish
-                saves here and copies JSON; the live site is not touched.
+            ) : null}
+            {editorView === "edit" && (
+              <span className="hidden text-xs text-body/55 lg:block">
+                Click anything in the page to select it; drag to move it; edit
+                it on the right. Changes preview here only.
               </span>
             )}
             <button
@@ -506,15 +509,19 @@ export default function DesignView({
               Close
             </button>
           </div>
-          <div className="min-h-0 flex-1">
-            {editorView === "preview" ? (
-              <iframe
-                src={previewPath}
-                title="Scout, live"
-                className="h-full w-full border-0 bg-cream"
+          <div className="flex min-h-0 flex-1">
+            <iframe
+              ref={liveFrameRef}
+              src={previewPath}
+              title="Scout, live"
+              className="h-full min-w-0 flex-1 border-0 bg-cream"
+            />
+            {editorView === "edit" && (
+              <LiveEditPanel
+                frameRef={liveFrameRef}
+                changes={liveChanges}
+                setChanges={setLiveChanges}
               />
-            ) : (
-              <PageEditor fill />
             )}
           </div>
         </div>
@@ -1121,6 +1128,284 @@ function PalettePicker({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+
+/* ---------------- In-place live editor ----------------
+ * Edits the REAL page in the preview iframe, right where you are. Same-origin,
+ * so the parent can reach the document: hover outlines anything, click selects
+ * it, drag moves it (a transform, so layout math stays honest), and the panel
+ * edits its text and styles inline. Every change is recorded as
+ * selector + property + value and copies out as a brief; a reload of the
+ * frame discards the preview, which is the point, the live site is never
+ * written from here. */
+interface LiveChange {
+  selector: string;
+  prop: string;
+  value: string;
+  label: string;
+}
+
+function cssPath(el: Element): string {
+  if ((el as HTMLElement).id) return `#${(el as HTMLElement).id}`;
+  const parts: string[] = [];
+  let cur: Element | null = el;
+  while (cur && cur.tagName.toLowerCase() !== "body" && parts.length < 6) {
+    const tag = cur.tagName.toLowerCase();
+    const parent: Element | null = cur.parentElement;
+    if (!parent) break;
+    const sibs = Array.from(parent.children).filter((c) => c.tagName === cur!.tagName);
+    parts.unshift(sibs.length > 1 ? `${tag}:nth-of-type(${sibs.indexOf(cur) + 1})` : tag);
+    cur = parent;
+  }
+  return `body > ${parts.join(" > ")}`;
+}
+
+export function LiveEditPanel({
+  frameRef,
+  changes,
+  setChanges,
+}: {
+  frameRef: React.RefObject<HTMLIFrameElement | null>;
+  changes: LiveChange[];
+  setChanges: React.Dispatch<React.SetStateAction<LiveChange[]>>;
+}) {
+  const [sel, setSel] = useState<HTMLElement | null>(null);
+  const [, bump] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const selRef = useRef<HTMLElement | null>(null);
+  selRef.current = sel;
+
+  const record = (el: HTMLElement, prop: string, value: string) => {
+    const selector = cssPath(el);
+    const label = (el.innerText || el.tagName).trim().slice(0, 40);
+    setChanges((prev) => [
+      ...prev.filter((c) => !(c.selector === selector && c.prop === prop)),
+      { selector, prop, value, label },
+    ]);
+  };
+
+  // Wire the iframe document: outline on hover, select on click, drag to move.
+  useEffect(() => {
+    const frame = frameRef.current;
+    const doc = frame?.contentDocument;
+    if (!doc) return;
+    const OUTLINE = "2px solid #377ec0";
+    let hovered: HTMLElement | null = null;
+    let drag: { el: HTMLElement; sx: number; sy: number; ox: number; oy: number } | null = null;
+
+    const readOffset = (el: HTMLElement): [number, number] => {
+      const m = /translate\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/.exec(
+        el.style.transform || ""
+      );
+      return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0, 0];
+    };
+
+    const over = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t || t === doc.body || t === hovered) return;
+      if (hovered && hovered !== selRef.current) hovered.style.outline = "";
+      hovered = t;
+      if (t !== selRef.current) t.style.outline = OUTLINE;
+    };
+    const out = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t && t !== selRef.current) t.style.outline = "";
+      if (hovered === t) hovered = null;
+    };
+    const down = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t || t === doc.body) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (selRef.current && selRef.current !== t) selRef.current.style.outline = "";
+      setSel(t);
+      t.style.outline = "3px solid #f7891f";
+      const [ox, oy] = readOffset(t);
+      drag = { el: t, sx: e.clientX, sy: e.clientY, ox, oy };
+    };
+    const move = (e: MouseEvent) => {
+      if (!drag) return;
+      const dx = e.clientX - drag.sx;
+      const dy = e.clientY - drag.sy;
+      if (Math.abs(dx) + Math.abs(dy) < 3) return;
+      drag.el.style.transform = `translate(${drag.ox + dx}px, ${drag.oy + dy}px)`;
+    };
+    const up = () => {
+      if (drag) {
+        const [x, y] = readOffset(drag.el);
+        if (x || y) record(drag.el, "transform", `translate(${x}px, ${y}px)`);
+        bump((n) => n + 1);
+      }
+      drag = null;
+    };
+    const kill = (e: Event) => {
+      // In edit mode a click must select, never navigate or submit.
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    doc.addEventListener("mouseover", over, true);
+    doc.addEventListener("mouseout", out, true);
+    doc.addEventListener("mousedown", down, true);
+    doc.addEventListener("mousemove", move, true);
+    doc.addEventListener("mouseup", up, true);
+    doc.addEventListener("click", kill, true);
+    doc.addEventListener("submit", kill, true);
+    return () => {
+      doc.removeEventListener("mouseover", over, true);
+      doc.removeEventListener("mouseout", out, true);
+      doc.removeEventListener("mousedown", down, true);
+      doc.removeEventListener("mousemove", move, true);
+      doc.removeEventListener("mouseup", up, true);
+      doc.removeEventListener("click", kill, true);
+      doc.removeEventListener("submit", kill, true);
+      if (hovered) hovered.style.outline = "";
+      if (selRef.current) selRef.current.style.outline = "";
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameRef, frameRef.current?.contentDocument]);
+
+  const style = sel ? (frameRef.current?.contentWindow?.getComputedStyle(sel) as CSSStyleDeclaration | undefined) : undefined;
+  const apply = (prop: string, value: string) => {
+    if (!sel) return;
+    (sel.style as any)[prop] = value;
+    record(sel, prop, value);
+    bump((n) => n + 1);
+  };
+  const toHex = (rgb: string): string => {
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb || "");
+    if (!m) return "#000000";
+    return (
+      "#" + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, "0")).join("")
+    );
+  };
+
+  return (
+    <div className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-warm-border bg-surface p-4">
+      {!sel ? (
+        <p className="text-sm leading-relaxed text-body/70">
+          Click anything in the page to select it. Drag it to move it. Its text
+          and styles open here.
+        </p>
+      ) : (
+        <>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">Selected</div>
+          <div className="mt-1 truncate rounded-lg bg-warm-bg px-2.5 py-1.5 text-xs font-semibold text-ink">
+            {(sel.innerText || sel.tagName).trim().slice(0, 46) || sel.tagName}
+          </div>
+
+          {sel.children.length === 0 && (
+            <>
+              <div className="mt-4 text-[11px] font-bold uppercase tracking-wider text-body/60">Text</div>
+              <textarea
+                defaultValue={sel.innerText}
+                key={cssPath(sel)}
+                onBlur={(e) => {
+                  if (!sel) return;
+                  sel.innerText = e.target.value;
+                  record(sel, "text", e.target.value);
+                }}
+                rows={3}
+                className="mt-1 w-full resize-y rounded-lg border border-warm-border px-2.5 py-2 text-sm text-ink outline-none focus:border-brown"
+              />
+            </>
+          )}
+
+          {(
+            [
+              ["Text color", "color"],
+              ["Background", "backgroundColor"],
+            ] as const
+          ).map(([label, prop]) => (
+            <div key={prop} className="mt-4">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">{label}</div>
+              <input
+                type="color"
+                value={toHex(style?.[prop as any] as string)}
+                onChange={(e) => apply(prop, e.target.value)}
+                className="mt-1 h-9 w-full cursor-pointer rounded-lg border border-warm-border bg-transparent"
+              />
+            </div>
+          ))}
+
+          <div className="mt-4">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+              Font size: {parseInt(String(style?.fontSize || "16"), 10)}px
+            </div>
+            <input
+              type="range"
+              min={9}
+              max={72}
+              value={parseInt(String(style?.fontSize || "16"), 10)}
+              onChange={(e) => apply("fontSize", `${e.target.value}px`)}
+              className="mt-1 w-full accent-brown"
+            />
+          </div>
+          <div className="mt-3">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+              Corner radius: {parseInt(String(style?.borderRadius || "0"), 10)}px
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={40}
+              value={parseInt(String(style?.borderRadius || "0"), 10)}
+              onChange={(e) => apply("borderRadius", `${e.target.value}px`)}
+              className="mt-1 w-full accent-brown"
+            />
+          </div>
+          <button
+            onClick={() => apply("display", "none")}
+            className="mt-4 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-danger/10 hover:text-danger"
+          >
+            Hide this element
+          </button>
+        </>
+      )}
+
+      <div className="mt-auto border-t border-warm-border pt-3">
+        <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
+          Changes ({changes.length})
+        </div>
+        <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto text-[11px] text-body/70">
+          {changes.slice(-8).map((c, i) => (
+            <li key={i} className="truncate">
+              {c.label || c.selector}: {c.prop}
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 flex gap-2">
+          <button
+            onClick={() => {
+              const brief = [
+                "Scout live-preview edits",
+                ...changes.map((c) => `${c.selector}\n  ${c.prop}: ${c.value}`),
+              ].join("\n");
+              try {
+                navigator.clipboard.writeText(brief);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              } catch {}
+            }}
+            disabled={!changes.length}
+            className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+          >
+            {copied ? "Copied" : "Copy brief"}
+          </button>
+          <button
+            onClick={() => {
+              setChanges([]);
+              setSel(null);
+              frameRef.current?.contentWindow?.location.reload();
+            }}
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Reset page
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
