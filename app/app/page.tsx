@@ -6057,6 +6057,42 @@ function ScoutTool({
   // Ask Scout to decompose the goal (no searching). Returns a blended
   // understanding % (model read, a content floor so it never starts at 0, and
   // the approve/deny signal), plus any NEW questions. Best-effort.
+  // Where the work happens decides who qualifies for anything role-shaped, and
+  // it is the single thing people most often leave out. The planner prompt asks
+  // for this question, but a prompt is a request, not a guarantee — a detailed
+  // goal ("internships in entertainment business, film or animation, fall 2026,
+  // no music industry") reads as well-specified, scores high, and sails past
+  // without it ever being asked. So Scout asks in code instead: if the goal is
+  // role-shaped and nothing in it or the profile settles remote vs in person,
+  // this question goes in whatever the model returned.
+  // Deliberately narrow. "employees", "opening" and "applications" all appear in
+  // goals that have nothing to do with being hired ("companies under 500
+  // employees", "opening a second location"), and a false positive here stops a
+  // search to ask a question that makes no sense for it.
+  const ROLE_SHAPED_RE =
+    /\b(intern(ship)?s?|jobs?|roles?|positions?|hiring|hire|recruit\w*|full[-\s]?time|part[-\s]?time|entry[-\s]?level|new\s?grad|co[-\s]?op|fellowship|residency|vacanc\w*)\b/i;
+  const WORK_ARRANGEMENT_RE =
+    /\b(remote|hybrid|on[-\s]?site|in[-\s]person|virtual|work\s?from\s?home|wfh|telecommut\w*|relocat\w*)\b/i;
+  const WORK_ARRANGEMENT_QUESTION = {
+    question: "Should this be online or in person?",
+    options: ["Remote / online", "In person", "Hybrid", "Either is fine"],
+  };
+  // Already answered once for this search? Never ask twice.
+  function arrangementAlreadyAsked(asked: string[], answers: string): boolean {
+    return (
+      asked.some((q) => /online or in person|remote|on[-\s]?site|hybrid/i.test(q)) ||
+      WORK_ARRANGEMENT_RE.test(answers || "")
+    );
+  }
+  function needsWorkArrangement(asked: string[], answers: string): boolean {
+    const goalText = `${goal} ${examplesBlock()}`;
+    if (!ROLE_SHAPED_RE.test(goalText)) return false;
+    if (WORK_ARRANGEMENT_RE.test(goalText)) return false;
+    // The profile can settle it too ("open to remote", "Seattle only").
+    if (WORK_ARRANGEMENT_RE.test(aboutForProject(activeProject))) return false;
+    return !arrangementAlreadyAsked(asked, answers);
+  }
+
   async function fetchUnderstanding(clarifyText = "", asked: string[] = []) {
     const aboutForApi = aboutForProject(activeProject);
     // Fold in what recent passes revealed, so the planner can raise a genuinely
@@ -6119,12 +6155,33 @@ function ScoutTool({
       // understands about this goal right now, and it's the one the caller has
       // to fall back on once there are open questions: gating on a blend that
       // remembers an old 100 would bury every question raised from then on.
-      return { understanding: blended, modelUnderstanding: modelU, questions, plan: d.plan ?? null };
+      // Lead with the work-arrangement question when it's missing, and drop any
+      // near-duplicate the model produced so it isn't asked twice in a row.
+      const mustAskArrangement = needsWorkArrangement(asked, clarifyText);
+      const finalQuestions = mustAskArrangement
+        ? [
+            WORK_ARRANGEMENT_QUESTION,
+            ...questions.filter(
+              (q: { question: string }) => !WORK_ARRANGEMENT_RE.test(q.question)
+            ),
+          ]
+        : questions;
+      return {
+        understanding: blended,
+        modelUnderstanding: modelU,
+        questions: finalQuestions,
+        mustAskArrangement,
+        plan: d.plan ?? null,
+      };
     } catch {
+      const mustAskArrangement = needsWorkArrangement(asked, clarifyText);
       return {
         understanding: 100,
         modelUnderstanding: 100,
-        questions: [] as { question: string; options: string[] }[],
+        questions: mustAskArrangement
+          ? [WORK_ARRANGEMENT_QUESTION]
+          : ([] as { question: string; options: string[] }[]),
+        mustAskArrangement,
         plan: null,
       };
     }
@@ -6159,7 +6216,12 @@ function ScoutTool({
       priorAsked,
     });
     const cached = understoodCache.current.get(cacheKey);
-    if (cached && cached.sig === sig && cached.understanding >= UNDERSTAND_GATE) {
+    if (
+      cached &&
+      cached.sig === sig &&
+      cached.understanding >= UNDERSTAND_GATE &&
+      !needsWorkArrangement(priorAsked, priorAnswers)
+    ) {
       flashUnderstood();
       await runDiscover(cached.plan, priorAnswers);
       return;
@@ -6172,13 +6234,20 @@ function ScoutTool({
       // once scored 100 would sit on it forever, and the card would claim 100%
       // while asking what it still doesn't know. So when there ARE questions,
       // both the gate and the number fall back to Scout's current read.
-      const score = u.questions.length
+      let score = u.questions.length
         ? Math.min(u.understanding, u.modelUnderstanding)
         : u.understanding;
+      // A question Scout is asking IS a gap, so the number can't read 100%
+      // beside it. The planner never counted this one (that's why it has to be
+      // forced), so cap the score below the gate to match what's on screen.
+      if (u.mustAskArrangement) score = Math.min(score, UNDERSTAND_GATE - 5);
       // Remember the (cumulative) understanding so the next run shows the real %.
       persistUnderstanding({ understanding: score });
-      // Cache a fully-understood pass so an unchanged re-run is free.
-      if (score >= UNDERSTAND_GATE || u.questions.length === 0) {
+      // Cache a fully-understood pass so an unchanged re-run is free. The
+      // arrangement question overrides the score outright: a goal can be
+      // detailed enough to read as fully understood and still not say where the
+      // work happens, which is the exact case that slipped through before.
+      if (!u.mustAskArrangement && (score >= UNDERSTAND_GATE || u.questions.length === 0)) {
         understoodCache.current.set(cacheKey, {
           sig,
           plan: u.plan,
