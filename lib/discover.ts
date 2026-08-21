@@ -892,6 +892,18 @@ const PLATFORM_SWEEPS: {
     domains: ["x.com"],
     when: /\b(creator|creators|influencer|influencers|commentator|commentators|thought leader|community|public figure|journalist|founder|founders|investor|investors|vc)\b/i,
   },
+  {
+    // Reddit is where niches recommend each other by name. A thread titled
+    // "who's the best wedding planner in LA" is a container page listing the
+    // exact vendors the goal wants, and the multi-person extractor already
+    // reads container pages. The profiles themselves carry no contact routes,
+    // so the value is the NAMES a thread surfaces; the engine's usual passes
+    // then find each one's own site and route.
+    key: "reddit",
+    label: "community recommendation threads",
+    domains: ["reddit.com"],
+    when: /\b(recommend|recommendation|recommendations|vendors?|niche|community|communities|local|indie|independent|freelance|freelancers?|small business|word of mouth|best .{0,24}\b(in|near|around)\b)\b/i,
+  },
 ];
 
 export function platformSweeps(

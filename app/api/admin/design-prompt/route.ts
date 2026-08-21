@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not authorized." }, { status: 403 });
   }
   try {
-    const { prompt, scheme, rainbow } = await req.json();
+    const { prompt, scheme, rainbow, style } = await req.json();
     const p = String(prompt || "").trim().slice(0, 600);
     if (!p) return NextResponse.json({ error: "Say what should change." }, { status: 400 });
     if (!process.env.ANTHROPIC_API_KEY) {
@@ -27,15 +27,21 @@ export async function POST(req: NextRequest) {
 
     const sys =
       "You are the design lead for Scout, a warm, editorial outreach tool. Given its current " +
-      "color tokens and one instruction, propose new tokens.\n" +
-      'Return ONLY JSON: {"scheme": {<same keys as given, hex values>}, "rainbow": [6 hex], "summary": string}.\n' +
-      "Rules: keep every scheme key that was given, change only what the instruction calls for, " +
-      "keep sufficient contrast (the stage token must carry light text, the canvas dark text), " +
-      "nothing neon unless asked, and the work-area token stays a slightly darker relative of the " +
-      "stage token. summary = one plain sentence of what changed and why, no em dashes.";
+      "design tokens and one instruction, propose changes. The instruction may be about ANY part " +
+      "of design: color, type, spacing, size, shape, layout.\n" +
+      'Return ONLY JSON: {"scheme": {<same keys as given, hex>}, "rainbow": [6 hex], ' +
+      '"style": {"radiusPx": number 4-24, "spacing": "compact"|"cozy"|"roomy", "navIconPx": number 16-30, ' +
+      '"displayWeight": 600|700|800, "buttonShape": "pill"|"rounded", "shadow": "none"|"soft"|"strong"}, ' +
+      '"notes": [strings], "summary": string}.\n' +
+      "Rules: change only what the instruction calls for; return scheme/rainbow/style keys even when " +
+      "unchanged (echo the current values). Colors: keep contrast (the stage token carries light text, " +
+      "the canvas dark text), nothing neon unless asked, work area a darker relative of the stage. " +
+      "notes = every part of the instruction the tokens above CANNOT express (a moved section, a new " +
+      "element, wording), phrased as concrete engineering instructions; empty array when the tokens " +
+      "cover it fully. summary = one plain sentence of what changed. Never use an em dash.";
     const user = `CURRENT SCHEME: ${JSON.stringify(scheme)}\nCURRENT RAINBOW: ${JSON.stringify(
       rainbow
-    )}\nINSTRUCTION: ${p}`;
+    )}\nCURRENT STYLE: ${JSON.stringify(style || {})}\nINSTRUCTION: ${p}`;
     const parsed: any = parseJsonLoose(await claudeJson(sys, user, 700));
     const hex = /^#[0-9a-f]{6}$/i;
     const outScheme: Record<string, string> = {};
@@ -46,15 +52,31 @@ export async function POST(req: NextRequest) {
       .filter((c: any) => typeof c === "string" && hex.test(c.trim()))
       .map((c: string) => c.trim().toLowerCase())
       .slice(0, 6);
-    if (Object.keys(outScheme).length < 3) {
-      return NextResponse.json(
-        { error: "Could not turn that into a concrete scheme. Try more specific wording." },
-        { status: 422 }
-      );
-    }
+    // Style tokens, validated to the preview's vocabulary.
+    const st = parsed?.style || {};
+    const clampN = (v: any, lo: number, hi: number, dflt: number) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? Math.min(hi, Math.max(lo, Math.round(n))) : dflt;
+    };
+    const outStyle = {
+      radiusPx: clampN(st.radiusPx, 4, 24, 16),
+      spacing: ["compact", "cozy", "roomy"].includes(st.spacing) ? st.spacing : "cozy",
+      navIconPx: clampN(st.navIconPx, 16, 30, 21),
+      displayWeight: [600, 700, 800].includes(Number(st.displayWeight))
+        ? Number(st.displayWeight)
+        : 700,
+      buttonShape: ["pill", "rounded"].includes(st.buttonShape) ? st.buttonShape : "pill",
+      shadow: ["none", "soft", "strong"].includes(st.shadow) ? st.shadow : "soft",
+    };
+    const notes = (Array.isArray(parsed?.notes) ? parsed.notes : [])
+      .map((n: any) => noDash(String(n || "")).trim())
+      .filter(Boolean)
+      .slice(0, 6);
     return NextResponse.json({
-      scheme: outScheme,
+      scheme: Object.keys(outScheme).length >= 3 ? outScheme : null,
       rainbow: outRainbow.length === 6 ? outRainbow : null,
+      style: outStyle,
+      notes,
       summary: noDash(String(parsed?.summary || "")).slice(0, 300),
     });
   } catch (e: any) {

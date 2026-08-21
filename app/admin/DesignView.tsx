@@ -290,6 +290,15 @@ export default function DesignView({
   const [copied, setCopied] = useState(false);
   const [typedColors, setTypedColors] = useState("");
   const [sourceNote, setSourceNote] = useState("");
+  const [style, setStyle] = useState({
+    radiusPx: 16,
+    spacing: "cozy" as "compact" | "cozy" | "roomy",
+    navIconPx: 21,
+    displayWeight: 700,
+    buttonShape: "pill" as "pill" | "rounded",
+    shadow: "soft" as "none" | "soft" | "strong",
+  });
+  const [designNotes, setDesignNotes] = useState<string[]>([]);
   const [designPrompt, setDesignPrompt] = useState("");
   const [promptBusy, setPromptBusy] = useState(false);
   const [promptSummary, setPromptSummary] = useState("");
@@ -308,12 +317,14 @@ export default function DesignView({
       const r = await fetch("/api/admin/design-prompt", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ prompt: pr, scheme, rainbow }),
+        body: JSON.stringify({ prompt: pr, scheme, rainbow, style }),
       });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j?.error || "Could not read that instruction.");
-      setScheme((prev) => ({ ...prev, ...j.scheme }));
+      if (j.scheme) setScheme((prev) => ({ ...prev, ...j.scheme }));
       if (j.rainbow) setRainbow(j.rainbow);
+      if (j.style) setStyle(j.style);
+      setDesignNotes(Array.isArray(j.notes) ? j.notes : []);
       setSourceNote(`prompt: ${pr.slice(0, 40)}`);
       setPromptSummary(j.summary || "Applied to the preview.");
     } catch (e: any) {
@@ -335,8 +346,13 @@ export default function DesignView({
       "Tokens (apply in app/globals.css + tailwind.config.ts):",
       ...Object.entries(scheme).map(([k, v]) => `  ${k}: ${v}`),
       `  Rainbow: ${rainbow.join(", ")}`,
+      `  Corner radius: ${style.radiusPx}px, spacing: ${style.spacing}, nav icons: ${style.navIconPx}px,`,
+      `  display weight: ${style.displayWeight}, buttons: ${style.buttonShape}, shadows: ${style.shadow}`,
+      ...(designNotes.length
+        ? ["", "Beyond tokens (implement by hand):", ...designNotes.map((n) => `  - ${n}`)]
+        : []),
       "",
-      "Surfaces affected: Scout stage, work area, canvas, cards, tiles, monograms.",
+      "Surfaces affected: Scout stage, work area, canvas, cards, tiles, monograms, nav.",
     ]
       .filter(Boolean)
       .join("\n");
@@ -376,6 +392,16 @@ export default function DesignView({
   }, [scheme, rainbow]);
 
   const s = (k: string) => scheme[k] || DEFAULT_SCHEME[k];
+  // Style tokens rendered into the preview: radius, spacing, shadows, shapes.
+  const pad = style.spacing === "compact" ? 16 : style.spacing === "roomy" ? 32 : 24;
+  const cardRadius = style.radiusPx;
+  const btnRadius = style.buttonShape === "pill" ? 999 : Math.min(12, style.radiusPx);
+  const shadowCss =
+    style.shadow === "none"
+      ? "none"
+      : style.shadow === "strong"
+        ? "0 14px 34px rgb(0 0 0 / 0.22)"
+        : "0 6px 18px rgb(0 0 0 / 0.10)";
   const ordered = [...ERAS].sort(
     (a, b) => Number(pins.includes(b.id)) - Number(pins.includes(a.id))
   );
@@ -384,10 +410,11 @@ export default function DesignView({
     <div className="space-y-10">
       {/* ---------------- Playground ---------------- */}
       <section>
-        <h2 className="text-lg font-bold text-ink">Try a color scheme</h2>
+        <h2 className="text-lg font-bold text-ink">Try a design</h2>
         <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
-          Edit the tokens and the preview re-renders live. Nothing here touches
-          the real app; when a scheme feels right, copy it out and hand it over.
+          Colors, corners, spacing, type, icon sizes: describe a change or edit
+          the tokens and the preview re-renders live. Nothing here touches the
+          real app; when it feels right, Implement copies the exact brief.
         </p>
         {/* Prompt a change: describe it, preview it, then hand it over. */}
         <div className="mt-4 rounded-2xl border border-warm-border bg-surface p-4">
@@ -418,6 +445,18 @@ export default function DesignView({
           </div>
           {promptSummary && (
             <p className="mt-2 text-xs leading-relaxed text-body/70">{promptSummary}</p>
+          )}
+          {designNotes.length > 0 && (
+            <ul className="mt-1.5 space-y-1 text-xs leading-relaxed text-body/70">
+              {designNotes.map((n, i) => (
+                <li key={i} className="flex gap-2">
+                  <span className="mt-1.5 h-1 w-1 shrink-0 rounded-full bg-brown" />
+                  <span>
+                    <b className="text-ink">Needs a hand:</b> {n}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
@@ -520,7 +559,32 @@ export default function DesignView({
 
           {/* Live preview: the stage, then the work area with a find card. */}
           <div className="overflow-hidden rounded-2xl border border-warm-border shadow-soft">
-            <div style={{ background: s("Stage brown"), color: s("Cream") }} className="p-6">
+            <div style={{ background: s("Stage brown"), color: s("Cream"), padding: pad }}>
+              {/* Nav strip: menu icons at the token size, so "make the symbols
+                  bigger" is a change you can SEE here. */}
+              <div className="mb-4 flex items-center gap-4">
+                {["Dashboard", "Scout", "Finds", "Projects"].map((n, i) => (
+                  <span key={n} className={`flex items-center gap-1.5 text-xs font-semibold ${i === 1 ? "opacity-100" : "opacity-55"}`}>
+                    <svg width={style.navIconPx} height={style.navIconPx} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                      {i === 0 ? (
+                        <>
+                          <rect x="3" y="3" width="7" height="9" rx="1.5" />
+                          <rect x="14" y="3" width="7" height="5" rx="1.5" />
+                          <rect x="14" y="12" width="7" height="9" rx="1.5" />
+                          <rect x="3" y="16" width="7" height="5" rx="1.5" />
+                        </>
+                      ) : i === 1 ? (
+                        <path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-3.3A8.4 8.4 0 1 1 21 11.5Z" />
+                      ) : i === 2 ? (
+                        <path d="M20 6 9 17l-5-5" />
+                      ) : (
+                        <path d="M3 7.5A2.5 2.5 0 0 1 5.5 5h3.2l1.8 2.2h8A2.5 2.5 0 0 1 21 9.7v7.8A2.5 2.5 0 0 1 18.5 20h-13A2.5 2.5 0 0 1 3 17.5z" />
+                      )}
+                    </svg>
+                    {n}
+                  </span>
+                ))}
+              </div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-[0.14em] opacity-60">
                   Scouting for
@@ -549,16 +613,21 @@ export default function DesignView({
                 )}
               </div>
               <span
-                className="mt-4 inline-block rounded-full px-6 py-2 text-sm font-bold"
-                style={{ background: s("Cream"), color: s("Stage brown") }}
+                className="mt-4 inline-block px-6 py-2 text-sm"
+                style={{
+                  background: s("Cream"),
+                  color: s("Stage brown"),
+                  borderRadius: btnRadius,
+                  fontWeight: style.displayWeight,
+                }}
               >
                 Scout
               </span>
             </div>
-            <div style={{ background: s("Work area") }} className="p-6">
+            <div style={{ background: s("Work area"), padding: pad }}>
               <div
-                className="max-w-sm rounded-2xl p-4 shadow-soft"
-                style={{ background: s("Canvas"), color: s("Ink") }}
+                className="max-w-sm p-4"
+                style={{ background: s("Canvas"), color: s("Ink"), borderRadius: cardRadius, boxShadow: shadowCss }}
               >
                 <div className="flex items-center gap-2.5">
                   <span
@@ -589,13 +658,13 @@ export default function DesignView({
             </div>
 
             {/* The rest of the site, same tokens: landing, dashboard, finds grid. */}
-            <div style={{ background: s("Canvas"), color: s("Ink") }} className="border-t p-6" >
+            <div style={{ background: s("Canvas"), color: s("Ink"), padding: pad }} className="border-t">
               <div className="text-[10px] font-bold uppercase tracking-[0.14em] opacity-50">
                 Landing
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-4">
                 <div>
-                  <div className="font-display text-2xl font-extrabold leading-tight">
+                  <div className="font-display text-2xl leading-tight" style={{ fontWeight: style.displayWeight }}>
                     Find your people.
                   </div>
                   <div className="mt-0.5 text-xs opacity-60">
@@ -603,14 +672,14 @@ export default function DesignView({
                   </div>
                 </div>
                 <span
-                  className="rounded-xl px-4 py-2 text-sm font-bold"
-                  style={{ background: s("Stage brown"), color: s("Cream") }}
+                  className="px-4 py-2 text-sm font-bold"
+                  style={{ background: s("Stage brown"), color: s("Cream"), borderRadius: btnRadius }}
                 >
                   Start free
                 </span>
                 <span
-                  className="rounded-xl border px-4 py-2 text-sm font-semibold"
-                  style={{ borderColor: `${s("Ink")}33` }}
+                  className="border px-4 py-2 text-sm font-semibold"
+                  style={{ borderColor: `${s("Ink")}33`, borderRadius: btnRadius }}
                 >
                   See how it works
                 </span>
@@ -623,8 +692,8 @@ export default function DesignView({
                 {[["45", "Finds"], ["12", "Sent"], ["18%", "Replies"], ["50%", "On-target"], ["21", "Searches"], ["4", "Hours saved"]].map(([v, l]) => (
                   <div
                     key={l}
-                    className="rounded-xl border p-2.5"
-                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a` }}
+                    className="border p-2.5"
+                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a`, borderRadius: Math.min(cardRadius, 14), boxShadow: shadowCss }}
                   >
                     <div className="font-display text-lg font-bold leading-none">{v}</div>
                     <div className="mt-1 text-[10px] opacity-60">{l}</div>
@@ -639,8 +708,8 @@ export default function DesignView({
                 {["Slevin & Hart", "Kinkead", "McKay Law"].map((n, i) => (
                   <div
                     key={n}
-                    className="overflow-hidden rounded-xl border"
-                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a` }}
+                    className="overflow-hidden border"
+                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a`, borderRadius: Math.min(cardRadius, 14), boxShadow: shadowCss }}
                   >
                     <div
                       className="grid h-14 place-items-center"
