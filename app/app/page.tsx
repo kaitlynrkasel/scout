@@ -4126,6 +4126,14 @@ function ScoutTool({
   // category: it is the project's own search, and every run was silently
   // adding another category to the Projects tab.
   const projectGoalRef = useRef<string>("");
+  // One-time nudge: first-timers get pointed at Templates while a search runs.
+  const [templateNudgeDone, setTemplateNudgeDone] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("scout_tpl_nudge_done") === "1";
+    } catch {
+      return false;
+    }
+  });
   useEffect(() => {
     if (tab !== "outreach" || catId || goal.trim()) return;
     const ctx = (activeProject?.context || "").trim();
@@ -7530,20 +7538,28 @@ function ScoutTool({
 
             {discovering && (
               <div ref={searchingRef} className="mt-8 flex scroll-mt-24 items-start gap-5">
-              <div className="w-full max-w-md rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5">
+              <div className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-5 py-4">
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
                   {(() => {
                     // Only the human-readable steps, newest last. Debug lines are
                     // filtered out (see friendlyProgress) so this never reads like
                     // a terminal.
-                    const steps = searchLog
-                      .map(friendlyProgress)
-                      .filter(Boolean)
-                      .slice(-5);
+                    const all = searchLog.map(friendlyProgress).filter(Boolean);
+                    // Collapse runs of the same line ("Found 10 results" x9)
+                    // into one entry with a count, then keep a handful.
+                    const collapsed: { m: string; n: number }[] = [];
+                    for (const m of all) {
+                      const lastEntry = collapsed[collapsed.length - 1];
+                      if (lastEntry && lastEntry.m === m) lastEntry.n++;
+                      else collapsed.push({ m, n: 1 });
+                    }
+                    const steps = collapsed
+                      .slice(-4)
+                      .map((x) => (x.n > 1 ? `${x.m} (x${x.n})` : x.m));
                     if (!steps.length) return null;
                     return (
                       <div className="mt-3 border-t border-white/15 pt-3">
-                        <ul className="space-y-1.5">
+                        <ul className="grid gap-1.5 lg:grid-cols-2">
                           {steps.map((m, i, arr) => {
                             const latest = i === arr.length - 1;
                             return (
@@ -7578,6 +7594,37 @@ function ScoutTool({
                   })()}
               </div>
               <SiteDeck log={searchLog} />
+              {myTemplates.length === 0 && !templateNudgeDone && (
+                <div className="hidden w-72 shrink-0 rounded-2xl border border-white/15 bg-white/5 p-4 xl:block">
+                  <div className="text-sm font-bold text-white">
+                    While Scout searches: add a template
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-white/60">
+                    Drop in an email you have sent before and Scout strips the
+                    specifics, keeps the shape, and writes every draft in that
+                    voice. Two minutes now, better drafts on this very search.
+                  </p>
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      onClick={() => setTab("templates")}
+                      className="rounded-full bg-cream px-4 py-2 text-xs font-bold text-brown-deep transition hover:bg-white"
+                    >
+                      Add a template
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTemplateNudgeDone(true);
+                        try {
+                          localStorage.setItem("scout_tpl_nudge_done", "1");
+                        } catch {}
+                      }}
+                      className="rounded-full px-3 py-2 text-xs font-semibold text-white/50 transition hover:text-white"
+                    >
+                      Later
+                    </button>
+                  </div>
+                </div>
+              )}
               </div>
             )}
 
