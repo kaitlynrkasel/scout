@@ -1238,8 +1238,9 @@ export function LiveEditPanel({
   // the usual commands.
   useEffect(() => {
     const frame = frameRef.current;
-    const doc = frame?.contentDocument;
-    if (!doc) return;
+    const doc0 = frame?.contentDocument;
+    if (!doc0) return;
+    const doc: Document = doc0;
     const OUTLINE = "2px solid #377ec0";
     const SELECTED = "3px solid #f7891f";
     let hovered: HTMLElement | null = null;
@@ -1316,7 +1317,7 @@ export function LiveEditPanel({
       const h = Math.abs(e.clientY - marquee!.sy);
       return { x, y, w, h };
     };
-    const finishMarquee = (e: MouseEvent) => {
+    function finishMarquee(e: MouseEvent) {
       if (!marquee) return;
       const { x, y, w, h } = marqueeRect(e);
       marquee.box.remove();
@@ -1347,14 +1348,23 @@ export function LiveEditPanel({
         const intersects = r.left < x + w && r.right > x && r.top < y + h && r.bottom > y;
         if (intersects) hits.push(el);
       }
-      // Keep the outermost of any nested chain so a card counts once, not the
-      // card plus all its children.
-      const keep = hits.filter((el) => !hits.includes(el.parentElement as HTMLElement));
+      // Keep only elements with NO ANCESTOR in the hit set, so a card counts
+      // once and its children never move separately (a parent-only check let
+      // nested spans double-move and scatter the layout on group drags).
+      const hitSet = new Set(hits);
+      const keep = hits.filter((el) => {
+        let a = el.parentElement;
+        while (a && a !== doc.body) {
+          if (hitSet.has(a)) return false;
+          a = a.parentElement;
+        }
+        return true;
+      });
       const next = Array.from(new Set([...selRef.current, ...keep])).slice(0, 80);
       clearPaint(selRef.current);
       setSels(next);
       paint(next);
-    };
+    }
     const marqueeBoxGuard: HTMLElement | null = null;
 
     const down = (e: MouseEvent) => {
@@ -1390,8 +1400,17 @@ export function LiveEditPanel({
       }
       setSels(next);
       paint(next);
+      const nextSet = new Set(next);
+      const outermost = next.filter((el) => {
+        let a = el.parentElement;
+        while (a && a !== doc.body) {
+          if (nextSet.has(a)) return false;
+          a = a.parentElement;
+        }
+        return true;
+      });
       drag = {
-        els: next.map((el) => {
+        els: outermost.map((el) => {
           const [ox, oy] = readOffset(el);
           return { el, ox, oy };
         }),
@@ -1413,6 +1432,14 @@ export function LiveEditPanel({
       }
     };
     const move = (e: MouseEvent) => {
+      // A release outside the iframe never sends this document a mouseup, which
+      // left the marquee (or a drag) stuck to the cursor. No buttons held on a
+      // move means the press ended elsewhere: finish now.
+      if (e.buttons === 0 && (marquee || drag)) {
+        if (marquee) finishMarquee(e);
+        else up(e);
+        return;
+      }
       if (marquee) {
         marquee.moved = true;
         const { x, y, w, h } = marqueeRect(e);
@@ -1482,7 +1509,7 @@ export function LiveEditPanel({
       }
       for (const d of drag.els) setOffset(d.el, grid(d.ox + ddx), grid(d.oy + ddy));
     };
-    const up = (e: MouseEvent) => {
+    function up(e: MouseEvent) {
       clearGuides();
       if (marquee) {
         finishMarquee(e);
@@ -1499,7 +1526,7 @@ export function LiveEditPanel({
         bump((n) => n + 1);
       }
       drag = null;
-    };
+    }
     const kill = (e: Event) => {
       e.preventDefault();
       e.stopPropagation();
@@ -1580,6 +1607,11 @@ export function LiveEditPanel({
     doc.addEventListener("mouseup", up, true);
     doc.addEventListener("click", kill, true);
     doc.addEventListener("submit", kill, true);
+    const leave = (e: MouseEvent) => {
+      if (marquee) finishMarquee(e);
+      else if (drag) up(e);
+    };
+    doc.addEventListener("mouseleave", leave, true);
     doc.addEventListener("keydown", key, true);
     window.addEventListener("keydown", key, true);
     return () => {
@@ -1590,6 +1622,7 @@ export function LiveEditPanel({
       doc.removeEventListener("mouseup", up, true);
       doc.removeEventListener("click", kill, true);
       doc.removeEventListener("submit", kill, true);
+      doc.removeEventListener("mouseleave", leave, true);
       doc.removeEventListener("keydown", key, true);
       window.removeEventListener("keydown", key, true);
       if (hovered) hovered.style.outline = "";
