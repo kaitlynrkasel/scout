@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-08-21T20:32:08.102Z",
+  "firstCommit": "2026-06-30",
+  "lastCommit": "2026-08-21",
+  "totalCommits": 661,
+  "claudeAssistedCommits": 544,
+  "totalHours": 129.6,
+  "people": [
+    {
+      "who": "Kaitlyn",
+      "commits": 481,
+      "sessions": 85,
+      "hours": 92.3
+    },
+    {
+      "who": "Claude (cloud)",
+      "commits": 93,
+      "sessions": 29,
+      "hours": 18
+    },
+    {
+      "who": "Mera",
+      "commits": 50,
+      "sessions": 22,
+      "hours": 11.9
+    },
+    {
+      "who": "Suri",
+      "commits": 37,
+      "sessions": 14,
+      "hours": 7.4
+    }
+  ]
+}

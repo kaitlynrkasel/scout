@@ -5,6 +5,7 @@
 // in-sidebar Insights tab so the customer-facing /app view has no trace of it.
 
 import { useEffect, useState } from "react";
+import workHistory from "./workHistory.json";
 
 interface AdminInsights {
   health?: {
@@ -141,6 +142,34 @@ export default function InsightsView({
             signal for tuning the extract prompt and filter.
           </p>
         </div>
+
+      {/* -------- Time on Scout: the build itself, from git history --------
+          Regenerate with `node scripts/work-history.mjs` and commit the JSON
+          (Vercel's shallow clone can't compute this at build time). */}
+      <section className="mb-8 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+        <div className="flex flex-wrap items-baseline gap-3">
+          <h2 className="text-lg font-bold tracking-tight text-ink">Time on Scout</h2>
+          <span className="text-xs text-body/60">
+            {workHistory.firstCommit} to {workHistory.lastCommit} · {workHistory.totalCommits}{" "}
+            commits · {workHistory.claudeAssistedCommits} with Claude · estimated from commit
+            sessions, updated {String(workHistory.generatedAt).slice(0, 10)}
+          </span>
+        </div>
+        <div className="mt-2 font-display text-4xl font-bold tabular-nums text-ink">
+          {workHistory.totalHours} hours
+        </div>
+        <div className="mt-4 space-y-2">
+          {workHistory.people.map((p: any) => (
+            <div key={p.who} className="flex items-center gap-3">
+              <span className="w-28 shrink-0 text-sm font-semibold text-ink">{p.who}</span>
+              <span className="h-2 rounded-full bg-brown/70" style={{ width: `${Math.max(2, (p.hours / workHistory.totalHours) * 100)}%` }} />
+              <span className="shrink-0 text-xs tabular-nums text-body/70">
+                {p.hours}h · {p.commits} commits · {p.sessions} sittings
+              </span>
+            </div>
+          ))}
+        </div>
+      </section>
         <div className="flex items-center gap-2">
           <button
             onClick={load}

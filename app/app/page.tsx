@@ -1614,9 +1614,13 @@ function ScoutTool({
     };
     document.documentElement.style.setProperty("--stage-bg", deeps[i]);
     document.documentElement.style.setProperty("--results-bg", shade(deeps[j]));
-    // The dashboard ground alternates through soft mid-tones the same way:
-    // sage, sky, blush, apricot, lilac, seafoam — never the same one twice
-    // in a row.
+  }, []);
+
+  // The dashboard ground alternates through soft mid-tones — dealt fresh
+  // EVERY time the dashboard is opened (tab switches included), never the
+  // same lead twice in a row.
+  useEffect(() => {
+    if (tab !== "dashboard") return;
     const tints = [
       "154 176 139", // sage
       "147 174 203", // sky
@@ -1651,7 +1655,8 @@ function ScoutTool({
       ? ["#377ec0", "#12baaa", "#7a5aa8"]
       : ["#f04f52", "#f7891f", "#d9a11c"];
     seams.forEach((c, k) => document.documentElement.style.setProperty(`--seam-${k}`, c));
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const gateCancelRef = useRef(false);
   const [gating, setGating] = useState(false); // the understanding pass is running
@@ -7890,8 +7895,27 @@ function ScoutTool({
                           )}
                         </div>
                       </div>
-                      <span className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-semibold text-white/80">
-                        <ExpandIcon /> Expand
+                      <span className="ml-auto flex items-center gap-2">
+                        <span
+                          role="button"
+                          tabIndex={0}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTab("finds");
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.stopPropagation();
+                              setTab("finds");
+                            }
+                          }}
+                          className="rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
+                        >
+                          See in Finds
+                        </span>
+                        <span className="flex items-center gap-1.5 rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-semibold text-white/80">
+                          <ExpandIcon /> Expand
+                        </span>
                       </span>
                     </button>
 
@@ -16264,6 +16288,61 @@ ${body}
             to get started.
           </p>
         )}
+      {/* -------- What makes your Scout special --------
+          A comparison that always lands on something genuinely positive: pick
+          the strongest true angle from real numbers rather than shaming with
+          averages. Every user has one; a brand-new account's angle is freshness
+          of taste data, a picky user's is precision, a prolific one's volume. */}
+      <div className="mt-5">
+        <h3 className="text-sm font-bold tracking-tight text-ink">What makes your Scout special</h3>
+        <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 p-5">
+          {(() => {
+            const denyRate = learned.decided ? learned.denyRate : null;
+            const avgDeny = community?.avgDenyRate ?? null;
+            const avgFinds = community?.avgFinds ?? null;
+            const avgDrafts = community?.avgDrafts ?? null;
+            const angles: { ok: boolean; text: string }[] = [
+              {
+                ok: denyRate != null && avgDeny != null && denyRate > avgDeny + 0.08,
+                text: `You are pickier than most: you pass on ${Math.round((denyRate || 0) * 100)}% of finds against a community ${Math.round((avgDeny || 0) * 100)}%, so your Scout learns a sharper taste profile than average and every kept find means more.`,
+              },
+              {
+                ok: denyRate != null && avgDeny != null && denyRate < avgDeny - 0.08,
+                text: `Your searches land: you keep ${100 - Math.round((denyRate || 0) * 100)}% of what Scout brings back, well above the community's ${100 - Math.round((avgDeny || 0) * 100)}%, which means your project descriptions are doing real work.`,
+              },
+              {
+                ok: avgFinds != null && finds.length > (avgFinds || 0) * 1.3,
+                text: `Your pipeline is deeper than most: ${finds.length} finds against a community average of ${Math.round(avgFinds || 0)}, so your Scout has more real signal to learn your taste from than almost anyone's.`,
+              },
+              {
+                ok: avgDrafts != null && activity.drafts > (avgDrafts || 0) * 1.3,
+                text: `You draft more than most: ${activity.drafts} messages against a community average of ${Math.round(avgDrafts || 0)}. Voice learning compounds with every edit, so your drafts are getting personal faster than average.`,
+              },
+              {
+                ok: (learned.replyRate ?? 0) > 0,
+                text: `You have real replies coming back, the rarest signal there is. Scout weights reply patterns heaviest of all, so your results are tuned by what actually worked, not just what looked right.`,
+              },
+              {
+                ok: learned.decided >= 5,
+                text: `You have taught your Scout ${learned.decided} real decisions. That taste data is yours alone, and it is why your results diverge, in a good way, from what anyone else would get for the same search.`,
+              },
+              {
+                ok: true,
+                text: `Your Scout is fresh: no inherited habits, no stale preferences. The next few keeps and passes will shape it faster than at any later point, so early decisions count double.`,
+              },
+            ];
+            const angle = angles.find((a) => a.ok)!;
+            return (
+              <div className="flex items-start gap-3">
+                <span aria-hidden className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sage/20 text-sage-deep">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
+                </span>
+                <p className="text-sm leading-relaxed text-ink">{angle.text}</p>
+              </div>
+            );
+          })()}
+        </div>
+      </div>
       </section>
 
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
@@ -16377,61 +16456,7 @@ ${body}
         </div>
       </section>
 
-      {/* -------- What makes your Scout special --------
-          A comparison that always lands on something genuinely positive: pick
-          the strongest true angle from real numbers rather than shaming with
-          averages. Every user has one; a brand-new account's angle is freshness
-          of taste data, a picky user's is precision, a prolific one's volume. */}
-      <section data-jig="5" className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">What makes your Scout special</h2>
-        <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 p-5">
-          {(() => {
-            const denyRate = learned.decided ? learned.denyRate : null;
-            const avgDeny = community?.avgDenyRate ?? null;
-            const avgFinds = community?.avgFinds ?? null;
-            const avgDrafts = community?.avgDrafts ?? null;
-            const angles: { ok: boolean; text: string }[] = [
-              {
-                ok: denyRate != null && avgDeny != null && denyRate > avgDeny + 0.08,
-                text: `You are pickier than most: you pass on ${Math.round((denyRate || 0) * 100)}% of finds against a community ${Math.round((avgDeny || 0) * 100)}%, so your Scout learns a sharper taste profile than average and every kept find means more.`,
-              },
-              {
-                ok: denyRate != null && avgDeny != null && denyRate < avgDeny - 0.08,
-                text: `Your searches land: you keep ${100 - Math.round((denyRate || 0) * 100)}% of what Scout brings back, well above the community's ${100 - Math.round((avgDeny || 0) * 100)}%, which means your project descriptions are doing real work.`,
-              },
-              {
-                ok: avgFinds != null && finds.length > (avgFinds || 0) * 1.3,
-                text: `Your pipeline is deeper than most: ${finds.length} finds against a community average of ${Math.round(avgFinds || 0)}, so your Scout has more real signal to learn your taste from than almost anyone's.`,
-              },
-              {
-                ok: avgDrafts != null && activity.drafts > (avgDrafts || 0) * 1.3,
-                text: `You draft more than most: ${activity.drafts} messages against a community average of ${Math.round(avgDrafts || 0)}. Voice learning compounds with every edit, so your drafts are getting personal faster than average.`,
-              },
-              {
-                ok: (learned.replyRate ?? 0) > 0,
-                text: `You have real replies coming back, the rarest signal there is. Scout weights reply patterns heaviest of all, so your results are tuned by what actually worked, not just what looked right.`,
-              },
-              {
-                ok: learned.decided >= 5,
-                text: `You have taught your Scout ${learned.decided} real decisions. That taste data is yours alone, and it is why your results diverge, in a good way, from what anyone else would get for the same search.`,
-              },
-              {
-                ok: true,
-                text: `Your Scout is fresh: no inherited habits, no stale preferences. The next few keeps and passes will shape it faster than at any later point, so early decisions count double.`,
-              },
-            ];
-            const angle = angles.find((a) => a.ok)!;
-            return (
-              <div className="flex items-start gap-3">
-                <span aria-hidden className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sage/20 text-sage-deep">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
-                </span>
-                <p className="text-sm leading-relaxed text-ink">{angle.text}</p>
-              </div>
-            );
-          })()}
-        </div>
-      </section>
+      
 
       {/* -------- Owner view: the same lens pointed at the TEAM -------- */}
       {teamOwner && finds.some((f) => f.foundByEmail && f.foundByEmail !== ownEmail) && (
