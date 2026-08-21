@@ -1622,12 +1622,12 @@ function ScoutTool({
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "outreach") return;
     const tints = [
-      "154 176 139", // sage
+      "186 205 172", // soft sage
       "147 174 203", // sky
       "217 161 180", // blush
       "224 180 138", // apricot
       "169 156 196", // lilac
-      "143 188 180", // seafoam
+      "176 209 201", // soft seafoam
     ];
     // Three tints per visit, fading into one field — and deliberately
     // temperature-diverse, so the alternation is visible in the FIRST
