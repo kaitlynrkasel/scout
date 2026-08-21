@@ -8343,10 +8343,14 @@ function ScoutTool({
       )}
 
       {tab === "account" && accountEmail && (
-        <main className="w-full max-w-3xl px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+        <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Your <span className="text-brown">account</span>
           </h1>
+          {/* Two columns on a wide screen so the page is used instead of one
+              narrow strip: identity on the left, mail sending on the right,
+              team admin full width below. */}
+          <div className="mt-7 grid items-start gap-6 xl:grid-cols-2">
           <AccountCard
             email={accountEmail}
             currentName={profile.name || ""}
@@ -8360,7 +8364,7 @@ function ScoutTool({
 
           {/* Send from your email — connect the mailbox Scout sends outreach from. */}
           {!!getToken && (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+            <section className="rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
               <h2 className="text-base font-extrabold tracking-tight text-ink">
                 Send from your email
               </h2>
@@ -8401,7 +8405,7 @@ function ScoutTool({
           )}
 
           {isOwner && (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+            <section className="rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8 xl:col-span-2">
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="max-w-md">
                   <h2 className="text-base font-extrabold tracking-tight text-ink">
@@ -8422,6 +8426,7 @@ function ScoutTool({
               </div>
             </section>
           )}
+          </div>
         </main>
       )}
 
@@ -22251,7 +22256,7 @@ function AccountCard({
   const [confirming, setConfirming] = useState(false);
 
   return (
-    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+    <section className="rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/40 px-4 py-3">
         <div className="min-w-0">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
