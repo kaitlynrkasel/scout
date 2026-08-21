@@ -13,13 +13,14 @@ import Link from "next/link";
 import InsightsView, { ConciergePanel } from "./InsightsView";
 import IndexView from "./IndexView";
 import PricingView from "./PricingView";
+import DesignView from "./DesignView";
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [checked, setChecked] = useState(false);
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
   const [adminTab, setAdminTab] = useState<
-    "insights" | "concierge" | "index" | "pricing" | "readiness"
+    "insights" | "concierge" | "index" | "pricing" | "design" | "readiness"
   >("insights");
   // Keyed /readiness link, fetched owner-only so the secret never ships in JS.
   const [readinessPath, setReadinessPath] = useState("");
@@ -124,7 +125,7 @@ export default function AdminPage() {
           {/* Full-bleed on mobile so the strip scrolls edge to edge instead of
               looking clipped inside the page padding. */}
           <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 pb-0.5 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
-            {(["insights", "concierge", "index", "pricing", "readiness"] as const).map((t) => (
+            {(["insights", "concierge", "index", "pricing", "design", "readiness"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
@@ -177,6 +178,19 @@ export default function AdminPage() {
           ) : (
             <p className="p-8 text-sm text-body/60">Loading the checklist…</p>
           )}
+        </main>
+      ) : adminTab === "design" ? (
+        <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+          <div className="mb-6">
+            <h1 className="text-3xl font-extrabold tracking-tight text-ink">
+              <span className="brand-text">Design</span>
+            </h1>
+            <p className="mt-1 text-sm text-body">
+              Try color schemes against real Scout surfaces, and keep the record
+              of every look the app has shipped with.
+            </p>
+          </div>
+          <DesignView />
         </main>
       ) : adminTab === "pricing" ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
