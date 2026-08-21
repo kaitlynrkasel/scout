@@ -1,11 +1,11 @@
 {
-  "generatedAt": "2026-08-21T21:12:39.716Z",
-  "commit": "79941f9",
+  "generatedAt": "2026-08-21T21:17:25.786Z",
+  "commit": "2aa13e0",
   "partial": true,
   "checks": {
     "unfinished::decide-what-happens-to-the-work-not-yet-published": {
       "verdict": "warn",
-      "note": "Uncommitted, so unbacked-up: app/readiness/page.tsx, lib/discover.ts, package.json, app/readiness/auto.json, scripts/readiness-auto.mjs, scripts/readiness-hook.mjs, scripts/readiness-resolve.mjs"
+      "note": "Uncommitted, so unbacked-up: lib/discover.ts"
     },
     "runbook::1-stop-making-changes-and-confirm-the-site-builds": {
       "verdict": "ok",
