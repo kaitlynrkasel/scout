@@ -1265,11 +1265,11 @@
             },
             {
               "sev": "should",
-              "title": "The dashboard lives on the brown stage",
-              "good": "The dashboard is one deep-brown room like the Scout tab: cream headings, open sections, no white cards, and the activity chart's lines are visible against the dark ground.",
+              "title": "The dashboard lives on the colour field",
+              "good": "The dashboard ground is a soft blended colour field (a fresh trio of tints dealt every time you open it, never repeating its lead), with film grain on the ground only and frosted translucent cards in one consistent surface style.",
               "steps": [
-                "Open the dashboard in light and dark mode.",
-                "Look for any unreadable grey-on-brown text or invisible chart lines."
+                "Open the dashboard several times; the field's colours must change each open.",
+                "Check buttons and text are clean (no grain speckle) and no card is plain solid white."
               ],
               "key": "tracking::the-dashboard-lives-on-the-brown-stage"
             },
@@ -1734,11 +1734,12 @@
             },
             {
               "sev": "should",
-              "title": "The Scout stage deals a new colour every visit",
-              "good": "Refreshing or reopening the Scout tab always shows a DIFFERENT deep tone than last time (never repeats back-to-back), with a second colour on the results shelf. All deals are dark and muted; nothing bright enough to be unpleasant.",
+              "title": "The Scout stage shares the field and always feels new",
+              "good": "The Scout tab wears the same blended colour field as the dashboard (same deals, fresh per open), toggles and bullets read clearly on it, the results shelf below is plain white, and the cursor glow follows the mouse in the ground's own blended colour on both tabs.",
               "steps": [
-                "Refresh the Scout tab five times; the room colour must change every time.",
-                "Confirm white text stays readable on every deal."
+                "Open the Scout tab twice; the field changes.",
+                "Move the mouse around: the glow fades smoothly between colours and relaxes ~3s after the mouse rests.",
+                "Run a search: results sit on a white shelf."
               ],
               "key": "feel::the-scout-stage-deals-a-new-colour-every-visit"
             },
