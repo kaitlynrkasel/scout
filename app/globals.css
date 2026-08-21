@@ -1037,6 +1037,18 @@ select.scout-kind-picker option {
 }
 /* Film grain over the whole surface, content included — that is the look.
    Subtle, non-interactive, and cheap (one tiled SVG noise texture). */
+/* One card language: every white sheet on the dashboard goes frosted
+   (translucent white over the colour field, blurred), matching the stat band
+   and the tinted insight cards instead of fighting them. */
+.dash-stage .bg-surface {
+  background: rgb(255 255 255 / 0.55);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+}
+.dark .dash-stage .bg-surface {
+  background: rgb(26 29 37 / 0.6);
+}
+
 /* Cursor glow: the tint deepens where the mouse is, and lets go after the
    mouse rests (the JS drops --glow back to 0 after ~3s of stillness). */
 .dash-stage::before {
