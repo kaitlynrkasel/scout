@@ -962,6 +962,19 @@ function sanitizeSiteUrl(url: string, contactEmail: string): string {
 // Normalize a person's name so "John Smith", "John J. Smith", "Dr. John Smith Jr",
 // and "John Jacob Smith" all collapse to the same key. Strips honorifics,
 // suffixes, and middle names/initials, then keeps first + last token.
+function isRedditHost(host: string): boolean {
+  return /(^|\.)reddit\.com$/i.test(host || "");
+}
+// True when every page that VOUCHES for this find is a Reddit page. The find's
+// own url does not exempt it: a website address typed into a thread is still
+// only the thread's word until the verification search sees it standing on the
+// open web.
+function onlyRedditSourced(o: Opportunity): boolean {
+  const srcUrls = (o.sources || []).map((x) => String(x?.url || "")).filter(Boolean);
+  if (srcUrls.length) return srcUrls.every((u) => isRedditHost(urlHost(u)));
+  return isRedditHost(urlHost(o.url || ""));
+}
+
 function normName(s: string): string {
   // Drop everything after the first role separator so "Neal Eggers, VP of
   // Customer Success" and "Neal Eggers" both normalize to "nealeggers".
@@ -2396,6 +2409,57 @@ export async function discover(
         return false;
       });
     }
+  }
+
+  // Reddit corroboration: a thread is somebody's opinion, not a record, so a
+  // find whose ONLY evidence is Reddit must be confirmed by one search of the
+  // wider web before it may surface. A find that already merged a non-Reddit
+  // source passes for free; the rest get one verification search each (cheap,
+  // the per-host cap means at most a few per run), matched by the find's own
+  // site appearing or its exact name in a result title. No confirmation, no
+  // surfacing.
+  if (!aborted() && kept.some((o) => onlyRedditSourced(o))) {
+    emit("Double-checking Reddit finds against the wider web");
+    const confirmedKept: Opportunity[] = [];
+    for (const o of kept) {
+      if (!onlyRedditSourced(o)) {
+        confirmedKept.push(o);
+        continue;
+      }
+      if (aborted()) {
+        confirmedKept.push(o);
+        continue; // cancelled mid-check: keep rather than silently drop
+      }
+      try {
+        const q = [o.name, o.outlet, o.location].filter(Boolean).join(" ");
+        const results = await tavilySearch(`"${o.name}" ${q === o.name ? "" : q.slice(o.name.length)}`.trim(), 5, { depth: "basic" });
+        const ownHost = urlHost(o.url || "");
+        const nameKey = normName(o.name);
+        const confirmation = results.find((r) => {
+          if (isRedditHost(urlHost(r.url))) return false;
+          if (ownHost && !isRedditHost(ownHost) && urlHost(r.url) === ownHost) return true;
+          return nameKey.length > 3 && normName(r.title).includes(nameKey);
+        });
+        if (confirmation) {
+          o.sources = [
+            ...(o.sources || []),
+            { url: confirmation.url, title: confirmation.title },
+          ].slice(0, 12);
+          confirmedKept.push(o);
+        } else {
+          logSkip(
+            o.name,
+            o.url,
+            "named on Reddit but nowhere else we could confirm; dropped as unverified"
+          );
+        }
+      } catch {
+        // The verification search itself failing is not evidence against the
+        // find; keep it rather than punishing a network blip.
+        confirmedKept.push(o);
+      }
+    }
+    kept = confirmedKept;
   }
 
   // Fallback disclosure: on a job/internship hunt, if actual open postings came
