@@ -378,6 +378,7 @@ export default function DesignView({
   // ---- Palette creator ----
   const [recipe, setRecipe] = useState<Recipe>(DEFAULT_RECIPE);
   const [locks, setLocks] = useState<Partial<Record<IdeaKey, string>>>({});
+  const swatchEditRefs = useRef<Partial<Record<IdeaKey, HTMLInputElement | null>>>({});
   const [mine, setMine] = useState<Palette[]>([]);
   useEffect(() => setMine(loadPalettes()), []);
   const made = useMemo(() => generatePalette(recipe, locks), [recipe, locks]);
@@ -681,24 +682,42 @@ export default function DesignView({
                 />
               </div>
 
-              {/* The six it made, each lockable so a good one survives a shuffle. */}
+              {/* The five it made. Click locks one through a shuffle; double-click
+                  opens the colour wheel to edit it (which locks the edit in). */}
               <div className="mt-3 flex gap-1.5">
                 {IDEAS.map(({ key, name }) => (
-                  <button
-                    key={key}
-                    onClick={() => toggleLock(key)}
-                    title={`${name} — ${locks[key] ? "locked, click to release" : "click to keep through a shuffle"}`}
-                    className={`relative h-10 flex-1 rounded-lg transition ${
-                      locks[key] ? "ring-2 ring-ink ring-offset-1" : ""
-                    }`}
-                    style={{ background: made.ideas[key] }}
-                  >
-                    {locks[key] && (
-                      <span className="absolute inset-0 flex items-center justify-center text-[11px]">
-                        🔒
-                      </span>
-                    )}
-                  </button>
+                  <span key={key} className="relative min-w-0 flex-1">
+                    <button
+                      onClick={() => toggleLock(key)}
+                      onDoubleClick={() => swatchEditRefs.current[key]?.click()}
+                      title={`${name} — ${
+                        locks[key] ? "locked, click to release" : "click to keep through a shuffle"
+                      }; double-click to pick the colour yourself`}
+                      className={`relative h-10 w-full rounded-lg transition ${
+                        locks[key] ? "ring-2 ring-ink ring-offset-1" : ""
+                      }`}
+                      style={{ background: made.ideas[key] }}
+                    >
+                      {locks[key] && (
+                        <span className="absolute inset-0 flex items-center justify-center text-[11px]">
+                          🔒
+                        </span>
+                      )}
+                    </button>
+                    {/* Hidden colour input the double-click opens. Editing a
+                        swatch is a statement of intent, so the pick locks in. */}
+                    <input
+                      ref={(el) => {
+                        swatchEditRefs.current[key] = el;
+                      }}
+                      type="color"
+                      value={made.ideas[key]}
+                      onChange={(e) => setLocks((l) => ({ ...l, [key]: e.target.value }))}
+                      className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                      tabIndex={-1}
+                      aria-hidden
+                    />
+                  </span>
                 ))}
               </div>
 
@@ -714,7 +733,7 @@ export default function DesignView({
                 {madeScore.ok ? (
                   <>
                     <b>Works.</b> Closest two are {madeScore.closest} apart,{" "}
-                    {madeScore.inkSafe} of six can carry text.
+                    {madeScore.inkSafe} of five can carry text.
                   </>
                 ) : (
                   <>
@@ -788,6 +807,24 @@ export default function DesignView({
               })}
             </div>
 
+            {/* Keep whatever is currently dialed in (including per-row edits)
+                as a saved palette on this device. Local only, nothing ships. */}
+            <button
+              onClick={() => {
+                const name = window.prompt("Name this palette", ideaPalette.label === "Custom" ? `Palette ${mine.length + 1}` : ideaPalette.label);
+                if (!name) return;
+                const next = [
+                  { ...ideaPalette, label: name.trim() || "Untitled" },
+                  ...mine.filter((m) => m.label !== name.trim()),
+                ];
+                setMine(next);
+                savePalettes(next);
+              }}
+              className="mb-2 w-full rounded-lg border border-warm-border px-3 py-2 text-[11px] font-bold text-body transition hover:bg-warm-bg"
+            >
+              Save this palette (stays in this browser)
+            </button>
+
             {IDEAS.map(({ key, name, blurb }) => {
               const hex = ideaPalette.ideas[key];
               const ratio = contrastOnWhite(hex);
@@ -827,7 +864,7 @@ export default function DesignView({
               <span className="text-xs leading-relaxed text-body">
                 <b className="text-ink">Paint the real app in this.</b> Open
                 Scout in another tab and use it normally. Background, text and
-                the main accent change; the six meanings need wiring into
+                the main accent change; the five meanings need wiring into
                 components before they show up out there.
               </span>
             </label>
@@ -924,8 +961,8 @@ export default function DesignView({
               {(
                 [
                   ["12", "People", ideaPalette.ideas.person],
-                  ["7", "Sent", ideaPalette.ideas.sent],
-                  ["2", "Replies", ideaPalette.ideas.reply],
+                  ["7", "Sent", ideaPalette.ideas.connect],
+                  ["2", "Replies", ideaPalette.ideas.connect],
                 ] as const
               ).map(([n, label, hex]) => (
                 <div key={label} className="rounded-xl p-2.5" style={{ background: lighten(hex) }}>
@@ -955,7 +992,7 @@ export default function DesignView({
                 {(
                   [
                     ["Person", ideaPalette.ideas.person],
-                    ["Replied", ideaPalette.ideas.reply],
+                    ["Replied", ideaPalette.ideas.connect],
                     ["Cue Creative", ideaPalette.ideas.shared],
                   ] as const
                 ).map(([label, hex]) => (

@@ -17,8 +17,11 @@ export const IDEAS = [
   { key: "search", name: "Searching", blurb: "Running a search, the goal field, category presets." },
   { key: "person", name: "A person", blurb: "Every human Scout surfaces. Find cards, contacts, counts." },
   { key: "voice", name: "Your voice", blurb: "Drafts, templates, tone — your writing, not Scout's finding." },
-  { key: "sent", name: "Sent", blurb: "Outreach that has left. Sent, scheduled, follow-ups queued." },
-  { key: "reply", name: "A reply", blurb: "Someone wrote back. The only colour that means good news." },
+  {
+    key: "connect",
+    name: "Connection",
+    blurb: "The conversation itself: outreach out the door and replies coming back.",
+  },
   { key: "shared", name: "Shared", blurb: "Belongs to the company, not to you. Teammates, shared projects." },
 ] as const;
 
@@ -43,15 +46,14 @@ export const SCOUT_TODAY: Palette = {
     search: "#7a6048",
     person: "#7a6048",
     voice: "#7a6048",
-    sent: "#7a6048",
-    reply: "#6f7a5b",
+    connect: "#6f7a5b",
     shared: "#5c4634",
   },
 };
 
-/** The proposal: white ground, six accents, one per idea. */
+/** The proposal: white ground, five accents, one per idea. */
 export const SIX_ON_WHITE: Palette = {
-  label: "Six on white",
+  label: "Five on white",
   ground: "#ffffff",
   surface: "#ffffff",
   ink: "#10293a",
@@ -59,40 +61,12 @@ export const SIX_ON_WHITE: Palette = {
     search: "#5e69ff", // cobalt
     person: "#4e9c9c", // aquamarine
     voice: "#aa2377", // hot pink
-    sent: "#f87c47", // naranja
-    reply: "#ffd747", // daffodil
+    connect: "#f87c47", // naranja — the conversation, out and back
     shared: "#19455e", // denim
   },
 };
 
-/**
- * Yellow and green, bright without going neon. The hard part of this family is
- * that yellow and green are neighbours on the wheel, so six slots cut from it
- * blur together — and a system where colour carries meaning dies the moment two
- * meanings look alike. The separation here is done with value and temperature
- * rather than hue: two yellows at opposite brightnesses, two greens at
- * different depths, a moss dark enough to set text in, and a forest anchor.
- * The spruce started as a sea green and was pushed deeper: at #0E8C7A it sat
- * only 51 apart from the kelly in RGB, close enough that "a person" and "a
- * search" would read as the same colour at pill size.
- */
-export const GROVE: Palette = {
-  label: "Grove",
-  ground: "#fbfdf6", // a hint of the palette in the paper, not plain white
-  surface: "#ffffff",
-  ink: "#12261c",
-  ideas: {
-    search: "#1fa24f", // kelly — clear and active
-    person: "#066b6b", // spruce — deep enough to set text in, and far enough
-                       // from the kelly to never be mistaken for it
-    voice: "#4f6410", // moss — deep enough to carry small text
-    sent: "#f0a722", // marigold — warm, in motion
-    reply: "#c4d544", // lime — the brightest thing on the screen
-    shared: "#14402c", // forest — the institutional anchor
-  },
-};
-
-export const PRESETS: Palette[] = [SCOUT_TODAY, SIX_ON_WHITE, GROVE];
+export const PRESETS: Palette[] = [SCOUT_TODAY, SIX_ON_WHITE];
 
 /* ---- colour maths ------------------------------------------------------ */
 
@@ -176,8 +150,8 @@ function groundVars(p: Palette): Record<string, string> {
   }
   for (const name of ["--c-brown-tint", "--c-blue-tint"]) set(name, lighten(accent));
 
-  set("--c-success", p.ideas.reply);
-  set("--c-success-deep", darken(p.ideas.reply));
+  set("--c-success", p.ideas.connect);
+  set("--c-success-deep", darken(p.ideas.connect));
 
   return vars;
 }
@@ -300,7 +274,7 @@ export const DEFAULT_RECIPE: Recipe = { hue: 96, spread: 70, energy: 0.72, seed:
  * mean no two ideas can collapse into each other however close their hues are,
  * and the order carries meaning too: the payoff is the brightest thing on the
  * page, the institutional anchor the darkest. */
-const VALUE_ORDER: IdeaKey[] = ["shared", "voice", "person", "search", "sent", "reply"];
+const VALUE_ORDER: IdeaKey[] = ["shared", "voice", "person", "search", "connect"];
 
 /* Where each idea sits in the hue fan. Deliberately NOT the value order:
  * roles that are neighbours in lightness are pushed to opposite ends of the
@@ -312,8 +286,7 @@ const HUE_SLOT: Record<IdeaKey, number> = {
   voice: 3,
   person: 1,
   search: 4,
-  sent: 2,
-  reply: 5,
+  connect: 2,
 };
 
 function hslToHex(h: number, s: number, l: number): string {
@@ -397,7 +370,7 @@ export function generatePalette(
       // Uneven rungs on purpose: at the dark end a given step in lightness
       // moves the colour far less in RGB than the same step does up in the
       // highlights, so the bottom of the ladder gets more room.
-      const RUNG = [0, 1.3, 2.5, 3.6, 4.6, 5.5];
+      const RUNG = [0, 1.5, 2.9, 4.2, 5.5];
       const l = 0.14 + RUNG[rank] * gap;
       // Dark colours need more saturation to stay coloured rather than muddy;
       // light ones need less or they glow.
