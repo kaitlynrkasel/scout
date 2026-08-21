@@ -3462,8 +3462,12 @@ function ScoutTool({
   // render, callers that create finds in this same pass need the fresh id.
   function autoSaveCustomSearch(): string {
     if (catId || !goal.trim()) return catId;
-    // The project-level search (seeded from the description) stays the custom
-    // slot; only searches the user actually typed get promoted to categories.
+    // Off switch lives in Settings (defaults on for new users).
+    try {
+      if (localStorage.getItem("scout_autosave_categories") === "0") return "";
+    } catch {}
+    // The project-level search (seeded from the description) stays the Solo
+    // Search slot; only searches the user actually typed get promoted.
     if (projectGoalRef.current === activeId) return "";
     const c: Category = {
       id: `cat-${Date.now()}`,
@@ -4126,6 +4130,22 @@ function ScoutTool({
   // category: it is the project's own search, and every run was silently
   // adding another category to the Projects tab.
   const projectGoalRef = useRef<string>("");
+  // Reloading or closing the tab must stop a running search server-side too:
+  // abort the in-flight request so the engine stops spending on a page nobody
+  // is watching.
+  useEffect(() => {
+    const stop = () => {
+      try {
+        discoverAbort.current?.abort();
+      } catch {}
+    };
+    window.addEventListener("beforeunload", stop);
+    window.addEventListener("pagehide", stop);
+    return () => {
+      window.removeEventListener("beforeunload", stop);
+      window.removeEventListener("pagehide", stop);
+    };
+  }, []);
   // One-time nudge: first-timers get pointed at Templates while a search runs.
   const [templateNudgeDone, setTemplateNudgeDone] = useState<boolean>(() => {
     try {
@@ -7189,7 +7209,7 @@ function ScoutTool({
                       onChange={selectCategory}
                       options={[
                         ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                        { value: "", label: "Custom search…" },
+                        { value: "", label: "Solo Search" },
                       ]}
                     />
                   </div>
@@ -7202,7 +7222,7 @@ function ScoutTool({
                       title="Search without a saved category; running it saves a new one"
                       className="rounded-full border border-dashed border-white/30 px-4 py-2.5 text-base font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
                     >
-                      Custom search
+                      Solo Search
                     </button>
                   )}
                   <button
@@ -7225,7 +7245,7 @@ function ScoutTool({
                   className={
                     stageHasWorkBelow
                       ? "mt-6"
-                      : "order-1 mt-0 w-full max-w-3xl"
+                      : "order-2 mt-0 w-full max-w-3xl"
                   }
                 >
                   {catId || goal.trim() ? (
@@ -10044,47 +10064,37 @@ function DenyReasons({
 
   if (phase === "pick") {
     return (
-      <div>
-        <p className="mb-1.5 text-[11px] text-body/60">
-          A quick reason trains <span className="font-semibold text-body/80">your</span>{" "}
-          Scout: it stops surfacing ones like this and finds more of what you want.
-        </p>
-        <div className="flex flex-wrap items-center gap-1.5">
-        {DENY_REASONS.map((r) => (
-          <button
-            key={r}
-            onClick={() => choose(r)}
-            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-              current === r
-                ? "border-coral/50 bg-brand-gradient text-white"
-                : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-            }`}
-          >
-            {r}
-          </button>
-        ))}
-        {/* Your saved reasons: ones you typed before, most-used first. */}
-        {customReasons.map((r) => (
-          <button
-            key={`custom-${r.t}`}
-            onClick={() => choose(r.t)}
-            title="A reason you typed before"
-            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-              current === r.t
-                ? "border-coral/50 bg-brand-gradient text-white"
-                : "border-sage/40 bg-sage/10 text-brown-deep hover:bg-sage/20"
-            }`}
-          >
-            {r.t}
-          </button>
-        ))}
+      <div className="flex flex-wrap items-center gap-2">
+        <select
+          value={current && (DENY_REASONS.includes(current) || customReasons.some((r) => r.t === current)) ? current : "__none__"}
+          onChange={(e) => {
+            if (e.target.value !== "__none__") choose(e.target.value);
+          }}
+          className="scout-select rounded-xl border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-ink outline-none focus:border-brown"
+          title="A quick reason trains your Scout: it stops surfacing ones like this."
+        >
+          <option value="__none__">Why? Pick a reason…</option>
+          {DENY_REASONS.map((r) => (
+            <option key={r} value={r}>
+              {r}
+            </option>
+          ))}
+          {customReasons.length > 0 && (
+            <optgroup label="Your reasons">
+              {customReasons.map((r) => (
+                <option key={`custom-${r.t}`} value={r.t}>
+                  {r.t}
+                </option>
+              ))}
+            </optgroup>
+          )}
+        </select>
         <button
           onClick={() => choose("")}
-          className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
+          className="rounded-full border border-dashed border-warm-border bg-surface px-3 py-1.5 text-[11px] font-semibold text-body/70 transition hover:bg-warm-bg"
         >
-          Other…
+          Type a reason…
         </button>
-        </div>
       </div>
     );
   }
@@ -10757,7 +10767,7 @@ function FindDetailModal({
           <div
             style={{ gridArea: "info" }}
             {...dropProps("info")}
-            className={`space-y-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r ${
+            className={`flex flex-col gap-4 border-b border-warm-border p-5 lg:border-b-0 lg:border-r ${
               narrow ? "" : "overflow-y-auto"
             }`}
           >
@@ -10954,7 +10964,7 @@ function FindDetailModal({
                 {scanNote}
               </div>
             )}
-            <div>
+            <div className="mt-auto pt-2">
               <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
                 Outreach
               </div>
@@ -19249,6 +19259,19 @@ function SettingsTab({
       localStorage.setItem(AUTOSCHED_KEY, next ? "1" : "0");
     } catch {}
   }
+  // Solo Searches auto-save as categories unless turned off here. Default on.
+  const [autoCats, setAutoCats] = useState(true);
+  useEffect(() => {
+    try {
+      setAutoCats(localStorage.getItem("scout_autosave_categories") !== "0");
+    } catch {}
+  }, []);
+  function setAutoCatsPref(next: boolean) {
+    setAutoCats(next);
+    try {
+      localStorage.setItem("scout_autosave_categories", next ? "1" : "0");
+    } catch {}
+  }
   function setTheme(next: boolean) {
     setDark(next);
     const root = document.documentElement;
@@ -19436,6 +19459,38 @@ function SettingsTab({
 
       {/* ---- Sending ---- */}
       <div className="kicker mt-10">Sending</div>
+
+      {/* Searching */}
+      <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Searching</h2>
+        <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-md">
+            <div className="text-sm font-bold text-ink">
+              Save Solo Searches as categories
+            </div>
+            <p className="mt-1 text-sm leading-relaxed text-body">
+              When on, running a Solo Search saves it to the project as a
+              category so you can run it again with one click. Turn it off to
+              keep Solo Searches one-off and your projects tidy.
+            </p>
+          </div>
+          <button
+            role="switch"
+            aria-checked={autoCats}
+            aria-label="Save Solo Searches as categories automatically"
+            onClick={() => setAutoCatsPref(!autoCats)}
+            className={`relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${
+              autoCats ? "bg-brown" : "bg-warm-border"
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${
+                autoCats ? "translate-x-6" : "translate-x-1"
+              }`}
+            />
+          </button>
+        </div>
+      </section>
 
       {/* Sending */}
       <section className="mt-3 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">

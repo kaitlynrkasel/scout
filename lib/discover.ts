@@ -640,6 +640,9 @@ async function planQueries(
       "businesses', '{target type} companies {city}' (only if the goal names a place), '{industry} startups contact us', " +
       "'{target type} companies with phone number email'. Prefer queries that surface company contact / about pages, business " +
       "directories, chamber-of-commerce and association member lists, and curated roundups of companies. " +
+      "HALF AND HALF, a hard rule when the goal names ONE industry plus openness beyond it ('music industry and other " +
+      "industries', 'tech but open to anything'): split the query set close to evenly, half inside the named industry, " +
+      "half deliberately across DIFFERENT industries, so results come back balanced instead of collapsing into the named one. " +
       "INDUSTRY SPREAD, a hard rule when the goal asks for ANY industry or a VARIETY: assign each query its OWN industry, " +
       "drawn from a spread like restaurants and food, fitness and wellness, construction and trades, healthcare clinics, " +
       "e-commerce and retail brands, real estate, marketing and creative agencies, manufacturers, education, logistics, " +
@@ -651,7 +654,9 @@ async function planQueries(
       "Find things the user can APPLY TO in their industry. Weight the query set about TWO-THIRDS toward (1) and one-third " +
       "toward (2): (1) REAL open job/internship listings the user can apply to right now, and (2) GOOD-FIT COMPANIES that " +
       "likely hire people like the user even if no listing is public, so they can send a proactive 'please consider me' " +
-      "email. Openings are the priority — most queries should hunt actual postings. For (1) pair the " +
+      "email. If the goal names one industry plus openness beyond it ('music industry and other industries'), split the " +
+      "queries close to evenly between that industry and deliberately different ones, so the results come back balanced. " +
+      "Openings are the priority — most queries should hunt actual postings. For (1) pair the " +
       "role/field with the user's sub-field and an apply signal (e.g. 'brand marketing internship summer 2026 apply', " +
       "'growth marketing intern DTC careers'). For (2) surface actual COMPANIES and their contact/careers/about pages " +
       "(e.g. 'small brand marketing agencies New York', 'boutique DTC studios careers email', 'independent {industry} firms " +
@@ -1652,6 +1657,40 @@ export async function discover(
   // it twice. Step 2: plan queries from it. Step 3+: gather + extract.
   const plan =
     opts?.plan ?? (await decomposeGoal(goal, about, useCase, personalOverride).catch(() => null));
+  // The index is a compass as well as a source: organizations it has already
+  // verified for goals like this one are worth searching DIRECTLY, and a
+  // dated posting it saw last cycle ("Summer 2027 internship") means the next
+  // cycle is what to hunt now. Turn a small index sample into planning
+  // guidance; the entries themselves still join the candidate pool later
+  // under the same caps as always.
+  let indexCompass = "";
+  if (opts?.indexLookup && !aborted()) {
+    try {
+      const known = await opts.indexLookup(goal);
+      if (known.length) {
+        const year = new Date().getFullYear();
+        const orgs = Array.from(
+          new Set(
+            known
+              .map((r) => String(r.title || "").split(/[|·–-]/)[0].trim())
+              .filter((t) => t && t.length > 2)
+          )
+        ).slice(0, 6);
+        const dated = known.filter((r) => /\b(20\d{2}|summer|fall|spring|winter)\b/i.test(r.title));
+        indexCompass =
+          "KNOWN FROM PAST VERIFIED SEARCHES (use as a compass): these organizations previously matched goals like this " +
+          `one: ${orgs.join("; ")}. Write one or two queries that go straight at them for their CURRENT openings or ` +
+          `pages. ${
+            dated.length
+              ? `Some past matches were dated postings (a season or year in the title); recurring programs repeat every cycle, so search for the ${year} and ${year + 1} editions by name, not the old year. `
+              : ""
+          }Never let these crowd out fresh discovery; the rest of the queries explore as usual.`;
+      }
+    } catch {
+      /* compass is optional */
+    }
+  }
+
   const queries = await planQueries(
     goal,
     about,
@@ -1659,7 +1698,7 @@ export async function discover(
     feedback,
     salt,
     cohortHint,
-    personalOverride,
+    [personalOverride, indexCompass].filter(Boolean).join("\n\n"),
     false,
     plan
   );

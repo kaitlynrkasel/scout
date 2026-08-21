@@ -23,6 +23,8 @@ export function MicButton({
   light?: boolean;
 }) {
   const [listening, setListening] = useState(false);
+  // The words being heard right now, shown live so dictation never looks dead.
+  const [heard, setHeard] = useState("");
   const [supported, setSupported] = useState(false);
   const recRef = useRef<any>(null);
 
@@ -43,16 +45,29 @@ export function MicButton({
     if (!SR) return;
     const rec = new SR();
     rec.continuous = true;
-    rec.interimResults = false; // append only finalized phrases, once each
+    rec.interimResults = true; // live words while speaking, so it visibly works
     rec.lang = "en-US";
     rec.onresult = (e: any) => {
+      let interim = "";
       for (let i = e.resultIndex; i < e.results.length; i++) {
         const r = e.results[i];
-        if (r.isFinal && r[0]?.transcript) onAppend(r[0].transcript.trim());
+        if (r.isFinal && r[0]?.transcript) {
+          onAppend(r[0].transcript.trim());
+          interim = "";
+        } else if (r[0]?.transcript) {
+          interim += r[0].transcript;
+        }
       }
+      setHeard(interim.trim().slice(-60));
     };
-    rec.onend = () => setListening(false);
-    rec.onerror = () => setListening(false);
+    rec.onend = () => {
+      setListening(false);
+      setHeard("");
+    };
+    rec.onerror = () => {
+      setListening(false);
+      setHeard("");
+    };
     recRef.current = rec;
     try {
       rec.start();
@@ -98,7 +113,7 @@ export function MicButton({
         <rect x="9" y="2" width="6" height="12" rx="3" />
         <path d="M5 11a7 7 0 0 0 14 0M12 18v3" />
       </svg>
-      {listening ? "Listening…" : "Dictate"}
+      {listening ? (heard ? `“${heard}”` : "Listening…") : "Dictate"}
     </button>
   );
 }
