@@ -30,6 +30,15 @@ export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
 // residence-based location ceiling above whenever the goal is about someone being
 // physically PRESENT at a place for a window, not living there. Placed after the
 // location clause in the prompt so it wins for these goals.
+// Two rules born from real misses. (1) The UBC mentor program looked perfect
+// until the page said mentors must be UBC-affiliated; the user is not.
+// Eligibility requirements the user cannot meet are disqualifying, not a
+// footnote. (2) When the user states criteria ("remote or in person", "has to
+// be paid"), each find should ANSWER them, so the UI can show remote/in-person
+// etc. as fields instead of burying it in prose.
+export const ELIGIBILITY_AND_CRITERIA_CLAUSE =
+  `ELIGIBILITY GATE: if the source states requirements for participating (must be a student or alumnus of a SPECIFIC school, members only, licensed professionals only, residents of a place, an affiliation) that ABOUT THE USER clearly does not satisfy, set is_relevant false, whatever else fits; an opportunity the user cannot be accepted into is not an opportunity. When eligibility is stated and the user MEETS it, say so in why_it_fits. CRITERIA ANSWERS: also return "criteria": an array of up to 5 {"ask","answer"} pairs, one for each explicit requirement or preference in the GOAL (remote or in person, paid, timeframe, size, location), where ask is the user's criterion in 2-4 words and answer is what THIS source says about it in 2-6 words ("Remote?" -> "In person, Vancouver"; "Paid?" -> "Unpaid" or "Not stated"). Answer from the source only, "Not stated" when it is silent, never guess.`;
+
 export const TRANSIENT_PRESENCE_CLAUSE =
   ` TRANSIENT / EVENT PRESENCE OVERRIDE: this applies ONLY when the GOAL is about a person being physically present at a place for an event, appearance, tour stop, festival, conference, residency, or visit during a time window (e.g. "artists who will be in Nashville in March", "founders coming to Austin for SXSW", "a speaker in town the week of the 12th"). For such goals, location compatibility is about WHERE THE PERSON WILL BE during that window, NOT where they are based or headquartered — and the residence-based LOCATION ALIGNMENT ceiling above does NOT apply. A person based anywhere who has a confirmed appearance, booked show, tour date, festival slot, or scheduled visit at the goal's location within the window is a STRONG location match: do not penalize them for living elsewhere. Conversely, a local resident who is clearly touring/away during the window is a WEAKER match. Capture the specific appearance/tour date in why_it_fits when the source states it, and raise fit_score when that date falls inside the requested window; lower it (or set is_relevant false) only when the source explicitly shows the person will NOT be there in the window. A candidate is LOCATION-ELIGIBLE for such a goal if EITHER of these is true, and you must accept both paths (do not require a printed future date for everyone): (A) the source shows a confirmed appearance, booked show, tour date, festival slot, residency, or scheduled visit at the goal's location within the window — this is the STRONGEST match, rank it highest and capture the date in why_it_fits; OR (B) the person is openly BASED IN / headquartered in / local to the goal's location (their bio, profile, or the source says they live or are based there) — a local is present by default, so being based there IS sufficient proof they can be in town, treat it as a STRONG match even with no specific date. Reject (set is_relevant false) only when the person is NEITHER confirmed-present in the window NOR based at the location — e.g. an out-of-town person with no booked appearance there — because someone who won't be in town cannot be used. Do NOT reject a locally-based person merely for lacking a printed date; their home base is the proof. Rank confirmed-in-window above merely-local. This eligibility rule SUPERSEDES any required/hard_constraint that would demand a specific printed date and reject locals along with everyone else. If the goal is NOT about transient presence, ignore this override entirely.`;
 
@@ -1385,7 +1394,8 @@ async function extract(
       `the target's own details don't stand on their own, describe the target's business and a plausible use case instead, or leave why_it_fits empty. ` +
       `fit_score: how well the target matches the GOAL's stated criteria; give 0.7+ to clear matches with a contact route, ` +
       `0.4-0.7 to plausible matches missing a contact detail, below 0.3 only when it clearly is not the kind of target the ` +
-      `goal describes. Do NOT lower fit_score just because the industry differs from the user's.`
+      `goal describes. Do NOT lower fit_score just because the industry differs from the user's. ` +
+      ELIGIBILITY_AND_CRITERIA_CLAUSE
     : jobs
     ? jobsRules
     : `${TUNABLE_INDUSTRY_ALIGNMENT_CLAUSE} ` +
@@ -1394,7 +1404,8 @@ async function extract(
       `${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
       `TIME WINDOW ALIGNMENT: if the GOAL specifies a semester or year and the posting is clearly for a different window, set ` +
       `is_relevant false, but only when the source explicitly says the wrong window. ` +
-      `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off.`;
+      `Reserve fit_score above 0.7 for results matching goal + industry + location; give 0.3 or below when two or more are off. ` +
+      ELIGIBILITY_AND_CRITERIA_CLAUSE;
 
   // Personal calibration wins over the universal baseline above by being the
   // last, most specific instruction, same mechanism coaching/dismissedAdvice
@@ -2212,6 +2223,15 @@ export async function discover(
             ? "person"
             : "company",
         whyItFits: noDash(r.why_it_fits || ""), // no em dashes in rendered LLM copy
+        criteria: Array.isArray(r.criteria)
+          ? r.criteria
+              .map((c: any) => ({
+                ask: noDash(String(c?.ask || "")).slice(0, 60),
+                answer: noDash(String(c?.answer || "")).slice(0, 80),
+              }))
+              .filter((c: any) => c.ask && c.answer)
+              .slice(0, 5)
+          : undefined,
         sourceTitle: cand.title || "",
         sourceSnippet: String(cand.content || "").slice(0, 220),
         sources: [

@@ -10867,6 +10867,30 @@ function FindDetailModal({
               )}
             </div>
 
+            {/* The user's own criteria, answered for THIS find: remote or in
+                person, paid, timeframe, whatever the goal asked for. Static
+                rows, no digging in prose. */}
+            {(o.criteria || []).length > 0 && (
+              <div className="space-y-1.5 border-t border-warm-border pt-3">
+                {(o.criteria || []).map((c) => (
+                  <div key={c.ask} className="flex items-baseline gap-3">
+                    <span className="w-24 shrink-0 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                      {c.ask}
+                    </span>
+                    <span
+                      className={`text-sm ${
+                        /not stated|unknown|unclear/i.test(c.answer)
+                          ? "text-body/50"
+                          : "font-semibold text-ink"
+                      }`}
+                    >
+                      {c.answer}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+
             {o.whyItFits && (
               <div>
                 <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">

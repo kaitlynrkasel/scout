@@ -70,6 +70,9 @@ export interface Opportunity {
   // cold-email (often with a contact person attached); "person" = a named contact.
   targetType?: "listing" | "company" | "person";
   whyItFits: string; // recent/specific note used to personalize
+  // The user's own stated criteria, answered for THIS find ("Remote?" ->
+  // "In person, Vancouver"). Shown as static rows in the detail rail.
+  criteria?: { ask: string; answer: string }[];
   // Teammates who denied this prospect in the shared pipeline (client-side
   // annotation). At most ONE such flagged result is shown per search.
   teamDeniedBy?: string[];
