@@ -10,7 +10,7 @@
 // Deliberately self-contained: nothing here touches the live app's styling.
 // Trying a scheme is safe by construction because only this page re-renders.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Scheme = Record<string, string>;
 
@@ -422,33 +422,8 @@ export default function DesignView({
         </div>
 
         {/* Start from anywhere: a preset, a photo, or a pasted list. */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <select
-            value={PRESET_PALETTES.some((pp) => pp.name === sourceNote) ? sourceNote : ""}
-            onChange={(e) => {
-              const pp = PRESET_PALETTES.find((x) => x.name === e.target.value);
-              if (pp) applyColors(pp.colors, pp.name);
-            }}
-            className="scout-select min-w-[220px] rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-brown"
-          >
-            <option value="">Pick a palette…</option>
-            {Array.from(new Set(PRESET_PALETTES.map((pp) => pp.group))).map((g) => (
-              <optgroup key={g} label={g}>
-                {PRESET_PALETTES.filter((pp) => pp.group === g).map((pp) => (
-                  <option key={pp.name} value={pp.name}>
-                    {pp.name}
-                  </option>
-                ))}
-              </optgroup>
-            ))}
-          </select>
-          {PRESET_PALETTES.some((pp) => pp.name === sourceNote) && (
-            <span className="flex overflow-hidden rounded-md border border-warm-border">
-              {PRESET_PALETTES.find((pp) => pp.name === sourceNote)!.colors.map((c) => (
-                <span key={c} className="h-6 w-6" style={{ background: c }} />
-              ))}
-            </span>
-          )}
+        <div className="mt-4">
+          <PalettePicker current={sourceNote} onPick={(pp) => applyColors(pp.colors, pp.name)} />
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label className="cursor-pointer rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:border-brown/50 hover:text-ink">
@@ -864,6 +839,103 @@ export default function DesignView({
           stays the record of where the look has been.
         </p>
       </section>
+    </div>
+  );
+}
+
+
+/* A dropdown where every row SHOWS its palette: a native <select> paints only
+ * text, which made picking colors blind. Grouped, keyboard-escapable, closes
+ * on outside click. */
+function PalettePicker({
+  current,
+  onPick,
+}: {
+  current: string;
+  onPick: (pp: { name: string; colors: string[] }) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDoc = (e: MouseEvent) => {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+  const selected = PRESET_PALETTES.find((pp) => pp.name === current);
+  return (
+    <div ref={boxRef} className="relative inline-block">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        className="flex items-center gap-3 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink transition hover:border-brown/50"
+      >
+        {selected ? (
+          <>
+            <span className="flex overflow-hidden rounded-md">
+              {selected.colors.map((c) => (
+                <span key={c} className="h-5 w-5" style={{ background: c }} />
+              ))}
+            </span>
+            {selected.name}
+          </>
+        ) : (
+          "Pick a palette…"
+        )}
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" className={`text-body/50 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden>
+          <polyline points="6 9 12 15 18 9" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          role="listbox"
+          className="absolute left-0 z-40 mt-1.5 max-h-[420px] w-[340px] overflow-auto rounded-2xl border border-warm-border bg-surface p-2 shadow-xl"
+        >
+          {Array.from(new Set(PRESET_PALETTES.map((pp) => pp.group))).map((g) => (
+            <div key={g}>
+              <div className="px-2 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                {g}
+              </div>
+              {PRESET_PALETTES.filter((pp) => pp.group === g).map((pp) => (
+                <button
+                  key={pp.name}
+                  role="option"
+                  aria-selected={pp.name === current}
+                  onClick={() => {
+                    onPick(pp);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-center gap-3 rounded-xl px-2 py-1.5 text-left text-sm transition ${
+                    pp.name === current
+                      ? "bg-brown-tint/60 font-bold text-brown-deep"
+                      : "font-medium text-body hover:bg-warm-bg"
+                  }`}
+                >
+                  <span className="flex shrink-0 overflow-hidden rounded-md">
+                    {pp.colors.map((c) => (
+                      <span key={c} className="h-5 w-5" style={{ background: c }} />
+                    ))}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{pp.name}</span>
+                  {pp.name === current && (
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 text-brown" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
