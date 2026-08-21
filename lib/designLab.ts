@@ -65,7 +65,34 @@ export const SIX_ON_WHITE: Palette = {
   },
 };
 
-export const PRESETS: Palette[] = [SCOUT_TODAY, SIX_ON_WHITE];
+/**
+ * Yellow and green, bright without going neon. The hard part of this family is
+ * that yellow and green are neighbours on the wheel, so six slots cut from it
+ * blur together — and a system where colour carries meaning dies the moment two
+ * meanings look alike. The separation here is done with value and temperature
+ * rather than hue: two yellows at opposite brightnesses, two greens at
+ * different depths, a moss dark enough to set text in, and a forest anchor.
+ * The spruce started as a sea green and was pushed deeper: at #0E8C7A it sat
+ * only 51 apart from the kelly in RGB, close enough that "a person" and "a
+ * search" would read as the same colour at pill size.
+ */
+export const GROVE: Palette = {
+  label: "Grove",
+  ground: "#fbfdf6", // a hint of the palette in the paper, not plain white
+  surface: "#ffffff",
+  ink: "#12261c",
+  ideas: {
+    search: "#1fa24f", // kelly — clear and active
+    person: "#066b6b", // spruce — deep enough to set text in, and far enough
+                       // from the kelly to never be mistaken for it
+    voice: "#4f6410", // moss — deep enough to carry small text
+    sent: "#f0a722", // marigold — warm, in motion
+    reply: "#c4d544", // lime — the brightest thing on the screen
+    shared: "#14402c", // forest — the institutional anchor
+  },
+};
+
+export const PRESETS: Palette[] = [SCOUT_TODAY, SIX_ON_WHITE, GROVE];
 
 /* ---- colour maths ------------------------------------------------------ */
 

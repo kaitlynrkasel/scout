@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
   IDEAS,
+  PRESETS,
   SIX_ON_WHITE,
   applyPalette,
   contrastOnWhite,
@@ -578,19 +579,31 @@ export default function DesignView({
 
         <div className="mt-4 grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className="space-y-2">
-            <button
-              onClick={() => setIdeaPalette(SIX_ON_WHITE)}
-              className="mb-2 flex w-full items-center gap-2 rounded-xl border border-warm-border px-3 py-2.5 text-left transition hover:border-brown/50 hover:bg-warm-bg/50"
-            >
-              {IDEAS.map(({ key }) => (
-                <span
-                  key={key}
-                  className="h-5 w-5 rounded-md"
-                  style={{ background: SIX_ON_WHITE.ideas[key] }}
-                />
-              ))}
-              <span className="ml-1 text-xs font-bold text-ink">Load the proposal</span>
-            </button>
+            <div className="mb-3 space-y-1.5">
+              {PRESETS.map((preset) => {
+                const active = preset.label === ideaPalette.label;
+                return (
+                  <button
+                    key={preset.label}
+                    onClick={() => setIdeaPalette(preset)}
+                    className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2.5 text-left transition ${
+                      active
+                        ? "border-brown bg-brown-tint/40"
+                        : "border-warm-border hover:border-brown/50 hover:bg-warm-bg/50"
+                    }`}
+                  >
+                    {IDEAS.map(({ key }) => (
+                      <span
+                        key={key}
+                        className="h-5 w-5 rounded-md"
+                        style={{ background: preset.ideas[key] }}
+                      />
+                    ))}
+                    <span className="ml-1 text-xs font-bold text-ink">{preset.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
             {IDEAS.map(({ key, name, blurb }) => {
               const hex = ideaPalette.ideas[key];
