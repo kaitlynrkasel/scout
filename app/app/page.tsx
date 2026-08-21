@@ -10527,6 +10527,26 @@ function FindDetailModal({
     setFrameLoaded(false);
     bridgeAliveRef.current = false;
   }, [o.url]);
+  // Heavy application portals (Workday and friends) are full apps that can
+  // spin for a minute through the proxy and often render blank anyway. Don't
+  // make the user sit through that: known-heavy hosts fail over to the
+  // open-in-new-tab card immediately, and anything else gets 10 seconds to
+  // paint before the same card appears.
+  const heavyPortal = /(myworkdayjobs|workday|icims|taleo|successfactors|oraclecloud)\.(com|net)/i.test(
+    o.url || ""
+  );
+  useEffect(() => {
+    if (!o.url) return;
+    if (heavyPortal) {
+      setPreviewFailed(true);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      if (!bridgeAliveRef.current) setPreviewFailed(true);
+    }, 10000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o.url]);
   // Pre-fill the previewed contact/application form with everything Scout knows
   // about the sender + the drafted message. Never submits, only populates.
   function fillForm() {
@@ -11242,8 +11262,9 @@ function FindDetailModal({
                         This site can&apos;t be previewed here
                       </div>
                       <p className="mt-1.5 text-xs leading-relaxed text-body/70">
-                        {host || "The site"} blocks embedding. Open it in a new tab, everything
-                        else (draft, scan for contact) still works.
+                        {heavyPortal
+                          ? `${host || "This"} is a full application portal that only loads properly in its own tab.`
+                          : `${host || "The site"} blocks embedding or is too slow to preview. Open it in a new tab, everything else (draft, scan for contact) still works.`}
                       </p>
                       <a
                         href={o.url}
