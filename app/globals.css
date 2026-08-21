@@ -815,14 +815,16 @@ select.scout-kind-picker option {
   background: #3a2c23;
 }
 
-/* The work area below the composer: the same room, one shade deeper, so the
-   stage reads as the lit part and the results as the desk. Light cards carry
-   the content. */
+/* The work area below the composer. This used to sit one shade deeper than the
+   stage (#4a3729 against #5c4634), meant to read as "the desk" below "the lit
+   part" — but at that small a gap it doesn't read as depth, it reads as two
+   browns that failed to match, with a visible seam where they meet. One room,
+   one colour; the light cards inside carry the separation instead. */
 .scout-results {
-  background: #4a3729;
+  background: #5c4634;
 }
 .dark .scout-results {
-  background: #2e231c;
+  background: #3a2c23;
 }
 
 /* The two toggles. Rounded, translucent, sitting on the ground rather than in
