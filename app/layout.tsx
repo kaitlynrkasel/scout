@@ -41,6 +41,22 @@ export const metadata: Metadata = {
   description:
     "Find the right people, get their contacts, and draft personalized outreach in your voice.",
   applicationName: "Scout",
+  // Link previews: app/opengraph-image.png is picked up automatically by the
+  // metadata route convention; these fill in the text halves of the card.
+  openGraph: {
+    title: "Scout | Find Your People",
+    description:
+      "Scout finds who to reach and writes the first note in your voice.",
+    url: "https://scout-source.com",
+    siteName: "Scout",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Scout | Find Your People",
+    description:
+      "Scout finds who to reach and writes the first note in your voice.",
+  },
   // Installed to an iOS home screen, Scout launches without Safari's chrome and
   // draws its own title bar. "default" keeps the status bar legible on the cream
   // canvas; the tint itself is the theme-color below, kept in sync by <Pwa />.
