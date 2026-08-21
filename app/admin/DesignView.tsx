@@ -134,10 +134,141 @@ const ERAS: Era[] = [
 
 const PIN_KEY = "scout_admin_design_pins";
 
+// ---- Palette helpers: turn any list of colors into a scheme ----
+function hexToRgb(hex: string): [number, number, number] | null {
+  const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
+  if (!m) return null;
+  let h = m[1];
+  if (h.length === 3) h = h.split("").map((c) => c + c).join("");
+  return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+const lum = (hex: string) => {
+  const c = hexToRgb(hex);
+  return c ? (0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]) / 255 : 0.5;
+};
+const shade = (hex: string, f: number) => {
+  const c = hexToRgb(hex);
+  if (!c) return hex;
+  return `#${c.map((v) => Math.max(0, Math.min(255, Math.round(v * f))).toString(16).padStart(2, "0")).join("")}`;
+};
+const hueOf = (hex: string) => {
+  const c = hexToRgb(hex);
+  if (!c) return 0;
+  const [r, g, b] = c.map((v) => v / 255);
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  if (mx === mn) return 0;
+  const d = mx - mn;
+  let h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
+  return h * 60;
+};
+
+// Map an arbitrary color list onto Scout's token slots by luminance: the
+// stage wants a deep tone, the canvas a pale one, and the work area is always
+// a shade of the stage so the two rooms stay related whatever the source.
+function schemeFromColors(colors: string[]): { scheme: Scheme; rainbow: string[] | null } {
+  const cs = colors.filter((c) => hexToRgb(c)).map((c) => (c.startsWith("#") ? c : `#${c}`));
+  if (cs.length < 2) return { scheme: { ...DEFAULT_SCHEME }, rainbow: null };
+  const byLum = [...cs].sort((a, b) => lum(a) - lum(b));
+  const darkest = byLum[0];
+  const light = byLum[byLum.length - 1];
+  const stage = byLum.length >= 3 ? byLum[1] : darkest;
+  const mid = byLum[Math.floor(byLum.length / 2)];
+  const scheme: Scheme = {
+    "Stage brown": lum(stage) < 0.55 ? stage : shade(stage, 0.55),
+    "Work area": shade(lum(stage) < 0.55 ? stage : shade(stage, 0.55), 0.8),
+    "Cream": lum(light) > 0.75 ? light : "#f6efe6",
+    "Canvas": lum(light) > 0.75 ? shade(light, 1.03) : "#f8f7f5",
+    "Ink": lum(darkest) < 0.2 ? darkest : "#2b2723",
+    "Accent blue": mid,
+  };
+  const rainbow =
+    cs.length >= 6 ? [...cs].sort((a, b) => hueOf(a) - hueOf(b)).slice(0, 6) : null;
+  return { scheme, rainbow };
+}
+
+// Pull the dominant colors out of an uploaded image (a palette shot, a website
+// screenshot) with a coarse quantize-and-count, keeping the winners apart so
+// six near-identical pixels of one background don't fill every slot.
+async function colorsFromImage(file: File): Promise<string[]> {
+  const url = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((res, rej) => {
+      const i = new Image();
+      i.onload = () => res(i);
+      i.onerror = rej;
+      i.src = url;
+    });
+    const w = 80;
+    const h = Math.max(1, Math.round((img.height / img.width) * w));
+    const cv = document.createElement("canvas");
+    cv.width = w;
+    cv.height = h;
+    const ctx = cv.getContext("2d")!;
+    ctx.drawImage(img, 0, 0, w, h);
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const buckets = new Map<string, { n: number; r: number; g: number; b: number }>();
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] < 200) continue;
+      const r = data[i], g = data[i + 1], b = data[i + 2];
+      const k = `${r >> 4}-${g >> 4}-${b >> 4}`;
+      const cur = buckets.get(k) || { n: 0, r: 0, g: 0, b: 0 };
+      cur.n++; cur.r += r; cur.g += g; cur.b += b;
+      buckets.set(k, cur);
+    }
+    const ranked = [...buckets.values()]
+      .sort((a, b) => b.n - a.n)
+      .map((v) => [Math.round(v.r / v.n), Math.round(v.g / v.n), Math.round(v.b / v.n)] as const);
+    const out: string[] = [];
+    for (const [r, g, b] of ranked) {
+      const hex = `#${[r, g, b].map((v) => v.toString(16).padStart(2, "0")).join("")}`;
+      // keep winners visually apart
+      if (out.some((o) => {
+        const c = hexToRgb(o)!;
+        return Math.abs(c[0] - r) + Math.abs(c[1] - g) + Math.abs(c[2] - b) < 90;
+      }))
+        continue;
+      out.push(hex);
+      if (out.length >= 8) break;
+    }
+    return out;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// A spread of ready palettes, deliberately wide: warm, cool, loud, quiet.
+const PRESET_PALETTES: { name: string; colors: string[] }[] = [
+  { name: "Shipped Scout", colors: ["#2b2723", "#5c4634", "#536872", "#f6efe6", "#f8f7f5", "#377ec0"] },
+  { name: "Espresso", colors: ["#1f1712", "#3b2c20", "#6f4e37", "#c89f7c", "#efe3d5", "#a3542f"] },
+  { name: "Tidepool", colors: ["#0e2a33", "#155e63", "#12baaa", "#9fd2d6", "#f2f7f6", "#f7891f"] },
+  { name: "Sunset motel", colors: ["#241b2f", "#5460ac", "#f04f52", "#f7891f", "#fbdf54", "#fdf6ec"] },
+  { name: "Meadow", colors: ["#1e2a1c", "#3f5f3a", "#7ba05b", "#cfe3b8", "#f6f8ef", "#c96f3a"] },
+  { name: "Ink and paper", colors: ["#14161a", "#3a3f4a", "#7b8494", "#d8dbe0", "#fafbfc", "#b5443c"] },
+  { name: "Grape soda", colors: ["#231631", "#4a2d6b", "#7a5aa8", "#c9b6e4", "#f7f3fb", "#12baaa"] },
+  { name: "Desert clay", colors: ["#2c1c14", "#8a5a44", "#c98a5e", "#e8c9a8", "#faf3ea", "#3f5666"] },
+  { name: "Deep pine", colors: ["#0f1f18", "#1e4034", "#4a5f52", "#a8c5b2", "#f1f6f2", "#e0a53a"] },
+  { name: "Denim", colors: ["#141c26", "#2b3f57", "#537ba2", "#a9c2d8", "#f4f7fa", "#c96f3a"] },
+  { name: "Rosewood", colors: ["#26141a", "#5f2a3a", "#a04a5e", "#dba6b0", "#faf1f3", "#3f6b4f"] },
+  { name: "Citrus press", colors: ["#20250f", "#5a5f3f", "#a3b02a", "#fbdf54", "#fbfaef", "#f04f52"] },
+  { name: "Harbor slate", colors: ["#161c1f", "#2f4356", "#536872", "#a5b0b6", "#f3f5f6", "#12baaa"] },
+  { name: "Bubblegum", colors: ["#2a1622", "#8a2f5c", "#e0699e", "#f7c2d8", "#fdf3f7", "#377ec0"] },
+  { name: "Harvest", colors: ["#241a0e", "#6b4a1f", "#a9761f", "#e0b45c", "#faf3e3", "#6d3f52"] },
+  { name: "Night shift", colors: ["#0b0d12", "#1c2230", "#39415a", "#8b93ad", "#e8eaf1", "#f7891f"] },
+];
+
 export default function DesignView() {
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
   const [copied, setCopied] = useState(false);
+  const [typedColors, setTypedColors] = useState("");
+  const [sourceNote, setSourceNote] = useState("");
+
+  const applyColors = (colors: string[], label: string) => {
+    const { scheme: sc, rainbow: rb } = schemeFromColors(colors);
+    setScheme(sc);
+    if (rb) setRainbow(rb);
+    setSourceNote(label);
+  };
   const [pins, setPins] = useState<string[]>(() => {
     try {
       const p = JSON.parse(localStorage.getItem(PIN_KEY) || "[]");
@@ -174,6 +305,62 @@ export default function DesignView() {
           Edit the tokens and the preview re-renders live. Nothing here touches
           the real app; when a scheme feels right, copy it out and hand it over.
         </p>
+        {/* Start from anywhere: a preset, a photo, or a pasted list. */}
+        <div className="mt-4 flex flex-wrap gap-2">
+          {PRESET_PALETTES.map((pp) => (
+            <button
+              key={pp.name}
+              onClick={() => applyColors(pp.colors, pp.name)}
+              title={pp.name}
+              className={`group flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition hover:border-brown/50 ${
+                sourceNote === pp.name ? "border-brown bg-brown-tint/40" : "border-warm-border bg-surface"
+              }`}
+            >
+              <span className="flex overflow-hidden rounded-md">
+                {pp.colors.map((c) => (
+                  <span key={c} className="h-4 w-3.5" style={{ background: c }} />
+                ))}
+              </span>
+              <span className="text-xs font-semibold text-body group-hover:text-ink">{pp.name}</span>
+            </button>
+          ))}
+        </div>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <label className="cursor-pointer rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:border-brown/50 hover:text-ink">
+            Pull colors from a photo
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={async (e) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                try {
+                  const cols = await colorsFromImage(f);
+                  if (cols.length >= 2) applyColors(cols, f.name);
+                  else setSourceNote("Could not read enough distinct colors from that image.");
+                } catch {
+                  setSourceNote("Could not read that image.");
+                }
+                e.target.value = "";
+              }}
+            />
+          </label>
+          <input
+            value={typedColors}
+            onChange={(e) => setTypedColors(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              const cols = typedColors.match(/#?[0-9a-fA-F]{6}|#?[0-9a-fA-F]{3}\b/g) || [];
+              if (cols.length >= 2) applyColors(cols, "typed colors");
+              else setSourceNote("Type at least two hex colors, like #5c4634 #f6efe6.");
+            }}
+            placeholder="Or type hex colors and press Enter: #5c4634 #f6efe6 #536872"
+            className="min-w-[280px] flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs text-ink outline-none transition focus:border-brown"
+          />
+          {sourceNote && <span className="text-xs text-body/60">From: {sourceNote}</span>}
+        </div>
+
         <div className="mt-4 grid gap-6 lg:grid-cols-[300px_minmax(0,1fr)]">
           <div className="space-y-2.5">
             {Object.keys(scheme).map((k) => (
