@@ -798,6 +798,83 @@ select.scout-kind-picker option {
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230D2B45' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E"), none !important;
 }
 
+/* ============================================================================
+   The Scout stage: the search composer, on its own deep-brown ground.
+   ------------------------------------------------------------------------
+   Scout is the screen you come to do the work on, and as a white card full of
+   bordered inputs it read as a form to fill in. On its own ground, with the
+   controls floating free of any card and the question set in display type, it
+   reads as a place you ask for something. Scoped to `.scout-stage` so nothing
+   else in the app inherits a dark canvas.
+   ========================================================================== */
+.scout-stage {
+  background: #5c4634;
+  color: #f6efe6;
+}
+.dark .scout-stage {
+  background: #3a2c23;
+}
+
+/* The two toggles. Rounded, translucent, sitting on the ground rather than in
+   a box, and wide enough to read as a choice rather than a form field. */
+.stage-toggle {
+  border-radius: 9999px;
+  border: 1px solid rgb(255 255 255 / 0.22);
+  background: rgb(255 255 255 / 0.09);
+  color: #f6efe6;
+  transition: background-color 0.2s ease, border-color 0.2s ease;
+}
+.stage-toggle:hover {
+  background: rgb(255 255 255 / 0.16);
+  border-color: rgb(255 255 255 / 0.34);
+}
+
+/* The ask itself: no border, no fill, no focus ring. Just words on the ground. */
+.stage-ask {
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #fdf8f1;
+  caret-color: #fdf8f1;
+  resize: none;
+}
+.stage-ask::placeholder {
+  color: rgb(253 248 241 / 0.42);
+}
+
+/* A quiet second line for the optional exemplars. */
+.stage-sub {
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: rgb(253 248 241 / 0.9);
+  resize: none;
+}
+.stage-sub::placeholder {
+  color: rgb(253 248 241 / 0.34);
+}
+
+/* Results arriving during a run: they lift in rather than snapping into place,
+   so a search reads as things being found one at a time. */
+@keyframes scout-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.scout-rise {
+  animation: scout-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scout-rise {
+    animation: none;
+  }
+}
+
 /* Indeterminate progress bar for the "Reading your goal…" understanding phase,
    so clicking Scout never looks frozen while the goal is being read. */
 @keyframes scout-indeterminate {

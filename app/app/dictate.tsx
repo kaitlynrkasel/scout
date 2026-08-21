@@ -15,9 +15,12 @@ export function joinSpoken(prev: string, add: string): string {
 export function MicButton({
   onAppend,
   className = "",
+  light = false,
 }: {
   onAppend: (text: string) => void;
   className?: string;
+  // For dark grounds (the Scout stage): light strokes instead of the warm greys.
+  light?: boolean;
 }) {
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
@@ -73,8 +76,12 @@ export function MicButton({
       aria-pressed={listening}
       className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-[11px] font-semibold transition ${
         listening
-          ? "border-coral bg-coral/10 text-accent"
-          : "border-warm-border text-body/70 hover:bg-warm-bg"
+          ? light
+            ? "border-white/60 bg-white/15 text-white"
+            : "border-coral bg-coral/10 text-accent"
+          : light
+            ? "border-white/25 text-white/70 hover:bg-white/10 hover:text-white"
+            : "border-warm-border text-body/70 hover:bg-warm-bg"
       } ${className}`}
     >
       <svg

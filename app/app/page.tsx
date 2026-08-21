@@ -4264,6 +4264,55 @@ function ScoutTool({
     return fresh.length;
   }
 
+  // ---- News: what the team (and Scout) did since you last read it ----
+  // Read state is a timestamp on this device; "closing" the card just stamps
+  // now, so the card stays gone until something newer happens. The nav shows a
+  // "News!" tag, never a number, when anything is newer than the stamp.
+  const [newsItems, setNewsItems] = useState<
+    { kind: string; who?: string; count: number; detail: string; at: string }[]
+  >([]);
+  const [newsReadAt, setNewsReadAt] = useState<string>(() => {
+    try {
+      return localStorage.getItem("scout_news_read_at") || "";
+    } catch {
+      return "";
+    }
+  });
+  const markNewsRead = () => {
+    const now = new Date().toISOString();
+    setNewsReadAt(now);
+    try {
+      localStorage.setItem("scout_news_read_at", now);
+    } catch {}
+  };
+  useEffect(() => {
+    if (!teamLens || !getToken) {
+      setNewsItems([]);
+      return;
+    }
+    let alive = true;
+    (async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const since = newsReadAt || new Date(Date.now() - 7 * 86400000).toISOString();
+        const r = await fetch(
+          `/api/team/news?workspaceId=${teamLens}&since=${encodeURIComponent(since)}`,
+          { headers: { authorization: `Bearer ${token}` } }
+        );
+        const j = await r.json().catch(() => ({}));
+        if (alive && Array.isArray(j.items)) setNewsItems(j.items);
+      } catch {
+        /* no news is fine news */
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teamLens, newsReadAt, tab]);
+  const unreadNews = newsItems.filter((n) => !newsReadAt || n.at > newsReadAt);
+
   // A teammate's find is your find. On a company lens the pipeline is shared by
   // definition, so making someone claim each row before they could act on it
   // added a step that answered no question: everyone could already see them, and
@@ -6661,6 +6710,7 @@ function ScoutTool({
         />
       )}
       <SideNav
+        hasNews={unreadNews.length > 0}
         tab={tab}
         setTab={setTab}
         tourTarget={tourTarget}
@@ -6911,160 +6961,130 @@ function ScoutTool({
           Scout gets a warmer canvas than the rest of the app: it is the screen
           you come to do the work on, and the deeper ground makes the search card
           read as the object on the page rather than blending into it. */}
-      <div
-        ref={contentRef}
-        className={`flex flex-1 flex-col transition-colors ${
-          tab === "outreach" ? "bg-brown-tint/45" : ""
-        }`}
-      >
+      <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
-          <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
-          <div className="mb-6">
-            <div className="kicker mb-2">Find &middot; Track &middot; Draft</div>
-            <h1 className="font-display text-[32px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">Scout</h1>
-            {/* The company lens lives in the sidebar now; no duplicate here. */}
-            {teamLens && (
-              <div className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
-                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-                </svg>
-                <span className="font-semibold text-ink">Shared with your team.</span>
-                <span className="text-body/80">
-                  Projects and categories you add on the {teamLensName} lens are
-                  shared, so everyone searches the same buckets.
-                </span>
-              </div>
-            )}
-          </div>
+          <main className="w-full">
 
-          {/* First-run welcome: we auto-run one search so a new user sees results
-              right away. Clears itself once results land or on dismiss. */}
-          {firstSearchBanner && opps.length === 0 && (
-            <div className="mb-6 flex items-start gap-3 rounded-2xl border border-sage/40 bg-sage/10 p-4">
-              <div className="min-w-0 flex-1">
-                <div className="text-sm font-extrabold text-ink">
-                  {discovering
-                    ? "Running your first search…"
-                    : "Welcome, let's find your first people"}
-                </div>
-                <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                  Scout is searching on the goal below so you can see real results
-                  fast. Tweak the goal or category anytime and search again.
-                </p>
-              </div>
-              <button
-                onClick={() => setFirstSearchBanner(false)}
-                aria-label="Dismiss"
-                className="shrink-0 rounded-lg px-2 py-1 text-lg leading-none text-body/50 transition hover:text-ink"
-              >
-                ×
-              </button>
-            </div>
-          )}
-
-            {/* ---------------- Request card (gated behind a completed profile) ---------------- */}
+            {/* ---------------- The stage (gated behind a completed profile) ----------------
+                Not a card of inputs. The whole band is the composer: choose the
+                project and category in two floating toggles, then say who you
+                are after, in display type on the ground itself. */}
             {profileComplete || guest ? (
-            <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
-              {/* -------- Project switcher: one workspace per artist / client / goal -------- */}
-              {/* Two toggles, nothing else. Defining a project or a category
-                  happens on the Projects tab; this screen is for choosing one
-                  and saying who you are after. */}
-              <div
-                data-tour="project-switcher"
-                className="mb-6 grid gap-4 border-b border-warm-border pb-6 sm:grid-cols-2 [&>*]:min-w-0"
-              >
-                <div>
-                  <Label>Project</Label>
-                  <PrettySelect
-                    ariaLabel="Project"
-                    value={activeId}
-                    onChange={selectProject}
-                    options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
-                  />
-                </div>
-                <div data-tour="category-switcher">
-                  <div className="mb-1.5 flex items-center justify-between gap-2">
-                    <Label className="mb-0">Category of search</Label>
-                    <button
-                      onClick={() => setTab("projects")}
-                      className="text-[11px] font-semibold text-accent transition hover:underline"
-                    >
-                      Manage projects
-                    </button>
+            <section className="scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12">
+              <div className="mx-auto w-full max-w-3xl">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+                    Scouting for
+                  </span>
+                  <div data-tour="project-switcher" className="stage-toggle">
+                    <PrettySelect
+                      ariaLabel="Project"
+                      bare
+                      value={activeId}
+                      onChange={selectProject}
+                      options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
+                    />
                   </div>
-                  <PrettySelect
-                    ariaLabel="Category of search"
-                    value={catId}
-                    onChange={selectCategory}
-                    options={[
-                      ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                      { value: "", label: "Custom search…" },
-                    ]}
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-6 [&>*]:min-w-0">
-
-                <div>
-                  <div className="mb-1 flex items-center justify-between gap-2">
-                    <Label className="mb-0">Who are you looking for?</Label>
-                    <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} />
+                  <span className="text-white/40">·</span>
+                  <div data-tour="category-switcher" className="stage-toggle">
+                    <PrettySelect
+                      ariaLabel="Category of search"
+                      bare
+                      value={catId}
+                      onChange={selectCategory}
+                      options={[
+                        ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                        { value: "", label: "Custom search…" },
+                      ]}
+                    />
                   </div>
-                  <textarea
-                    ref={goalInputRef}
-                    value={goal}
-                    onChange={(e) => setGoal(e.target.value)}
-                    placeholder={goalPlaceholder}
-                    rows={3}
-                    className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                  />
-                  <p className="mt-1.5 text-xs text-body/70">
-                    Tip: add your industry, genre, or city to sharpen the results.
+                  <button
+                    onClick={() => setTab("projects")}
+                    className="ml-auto text-[11px] font-semibold text-white/50 transition hover:text-white"
+                  >
+                    Manage projects
+                  </button>
+                </div>
+
+                {firstSearchBanner && opps.length === 0 && (
+                  <p className="scout-fade-in mt-5 text-sm font-medium text-white/70">
+                    {discovering
+                      ? "Running your first search so you see real results right away…"
+                      : "Welcome. Tell Scout who you're after, or run the goal below to see it work."}
                   </p>
+                )}
+
+                <div className="mt-6">
+                  {catId ? (
+                    // A saved category is a defined search, so show it as what
+                    // it IS: a few bullet points of who it finds, not a chat
+                    // bar to retype. Click a bullet to edit, add one to
+                    // sharpen; the joined bullets are the goal the engine runs.
+                    <StageBullets goal={goal} onGoal={setGoal} />
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-3">
+                        <label htmlFor="stage-goal" className="sr-only">
+                          Who are you looking for?
+                        </label>
+                        <textarea
+                          id="stage-goal"
+                          ref={goalInputRef}
+                          value={goal}
+                          onChange={(e) => setGoal(e.target.value)}
+                          placeholder={goalPlaceholder || "Who are you looking for?"}
+                          rows={goal.length > 90 ? 3 : 2}
+                          className="stage-ask font-display w-full text-2xl font-bold leading-snug tracking-[-0.01em] sm:text-[28px]"
+                        />
+                        <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} light />
+                      </div>
+                      <div className="mt-1 h-px w-full bg-white/15" />
+                      <p className="mt-2 text-xs text-white/45">
+                        Add your industry, genre, or city to sharpen the results.
+                      </p>
+                    </>
+                  )}
 
                   {/* Optional exemplars: links / names / companies "like this".
                       Fed to the engine as type-and-quality exemplars, never as
-                      scope filters — an explicit "any industry" goal still wins. */}
-                  <div className="mt-4">
-                    <div className="mb-1 flex items-center gap-2">
-                      <Label className="mb-0">Examples of what you want</Label>
-                      <span className="rounded-full bg-warm-bg px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-body/50">
-                        Optional
-                      </span>
-                    </div>
+                      scope filters — an explicit "any industry" goal still wins.
+                      A quiet second line, not a second bordered field: it only
+                      opens if you reach for it. */}
+                  <details className="group mt-4" open={!!examples.trim()}>
+                    <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-white/55 transition hover:text-white/80">
+                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90" aria-hidden><path d="m9 18 6-6-6-6" /></svg>
+                      Examples of what you want
+                      <span className="font-normal text-white/35">optional</span>
+                    </summary>
                     <textarea
                       value={examples}
                       onChange={(e) => setExamples(e.target.value)}
                       rows={2}
-                      placeholder="Links, names, or companies like the ones you want, e.g. https://example.com/their-page, Jane Doe at Sub Pop, “something like Daytrotter”"
-                      className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                      placeholder={'Links, names, or companies like the ones you want, e.g. https://example.com/their-page, Jane Doe at Sub Pop, "something like Daytrotter"'}
+                      className="stage-sub mt-2 w-full text-sm leading-relaxed"
                     />
-                    <p className="mt-1 text-[11px] leading-relaxed text-body/60">
-                      Scout uses these as examples of the <b>type</b> you want, they
-                      won&apos;t narrow your search. If your goal says any industry,
-                      you&apos;ll still get all industries.
+                    <p className="text-[11px] leading-relaxed text-white/40">
+                      Examples of the type you want; they won&apos;t narrow the search.
                     </p>
-                  </div>
+                  </details>
 
                   {!aboutText && (
                     <button
                       onClick={() => setTab("profile")}
-                      className="mt-2 text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                      className="mt-2 text-xs font-semibold text-white/60 underline-offset-2 hover:text-white hover:underline"
                     >
                       Add your info in Profile to personalize your messages →
                     </button>
                   )}
                 </div>
-              </div>
 
-              <div className="mt-6 flex flex-wrap items-center gap-3">
+              <div className="mt-7 flex flex-wrap items-center gap-3">
                 <button
                   ref={scoutBtnRef}
                   onClick={startScout}
                   disabled={discovering || gating || !goal.trim()}
-                  className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                  className="rounded-full bg-cream px-8 py-3 text-sm font-bold text-brown-deep shadow-soft transition hover:bg-white disabled:opacity-50"
                 >
                   {discovering ? "Scouting…" : gating ? "Understanding…" : "Scout"}
                 </button>
@@ -7072,7 +7092,7 @@ function ScoutTool({
                   <button
                     onClick={stopDiscover}
                     title="Stop this run. Scout keeps whatever it has already found."
-                    className="rounded-xl border border-warm-border px-4 py-3 text-sm font-semibold text-body transition hover:border-red-300 hover:bg-red-50 hover:text-danger"
+                    className="rounded-full border border-white/25 px-4 py-3 text-sm font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
                   >
                     {liveCount > 0
                       ? `Cancel · keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
@@ -7083,26 +7103,26 @@ function ScoutTool({
                     Scout reads the goal before searching. */}
                 {gating && (
                   <div className="scout-fade-in flex min-w-0 flex-1 items-center gap-2.5">
-                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-brown-tint">
-                      <div className="scout-indeterminate h-full w-1/2 rounded-full bg-brown" />
+                    <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/15">
+                      <div className="scout-indeterminate h-full w-1/2 rounded-full bg-cream" />
                     </div>
-                    <span className="text-xs font-medium text-body/80">
+                    <span className="text-xs font-medium text-white/70">
                       Reading your goal…
                     </span>
                   </div>
                 )}
                 {/* Brief confirmation the moment understanding finishes. */}
                 {understoodFlash && !gating && (
-                  <span className="scout-fade-in inline-flex items-center gap-1.5 rounded-full border border-sage/40 bg-sage/10 px-2.5 py-1 text-xs font-semibold text-sage-deep">
+                  <span className="scout-fade-in inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
                     Scout understands your inquiry
                   </span>
                 )}
-                {stats && <span className="text-xs text-body/80">{stats}</span>}
+                {stats && <span className="text-xs text-white/60">{stats}</span>}
                 {skipped.length > 0 && (
                   <button
                     onClick={() => setShowSkipped((v) => !v)}
-                    className="ml-auto text-xs font-semibold text-body/70 underline-offset-2 transition hover:text-brown-deep hover:underline"
+                    className="ml-auto text-xs font-semibold text-white/55 underline-offset-2 transition hover:text-white hover:underline"
                   >
                     {showSkipped ? "Hide" : "See"} what was filtered ({skipped.length})
                   </button>
@@ -7112,49 +7132,48 @@ function ScoutTool({
               {/* Job/internship fallback disclosure: never pass companies off as
                   confirmed openings. */}
               {searchNotice && (
-                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
-                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sage/20 text-[11px] font-extrabold text-sage-deep">
+                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-white/15 bg-white/5 px-4 py-3">
+                  <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/15 text-[11px] font-extrabold text-white">
                     i
                   </span>
-                  <p className="text-xs leading-relaxed text-body">{searchNotice}</p>
+                  <p className="text-xs leading-relaxed text-white/80">{searchNotice}</p>
                 </div>
               )}
 
               {/* Confidence gate: Scout has gaps, so ask before running. */}
               {planGate && (
-                <div className="mt-5 overflow-hidden rounded-2xl border border-coral/30 bg-warm-bg/50 shadow-card">
-                  <div className="flex flex-wrap items-center gap-3 border-b border-warm-border bg-surface px-5 py-4">
+                <div className="scout-fade-in mt-8 border-t border-white/12 pt-6">
+                  <div className="flex flex-wrap items-center gap-3">
                     <div className="relative h-11 w-11 shrink-0">
                       <svg viewBox="0 0 36 36" className="h-11 w-11 -rotate-90">
-                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" className="text-warm-border" />
+                        <circle cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" className="text-white/15" />
                         <circle
                           cx="18" cy="18" r="15.5" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"
-                          className="text-coral transition-all duration-500"
+                          className="text-cream transition-all duration-500"
                           strokeDasharray={`${(liveUnderstanding / 100) * 97.4} 97.4`}
                         />
                       </svg>
-                      <span className="absolute inset-0 grid place-items-center text-[11px] font-extrabold text-ink tabular-nums">
+                      <span className="absolute inset-0 grid place-items-center text-[11px] font-extrabold text-white tabular-nums">
                         {liveUnderstanding}%
                       </span>
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-extrabold tracking-tight text-ink">
-                        Scout understands {liveUnderstanding}% of your inquiry
+                      <div className="font-display text-lg font-bold tracking-tight text-white">
+                        A couple of things before Scout runs
                       </div>
-                      <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-                        Answer to sharpen it: the more you tell Scout, the higher this
-                        climbs. Change any answer, or just run Scout now.
+                      <p className="mt-0.5 text-xs leading-relaxed text-white/60">
+                        Each answer sharpens the search. Or skip them and run now.
                       </p>
                     </div>
                   </div>
-                  <div className="px-5 py-4">
-                    <div className="space-y-4">
+                  <div className="mt-5">
+                    <div className="space-y-5">
                       {planGate.questions.map((q, i) => (
                         <div key={i}>
-                          <div className="text-xs font-bold leading-relaxed text-ink">
+                          <div className="text-sm font-semibold leading-relaxed text-white/90">
                             {q.question}
                           </div>
-                          <div className="mt-0.5 text-[11px] text-body/50">
+                          <div className="mt-0.5 text-[11px] text-white/40">
                             Pick any that apply.
                           </div>
                           <div className="mt-2 flex flex-wrap gap-1.5">
@@ -7167,8 +7186,8 @@ function ScoutTool({
                                   className={
                                     "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
                                     (active
-                                      ? "border-coral bg-coral text-white"
-                                      : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
+                                      ? "border-cream bg-cream text-brown-deep"
+                                      : "border-white/25 bg-white/5 text-white/80 hover:border-white/50 hover:text-white")
                                   }
                                 >
                                   {opt}
@@ -7182,8 +7201,8 @@ function ScoutTool({
                               className={
                                 "rounded-full border px-3 py-1.5 text-xs font-semibold transition " +
                                 ((picks[i] || []).includes("__any__")
-                                  ? "border-coral bg-coral text-white"
-                                  : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
+                                  ? "border-cream bg-cream text-brown-deep"
+                                  : "border-white/25 bg-white/5 text-white/80 hover:border-white/50 hover:text-white")
                               }
                             >
                               Any / all
@@ -7193,8 +7212,8 @@ function ScoutTool({
                               className={
                                 "rounded-full border border-dashed px-3 py-1.5 text-xs font-semibold transition " +
                                 ((picks[i] || []).includes("__other__")
-                                  ? "border-coral bg-coral text-white"
-                                  : "border-warm-border bg-surface text-body hover:border-coral/40 hover:text-accent")
+                                  ? "border-cream bg-cream text-brown-deep"
+                                  : "border-white/25 bg-white/5 text-white/80 hover:border-white/50 hover:text-white")
                               }
                             >
                               Other…
@@ -7208,7 +7227,7 @@ function ScoutTool({
                               }
                               autoFocus
                               placeholder="Type your answer…"
-                              className="mt-2 w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+                              className="stage-sub mt-2 w-full border-b border-white/20 pb-1 text-sm leading-relaxed focus:border-white/50"
                             />
                           )}
                         </div>
@@ -7218,13 +7237,13 @@ function ScoutTool({
                       <button
                         onClick={runFromGate}
                         disabled={discovering}
-                        className="rounded-xl bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                        className="rounded-full bg-cream px-6 py-2.5 text-sm font-bold text-brown-deep shadow-soft transition hover:bg-white disabled:opacity-50"
                       >
                         {answeredCount > 0 ? "Run Scout with these" : "Run Scout"}
                       </button>
                       <button
                         onClick={() => setPlanGate(null)}
-                        className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
+                        className="ml-auto text-xs font-semibold text-white/45 transition hover:text-white"
                       >
                         Dismiss
                       </button>
@@ -7234,15 +7253,15 @@ function ScoutTool({
               )}
 
               {showSkipped && skipped.length > 0 && (
-                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-warm-border bg-warm-bg/40 p-4 text-xs">
+                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-white/15 bg-white/5 p-4 text-xs">
                   <ul className="space-y-2">
                     {skipped.map((s, i) => (
                       <li key={i} className="flex gap-2 leading-relaxed">
-                        <span className="mt-0.5 shrink-0 rounded bg-brown-tint px-1.5 py-0.5 text-[10px] font-bold uppercase text-brown-deep">
+                        <span className="mt-0.5 shrink-0 rounded bg-white/15 px-1.5 py-0.5 text-[10px] font-bold uppercase text-white/80">
                           {s.reason}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="truncate font-semibold text-ink">
+                          <div className="truncate font-semibold text-white/90">
                             {s.title || "(untitled)"}
                           </div>
                           {s.url && (
@@ -7250,7 +7269,7 @@ function ScoutTool({
                               href={s.url}
                               target="_blank"
                               rel="noreferrer"
-                              className="truncate block text-body/60 underline-offset-2 hover:underline"
+                              className="truncate block text-white/50 underline-offset-2 hover:underline"
                             >
                               {s.url}
                             </a>
@@ -7261,10 +7280,15 @@ function ScoutTool({
                   </ul>
                 </div>
               )}
+              </div>
             </section>
             ) : (
-              <ProfileGate onSetup={() => setTab("profile")} />
+              <div className="px-5 pt-6 sm:px-8 xl:px-12">
+                <ProfileGate onSetup={() => setTab("profile")} />
+              </div>
             )}
+
+            <div className="px-5 pb-16 sm:px-8 xl:px-12">
 
             {error &&
               (apiReason ? (
@@ -7633,6 +7657,7 @@ function ScoutTool({
                 </div>
               </section>
             )}
+            </div>
           </main>
       )}
 
@@ -7710,6 +7735,8 @@ function ScoutTool({
 
       {tab === "dashboard" && (
         <DashboardTab
+          news={unreadNews}
+          onNewsRead={markNewsRead}
           activity={activity}
           profile={profile}
           about={aboutText}
@@ -8506,12 +8533,16 @@ function PrettySelect({
   onChange,
   className = "",
   ariaLabel,
+  bare = false,
 }: {
   value: string;
   options: { value: string; label: string }[];
   onChange: (v: string) => void;
   className?: string;
   ariaLabel?: string;
+  // Draw no box of its own: the trigger inherits its parent's pill (the Scout
+  // stage toggles), while the dropdown list stays the standard light panel.
+  bare?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -8539,12 +8570,16 @@ function PrettySelect({
         aria-haspopup="listbox"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
-        className="pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
+        className={
+          bare
+            ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-left text-sm font-semibold text-inherit outline-none transition focus-visible:ring-2 focus-visible:ring-white/40"
+            : "pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
+        }
       >
         <span className="min-w-0 truncate">{current?.label || "Select…"}</span>
         <svg
           width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"
-          className={`shrink-0 text-body/50 transition-transform ${open ? "rotate-180" : ""}`}
+          className={`shrink-0 transition-transform ${bare ? "opacity-60" : "text-body/50"} ${open ? "rotate-180" : ""}`}
           aria-hidden
         >
           <polyline points="6 9 12 15 18 9" />
@@ -8553,7 +8588,7 @@ function PrettySelect({
       {open && (
         <div
           role="listbox"
-          className="absolute left-0 right-0 z-30 mt-1.5 max-h-64 overflow-auto rounded-2xl border border-warm-border bg-surface p-1.5 shadow-xl"
+          className={`absolute left-0 z-30 mt-1.5 max-h-64 overflow-auto rounded-2xl border border-warm-border bg-surface p-1.5 shadow-xl ${bare ? "min-w-[240px]" : "right-0"}`}
         >
           {options.map((o) => {
             const sel = o.value === value;
@@ -8588,6 +8623,7 @@ function PrettySelect({
 function SideNav({
   tab,
   setTab,
+  hasNews,
   newFindCount,
   templatesCount,
   profileHasBio,
@@ -8611,6 +8647,7 @@ function SideNav({
 }: {
   tab: string;
   setTab: (t: any) => void;
+  hasNews?: boolean;
   newFindCount: number;
   templatesCount: number;
   profileHasBio: boolean;
@@ -8706,10 +8743,12 @@ function SideNav({
     icon: React.ReactNode;
     badge?: number;
     dot?: boolean;
+    tag?: string;
   }[] = [
     {
       key: "dashboard",
       label: "Dashboard",
+      tag: hasNews ? "News!" : undefined,
       icon: (
         <>
           <rect x="3" y="3" width="7" height="9" rx="1.5" />
@@ -8881,9 +8920,9 @@ function SideNav({
           {icon}
         </svg>
         {!!badge && badge > 0 && (
-          <span className="absolute -right-2 -top-1 min-w-[15px] rounded-full bg-brown px-1 text-center text-[9px] font-bold leading-[15px] text-white">
-            {badge > 9 ? "9+" : badge}
-          </span>
+          // A quiet dot, not a number: "something new here" without a count to
+          // feel behind on.
+          <span className="absolute -right-1 -top-0.5 h-2 w-2 rounded-full bg-brown"></span>
         )}
       </span>
       <span className={`text-[10px] leading-none ${active ? "font-bold" : "font-semibold"}`}>
@@ -8936,9 +8975,8 @@ function SideNav({
         {icon}
       </svg>
       {label}
-      {typeof opts.badge === "number" && opts.badge > 0 && (
-        <span className="su-ct">{opts.badge}</span>
-      )}
+      {/* Numeric counts deliberately not rendered: a number on a nav item reads
+          as a nagging notification, not information. Text tags still show. */}
       {opts.tag && <span className="su-ct">{opts.tag}</span>}
       {opts.dot && <span className="su-dot" />}
     </button>
@@ -8979,6 +9017,7 @@ function SideNav({
               onClick: () => goTab(it.key),
               badge: it.badge,
               dot: it.dot,
+              tag: it.tag,
               tour: `nav-${it.key}`,
               ...(group
                 ? {
@@ -9021,11 +9060,6 @@ function SideNav({
                         <path d="m9 18 6-6-6-6" />
                       </svg>
                       <span>{g.label}</span>
-                      {!open && badge > 0 && (
-                        <span className="ml-auto rounded-full bg-[color:var(--su-rail-hover)] px-1.5 py-0.5 text-[9px] font-bold text-[color:var(--su-rail-fg-strong)]">
-                          {badge}
-                        </span>
-                      )}
                     </button>
                     {open && (
                       <div className="flex flex-col gap-0.5">
@@ -9335,7 +9369,7 @@ function FindsList({
         return (
           <div
             key={o.id}
-            className={`flex flex-col gap-3 rounded-2xl border p-3.5 transition ${
+            className={`scout-rise flex flex-col gap-3 rounded-2xl border p-3.5 transition ${
               isDenied
                 ? "border-warm-border bg-surface opacity-60"
                 : on
@@ -11824,16 +11858,23 @@ function SiteTile({
   label?: string;
 }) {
   const [color, setColor] = useState("");
-  const [logoFailed, setLogoFailed] = useState(false);
+  const [onColor, setOnColor] = useState("#ffffff");
+  const [hasLogo, setHasLogo] = useState(false);
   useEffect(() => {
-    setLogoFailed(false);
+    setHasLogo(false);
     if (!url) return;
     let alive = true;
     (async () => {
       try {
         const r = await fetch(`/api/site-color?url=${encodeURIComponent(url)}`);
         const j = await r.json();
-        if (alive && j?.color) setColor(String(j.color));
+        if (!alive) return;
+        if (j?.color) setColor(String(j.color));
+        if (j?.on) setOnColor(String(j.on));
+        // The server checks this: the favicon service answers a logo-less site
+        // with a generic globe on a 404, which the browser reports as a
+        // perfectly good image, so onError here would never fire.
+        setHasLogo(!!j?.logo);
       } catch {
         /* the neutral ground below is a fine resting state */
       }
@@ -11851,10 +11892,14 @@ function SiteTile({
   // the platform mark for a profile page, then the company's own logo, then
   // the Scout dog. The dog is the house fallback, not the default.
   const platform = socialPlatform(url);
+  // The direct endpoint, not /s2/favicons: that one 301s, and a CSS mask draws
+  // nothing when its image is a redirect.
   const favicon = host
-    ? `https://www.google.com/s2/favicons?sz=128&domain=${encodeURIComponent(host)}`
+    ? `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=${encodeURIComponent(
+        `https://${host}`
+      )}`
     : "";
-  const showLogo = !!favicon && !platform && !logoFailed;
+  const showLogo = !!favicon && !platform && hasLogo;
 
   // Sized by HEIGHT and anchored well inside the tile, so the whole dog is
   // always visible. Sizing by width cropped him: the artwork is wider than it
@@ -11890,8 +11935,8 @@ function SiteTile({
           <svg
             aria-hidden
             viewBox="0 0 24 24"
-            className="h-16 w-16 text-white/80 transition group-hover:text-white"
-            fill="currentColor"
+            className="h-16 w-16 opacity-85 transition group-hover:opacity-100"
+            fill={onColor}
           >
             {platform === "LinkedIn" ? (
               <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.76-1.95C21.4 8.75 22 11.1 22 14.16V21h-4v-6.06c0-1.45-.03-3.31-2.02-3.31-2.02 0-2.33 1.58-2.33 3.21V21h-4V9Z" />
@@ -11906,12 +11951,10 @@ function SiteTile({
         // The company's own logo, drawn as a mask so it reads as one white mark
         // over their color rather than a clashing square of someone else's art.
         <div className="absolute inset-0 grid place-items-center">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={favicon} alt="" onError={() => setLogoFailed(true)} className="hidden" />
           <span
             aria-hidden
-            style={maskStyle(favicon)}
-            className="h-16 w-16 bg-white/85 transition group-hover:bg-white"
+            style={{ ...maskStyle(favicon), backgroundColor: onColor }}
+            className="h-16 w-16 opacity-90 transition group-hover:opacity-100"
           />
         </div>
       ) : (
@@ -11926,8 +11969,9 @@ function SiteTile({
           strokeWidth="1.7"
           strokeLinejoin="round"
           strokeLinecap="round"
-          className="pointer-events-none absolute w-auto text-white/70 transition-all duration-500 group-hover:text-white"
+          className="pointer-events-none absolute w-auto opacity-75 transition-all duration-500 group-hover:opacity-100"
           style={{
+            color: onColor,
             height: `${dogHeight}%`,
             left: `${dogLeft}%`,
             bottom: `${dogBottom}%`,
@@ -14668,6 +14712,8 @@ const FIND_STATUS: Record<
 };
 
 function DashboardTab({
+  news = [],
+  onNewsRead,
   activity,
   profile,
   about,
@@ -14717,6 +14763,8 @@ function DashboardTab({
   getToken?: () => Promise<string | null>;
   openCommand: () => void;
   onOpenFind: (f: Find) => void;
+  news?: { kind: string; who?: string; count: number; detail: string; at: string }[];
+  onNewsRead?: () => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
@@ -15064,6 +15112,141 @@ function DashboardTab({
     </div>
   );
 
+  // ---- Export report (PDF) ----
+  // Builds a print-ready document from the sections chosen in the dialog and
+  // opens the browser's print flow, whose default destination is Save as PDF.
+  // Printing keeps the text vector and the file small, and ships no PDF
+  // library to every visitor for a feature used occasionally.
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportSections, setReportSections] = useState<Record<string, boolean>>({
+    overview: true,
+    pipeline: true,
+    projects: true,
+    voice: false,
+  });
+
+  function exportReport() {
+    const on = (k: string) => !!reportSections[k];
+    const esc = (t: string) =>
+      String(t).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const today = new Date().toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+    });
+
+    const statusOrder: FindStatus[] = ["new", "undecided", "drafted", "sent", "replied", "denied"];
+    const statusCounts = statusOrder.map((st) => ({
+      label: FIND_STATUS[st]?.label || st,
+      n: finds.filter((f) => f.status === st).length,
+    }));
+    const maxStatus = Math.max(1, ...statusCounts.map((x) => x.n));
+
+    const projRows = projects
+      .map((p) => {
+        const pf = finds.filter((f) => f.projectId === p.id);
+        return {
+          name: p.name,
+          total: pf.length,
+          sent: pf.filter((f) => f.status === "sent" || f.status === "replied").length,
+          replied: pf.filter((f) => f.status === "replied").length,
+        };
+      })
+      .filter((r) => r.total > 0)
+      .sort((a, b) => b.total - a.total);
+
+    const bar = (n: number, max: number) =>
+      `<div style="height:10px;border-radius:5px;background:#7a6048;width:${Math.max(
+        2,
+        Math.round((n / max) * 100)
+      )}%"></div>`;
+
+    let body = "";
+    if (on("overview")) {
+      const cells: [string, string | number][] = [
+        ["Searches run", activity.searches],
+        ["People found", activity.found],
+        ["Drafts written", activity.drafts],
+        ["Taken to send", activity.copies],
+        [
+          "Reply rate",
+          learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "—",
+        ],
+        ["Est. hours saved", Math.round((activity.drafts * 6) / 60) || "—"],
+      ];
+      body += `<h2>Overview</h2><div class="grid">${cells
+        .map(
+          ([l, v]) =>
+            `<div class="stat"><div class="v">${esc(String(v))}</div><div class="l">${esc(
+              l
+            )}</div></div>`
+        )
+        .join("")}</div>`;
+    }
+    if (on("pipeline")) {
+      body += `<h2>Pipeline</h2><table class="bars">${statusCounts
+        .map(
+          (x) =>
+            `<tr><td class="bl">${esc(x.label)}</td><td class="bb">${bar(
+              x.n,
+              maxStatus
+            )}</td><td class="bn">${x.n}</td></tr>`
+        )
+        .join("")}</table>`;
+    }
+    if (on("projects") && projRows.length) {
+      body += `<h2>Projects</h2><table class="tbl"><tr><th>Project</th><th>Finds</th><th>Sent</th><th>Replied</th></tr>${projRows
+        .map(
+          (r) =>
+            `<tr><td>${esc(r.name)}</td><td>${r.total}</td><td>${r.sent}</td><td>${r.replied}</td></tr>`
+        )
+        .join("")}</table>`;
+    }
+    if (on("voice") && insights.length) {
+      body += `<h2>What Scout learned</h2><ul class="learn">${insights
+        .slice(0, 6)
+        .map((i: any) => `<li>${esc(String(i.text || i.title || i))}</li>`)
+        .join("")}</ul>`;
+    }
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Scout report</title>
+<style>
+  @page { margin: 20mm; }
+  * { box-sizing: border-box; }
+  body { font: 13px/1.55 -apple-system, "Segoe UI", Inter, sans-serif; color: #2b2723; margin: 0; }
+  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 3px solid #5c4634; padding-bottom: 12px; }
+  header h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0; color: #5c4634; }
+  header .date { margin-left: auto; color: #8a8073; font-size: 12px; }
+  h2 { font-size: 15px; color: #5c4634; margin: 26px 0 10px; border-bottom: 1px solid #e6e0d6; padding-bottom: 5px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .stat { border: 1px solid #e6e0d6; border-radius: 10px; padding: 12px 14px; }
+  .stat .v { font-size: 22px; font-weight: 800; }
+  .stat .l { font-size: 11px; color: #8a8073; margin-top: 2px; text-transform: uppercase; letter-spacing: 0.06em; }
+  table.bars { width: 100%; border-collapse: collapse; }
+  table.bars td { padding: 4px 0; }
+  .bl { width: 90px; font-weight: 600; }
+  .bb { padding: 0 10px !important; }
+  .bn { width: 34px; text-align: right; font-variant-numeric: tabular-nums; }
+  table.tbl { width: 100%; border-collapse: collapse; }
+  table.tbl th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: #8a8073; border-bottom: 1px solid #e6e0d6; padding: 6px 8px; }
+  table.tbl td { border-bottom: 1px solid #f0ebe2; padding: 7px 8px; }
+  ul.learn { padding-left: 18px; } ul.learn li { margin: 5px 0; }
+  footer { margin-top: 34px; padding-top: 10px; border-top: 1px solid #e6e0d6; font-size: 11px; color: #8a8073; }
+</style></head><body>
+<header><h1>Scout</h1><span>${esc(profile.companyName || profile.name || "")} outreach report</span><span class="date">${esc(
+      today
+    )}</span></header>
+${body}
+<footer>Generated by Scout</footer>
+<script>window.onload = () => { window.print(); };<\/script></body></html>`;
+
+    const w = window.open("", "_blank", "width=900,height=1100");
+    if (!w) return;
+    w.document.write(html);
+    w.document.close();
+    setReportOpen(false);
+  }
+
   return (
     <main className="w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
@@ -15073,13 +15256,136 @@ function DashboardTab({
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <h1 className="font-display text-xl font-bold tracking-tight text-ink">Dashboard</h1>
         {dashToggle}
-        <button
-          onClick={goOutreach}
-          className="ml-auto inline-flex w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep sm:w-auto"
-        >
-          Start scouting
-        </button>
+        <div className="ml-auto flex w-full shrink-0 flex-wrap items-center gap-2 sm:w-auto">
+          <button
+            onClick={() => setReportOpen(true)}
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Export report
+          </button>
+          <button
+            onClick={goOutreach}
+            className="inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-brown px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:bg-brown-deep"
+          >
+            Start scouting
+          </button>
+        </div>
       </div>
+
+      {/* Section picker for the report. Portaled to <body>: an ancestor here
+          animates with a transform, which turns position:fixed into
+          position-relative-to-that-ancestor and threw the dialog off screen. */}
+      {reportOpen &&
+        createPortal(
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/45 p-4" onClick={() => setReportOpen(false)}>
+          <div
+            className="w-full max-w-sm rounded-3xl border border-warm-border bg-surface p-6 shadow-float"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="kicker mb-1.5">Export</div>
+            <h2 className="font-display text-xl font-bold tracking-tight text-ink">
+              Report as PDF
+            </h2>
+            <p className="mt-1 text-sm leading-relaxed text-body/70">
+              Pick what goes in. It opens print-ready; choose Save as PDF as the
+              destination.
+            </p>
+            <div className="mt-4 space-y-2">
+              {(
+                [
+                  ["overview", "Overview numbers", "Searches, finds, drafts, reply rate"],
+                  ["pipeline", "Pipeline by status", "Where every find stands"],
+                  ["projects", "Projects breakdown", "Finds, sent and replies per project"],
+                  ["voice", "What Scout learned", "How it has tuned to you"],
+                ] as const
+              ).map(([k, label, sub]) => (
+                <label
+                  key={k}
+                  className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-warm-border px-3.5 py-2.5 transition hover:bg-warm-bg/50"
+                >
+                  <input
+                    type="checkbox"
+                    checked={!!reportSections[k]}
+                    onChange={(e) =>
+                      setReportSections((v) => ({ ...v, [k]: e.target.checked }))
+                    }
+                    className="mt-0.5 h-4 w-4 accent-brown"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-bold text-ink">{label}</span>
+                    <span className="block text-xs text-body/60">{sub}</span>
+                  </span>
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex items-center justify-end gap-2">
+              <button
+                onClick={() => setReportOpen(false)}
+                className="rounded-xl px-4 py-2 text-sm font-semibold text-body/60 transition hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={exportReport}
+                disabled={!Object.values(reportSections).some(Boolean)}
+                className="rounded-xl bg-brand-gradient px-5 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                Open print view
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* -------- News: what happened while you were away -------- */}
+      {news.length > 0 && (
+        <section className="scout-fade-in mt-5 rounded-2xl border border-warm-border bg-surface p-4 shadow-card sm:p-5">
+          <div className="flex items-center gap-2">
+            <span className="rounded-full bg-brown px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+              News
+            </span>
+            <span className="text-xs text-body/60">since you last read this</span>
+            <button
+              onClick={onNewsRead}
+              className="ml-auto rounded-lg px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+              title="Mark it all read and close this"
+            >
+              Read, close
+            </button>
+          </div>
+          <ul className="mt-3 space-y-2">
+            {news.slice(0, 8).map((n, i) => (
+              <li key={i} className="flex items-start gap-2.5 text-sm leading-relaxed text-body">
+                <span
+                  aria-hidden
+                  className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${
+                    n.kind === "scout" ? "bg-blue" : n.kind === "outreach" ? "bg-sage" : "bg-brown"
+                  }`}
+                />
+                <span className="min-w-0">
+                  {n.kind === "searches" ? (
+                    <>
+                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> ran searches and
+                      found <b className="text-ink">{n.count}</b>
+                      {n.detail ? <> in {n.detail}</> : null}
+                    </>
+                  ) : n.kind === "outreach" ? (
+                    <>
+                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> moved outreach:{" "}
+                      {n.detail}
+                    </>
+                  ) : (
+                    <>
+                      <b className="text-ink">Scout got better:</b> {n.detail}
+                    </>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {dashTab === "you" ? (
         <>
@@ -21836,6 +22142,119 @@ function SectionedText({
   );
 }
 
+/* ---------------- Stage bullets ----------------
+ * A saved category on the Scout stage, shown as the search it IS: a few short
+ * bullet points, two to a line, instead of a text box to retype. Click one to
+ * edit it, remove it, or add another. The bullets serialize back into the one
+ * goal string ("; "-joined) that the engine, the category store, and every
+ * existing consumer already read. Splitting is on the same separators, so a
+ * goal written as prose round-trips as a single editable bullet. */
+function splitGoalBullets(goal: string): string[] {
+  return String(goal || "")
+    .split(/\s*(?:;|\n|·)\s*/)
+    .map((b) => b.trim())
+    .filter(Boolean);
+}
+function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => void }) {
+  const bullets = splitGoalBullets(goal);
+  const [editing, setEditing] = useState<number | null>(null); // index, or -1 = new
+  const [draft, setDraft] = useState("");
+
+  const commit = () => {
+    const t = draft.trim();
+    const next = [...bullets];
+    if (editing === -1) {
+      if (t) next.push(t);
+    } else if (editing !== null) {
+      if (t) next[editing] = t;
+      else next.splice(editing, 1); // cleared = removed
+    }
+    onGoal(next.join("; "));
+    setEditing(null);
+    setDraft("");
+  };
+
+  return (
+    <div>
+      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+        This search finds
+      </div>
+      <div className="mt-3 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+        {bullets.map((b, i) =>
+          editing === i ? (
+            <input
+              key={i}
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commit();
+                if (e.key === "Escape") {
+                  setEditing(null);
+                  setDraft("");
+                }
+              }}
+              className="stage-sub border-b border-white/30 pb-0.5 text-[15px] font-semibold"
+            />
+          ) : (
+            <button
+              key={i}
+              onClick={() => {
+                setEditing(i);
+                setDraft(b);
+              }}
+              title="Edit this point"
+              className="group/b flex items-start gap-2.5 text-left"
+            >
+              <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-cream/80" />
+              <span className="text-[15px] font-semibold leading-snug text-white/90 underline-offset-4 group-hover/b:underline">
+                {b}
+              </span>
+            </button>
+          )
+        )}
+        {editing === -1 ? (
+          <input
+            autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commit}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") commit();
+              if (e.key === "Escape") {
+                setEditing(null);
+                setDraft("");
+              }
+            }}
+            placeholder="Add a point…"
+            className="stage-sub border-b border-white/30 pb-0.5 text-[15px] font-semibold"
+          />
+        ) : (
+          <button
+            onClick={() => {
+              setEditing(-1);
+              setDraft("");
+            }}
+            className="flex items-center gap-2 text-left text-[13px] font-semibold text-white/45 transition hover:text-white"
+          >
+            <span aria-hidden className="grid h-4 w-4 place-items-center rounded-full border border-white/35 text-[11px] leading-none">
+              +
+            </span>
+            Add a point
+          </button>
+        )}
+      </div>
+      {bullets.length === 0 && editing === null && (
+        <p className="mt-2 text-xs text-white/45">
+          This category has no description yet. Add a point or two, or write one
+          on the Projects tab.
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* ---------------- Projects tab ----------------
  * Where a project is DEFINED: named, described, given its categories, deleted,
  * and shared with the team. The Scout tab only picks one and runs it, so the
@@ -22246,7 +22665,7 @@ const FIT_BANDS: { min: number; label: string; cls: string }[] = [
   { min: 70, label: "Great fit", cls: "border border-sage/50 bg-sage/15 text-sage-deep" },
   { min: 50, label: "Good fit", cls: "border border-blue-deep/30 bg-blue-tint/40 text-blue-deep" },
   { min: 30, label: "Potential fit", cls: "border border-attention/40 bg-attention/10 text-attention" },
-  { min: 0, label: "Long shot", cls: "border border-warm-border bg-warm-bg text-body/70" },
+  { min: 0, label: "Far-fetched fit", cls: "border border-warm-border bg-warm-bg text-body/70" },
 ];
 
 function fitBand(fitScore: number): { label: string; cls: string; pct: number } {

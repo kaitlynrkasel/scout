@@ -3,25 +3,34 @@ import { NextRequest, NextResponse } from "next/server";
 export const runtime = "nodejs";
 export const maxDuration = 15;
 
-// The dominant brand color of a site, for the tile that stands in for it in the
-// grid. Screenshots of other people's homepages make a poor thumbnail: mostly
-// whitespace, cropped at an arbitrary point, and a wall of them reads as noise.
-// A flat block of the site's own color does the same job of "this is them" and
-// lets the grid stay calm.
+// What a find's tile looks like: a colour from OUR palette, and whether the
+// site has a real logo to draw on it.
 //
-// Read from what the site declares about itself, in descending order of intent,
-// and fall back to a stable color derived from the hostname so every find gets
-// one instantly and the same site always looks the same.
+// Screenshots of other people's homepages make poor thumbnails: mostly
+// whitespace, cropped at an arbitrary scroll point, and forty of them read as
+// noise. A flat block of colour does the same job of "this is them" and lets
+// the grid stay calm.
+//
+// The site's own colour is a VOTE, never the answer. Used raw it produced a
+// pure #0000FF card sitting beside a warm brown one and the grid stopped
+// reading as one product, so every colour is snapped to the nearest entry in
+// Scout's palette below.
 
-const cache = new Map<string, { color: string; at: number }>();
+const cache = new Map<string, { color: string; on: string; logo: boolean; at: number }>();
 const TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
-// Deep, saturated tones that carry white artwork. Deliberately not random: the
-// hostname picks one, so a site with nothing declared still looks considered
-// and never changes between visits.
-const FALLBACK = [
-  "#3d5a6c", "#6b4a6f", "#2f5d70", "#7a4a3c", "#4a5d3f", "#5a4a7a",
-  "#7a6048", "#365a52", "#6d3f52", "#44506b", "#7a5230", "#3f5f4a",
+// Scout's tile palette, from Kaitlyn's swatch: confident, warm, never neon.
+// Each entry carries the ink to draw its artwork in, because the two pale ones
+// (sky, yellow) cannot hold white and take the deep navy instead.
+const PALETTE: { hex: string; on: string }[] = [
+  { hex: "#377ec0", on: "#ffffff" }, // blue
+  { hex: "#5460ac", on: "#ffffff" }, // indigo
+  { hex: "#7a5aa8", on: "#ffffff" }, // purple
+  { hex: "#12baaa", on: "#ffffff" }, // teal
+  { hex: "#9fd2d6", on: "#2f4356" }, // sky
+  { hex: "#fbdf54", on: "#2f4356" }, // yellow
+  { hex: "#f7891f", on: "#ffffff" }, // orange
+  { hex: "#f04f52", on: "#ffffff" }, // red
 ];
 
 function hostOf(u: string): string {
@@ -32,39 +41,86 @@ function hostOf(u: string): string {
   }
 }
 
-function fallbackFor(host: string): string {
-  let h = 0;
-  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
-  return FALLBACK[h % FALLBACK.length];
-}
-
-// Only accept a color that can carry white artwork. A site whose declared theme
-// color is near-white would give us an invisible tile, and pure black reads as
-// a hole punched in the grid.
-function usable(hex: string): string {
+function hexToRgb(hex: string): [number, number, number] | null {
   const m = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex.trim());
-  if (!m) return "";
+  if (!m) return null;
   let h = m[1];
   if (h.length === 3) h = h.split("").map((c) => c + c).join("");
-  const r = parseInt(h.slice(0, 2), 16);
-  const g = parseInt(h.slice(2, 4), 16);
-  const b = parseInt(h.slice(4, 6), 16);
-  const lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
-  if (lum > 0.62 || lum < 0.04) return "";
-  return `#${h.toLowerCase()}`;
+  return [
+    parseInt(h.slice(0, 2), 16),
+    parseInt(h.slice(2, 4), 16),
+    parseInt(h.slice(4, 6), 16),
+  ];
+}
+
+// Weighted euclidean distance, the standard cheap approximation of how far
+// apart two colours LOOK rather than how far apart their numbers are. Plain RGB
+// distance puts a saturated blue nearer to black than to our denim.
+function nearestInPalette(hex: string): { hex: string; on: string } | null {
+  const rgb = hexToRgb(hex);
+  if (!rgb) return null;
+  const [r1, g1, b1] = rgb;
+  let best: { hex: string; on: string } | null = null;
+  let bestD = Infinity;
+  for (const cand of PALETTE) {
+    const c = hexToRgb(cand.hex)!;
+    const rm = (r1 + c[0]) / 2;
+    const dr = r1 - c[0];
+    const dg = g1 - c[1];
+    const db = b1 - c[2];
+    const d =
+      (2 + rm / 256) * dr * dr + 4 * dg * dg + (2 + (255 - rm) / 256) * db * db;
+    if (d < bestD) {
+      bestD = d;
+      best = cand;
+    }
+  }
+  return best;
+}
+
+function fallbackFor(host: string): { hex: string; on: string } {
+  let h = 0;
+  for (let i = 0; i < host.length; i++) h = (h * 31 + host.charCodeAt(i)) >>> 0;
+  return PALETTE[h % PALETTE.length];
+}
+
+// The direct endpoint, NOT /s2/favicons: that one answers with a 301, and a CSS
+// mask renders nothing at all when its image is a redirect. That is why every
+// tile came back as an empty block of colour.
+function faviconUrl(host: string): string {
+  return `https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=${encodeURIComponent(
+    `https://${host}`
+  )}`;
+}
+
+// Google serves a generic globe for a site with no favicon, and returns it with
+// a 404 status even though the body is a valid image, so the browser's own
+// onError never fires and every logo-less site would show the same globe. Ask
+// here instead, and only claim a logo on a clean 200.
+async function hasFavicon(host: string): Promise<boolean> {
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 4000);
+    const r = await fetch(faviconUrl(host), { signal: ctrl.signal });
+    clearTimeout(t);
+    return r.status === 200;
+  } catch {
+    return false;
+  }
 }
 
 export async function GET(req: NextRequest) {
   const url = req.nextUrl.searchParams.get("url") || "";
   const host = hostOf(url);
-  if (!host) return NextResponse.json({ color: FALLBACK[0] });
+  if (!host)
+    return NextResponse.json({ color: PALETTE[0].hex, on: PALETTE[0].on, logo: false });
 
   const hit = cache.get(host);
   if (hit && Date.now() - hit.at < TTL_MS) {
-    return NextResponse.json({ color: hit.color, cached: true });
+    return NextResponse.json({ color: hit.color, on: hit.on, logo: hit.logo, cached: true });
   }
 
-  let color = "";
+  let color: { hex: string; on: string } | null = null;
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);
@@ -85,24 +141,25 @@ export async function GET(req: NextRequest) {
     );
     if (themeRev) candidates.push(themeRev[1]);
     // A brand's own CSS variables are the next most deliberate statement of
-    // "this is our color".
+    // "this is our colour".
     for (const m of html.matchAll(
       /--(?:brand|primary|accent|main|theme)[a-z-]*\s*:\s*(#[0-9a-f]{3,6})/gi
     )) {
       candidates.push(m[1]);
     }
     for (const c of candidates) {
-      const ok = usable(c);
-      if (ok) {
-        color = ok;
+      const snapped = nearestInPalette(c);
+      if (snapped) {
+        color = snapped;
         break;
       }
     }
   } catch {
-    /* unreachable, slow, or bot-blocked: the fallback still looks right */
+    /* unreachable, slow, or bot-blocked: the hostname colour still looks right */
   }
 
   const final = color || fallbackFor(host);
-  cache.set(host, { color: final, at: Date.now() });
-  return NextResponse.json({ color: final });
+  const logo = await hasFavicon(host);
+  cache.set(host, { color: final.hex, on: final.on, logo, at: Date.now() });
+  return NextResponse.json({ color: final.hex, on: final.on, logo });
 }
