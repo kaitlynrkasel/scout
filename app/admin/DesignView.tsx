@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
 import {
+  DEFAULT_RECIPE,
   IDEAS,
   PRESETS,
   SIX_ON_WHITE,
@@ -21,9 +22,14 @@ import {
   darken,
   isHex,
   lighten,
+  generatePalette,
+  loadPalettes,
   loadSaved,
+  savePalettes,
   saveSaved,
+  scorePalette,
   textOn,
+  type Recipe,
   type IdeaKey,
   type Palette,
 } from "@/lib/designLab";
@@ -341,6 +347,33 @@ export default function DesignView({
   }, [ideaPalette, paintApp]);
   const setIdea = (key: IdeaKey, hex: string) =>
     setIdeaPalette((p) => ({ ...p, ideas: { ...p.ideas, [key]: hex } }));
+
+  // ---- Palette creator ----
+  const [recipe, setRecipe] = useState<Recipe>(DEFAULT_RECIPE);
+  const [locks, setLocks] = useState<Partial<Record<IdeaKey, string>>>({});
+  const [mine, setMine] = useState<Palette[]>([]);
+  useEffect(() => setMine(loadPalettes()), []);
+  const made = useMemo(() => generatePalette(recipe, locks), [recipe, locks]);
+  const madeScore = useMemo(() => scorePalette(made), [made]);
+  const toggleLock = (key: IdeaKey) =>
+    setLocks((l) => {
+      const next = { ...l };
+      if (next[key]) delete next[key];
+      else next[key] = made.ideas[key];
+      return next;
+    });
+  function keepPalette() {
+    const name = window.prompt("Name this palette", `Palette ${mine.length + 1}`);
+    if (!name) return;
+    const next = [{ ...made, label: name.trim() || "Untitled" }, ...mine];
+    setMine(next);
+    savePalettes(next);
+  }
+  function dropPalette(label: string) {
+    const next = mine.filter((p) => p.label !== label);
+    setMine(next);
+    savePalettes(next);
+  }
   const [copied, setCopied] = useState(false);
   const [typedColors, setTypedColors] = useState("");
   const [sourceNote, setSourceNote] = useState("");
@@ -579,8 +612,111 @@ export default function DesignView({
 
         <div className="mt-4 grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
           <div className="space-y-2">
+            {/* ---- Make one ---- */}
+            <div className="mb-4 rounded-xl border border-warm-border bg-surface p-3.5">
+              <div className="flex items-center justify-between">
+                <div className="text-xs font-extrabold uppercase tracking-wide text-ink">
+                  Make a palette
+                </div>
+                <button
+                  onClick={() => setRecipe((r) => ({ ...r, seed: r.seed + 1 }))}
+                  className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg"
+                >
+                  Shuffle
+                </button>
+              </div>
+
+              <div className="mt-3 space-y-2.5">
+                <Slider
+                  label="Colour"
+                  hint={`${Math.round(recipe.hue)}°`}
+                  min={0}
+                  max={359}
+                  value={recipe.hue}
+                  onChange={(v) => setRecipe((r) => ({ ...r, hue: v }))}
+                  track="linear-gradient(to right, #f00 0%, #ff0 17%, #0f0 33%, #0ff 50%, #00f 67%, #f0f 83%, #f00 100%)"
+                />
+                <Slider
+                  label="Range"
+                  hint={recipe.spread < 55 ? "one family" : recipe.spread < 120 ? "related" : "across the wheel"}
+                  min={20}
+                  max={180}
+                  value={recipe.spread}
+                  onChange={(v) => setRecipe((r) => ({ ...r, spread: v }))}
+                />
+                <Slider
+                  label="Punch"
+                  hint={recipe.energy < 0.4 ? "dusty" : recipe.energy < 0.75 ? "balanced" : "vivid"}
+                  min={0}
+                  max={100}
+                  value={recipe.energy * 100}
+                  onChange={(v) => setRecipe((r) => ({ ...r, energy: v / 100 }))}
+                />
+              </div>
+
+              {/* The six it made, each lockable so a good one survives a shuffle. */}
+              <div className="mt-3 flex gap-1.5">
+                {IDEAS.map(({ key, name }) => (
+                  <button
+                    key={key}
+                    onClick={() => toggleLock(key)}
+                    title={`${name} — ${locks[key] ? "locked, click to release" : "click to keep through a shuffle"}`}
+                    className={`relative h-10 flex-1 rounded-lg transition ${
+                      locks[key] ? "ring-2 ring-ink ring-offset-1" : ""
+                    }`}
+                    style={{ background: made.ideas[key] }}
+                  >
+                    {locks[key] && (
+                      <span className="absolute inset-0 flex items-center justify-center text-[11px]">
+                        🔒
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+
+              {/* Its own report card. A generator that hides a bad result is
+                  worse than no generator. */}
+              <div
+                className="mt-2.5 rounded-lg px-2.5 py-2 text-[11px] leading-relaxed"
+                style={{
+                  background: madeScore.ok ? "rgb(var(--c-success) / 0.12)" : "rgb(var(--c-attention) / 0.14)",
+                  color: madeScore.ok ? "rgb(var(--c-success-deep))" : "rgb(var(--c-attention))",
+                }}
+              >
+                {madeScore.ok ? (
+                  <>
+                    <b>Works.</b> Closest two are {madeScore.closest} apart,{" "}
+                    {madeScore.inkSafe} of six can carry text.
+                  </>
+                ) : (
+                  <>
+                    <b>Too close to call apart.</b> {madeScore.closestPair[0]} and{" "}
+                    {madeScore.closestPair[1]} are only {madeScore.closest} apart — under
+                    60 they read as one colour at pill size. Widen the range or add
+                    punch.
+                  </>
+                )}
+              </div>
+
+              <div className="mt-2.5 flex gap-2">
+                <button
+                  onClick={() => setIdeaPalette(made)}
+                  className="flex-1 rounded-lg bg-brand-gradient px-3 py-2 text-[11px] font-bold text-white shadow-soft transition hover:opacity-90"
+                >
+                  Try it
+                </button>
+                <button
+                  onClick={keepPalette}
+                  className="rounded-lg border border-warm-border px-3 py-2 text-[11px] font-bold text-body transition hover:bg-warm-bg"
+                >
+                  Keep it
+                </button>
+              </div>
+            </div>
+
             <div className="mb-3 space-y-1.5">
-              {PRESETS.map((preset) => {
+              {[...PRESETS, ...mine].map((preset) => {
                 const active = preset.label === ideaPalette.label;
                 return (
                   <button
@@ -599,7 +735,27 @@ export default function DesignView({
                         style={{ background: preset.ideas[key] }}
                       />
                     ))}
-                    <span className="ml-1 text-xs font-bold text-ink">{preset.label}</span>
+                    <span className="ml-1 flex-1 text-xs font-bold text-ink">{preset.label}</span>
+                    {mine.some((m) => m.label === preset.label) && (
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          dropPalette(preset.label);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation();
+                            dropPalette(preset.label);
+                          }
+                        }}
+                        className="rounded px-1 text-[13px] leading-none text-body/40 transition hover:text-danger"
+                        title="Forget this palette"
+                      >
+                        ×
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -2098,5 +2254,45 @@ export function LiveEditPanel({
         </div>
       </div>
     </div>
+  );
+}
+
+/* A labelled slider with an optional gradient track — used by the palette
+ * creator, where seeing the hue you're dragging through matters more than the
+ * number. */
+function Slider({
+  label,
+  hint,
+  min,
+  max,
+  value,
+  onChange,
+  track,
+}: {
+  label: string;
+  hint: string;
+  min: number;
+  max: number;
+  value: number;
+  onChange: (v: number) => void;
+  track?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="flex items-baseline justify-between text-[11px]">
+        <span className="font-bold text-ink">{label}</span>
+        <span className="text-body/60">{hint}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="mt-1 h-2 w-full cursor-pointer appearance-none rounded-full"
+        style={{ background: track || "rgb(var(--c-warm-border))" }}
+        aria-label={label}
+      />
+    </label>
   );
 }

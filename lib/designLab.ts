@@ -261,3 +261,198 @@ export function toCss(p: Palette): string {
   lines.push("}");
   return lines.join("\n");
 }
+
+/* ---- Palette generator --------------------------------------------------
+ *
+ * Building one of these by hand is deceptively hard. The Grove palette took
+ * several passes because yellow and green sit next to each other on the wheel,
+ * and two of the six landed close enough to read as the same colour at pill
+ * size — which is fatal in a system where colour carries meaning.
+ *
+ * So the generator works in HSL and fixes the problem structurally: each idea
+ * gets its own band of lightness. Even six colours cut from one narrow slice of
+ * hue stay apart, because "a reply" is always the brightest thing on screen and
+ * "shared" is always the darkest. Hue supplies the character; lightness does
+ * the work of keeping them legible.
+ */
+
+export type Recipe = {
+  /** Seed hue, 0–360. */
+  hue: number;
+  /** How far around the wheel the six spread. ~30 is one family, 180 is wide. */
+  spread: number;
+  /** 0–1, drives saturation. Low is dusty, high is vivid. */
+  energy: number;
+  /** Changes the arrangement without changing the character. */
+  seed: number;
+};
+
+export const DEFAULT_RECIPE: Recipe = { hue: 96, spread: 70, energy: 0.72, seed: 1 };
+
+/* Each idea's place in the value order — the whole trick. Fixed lightness bands
+ * mean no two ideas can collapse into each other however close their hues are,
+ * and the order carries meaning too: the payoff is the brightest thing on the
+ * page, the institutional anchor the darkest. */
+const VALUE_ORDER: IdeaKey[] = ["shared", "voice", "person", "search", "sent", "reply"];
+
+/* Where each idea sits in the hue fan. Deliberately NOT the value order:
+ * roles that are neighbours in lightness are pushed to opposite ends of the
+ * hue spread, so the two forces that separate colours never line up and cancel.
+ * Getting this wrong is what made the first version fail — person and voice
+ * came out one step apart in both value and hue and measured 25 apart. */
+const HUE_SLOT: Record<IdeaKey, number> = {
+  shared: 0,
+  voice: 3,
+  person: 1,
+  search: 4,
+  sent: 2,
+  reply: 5,
+};
+
+function hslToHex(h: number, s: number, l: number): string {
+  const a = s * Math.min(l, 1 - l);
+  const f = (n: number) => {
+    const k = (n + h / 30) % 12;
+    const c = l - a * Math.max(-1, Math.min(k - 3, Math.min(9 - k, 1)));
+    return Math.round(255 * c)
+      .toString(16)
+      .padStart(2, "0");
+  };
+  return `#${f(0)}${f(8)}${f(4)}`;
+}
+
+/** Deterministic 0–1 from an integer, so a given seed always rebuilds the same. */
+function rand(n: number): number {
+  const x = Math.sin(n * 12.9898) * 43758.5453;
+  return x - Math.floor(x);
+}
+
+/** Straight-line distance in RGB. Under ~60 and two colours start to merge. */
+export function colourDistance(a: string, b: string): number {
+  const x = toRgb(a);
+  const y = toRgb(b);
+  if (!x || !y) return 999;
+  return Math.round(Math.sqrt(x.reduce((sum, v, i) => sum + (v - y[i]) ** 2, 0)));
+}
+
+export type Score = {
+  /** The two closest colours in the set, and how far apart they are. */
+  closest: number;
+  closestPair: [IdeaKey, IdeaKey];
+  /** How many clear 4.5:1 on white, i.e. can carry small text. */
+  inkSafe: number;
+  /** Every pair far enough apart, and at least two usable as ink. */
+  ok: boolean;
+};
+
+export function scorePalette(p: Palette): Score {
+  const keys = IDEAS.map((i) => i.key);
+  let closest = 999;
+  let closestPair: [IdeaKey, IdeaKey] = [keys[0], keys[1]];
+  for (let i = 0; i < keys.length; i++) {
+    for (let j = i + 1; j < keys.length; j++) {
+      const d = colourDistance(p.ideas[keys[i]], p.ideas[keys[j]]);
+      if (d < closest) {
+        closest = d;
+        closestPair = [keys[i], keys[j]];
+      }
+    }
+  }
+  const inkSafe = keys.filter((k) => contrastOnWhite(p.ideas[k]) >= 4.5).length;
+  return { closest, closestPair, inkSafe, ok: closest >= 60 && inkSafe >= 2 };
+}
+
+/**
+ * Build a palette from a recipe. Anything in `locked` is kept exactly as given,
+ * so a colour worth keeping survives a reshuffle.
+ *
+ * The value ladder starts tight and is widened until every pair is far enough
+ * apart to tell apart. Six colours cut from a narrow hue slice genuinely may
+ * not fit — when that happens the palette comes back scoring `ok: false` rather
+ * than pretending, and the lab tells you to widen the spread.
+ */
+export function generatePalette(
+  r: Recipe,
+  locked: Partial<Record<IdeaKey, string>> = {}
+): Palette {
+  const build = (gap: number): Palette => {
+    const ideas = {} as Record<IdeaKey, string>;
+    VALUE_ORDER.forEach((key, rank) => {
+      if (locked[key] && isHex(locked[key]!)) {
+        ideas[key] = locked[key]!;
+        return;
+      }
+      const slot = HUE_SLOT[key];
+      const step = slot / (VALUE_ORDER.length - 1) - 0.5;
+      const jitter = (rand(r.seed * 31 + slot) - 0.5) * (r.spread / 10);
+      const hue = (r.hue + step * r.spread + jitter + 360) % 360;
+
+      // Uneven rungs on purpose: at the dark end a given step in lightness
+      // moves the colour far less in RGB than the same step does up in the
+      // highlights, so the bottom of the ladder gets more room.
+      const RUNG = [0, 1.3, 2.5, 3.6, 4.6, 5.5];
+      const l = 0.14 + RUNG[rank] * gap;
+      // Dark colours need more saturation to stay coloured rather than muddy;
+      // light ones need less or they glow.
+      const satBase = 0.34 + r.energy * 0.5;
+      const sat = Math.max(0.18, Math.min(0.95, satBase + (0.5 - l) * 0.35));
+      ideas[key] = hslToHex(hue, sat, l);
+    });
+    // A palette needs at least two colours that can carry small text. Yellows
+    // stay luminous even at a low lightness, so the two darkest roles get
+    // pushed down until they actually clear 4.5:1 rather than merely looking
+    // dark on the swatch.
+    for (const key of ["shared", "voice"] as IdeaKey[]) {
+      if (locked[key]) continue;
+      let guard = 0;
+      while (contrastOnWhite(ideas[key]) < 4.5 && guard++ < 8) {
+        ideas[key] = darken(ideas[key], 0.12);
+      }
+    }
+    const ground = hslToHex(r.hue, Math.min(0.5, r.energy * 0.5), 0.985);
+    const ink = hslToHex(r.hue, 0.3, 0.12);
+    return { label: "Custom", ground, surface: "#ffffff", ink, ideas };
+  };
+
+  let best = build(0.115);
+  let bestScore = scorePalette(best);
+  // Widen the ladder a step at a time and keep the first arrangement that
+  // clears the bar; failing that, keep whichever got furthest.
+  for (let gap = 0.12; gap <= 0.145; gap += 0.005) {
+    if (bestScore.ok) break;
+    const cand = build(gap);
+    const score = scorePalette(cand);
+    if (score.closest > bestScore.closest || (score.ok && !bestScore.ok)) {
+      best = cand;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/* ---- Saved palettes ----------------------------------------------------- */
+
+const SAVED_KEY = "scout_design_saved";
+
+export function loadPalettes(): Palette[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
+    if (!Array.isArray(raw)) return [];
+    return raw.filter(
+      (p: any) =>
+        p && typeof p.label === "string" && isHex(p.ground) && isHex(p.ink) &&
+        IDEAS.every(({ key }) => isHex(p.ideas?.[key]))
+    );
+  } catch {
+    return [];
+  }
+}
+
+export function savePalettes(list: Palette[]): void {
+  try {
+    localStorage.setItem(SAVED_KEY, JSON.stringify(list.slice(0, 24)));
+  } catch {
+    /* storage blocked — saved palettes just won't survive a reload */
+  }
+}
