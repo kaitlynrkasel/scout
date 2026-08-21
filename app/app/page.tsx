@@ -7095,11 +7095,26 @@ function ScoutTool({
             {profileComplete || guest ? (
             <section
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow ? "" : "min-h-[calc(100vh-40px)]"
+                stageHasWorkBelow ? "" : "flex min-h-[calc(100vh-40px)]"
               }`}
             >
-              <div className="w-full max-w-[1400px]">
-                <div className="flex flex-wrap items-center gap-2">
+              {/* Two shapes for one composer. Alone on the screen it sits as a
+                  centered hero: the toggles and the run button on the left, the
+                  bullets on the right. The moment work exists below, it settles
+                  back into the compact stacked band and the dark section fades
+                  in underneath. Same DOM both ways; only the grid changes. */}
+              <div
+                className={`w-full max-w-[1400px] ${
+                  stageHasWorkBelow
+                    ? ""
+                    : "my-auto lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-x-20 lg:gap-y-10"
+                }`}
+              >
+                <div
+                  className={`flex flex-wrap items-center gap-2 ${
+                    stageHasWorkBelow ? "" : "lg:col-start-1 lg:row-start-1 lg:self-end"
+                  }`}
+                >
                   <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
                     Scouting for
                   </span>
@@ -7150,7 +7165,13 @@ function ScoutTool({
                   </p>
                 )}
 
-                <div className="mt-6">
+                <div
+                  className={
+                    stageHasWorkBelow
+                      ? "mt-6"
+                      : "mt-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0"
+                  }
+                >
                   {catId ? (
                     // A saved category is a defined search, so show it as what
                     // it IS: a few bullet points of who it finds, not a chat
@@ -7191,7 +7212,11 @@ function ScoutTool({
                   )}
                 </div>
 
-              <div className="mt-7 flex flex-wrap items-center gap-3">
+              <div
+                className={`flex flex-wrap items-center gap-3 ${
+                  stageHasWorkBelow ? "mt-7" : "mt-7 lg:col-start-1 lg:row-start-2 lg:mt-0 lg:self-start"
+                }`}
+              >
                 <button
                   ref={scoutBtnRef}
                   onClick={startScout}
@@ -7250,7 +7275,7 @@ function ScoutTool({
               {/* Job/internship fallback disclosure: never pass companies off as
                   confirmed openings. */}
               {searchNotice && (
-                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-white/15 bg-white/5 px-4 py-3">
+                <div className="mt-4 flex items-start gap-2.5 rounded-2xl border border-white/15 bg-white/5 px-4 py-3 lg:col-span-2">
                   <span className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-white/15 text-[11px] font-extrabold text-white">
                     i
                   </span>
@@ -7260,7 +7285,7 @@ function ScoutTool({
 
               {/* Confidence gate: Scout has gaps, so ask before running. */}
               {planGate && (
-                <div className="scout-fade-in mt-8 border-t border-white/12 pt-6">
+                <div className="scout-fade-in mt-8 border-t border-white/12 pt-6 lg:col-span-2">
                   <div className="flex flex-wrap items-center gap-3">
                     <div className="relative h-11 w-11 shrink-0">
                       <svg viewBox="0 0 36 36" className="h-11 w-11 -rotate-90">
@@ -7371,7 +7396,7 @@ function ScoutTool({
               )}
 
               {showSkipped && skipped.length > 0 && (
-                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-white/15 bg-white/5 p-4 text-xs">
+                <div className="mt-4 max-h-72 overflow-y-auto rounded-2xl border border-white/15 bg-white/5 p-4 text-xs lg:col-span-2">
                   <ul className="space-y-2">
                     {skipped.map((s, i) => (
                       <li key={i} className="flex gap-2 leading-relaxed">

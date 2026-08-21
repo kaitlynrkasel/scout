@@ -904,6 +904,55 @@ const PLATFORM_SWEEPS: {
     domains: ["reddit.com"],
     when: /\b(recommend|recommendation|recommendations|vendors?|niche|community|communities|local|indie|independent|freelance|freelancers?|small business|word of mouth|best .{0,24}\b(in|near|around)\b)\b/i,
   },
+  {
+    // Channel about-pages are public and often list a business email; the
+    // single biggest gap for music and creator goals.
+    key: "youtube",
+    label: "YouTube channels",
+    domains: ["youtube.com"],
+    when: /\b(youtube|youtuber|channel|channels|creator|creators|video|videos|vlogger|podcast|podcaster|reviewer|reviewers|cover|covers|musician|musicians|artist|artists|streamer)\b/i,
+  },
+  {
+    // Event organizers and speakers: pages are public, named, and carry a
+    // contact route, exactly the shape networking and partnership goals want.
+    key: "events",
+    label: "event organizers and speakers",
+    domains: ["eventbrite.com", "meetup.com", "lu.ma"],
+    when: /\b(event|events|organizer|organizers|host|hosts|meetup|meetups|conference|conferences|summit|workshop|workshops|panel|panels|speaker|speakers|showcase|showcases|open mic|networking)\b/i,
+  },
+  {
+    // Small makers and indie brands with real shop contact routes: the
+    // "smaller companies, any industry" prospecting shape.
+    key: "makers",
+    label: "independent makers and shops",
+    domains: ["etsy.com", "faire.com"],
+    when: /\b(maker|makers|handmade|artisan|artisans|crafts?|boutique|boutiques|indie brand|indie brands|small (shop|shops|brand|brands|business|businesses)|sellers?|jewelry|candle|candles|apparel|stationery|pottery|prints)\b/i,
+  },
+  {
+    // Local service businesses: venues, planners, studios. Yelp is heavily
+    // bot-protected, so this sweep can come back thin; it is a supplement to
+    // the open-web queries, never the plan.
+    key: "local",
+    label: "local business listings",
+    domains: ["yelp.com"],
+    when: /\b(venue|venues|studio|studios|planner|planners|salon|salons|restaurant|restaurants|caterer|caterers|photographer|photographers|florist|florists|bar|bars|cafe|cafes|shop|shops) .{0,30}\b(in|near|around)\b/i,
+  },
+  {
+    // Startups by stage and niche, founders named; pairs with the tech sweep.
+    key: "startups",
+    label: "startup directories",
+    domains: ["crunchbase.com", "producthunt.com"],
+    when: /\b(startup|startups|founder|founders|seed|pre-?seed|series [ab]|saas|early[- ]stage|venture|funded|bootstrapped|launch(ed|ing)?)\b/i,
+  },
+  {
+    // TikTok is the most login-walled platform; direct pages rarely crawl, so
+    // this sweep exists for the minority that do, while the roundup-article
+    // strategy stays the primary route to TikTok creators.
+    key: "tiktok",
+    label: "public TikTok profiles",
+    domains: ["tiktok.com"],
+    when: /\btiktok(er|ers)?\b/i,
+  },
 ];
 
 export function platformSweeps(
@@ -933,7 +982,7 @@ export function platformSweeps(
 // own home. Surfacing one as the find's "website" (a Yelp listing, a
 // YellowPages page) points the user somewhere that isn't the company at all.
 const DIRECTORY_URL_HOSTS =
-  /(^|\.)(yelp|yellowpages|superpages|bbb|mapquest|manta|tripadvisor|foursquare|chamberofcommerce|dnb|zoominfo|glassdoor|indeed|ziprecruiter|angi|thumbtack|houzz|birdeye|alignable|citysearch|merchantcircle|hotfrog|brownbook|cylex|nicelocal|opencorporates|buzzfile)\.(com|co|org|net|io)$/i;
+  /(^|\.)(yelp|yellowpages|superpages|bbb|mapquest|manta|tripadvisor|foursquare|chamberofcommerce|dnb|zoominfo|glassdoor|indeed|ziprecruiter|angi|thumbtack|houzz|birdeye|alignable|citysearch|merchantcircle|hotfrog|brownbook|cylex|nicelocal|opencorporates|buzzfile|crunchbase|producthunt)\.(com|co|org|net|io)$/i;
 const FREEMAIL_DOMAINS =
   /^(gmail|yahoo|ymail|outlook|hotmail|live|msn|aol|icloud|me|proton|protonmail|zoho|gmx|mail|pm)\./i;
 
