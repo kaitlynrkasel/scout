@@ -16786,14 +16786,19 @@ ${body}
 
       {dashTab === "you" && (
       <>
-      {/* -------- CTA -------- */}
-      <section className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl bg-brand-gradient px-6 py-5 text-white shadow-soft">
+      {/* -------- CTA: a tinted translucent card, not a solid slab -------- */}
+      <section
+        className="mt-4 flex flex-wrap items-center gap-4 rounded-3xl border border-white/60 px-6 py-5 backdrop-blur-md"
+        style={{ background: "rgb(var(--c-brown) / 0.08)" }}
+      >
         <div>
-          <h3 className="text-base font-extrabold">Ready to reach a few more people?</h3>
+          <h3 className="text-base font-extrabold text-ink">
+            Ready to reach a few more people?
+          </h3>
         </div>
         <button
           onClick={goOutreach}
-          className="ml-auto rounded-xl bg-surface px-5 py-2.5 text-sm font-extrabold text-brown-deep transition hover:opacity-95"
+          className="ml-auto rounded-xl bg-brown px-5 py-2.5 text-sm font-extrabold text-white transition hover:opacity-95"
         >
           Start scouting →
         </button>
