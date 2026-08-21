@@ -47,6 +47,14 @@ const PERSONAL_THRESHOLDS: TuningThresholds = {
 // exactly one backtick-delimited string, so regex extraction/replacement is
 // unambiguous. Adding a new tunable clause means: (1) extract it into a named
 // const in discover.ts the same way, (2) add an entry here.
+// The hard ceiling on any PROSE clause after an auto-edit. Without one, each
+// edit could grow a clause by the 15% file allowance, and over months the
+// location clause compounded into a 3,000-character absolutist wall ("probable
+// is mismatch, plausible is mismatch") that floored nearly every candidate.
+// Longer never means better here: past a paragraph, a clause stops being a
+// scoring rule and becomes a monologue the model over-obeys.
+export const MAX_PROSE_CLAUSE_CHARS = 900;
+
 export interface TunableSlot {
   constName: string;
   label: string;
@@ -360,6 +368,20 @@ export function sanityCheck(original: string, revised: string): { ok: boolean; r
   for (const slot of TUNABLE_SLOTS) {
     if (!revised.includes(`export const ${slot.constName}`)) {
       return { ok: false, reason: `${slot.constName} is missing from the revised file` };
+    }
+  }
+  // No prose slot may exceed the ceiling after the edit; this is what stops
+  // escalation from rebuilding the 3,000-character location monologue.
+  for (const slot of TUNABLE_SLOTS) {
+    if (slot.constName === "TUNABLE_RANK_WEIGHTS") continue; // numeric, tiny
+    const m = revised.match(
+      new RegExp(`export const ${slot.constName} =\\s*\\x60([^\\x60]*)\\x60`)
+    );
+    if (m && m[1].length > MAX_PROSE_CLAUSE_CHARS) {
+      return {
+        ok: false,
+        reason: `${slot.constName} would be ${m[1].length} chars; the ceiling is ${MAX_PROSE_CLAUSE_CHARS}`,
+      };
     }
   }
   // Backtick count must stay even, an unterminated template literal is the

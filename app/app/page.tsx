@@ -4083,6 +4083,19 @@ function ScoutTool({
     exProjectContext,
   ]);
   // What the goal textarea actually shows as its placeholder.
+  // Is there anything to show under the Scout composer? Until the first run
+  // there is not, and the stage owns the whole screen; the moment a search
+  // starts (or results/drafts/errors exist) it folds up to a band and the
+  // darker work area takes the rest. Drives both the render and the
+  // min-height transition on the stage.
+  const stageHasWorkBelow =
+    discovering ||
+    opps.length > 0 ||
+    drafts.length > 0 ||
+    !!error ||
+    !!teamShareNote ||
+    noResults;
+
   const goalPlaceholder = dynExample
     ? `e.g. ${dynExample}`
     : uc.goalPlaceholder;
@@ -7051,8 +7064,12 @@ function ScoutTool({
                 project and category in two floating toggles, then say who you
                 are after, in display type on the ground itself. */}
             {profileComplete || guest ? (
-            <section className="scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12">
-              <div className="mx-auto w-full max-w-3xl">
+            <section
+              className={`scout-stage px-5 pb-10 pt-8 transition-[min-height] duration-700 ease-in-out sm:px-8 sm:pt-10 xl:px-12 ${
+                stageHasWorkBelow ? "min-h-0" : "min-h-[calc(100vh-40px)]"
+              }`}
+            >
+              <div className="w-full max-w-[1400px]">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
                     Scouting for
@@ -7083,7 +7100,7 @@ function ScoutTool({
                     <button
                       onClick={() => selectCategory("")}
                       title="Search without a saved category; running it saves a new one"
-                      className="rounded-full border border-dashed border-white/30 px-3.5 py-2 text-sm font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
+                      className="rounded-full border border-dashed border-white/30 px-4 py-2.5 text-base font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
                     >
                       Custom search
                     </button>
@@ -7124,7 +7141,7 @@ function ScoutTool({
                           onChange={(e) => setGoal(e.target.value)}
                           placeholder={goalPlaceholder || "Who are you looking for?"}
                           rows={goal.length > 90 ? 3 : 2}
-                          className="stage-ask font-display w-full text-2xl font-bold leading-snug tracking-[-0.01em] sm:text-[28px]"
+                          className="stage-ask font-display w-full text-[26px] font-bold leading-snug tracking-[-0.01em] sm:text-[34px]"
                         />
                         <MicButton onAppend={(t) => setGoal((g) => joinSpoken(g, t))} light />
                       </div>
@@ -7363,8 +7380,12 @@ function ScoutTool({
             {/* Everything below the composer sits on a deeper shade of the
                 same ground, so the tab reads as one brown room with the work
                 area recessed. Content here lives in light cards, which is what
-                keeps it legible. */}
-            <div className="scout-results flex-1 px-5 pb-16 sm:px-8 xl:px-12">
+                keeps it legible. Rendered only when there is something to show:
+                until the first run, the stage owns the whole screen, and the
+                min-height transition above is what makes it fold up to reveal
+                this section the moment a search starts. */}
+            {stageHasWorkBelow && (
+            <div className="scout-results scout-fade-in flex-1 px-5 pb-16 sm:px-8 xl:px-12">
 
             {error &&
               (apiReason ? (
@@ -7730,6 +7751,7 @@ function ScoutTool({
               </section>
             )}
             </div>
+            )}
           </main>
       )}
 
@@ -8649,7 +8671,7 @@ function PrettySelect({
         onClick={() => setOpen((v) => !v)}
         className={
           bare
-            ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-left text-sm font-semibold text-inherit outline-none transition focus-visible:ring-2 focus-visible:ring-white/40"
+            ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold text-inherit outline-none transition focus-visible:ring-2 focus-visible:ring-white/40"
             : "pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
         }
       >
@@ -15122,10 +15144,12 @@ function DashboardTab({
   const spotlight = pick;
   const moreList = (spotlight ? recentFinds.filter((f) => f.id !== spotlight.id) : recentFinds).slice(0, 5);
   const startNum = spotlight ? 2 : 1;
-  const avatarPalette = ["#8a5f42", "#6f7a4e", "#5c402f", "#a9761f", "#77563b", "#525c37"];
+  // Same rainbow the find tiles and avatars use; this list was a second,
+  // forgotten copy of the old brown set.
   const avatarColor = (name: string) =>
-    avatarPalette[
-      (name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0) % avatarPalette.length
+    FIND_AVATAR_COLORS[
+      (name || "").split("").reduce((s, c) => s + c.charCodeAt(0), 0) %
+        FIND_AVATAR_COLORS.length
     ];
   const roleLine = (o: Opportunity) =>
     [o.contactRole, o.outlet, o.location].filter(Boolean).join(" · ") || o.channel || "";
@@ -22297,7 +22321,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
           </span>
         )}
       </div>
-      <div className="mt-3 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
+      <div className="mt-4 grid gap-x-16 gap-y-3.5 sm:grid-cols-2">
         {bullets.map((b, i) =>
           editing === i ? (
             <input
@@ -22313,7 +22337,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
                   setDraft("");
                 }
               }}
-              className="stage-sub border-b border-white/30 pb-0.5 text-[15px] font-semibold"
+              className="stage-sub border-b border-white/30 pb-0.5 text-lg font-semibold sm:text-xl"
             />
           ) : (
             <button
@@ -22325,8 +22349,8 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
               title="Edit this point"
               className="group/b flex items-start gap-2.5 text-left"
             >
-              <span aria-hidden className="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-cream/80" />
-              <span className="text-[15px] font-semibold leading-snug text-white/90 underline-offset-4 group-hover/b:underline">
+              <span aria-hidden className="mt-[11px] h-2 w-2 shrink-0 rounded-full bg-cream/80" />
+              <span className="text-lg font-semibold leading-snug text-white/90 underline-offset-4 group-hover/b:underline sm:text-xl">
                 {b}
               </span>
             </button>
