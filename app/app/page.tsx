@@ -15595,134 +15595,53 @@ ${body}
             )}
           </p>
 
-          {/* -------- Two-column: action (left) + glance (right) -------- */}
-          <div className="mt-5 grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px] lg:items-start">
-            {/* LEFT — the action */}
-            <div className="min-w-0">
-              {recentFinds.length ? (
-                <>
-                  {spotlight && (
-                    <>
-                      <h2 className="mb-3 px-0.5 text-[13px] font-bold text-muted">Do this next</h2>
-                      <div className="rounded-2xl border border-warm-border bg-surface p-6 shadow-soft">
-                        <div className="text-[11px] font-bold uppercase tracking-[0.12em] text-brown">Top match today</div>
-                        <div className="mt-3 flex flex-wrap items-center gap-3">
-                          <span className="font-display text-[26px] font-extrabold leading-none text-ink">{spotlight.opp.name}</span>
-                          {typeof spotlight.opp.fitScore === "number" && (
-                            <FitPill fitScore={spotlight.opp.fitScore} className="px-2.5 py-1 text-xs" />
-                          )}
-                        </div>
-                        <div className="mt-1.5 text-sm text-muted">{roleLine(spotlight.opp)}</div>
-                        <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/50 p-4 text-sm leading-relaxed text-body">
-                          {cleanDash(spotlight.opp.whyItFits).trim() ||
-                            "Your strongest still-open match, worth a short, specific intro."}
-                        </div>
-                        <div className="mt-5 flex items-center gap-3">
-                          <button onClick={() => onOpenFind(spotlight)} className="rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brown-deep">
-                            {spotlight.status === "drafted" ? "Send in my voice →" : "Draft in my voice →"}
-                          </button>
-                          <button onClick={() => onOpenFind(spotlight)} className="text-sm font-bold text-brown-deep hover:underline">
-                            {spotlight.status === "drafted" ? "Edit draft" : "Open find"}
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-
-                  {moreList.length > 0 && (
-                    <>
-                      <div className="mb-3 mt-7 flex items-baseline justify-between px-0.5">
-                        <h2 className="text-[13px] font-bold text-muted">More matches</h2>
-                        <button onClick={goFinds} className="text-xs font-bold text-brown-deep hover:underline">All finds →</button>
-                      </div>
-                      <div className="overflow-hidden rounded-2xl border border-warm-border bg-surface">
-                        {moreList.map((f) => {
-                          const st = FIND_STATUS[f.status];
-                          const fit =
-                            typeof f.opp.fitScore === "number" ? Math.round(f.opp.fitScore * 100) : null;
-                          return (
-                            <button key={f.id} onClick={() => onOpenFind(f)} className="flex w-full items-center gap-4 border-b border-warm-border px-5 py-4 text-left transition last:border-b-0 hover:bg-warm-bg/40">
-                              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg text-[11px] font-bold text-white" style={{ backgroundColor: avatarColor(f.opp.name) }} aria-hidden>
-                                {initials(f.opp.name)}
-                              </span>
-                              <span className="min-w-0 flex-1">
-                                <span className="block truncate text-sm font-bold text-ink">{f.opp.name}</span>
-                                <span className="block truncate text-xs text-muted">{roleLine(f.opp)}</span>
-                              </span>
-                              {fit != null && (
-                                <span className="shrink-0 text-xs font-bold tabular-nums text-success-deep">{fit}%</span>
-                              )}
-                              <span className="shrink-0 text-xs font-semibold text-brown-deep">{st.action}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </>
-                  )}
-                </>
-              ) : (
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-warm-border bg-surface px-6 py-14 text-center">
-                  <p className="max-w-sm text-sm text-muted">
-                    No finds yet. Run a search and Scout starts filling your pipeline with people worth reaching.
-                  </p>
-                  <button onClick={goOutreach} className="mt-4 rounded-xl bg-brown px-5 py-2.5 text-sm font-bold text-white transition hover:bg-brown-deep">
-                    Start scouting →
-                  </button>
+          {/* -------- The numbers, full width. --------
+              Matches deliberately do NOT appear here: the dashboard is for
+              impactful numbers and what Scout is learning about you; the
+              pipeline itself lives on Finds. */}
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {(
+              [
+                [String(finds.length), "Finds", newThisWeek > 0 ? `+${newThisWeek} this week` : ""],
+                [String(pipe.sent), "Messages sent", ""],
+                [replyRatePct, "Reply rate", ""],
+                [onTarget != null ? `${onTarget}%` : "·", "On-target", ""],
+                [String(activity.searches), "Searches run", ""],
+                [String(Math.round((activity.drafts * 6) / 60)), "Hours saved drafting", ""],
+              ] as const
+            ).map(([v, label, sub]) => (
+              <div key={label} className="rounded-2xl border border-warm-border bg-surface p-5">
+                <div className="font-display text-[34px] font-bold leading-none tabular-nums text-ink">
+                  {v}
                 </div>
-              )}
-            </div>
-
-            {/* RIGHT — the glance */}
-            <div className="min-w-0">
-              <h2 className="mb-3 px-0.5 text-[13px] font-bold text-muted">At a glance</h2>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-warm-border bg-surface p-4">
-                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{finds.length}</div>
-                  <div className="mt-1.5 text-[11.5px] text-muted">
-                    Finds{newThisWeek > 0 && <span className="ml-1 font-semibold text-success-deep">▲{newThisWeek}</span>}
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-warm-border bg-surface p-4">
-                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{pipe.sent}</div>
-                  <div className="mt-1.5 text-[11.5px] text-muted">Messages sent</div>
-                </div>
-                <div className="rounded-2xl border border-warm-border bg-surface p-4">
-                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{replyRatePct}</div>
-                  <div className="mt-1.5 text-[11.5px] text-muted">Reply rate</div>
-                </div>
-                <div className="rounded-2xl border border-warm-border bg-surface p-4">
-                  <div className="font-display text-[26px] font-bold leading-none tabular-nums text-ink">{onTarget != null ? `${onTarget}%` : "·"}</div>
-                  <div className="mt-1.5 text-[11.5px] text-muted">On-target</div>
-                </div>
+                <div className="mt-2 text-[12px] text-muted">{label}</div>
+                {sub && <div className="mt-0.5 text-[11px] font-semibold text-success-deep">{sub}</div>}
               </div>
+            ))}
+          </div>
 
-              {(dueFollowUps > 0 || insights.length > 0 || coaching.length > 0) && (
-                <>
-                  <h2 className="mb-3 mt-7 px-0.5 text-[13px] font-bold text-muted">Also on your radar</h2>
-                  <div className="flex flex-col gap-2.5">
-                    {dueFollowUps > 0 && (
-                      <button onClick={goFinds} className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-left text-sm transition hover:border-brown/40">
-                        <span className="font-semibold text-ink">{dueFollowUps} follow-up{dueFollowUps === 1 ? "" : "s"} due</span>
-                        <span className="ml-auto text-xs font-semibold text-brown-deep">Review →</span>
-                      </button>
-                    )}
-                    {insights.length > 0 && (
-                      <div className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-sm">
-                        <span className="font-semibold text-ink">What Scout learned</span>
-                        <span className="ml-auto text-xs text-muted">{insights.length} signal{insights.length === 1 ? "" : "s"}</span>
-                      </div>
-                    )}
-                    {coaching.length > 0 && (
-                      <div className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-3 text-sm">
-                        <span className="font-semibold text-ink">Coaching you turned on</span>
-                        <span className="ml-auto text-xs text-muted">{coaching.length} rule{coaching.length === 1 ? "" : "s"}</span>
-                      </div>
-                    )}
-                  </div>
-                </>
+          {/* Quiet action strip: things worth a look, never a pipeline. */}
+          {(dueFollowUps > 0 || coaching.length > 0) && (
+            <div className="mt-4 flex flex-wrap gap-2.5">
+              {dueFollowUps > 0 && (
+                <button
+                  onClick={goFinds}
+                  className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm transition hover:border-brown/40"
+                >
+                  <span className="font-semibold text-ink">
+                    {dueFollowUps} follow-up{dueFollowUps === 1 ? "" : "s"} due
+                  </span>
+                  <span className="text-xs font-semibold text-brown-deep">Review →</span>
+                </button>
+              )}
+              {coaching.length > 0 && (
+                <span className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm">
+                  <span className="font-semibold text-ink">Coaching you turned on</span>
+                  <span className="text-xs text-muted">{coaching.length} rule{coaching.length === 1 ? "" : "s"}</span>
+                </span>
               )}
             </div>
-          </div>
+          )}
         </>
       ) : (
         <p className="mt-4 text-sm text-muted">
@@ -15732,6 +15651,43 @@ ${body}
 
       {dashTab === "you" && (
       <>
+
+      {/* -------- What Scout has learned about YOU lately (individual) -------- */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
+        {insights.length ? (
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            {insights.map((ins) => (
+              <div
+                key={ins.text}
+                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
+              >
+                <span
+                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-sage"
+                  aria-hidden
+                >
+                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18" /></svg>
+                </span>
+                <div>
+                  <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
+                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-body/50">
+                    {ins.basis}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-sm text-body/70">
+            Nothing learned yet. As you keep, pass on, and edit finds, real insights about
+            your taste and voice show up here.{" "}
+            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
+              Work a few finds
+            </button>{" "}
+            to get started.
+          </p>
+        )}
+      </section>
 
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
@@ -15920,42 +15876,6 @@ ${body}
         )}
       </section>
 
-      {/* -------- What Scout has learned about YOU lately (individual) -------- */}
-      <section className="mt-10">
-        <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
-        {insights.length ? (
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            {insights.map((ins) => (
-              <div
-                key={ins.text}
-                className="flex items-start gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
-              >
-                <span
-                  className="mt-0.5 grid h-6 w-6 shrink-0 place-items-center rounded-full bg-sage/15 text-sage"
-                  aria-hidden
-                >
-                  <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 3v18M3 12h18M6 6l12 12M18 6 6 18" /></svg>
-                </span>
-                <div>
-                  <p className="text-sm leading-relaxed text-ink">{ins.text}</p>
-                  <p className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-body/50">
-                    {ins.basis}
-                  </p>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-3 rounded-2xl border border-dashed border-warm-border bg-surface/60 px-4 py-3 text-sm text-body/70">
-            Nothing learned yet. As you keep, pass on, and edit finds, real insights about
-            your taste and voice show up here.{" "}
-            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
-              Work a few finds
-            </button>{" "}
-            to get started.
-          </p>
-        )}
-      </section>
 
       </>
       )}

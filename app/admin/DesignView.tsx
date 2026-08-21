@@ -31,14 +31,18 @@ interface Era {
   name: string;
   when: string;
   notes: string;
+  // The surface this version belongs to; history is grouped by it, because
+  // design versions are formatting as much as color.
+  surface: string;
   // Which mockup the era renders and the palette it ran on.
-  kind: "form" | "stage";
+  kind: "form" | "stage" | "grid-shots" | "grid-tiles" | "fit-pct" | "fit-words" | "dash-matches" | "dash-numbers";
   colors: { bg: string; card: string; ink: string; button: string; buttonText: string };
 }
 
 const ERAS: Era[] = [
   {
     id: "coral",
+    surface: "Search screen",
     name: "Coral spike",
     when: "Early July 2026",
     notes:
@@ -48,6 +52,7 @@ const ERAS: Era[] = [
   },
   {
     id: "leather",
+    surface: "Search screen",
     name: "Leather and denim",
     when: "Mid July 2026",
     notes:
@@ -57,12 +62,73 @@ const ERAS: Era[] = [
   },
   {
     id: "stage",
+    surface: "Search screen",
     name: "The stage",
     when: "Late August 2026, live now",
     notes:
       "The composer becomes a brown room: floating pill toggles, the goal as bullet points, a deeper work area that fades in, finds on light cards.",
     kind: "stage",
     colors: { bg: "#5c4634", card: "#4a3729", ink: "#f6efe6", button: "#f6efe6", buttonText: "#4a3729" },
+  },
+  {
+    id: "grid-shots",
+    surface: "Finds grid",
+    name: "Site screenshots",
+    when: "Through August 20, 2026",
+    notes:
+      "Each card led with a live thumbnail of the find's homepage. Mostly whitespace, cropped at an arbitrary scroll point; forty of them read as noise.",
+    kind: "grid-shots",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
+  },
+  {
+    id: "grid-tiles",
+    surface: "Finds grid",
+    name: "Brand tiles",
+    when: "August 21, 2026, live now",
+    notes:
+      "A flat block snapped to the rainbow palette, carrying the company's own logo, the platform mark for a profile, or the Scout dog. The grid stays calm.",
+    kind: "grid-tiles",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
+  },
+  {
+    id: "fit-pct",
+    surface: "Fit labels",
+    name: "Percent scores",
+    when: "Through August 20, 2026",
+    notes:
+      "38% fit on every card. Read like a grade, and two digits were false precision on a model's judgement.",
+    kind: "fit-pct",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
+  },
+  {
+    id: "fit-words",
+    surface: "Fit labels",
+    name: "Word bands",
+    when: "August 21, 2026, live now",
+    notes:
+      "Perfect, Great, Good, Potential, Far-fetched, each with its own colour so a list can be skimmed. The exact score stays on hover.",
+    kind: "fit-words",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
+  },
+  {
+    id: "dash-matches",
+    surface: "Dashboard",
+    name: "Top match and more matches",
+    when: "Through August 21, 2026",
+    notes:
+      "The dashboard led with a spotlight find and a ranked list, duplicating the Finds tab on the landing screen.",
+    kind: "dash-matches",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
+  },
+  {
+    id: "dash-numbers",
+    surface: "Dashboard",
+    name: "Numbers and learning",
+    when: "August 22, 2026, live now",
+    notes:
+      "Impactful numbers full width, then what Scout is learning about you. Matches live on Finds where they belong.",
+    kind: "dash-numbers",
+    colors: { bg: "#f8f7f5", card: "#ffffff", ink: "#2b2723", button: "#7a6048", buttonText: "#fff" },
   },
 ];
 
@@ -245,8 +311,11 @@ export default function DesignView() {
           Every look Scout has shipped with. Pin the ones worth keeping in reach;
           pinned eras stay at the top.
         </p>
-        <div className="mt-4 grid gap-5 md:grid-cols-2 xl:grid-cols-3">
-          {ordered.map((era) => {
+        {Array.from(new Set(ordered.map((e) => e.surface))).map((surface) => (
+        <div key={surface} className="mt-6">
+        <div className="kicker mb-2">{surface}</div>
+        <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+          {ordered.filter((e) => e.surface === surface).map((era) => {
             const pinned = pins.includes(era.id);
             return (
               <div
@@ -257,7 +326,76 @@ export default function DesignView() {
               >
                 {/* Mockup */}
                 <div style={{ background: era.colors.bg }} className="h-40 p-4">
-                  {era.kind === "form" ? (
+                  {era.kind === "grid-shots" || era.kind === "grid-tiles" ? (
+                    <div className="grid h-full grid-cols-2 gap-2">
+                      {[0, 1, 2, 3].map((i) => (
+                        <div key={i} className="overflow-hidden rounded-lg border border-black/10 bg-white text-[8px]">
+                          {era.kind === "grid-shots" ? (
+                            <div className="h-2/3 bg-gradient-to-b from-neutral-100 to-neutral-300 p-1">
+                              <div className="h-1 w-2/3 rounded bg-neutral-400/60" />
+                              <div className="mt-0.5 h-1 w-1/3 rounded bg-neutral-400/40" />
+                            </div>
+                          ) : (
+                            <div
+                              className="grid h-2/3 place-items-center"
+                              style={{ background: DEFAULT_RAINBOW[i % DEFAULT_RAINBOW.length] }}
+                            >
+                              <span className="grid h-4 w-4 place-items-center rounded bg-white/85 text-[7px] font-bold" style={{ color: DEFAULT_RAINBOW[i % DEFAULT_RAINBOW.length] }}>
+                                {"SKLM"[i]}
+                              </span>
+                            </div>
+                          )}
+                          <div className="p-1 font-bold" style={{ color: era.colors.ink }}>
+                            {["Slevin & Hart", "Kinkead", "Lackey PLLC", "McKay Law"][i]}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : era.kind === "fit-pct" || era.kind === "fit-words" ? (
+                    <div className="flex h-full flex-col justify-center gap-2">
+                      {(era.kind === "fit-pct"
+                        ? [["Kinkead Entertainment", "52%", "#e8f0e6", "#3f6b4f"], ["Lackey PLLC", "39%", "#e8f0e6", "#3f6b4f"], ["McKay Law", "61%", "#e8f0e6", "#3f6b4f"]]
+                        : [["Kinkead Entertainment", "Great fit", "#e2ece5", "#3f6b4f"], ["Lackey PLLC", "Potential fit", "#fdf0dc", "#9a6b1f"], ["McKay Law", "Perfect fit", "#5c4634", "#ffffff"]]
+                      ).map(([name, tag, bg, fg]) => (
+                        <div key={name} className="flex items-center gap-2 rounded-lg border border-black/10 bg-white px-2 py-1.5 text-[9px]" style={{ color: era.colors.ink }}>
+                          <b>{name}</b>
+                          <span className="ml-auto rounded-full px-1.5 py-0.5 text-[8px] font-bold" style={{ background: bg, color: fg }}>
+                            {tag}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : era.kind === "dash-matches" || era.kind === "dash-numbers" ? (
+                    era.kind === "dash-matches" ? (
+                      <div className="flex h-full flex-col gap-1.5 text-[8px]" style={{ color: era.colors.ink }}>
+                        <div className="rounded-lg border border-black/10 bg-white p-2">
+                          <div className="text-[7px] font-bold uppercase tracking-wide" style={{ color: era.colors.button }}>Top match today</div>
+                          <div className="text-[10px] font-extrabold">Window Music Publishing</div>
+                          <span className="mt-1 inline-block rounded px-2 py-0.5 font-bold text-white" style={{ background: era.colors.button }}>Send in my voice</span>
+                        </div>
+                        {["Julie Pryor", "Capitol CMG"].map((n) => (
+                          <div key={n} className="flex items-center gap-1.5 rounded-lg border border-black/10 bg-white px-2 py-1">
+                            <b>{n}</b>
+                            <span className="ml-auto opacity-60">Draft</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex h-full flex-col gap-1.5 text-[8px]" style={{ color: era.colors.ink }}>
+                        <div className="grid grid-cols-3 gap-1.5">
+                          {[["45", "Finds"], ["12", "Sent"], ["18%", "Replies"], ["50%", "On-target"], ["21", "Searches"], ["4", "Hours saved"]].map(([v, l]) => (
+                            <div key={l} className="rounded-lg border border-black/10 bg-white p-1.5">
+                              <div className="text-[11px] font-extrabold">{v}</div>
+                              <div className="opacity-60">{l}</div>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="rounded-lg border border-black/10 bg-white px-2 py-1.5">
+                          <b>What Scout learned:</b> you keep smaller companies and pass on big brands.
+                        </div>
+                      </div>
+                    )
+                  ) : era.kind === "form" ? (
                     <div
                       className="mx-auto h-full max-w-[260px] rounded-xl border p-3 text-[9px]"
                       style={{
@@ -336,6 +474,8 @@ export default function DesignView() {
             );
           })}
         </div>
+        </div>
+        ))}
         <p className="mt-3 text-xs text-body/55">
           New eras get added here when the design meaningfully changes, so this
           stays the record of where the look has been.
