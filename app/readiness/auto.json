@@ -1,0 +1,123 @@
+{
+  "generatedAt": "2026-08-21T21:12:39.716Z",
+  "commit": "79941f9",
+  "partial": true,
+  "checks": {
+    "unfinished::decide-what-happens-to-the-work-not-yet-published": {
+      "verdict": "warn",
+      "note": "Uncommitted, so unbacked-up: app/readiness/page.tsx, lib/discover.ts, package.json, app/readiness/auto.json, scripts/readiness-auto.mjs, scripts/readiness-hook.mjs, scripts/readiness-resolve.mjs"
+    },
+    "runbook::1-stop-making-changes-and-confirm-the-site-builds": {
+      "verdict": "ok",
+      "note": "npx tsc --noEmit is clean and `next build` completes."
+    },
+    "unfinished::publish-the-browser-security-protections": {
+      "verdict": "ok",
+      "note": "All six headers are in a committed next.config.js: Content-Security-Policy, Strict-Transport-Security, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy"
+    },
+    "security::done-standard-browser-protections-switched-on": {
+      "verdict": "ok",
+      "note": "Six headers set; 'unsafe-eval' and the HMR socket are behind the isDev flag only."
+    },
+    "security::done-previewed-websites-are-in-a-locked-box": {
+      "verdict": "ok",
+      "note": "Every sandboxed frame (app/app/page.tsx) withholds allow-same-origin."
+    },
+    "unfinished::close-the-page-preview-loophole": {
+      "verdict": "ok",
+      "note": "/api/site-preview refuses to fetch without a valid signed token; forged and empty tokens are rejected."
+    },
+    "finding::website-previews-require-being-signed-in": {
+      "verdict": "ok",
+      "note": "Tokens are minted only for a signed-in user and expire after 6h; an expired one is refused."
+    },
+    "security::done-email-approve-links-expire": {
+      "verdict": "ok",
+      "note": "Approve/deny links verify fresh, are refused at 15 days, and a token with no issued-at or a forged signature is rejected."
+    },
+    "security::done-mailbox-keys-are-stored-scrambled": {
+      "verdict": "ok",
+      "note": "AES-256-GCM round-trips, a wrong key fails, and both Gmail and Outlook seal on connect and open on use."
+    },
+    "security::done-the-server-cannot-be-tricked-into-fetching-internal-add": {
+      "verdict": "warn",
+      "note": "lib/pageText.safeUrl blocks all 16 payloads, but these fetch paths use their own weaker check:\n  app/api/deep-scan/route.ts — lets through http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/\n  app/api/find-chat/route.ts — lets through http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/\n  lib/readSite.ts — lets through http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/"
+    },
+    "guardrails::the-website-reading-features-cannot-be-aimed-at-our-own-syst": {
+      "verdict": "bad",
+      "note": "These reading features each carry their own copy of the host check, and each copy is weaker than lib/pageText.safeUrl:\n  app/api/deep-scan/route.ts — accepts http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/\n  app/api/find-chat/route.ts — accepts http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/\n  lib/readSite.ts — accepts http://172.16.0.1/, http://172.31.255.1/, http://100.64.0.1/, http://db.internal/, http://printer.local/, http://api.localhost/"
+    },
+    "guardrails::close-the-fifteen-features-that-anyone-can-trigger-for-free": {
+      "verdict": "bad",
+      "note": "15 of 15 routes still take an unauthenticated POST and spend our model credits:\n  drafting (app/api/draft/route.ts) — no auth, no rate limit\n  redrafting (app/api/redraft-batch/route.ts) — no auth, no rate limit\n  follow-ups (app/api/draft-followup/route.ts) — no auth, no rate limit\n  advice (app/api/draft-advice/route.ts) — no auth, no rate limit\n  deep scan (app/api/deep-scan/route.ts) — no auth, no rate limit\n  website reading (app/api/read-website/route.ts) — no auth, no rate limit\n  company reading (app/api/read-company/route.ts) — no auth, no rate limit\n  PDF reading (app/api/read-pdf/route.ts) — rate-limited by IP only\n  profile parsing (app/api/parse-profile/route.ts) — rate-limited by IP only\n  meeting prep (app/api/meeting-prep/route.ts) — no auth, no rate limit\n  application writing (app/api/application/route.ts) — no auth, no rate limit\n  category goals (app/api/category-goal/route.ts) — no auth, no rate limit\n  example goals (app/api/example-goal/route.ts) — rate-limited by IP only\n  starter plans (app/api/starter-plan/route.ts) — no auth, no rate limit\n  tuning prompts (app/api/tuning-prompt/route.ts) — no auth, no rate limit\n12 of those have no rate limit either."
+    },
+    "teams::invite-and-company-codes-cannot-be-guessed": {
+      "verdict": "warn",
+      "note": "Codes are 8 characters from a 31-character alphabet (~40 bits, not guessable by hand) but they are drawn from Math.random(), which is a predictable generator — seeing a few codes can narrow the next one. crypto.randomInt() is a one-line swap in lib/teams.ts."
+    },
+    "paying::the-free-allowance-matches-what-we-advertise": {
+      "verdict": "ok",
+      "note": "FREE_LIMIT is 3 and all 1 place(s) that state it in words agree."
+    },
+    "settings::the-site-address-is-the-same-everywhere": {
+      "verdict": "warn",
+      "note": "3 different address settings are read, so one of them being unset or wrong breaks a feature quietly:\n  NEXT_PUBLIC_SITE_URL — app/api/cron/auto-search/route.ts, app/api/cron/send-scheduled/route.ts, app/api/team/invite/route.ts, lib/teams.ts\n  APP_URL — app/api/cron/send-scheduled/route.ts\n  NEXT_PUBLIC_APP_URL — lib/stripe.ts"
+    },
+    "security::to-do-later-one-remaining-dependency-advisory": {
+      "verdict": "bad",
+      "note": "2 high/critical advisory(ies), not one: next (high, fix is a major upgrade), postcss (high, fix is a major upgrade). Plus @measured/puck (moderate, fix is a major upgrade), uuid (moderate, fix is a major upgrade)."
+    },
+    "finding::nobody-reaches-your-pipeline-without-a-way-to-contact-them": {
+      "verdict": "ok",
+      "note": "discover() drops any find failing hasAnyContact, and the test is keyed on a real contact value: a bio page carrying channel \"Website Form\" and no address, number or handle is refused."
+    },
+    "finding::a-search-with-no-location-given-is-not-steered-to-any-city": {
+      "verdict": "ok",
+      "note": "The HOME BASE rule names no city, and still says outright that with no base given it applies no geography, invents no city, and does not fall back to any place named elsewhere in the prompt."
+    },
+    "importing::spreadsheet-junk-does-not-become-contacts": {
+      "verdict": "ok",
+      "note": "Blank rows, \"TRUE\"/\"FALSE\"/\"N/A\"/\"x\" cell artifacts, a prose note with no contact route, and a duplicate all fail to become contacts; the one real row does."
+    },
+    "importing::accents-and-unusual-characters-survive": {
+      "verdict": "warn",
+      "note": "Display values survive intact, but the dedup key treats \"Zoë Müller\" and \"Zoe Muller\" as two different people (normNameKey drops non-ASCII rather than folding it), so the same person imported twice under two spellings lands twice."
+    },
+    "importing::a-very-large-file-does-not-hang-the-app": {
+      "verdict": "ok",
+      "note": "20,000 rows map to 20,000 contacts in 24ms, so the parse itself cannot be what hangs a big import."
+    },
+    "importing::a-broken-or-wrong-file-fails-politely": {
+      "verdict": "ok",
+      "note": "Empty, unmapped, null-valued, project-less and non-sheet inputs all come back as an empty list rather than throwing."
+    },
+    "importing::imported-personal-contacts-stay-private": {
+      "verdict": "ok",
+      "note": "Only role inboxes on company domains cross into the shared index; personal freemail addresses and bare handles are held back, and the publish path filters on it."
+    },
+    "importing::imported-rows-link-back-to-the-exact-sheet-row": {
+      "verdict": "ok",
+      "note": "A row stamped 42 becomes a contact whose link opens that sheet at gid=7, cell A42."
+    },
+    "feel::a-wrong-address-gives-a-helpful-page": {
+      "verdict": "ok",
+      "note": "app/not-found.tsx is a real Scout page with an explanation and a link home."
+    },
+    "live::search-engines-are-told-what-to-index": {
+      "verdict": "ok",
+      "note": "robots.txt hides /app, /admin, /api/, /readiness and points at the sitemap, which lists only /, /privacy, /terms."
+    },
+    "live::shared-links-look-right": {
+      "verdict": "ok",
+      "note": "Title, description, site name, a large-image Twitter card and a 1200x630 preview image are all set, on an absolute metadataBase."
+    },
+    "live::the-old-version-of-the-site-sends-people-to-the-new-one": {
+      "verdict": "ok",
+      "note": "cue-connect-alpha.vercel.app redirect 308 to https://scout-source.com, keeping the path and query; the live host is untouched."
+    },
+    "feel::animation-respects-the-reduce-motion-setting": {
+      "verdict": "warn",
+      "note": "6 of 6 animated classes in globals.css have a reduced-motion override. Separately, Tailwind's own utilities are used in the app and none of them are covered, because the overrides are written one class at a time in globals.css: animate-spin (4), animate-pulse (7), animate-ping (1). One blanket rule — animation and transition off under prefers-reduced-motion — would cover these and every future one."
+    }
+  }
+}

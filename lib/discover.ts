@@ -4,7 +4,7 @@
 // extraction, a known-index dedupe so the same target never repeats.
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
-import { tavilySearch, TavilyResult } from "./tavily";
+import { tavilySearch, type TavilyResult } from "./tavily";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
@@ -1184,7 +1184,7 @@ const GENERIC_EMAIL =
 // guess at a route ("Website Form", "Company Portal") and is routinely set on
 // results carrying no contact detail at all. A profile URL doesn't count
 // either: a bio page you can read is not a way to get in touch.
-function hasAnyContact(o: Opportunity): boolean {
+export function hasAnyContact(o: Opportunity): boolean {
   return (
     !!String(o.contactEmail || "").trim() ||
     !!String(o.contactPhone || "").trim() ||

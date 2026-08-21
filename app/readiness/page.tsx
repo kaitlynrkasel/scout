@@ -9,6 +9,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import DATA from "./data.json";
+import AUTO from "./auto.json";
 
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,27 @@ function ReadinessInner() {
     [parts]
   );
   const [checks, setChecks] = useState<Record<string, CheckRow>>({});
+  // Items a machine already settled (scripts/readiness-auto.mjs, run with
+  // `npm run readiness`). These sit UNDER the shared table: a person's verdict
+  // always wins, and clearing one falls back to the machine's rather than to
+  // blank, because the code fact is still true either way.
+  const autoAt = String((AUTO as any).generatedAt || "");
+  const auto = (AUTO as any).checks as Record<string, { verdict: Verdict; note: string }>;
+  const merged = useMemo(() => {
+    const m: Record<string, CheckRow> = { ...checks };
+    for (const [key, a] of Object.entries(auto)) {
+      if (m[key]?.verdict) continue;
+      m[key] = {
+        key,
+        verdict: a.verdict,
+        owner_name: "checked by code",
+        note: checks[key]?.note || a.note,
+        updated_at: autoAt,
+      };
+    }
+    return m;
+  }, [checks, auto, autoAt]);
+  const isAuto = (key: string) => !!auto[key] && !checks[key]?.verdict;
   const [status, setStatus] = useState<"loading" | "live" | "denied" | "notReady">("loading");
   const [openKey, setOpenKey] = useState("");
   // Split position as a percentage of the window width (checklist column).
@@ -162,13 +184,14 @@ function ReadinessInner() {
     }
   }
 
-  const done = allItems.filter((i) => checks[i.key]?.verdict).length;
+  const done = allItems.filter((i) => merged[i.key]?.verdict).length;
   const counts = {
-    ok: allItems.filter((i) => checks[i.key]?.verdict === "ok").length,
-    warn: allItems.filter((i) => checks[i.key]?.verdict === "warn").length,
-    bad: allItems.filter((i) => checks[i.key]?.verdict === "bad").length,
+    ok: allItems.filter((i) => merged[i.key]?.verdict === "ok").length,
+    warn: allItems.filter((i) => merged[i.key]?.verdict === "warn").length,
+    bad: allItems.filter((i) => merged[i.key]?.verdict === "bad").length,
   };
-  const mustLeft = allItems.filter((i) => i.sev === "must" && checks[i.key]?.verdict !== "ok").length;
+  const mustLeft = allItems.filter((i) => i.sev === "must" && merged[i.key]?.verdict !== "ok").length;
+  const autoCount = allItems.filter((i) => isAuto(i.key)).length;
 
   if (status === "denied")
     return (
@@ -246,6 +269,16 @@ function ReadinessInner() {
         {status === "loading" && <span className="text-xs text-body/50">syncing…</span>}
       </div>
 
+      {autoCount > 0 && (
+        <p className="mt-3 max-w-[62ch] rounded-lg border border-warm-border bg-warm-bg/60 px-3 py-2 text-xs leading-relaxed text-body/70">
+          <b className="text-ink/80">{autoCount} of these are already settled by code.</b> They carry an{" "}
+          <span className="rounded border border-warm-border bg-surface px-1 font-bold uppercase tracking-wide">auto</span>{" "}
+          tag and the evidence that decided them, from{" "}
+          <code className="text-[11px]">npm run readiness</code> at commit {String((AUTO as any).commit || "?")} on{" "}
+          {autoAt.slice(0, 10)}. Nobody needs to re-test those by hand — but marking one yourself overrides the machine.
+        </p>
+      )}
+
       {parts.map((p) => (
         <div key={p.part} className="mt-10">
           <div className="border-t-2 border-ink pt-4">
@@ -259,7 +292,8 @@ function ReadinessInner() {
               <p className="mt-0.5 max-w-[62ch] text-[13px] text-body/60">{s.blurb}</p>
               <div className="mt-3 space-y-2">
                 {s.items.map((it) => {
-                  const c = checks[it.key];
+                  const c = merged[it.key];
+                  const machine = isAuto(it.key);
                   const open = openKey === it.key;
                   // Only a clean pass collapses. "Needs work" and "Broken"
                   // stay open: they are the ones that need a note, and folding
@@ -314,6 +348,14 @@ function ReadinessInner() {
                               {c?.owner_name ? ` · ${c.owner_name}` : ""}
                             </span>
                           )}
+                          {!folded && machine && (
+                            <span
+                              title="Settled by scripts/readiness-auto.mjs, not by a person"
+                              className="shrink-0 rounded-md border border-warm-border bg-warm-bg px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-body/55"
+                            >
+                              auto
+                            </span>
+                          )}
                         </button>
                         {!folded && (
                           <p className="ml-5 mt-1 text-[13px] leading-relaxed text-body/75">
@@ -337,7 +379,11 @@ function ReadinessInner() {
                               <button
                                 key={v}
                                 onClick={() => {
-                                  const next = c?.verdict === v ? "" : v;
+                                  // Toggle against the PERSON's verdict, not the
+                                  // merged one: on a machine-checked item the
+                                  // buttons start unpressed, so the first click
+                                  // records an opinion instead of clearing one.
+                                  const next = checks[it.key]?.verdict === v ? "" : v;
                                   save(it.key, {
                                     verdict: next,
                                     owner_name: meRef.current,
@@ -348,7 +394,7 @@ function ReadinessInner() {
                                   else if (next) setOpenKey(it.key);
                                 }}
                                 className={`rounded-lg border px-2.5 py-1 text-xs font-semibold transition ${
-                                  c?.verdict === v
+                                  checks[it.key]?.verdict === v
                                     ? v === "ok"
                                       ? "border-sage bg-sage/15 text-sage-deep"
                                       : v === "warn"
@@ -369,6 +415,24 @@ function ReadinessInner() {
                         </div>
                         {(open || c?.verdict === "warn" || c?.verdict === "bad") && (
                           <div className="ml-5 mt-3 border-t border-warm-border pt-3">
+                            {machine && (
+                              <div
+                                className={`mb-3 rounded-lg border-l-2 px-3 py-2 text-xs leading-relaxed ${
+                                  c?.verdict === "ok"
+                                    ? "border-sage bg-sage/5 text-body/80"
+                                    : c?.verdict === "warn"
+                                      ? "border-attention bg-attention/5 text-body/80"
+                                      : "border-danger bg-danger/5 text-body/80"
+                                }`}
+                              >
+                                <div className="mb-1 text-[10px] font-bold uppercase tracking-wide text-body/50">
+                                  What the code says
+                                </div>
+                                <div className="whitespace-pre-wrap font-mono text-[11.5px] leading-relaxed">
+                                  {auto[it.key].note}
+                                </div>
+                              </div>
+                            )}
                             {it.steps && it.steps.length > 0 && (
                               <ol className="list-decimal space-y-1 pl-5 text-[13px] leading-relaxed text-body/80">
                                 {it.steps.map((st, i) => (
@@ -382,10 +446,10 @@ function ReadinessInner() {
                               </p>
                             )}
                             <textarea
-                              defaultValue={c?.note || ""}
-                              key={`${it.key}-${c?.note || ""}`}
+                              defaultValue={checks[it.key]?.note || ""}
+                              key={`${it.key}-${checks[it.key]?.note || ""}`}
                               onBlur={(e) => {
-                                if (e.target.value !== (c?.note || ""))
+                                if (e.target.value !== (checks[it.key]?.note || ""))
                                   save(it.key, { note: e.target.value, owner_name: meRef.current });
                               }}
                               placeholder="What you saw (saved for everyone)"
