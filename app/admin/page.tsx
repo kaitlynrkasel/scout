@@ -14,6 +14,10 @@ import InsightsView, { ConciergePanel } from "./InsightsView";
 import IndexView from "./IndexView";
 import PricingView from "./PricingView";
 import DesignView from "./DesignView";
+// Puck's stylesheet is imported here, statically with the page, because a
+// global CSS import inside the dynamically loaded editor trips a dev-mode
+// chunk-loading race in Next 14.
+import "@measured/puck/puck.css";
 
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);

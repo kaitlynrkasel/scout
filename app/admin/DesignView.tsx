@@ -11,6 +11,7 @@
 // Trying a scheme is safe by construction because only this page re-renders.
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 
 type Scheme = Record<string, string>;
 
@@ -280,11 +281,24 @@ const PRESET_PALETTES: { name: string; group: string; colors: string[] }[] = [
   { name: "Espresso noir", group: "Dark", colors: ["#0f0a07", "#291b12", "#4a3323", "#9a8064", "#f1ebe3", "#537ba2"] },
 ];
 
+// The Puck page editor is heavy and browser-only; load it only when the
+// Page editor mode is opened.
+const PageEditor = dynamic(() => import("./PageEditor"), {
+  ssr: false,
+  loading: () => (
+    <p className="rounded-2xl border border-warm-border bg-surface p-6 text-sm text-body/60">
+      Opening the page editor…
+    </p>
+  ),
+});
+
 export default function DesignView({
   getToken,
 }: {
   getToken?: () => Promise<string | null>;
 }) {
+  // Two rooms: the token playground, and the full drag-and-drop page editor.
+  const [mode, setMode] = useState<"playground" | "editor">("playground");
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
   const [copied, setCopied] = useState(false);
@@ -408,6 +422,45 @@ export default function DesignView({
 
   return (
     <div className="space-y-10">
+      {/* Which room */}
+      <div className="inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+        {(
+          [
+            ["playground", "Tokens and palettes"],
+            ["editor", "Page editor"],
+          ] as const
+        ).map(([m, label]) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+              mode === m ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {mode === "editor" && (
+        <section>
+          <h2 className="text-lg font-bold text-ink">Page editor</h2>
+          <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-body/70">
+            The site as draggable blocks: pull components from the left rail
+            onto the page, drag them into any order, drop blocks inside a
+            colored ground, and edit every color, word and size in the panel on
+            the right. Publish saves the arrangement on this device and copies
+            it as JSON to hand to engineering; the live site is never touched
+            from here.
+          </p>
+          <div className="mt-4">
+            <PageEditor />
+          </div>
+        </section>
+      )}
+
+      {mode === "playground" && (
+      <>
       {/* ---------------- Playground ---------------- */}
       <section>
         <h2 className="text-lg font-bold text-ink">Try a design</h2>
@@ -908,6 +961,8 @@ export default function DesignView({
           stays the record of where the look has been.
         </p>
       </section>
+      </>
+      )}
     </div>
   );
 }
