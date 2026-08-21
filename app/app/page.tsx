@@ -16389,7 +16389,7 @@ ${body}
               Matches deliberately do NOT appear here: the dashboard is for
               impactful numbers and what Scout is learning about you; the
               pipeline itself lives on Finds. */}
-          <div className="mt-6 grid grid-cols-2 overflow-hidden rounded-3xl border border-white/60 bg-white/40 backdrop-blur-md sm:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-6 grid grid-cols-1 overflow-hidden rounded-3xl border border-white/60 bg-white/40 backdrop-blur-md sm:grid-cols-3 xl:grid-cols-6">
             {(() => {
               // Relevance first: a zero is dead air, so each slot is filled by
               // the first stat that has something to say. A brand-new account
@@ -16425,27 +16425,51 @@ ${body}
                 ? cand.slice(0, 6)
                 : cand.filter((c) => c[3]).slice(0, 6);
               return chosen;
-            })().map(([v, label, sub], i) => (
-              <div key={label} className="relative p-6">
-                <div className="font-display text-[38px] font-bold leading-none tabular-nums text-ink">
+            })().map(([v, label, sub], i, all) => {
+              const seam = `var(--seam-${i % 3}, ${FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length]})`;
+              const last = i === all.length - 1;
+              // A seam only belongs BETWEEN two numbers, so it has to know where
+              // each row ends — and that moves with the breakpoint. At three
+              // across, every third cell is a row end; at six across, only the
+              // last one is. Drawing it on a row end put a bar on the card's own
+              // outer edge, which is what it looked like on a phone.
+              const vertical = last
+                ? "hidden"
+                : i % 3 === 2
+                  ? "hidden xl:block"
+                  : "hidden sm:block";
+              return (
+              <div
+                key={label}
+                className="relative flex items-baseline justify-between gap-3 p-5 sm:block sm:p-6"
+              >
+                <div className="font-display text-[34px] font-bold leading-none tabular-nums text-ink sm:text-[38px]">
                   {v}
                 </div>
-                <div className="mt-2 text-[12px] font-medium text-body/70">{label}</div>
-                {sub ? (
-                  <div className="mt-0.5 text-[11px] font-semibold text-body">{sub}</div>
-                ) : null}
+                {/* Stacked under the number from `sm`; beside it on a phone, so
+                    six of these stay a glance rather than a scroll. */}
+                <div className="text-right sm:mt-2 sm:text-left">
+                  <div className="text-[12px] font-medium text-body/70">{label}</div>
+                  {sub ? (
+                    <div className="mt-0.5 text-[11px] font-semibold text-body">{sub}</div>
+                  ) : null}
+                </div>
                 {/* one card; the rainbow is the seams between the numbers */}
-                {i < 5 && (
+                {!last && (
                   <span
                     aria-hidden
-                    className="absolute inset-y-5 right-0 w-[3px] rounded-full opacity-70"
-                    style={{
-                      background: `var(--seam-${i % 3}, ${FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length]})`,
-                    }}
+                    className="absolute inset-x-5 bottom-0 h-[3px] rounded-full opacity-70 sm:hidden"
+                    style={{ background: seam }}
                   />
                 )}
+                <span
+                  aria-hidden
+                  className={`absolute inset-y-5 right-0 w-[3px] rounded-full opacity-70 ${vertical}`}
+                  style={{ background: seam }}
+                />
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Quiet action strip: things worth a look, never a pipeline. */}
