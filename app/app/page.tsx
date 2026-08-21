@@ -12549,7 +12549,15 @@ function SiteTile({
 // Compact find tile for the grid view: leads with a live preview of the find's
 // page (routed through /api/site-preview so embedding isn't refused), then the
 // name, fit, role, and status. Clicking anywhere opens the full detail.
-function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
+function FindGridCard({
+  find,
+  onOpen,
+  onTogglePin,
+}: {
+  find: Find;
+  onOpen: () => void;
+  onTogglePin: () => void;
+}) {
   const o = find.opp;
   const fit = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
   const role =
@@ -12566,16 +12574,66 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
       onClick={onOpen}
       className="group flex flex-col overflow-hidden rounded-2xl border border-warm-border bg-surface text-left transition hover:border-clay hover:shadow-soft"
     >
-      <SiteTile
-        url={o.url}
-        name={o.name}
-        host={host}
-        label={
-          isSocialProfileUrl(o.url)
-            ? [platform ? `${platform} profile` : "Profile", profileHandle].filter(Boolean).join(" · ")
-            : host
-        }
-      />
+      <div className="relative">
+        <SiteTile
+          url={o.url}
+          name={o.name}
+          host={host}
+          label={
+            isSocialProfileUrl(o.url)
+              ? [platform ? `${platform} profile` : "Profile", profileHandle].filter(Boolean).join(" · ")
+              : host
+          }
+        />
+        {/* The tile view had no star at all — only the list rows did — so on the
+            default view there was no way to star anything. A span with a button
+            role, not a <button>: the whole card is already a button, and nesting
+            one inside another is invalid HTML. */}
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onTogglePin();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              e.stopPropagation();
+              onTogglePin();
+            }
+          }}
+          title={find.pinned ? "Unstar, return it to its place in the list" : "Star, moves it to the top of the list"}
+          aria-label={find.pinned ? "Unstar find" : "Star find to move it to the top"}
+          aria-pressed={!!find.pinned}
+          className={`absolute right-2 top-2 z-10 grid h-7 w-7 cursor-pointer place-items-center rounded-lg border backdrop-blur transition ${
+            find.pinned
+              ? "border-coral/40 bg-surface/90"
+              : "border-transparent bg-surface/70 text-body/40 opacity-0 hover:bg-surface hover:text-accent group-hover:opacity-100"
+          }`}
+        >
+          {/* Painted on the SVG itself rather than inherited through `color`.
+              An inline color on this span doesn't take — not even with
+              !important — so currentColor would resolve to the muted grey it
+              inherits. fill/stroke here are CSS properties, so var() works, and
+              --c-brown is the brand token the chosen accent overrides. */}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            strokeWidth="1.8"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={
+              find.pinned
+                ? { fill: "rgb(var(--c-brown))", stroke: "rgb(var(--c-brown))" }
+                : { fill: "none", stroke: "currentColor" }
+            }
+          >
+            <path d="m12 2.5 2.94 5.96 6.58.96-4.76 4.64 1.12 6.55L12 17.52l-5.88 3.09 1.12-6.55L2.48 9.42l6.58-.96z" />
+          </svg>
+        </span>
+      </div>
       <div className="p-4">
         <div className="flex items-center gap-2">
           <span className="min-w-0 flex-1 truncate text-sm font-bold text-ink">{o.name}</span>
@@ -13416,7 +13474,12 @@ function FindsTab({
           </p>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {shown.map((f) => (
-              <FindGridCard key={f.id} find={f} onOpen={() => setDetailId(f.id)} />
+              <FindGridCard
+                key={f.id}
+                find={f}
+                onOpen={() => setDetailId(f.id)}
+                onTogglePin={() => onTogglePin(f.id)}
+              />
             ))}
           </div>
         </div>
