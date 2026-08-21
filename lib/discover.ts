@@ -1362,9 +1362,14 @@ async function extract(
     `size, fame, or selectivity; and unless the GOAL also names a location, treat a location mismatch as SOFT (moderate ` +
     `fit_score, mention the location in why_it_fits) instead of applying the hard location ceiling above — the user asked ` +
     `for this employer's openings, not openings near them. Results at OTHER companies remain subject to all the usual rules. ` +
+    `PEOPLE ARE NOT OPPORTUNITIES: a bare individual's profile or bio (a LinkedIn profile, a staff ` +
+    `page, a coordinator, someone who merely WORKS somewhere) is not something the user can apply to; set is_relevant false ` +
+    `unless the person is a recruiter or hiring manager tied to a live opening (then name the OPENING, with the person as its ` +
+    `contact) or the GOAL explicitly asks for people to reach out to. Every result must be an opening or an employer. ` +
     `fit_score: 0.7+ for an on-industry, accessible employer with a contact route; lower it for big/ultra-competitive names ` +
     `when the user wants accessible ones, for aggregator list pages, and for results missing any contact route; below 0.3 ` +
-    `only when clearly off-industry.`;
+    `only when clearly off-industry. ` +
+    ELIGIBILITY_AND_CRITERIA_CLAUSE;
   const fitRules = prospecting
     ? `TARGET DEFINED BY THE GOAL, NOT THE USER'S FIELD: the user is prospecting, finding external ${noun || "target"}s to ` +
       `pitch, sell to, partner with, or raise from. Do NOT reject a result for being in a different industry than the user. ` +
