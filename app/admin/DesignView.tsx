@@ -348,6 +348,33 @@ export default function DesignView({
   const setIdea = (key: IdeaKey, hex: string) =>
     setIdeaPalette((p) => ({ ...p, ideas: { ...p.ideas, [key]: hex } }));
 
+  // ---- Live site preview, painted straight into the frame ----
+  const colourFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const [colourPath, setColourPath] = useState<"/" | "/app">("/app");
+  const [frameWidth, setFrameWidth] = useState<"phone" | "full">("full");
+  // Same origin, so the palette can be written into the frame's own document
+  // rather than waiting for it to reload — a slider drag recolours the real
+  // site as it moves.
+  const paintFrame = () => {
+    const doc = colourFrameRef.current?.contentDocument;
+    if (!doc) return;
+    try {
+      applyPalette(ideaPalette, true, doc);
+    } catch {
+      /* frame not ready, or navigated away — the load handler repaints */
+    }
+  };
+  // The frame runs its own copy of <Pwa>, which clears the palette on hydrate
+  // unless "paint the real app" is ticked. Hydration lands after the load
+  // event, so a single paint on load can be wiped a beat later. Repainting a
+  // few times over the first second outlasts it either way.
+  const paintFrameSettled = () => {
+    paintFrame();
+    const timers = [250, 700, 1500].map((ms) => window.setTimeout(paintFrame, ms));
+    return () => timers.forEach((t) => window.clearTimeout(t));
+  };
+  useEffect(paintFrame, [ideaPalette, colourPath, frameWidth]);
+
   // ---- Palette creator ----
   const [recipe, setRecipe] = useState<Recipe>(DEFAULT_RECIPE);
   const [locks, setLocks] = useState<Partial<Record<IdeaKey, string>>>({});
@@ -806,7 +833,86 @@ export default function DesignView({
             </label>
           </div>
 
-          {/* What several meanings on one screen actually looks like. */}
+          <div className="space-y-4">
+          {/* The real site, painted as you drag. Same frame the editor uses. */}
+          <div className="overflow-hidden rounded-2xl border border-warm-border shadow-soft">
+            <div className="flex flex-wrap items-center gap-2 border-b border-warm-border bg-warm-bg/40 px-3 py-2">
+              <span className="text-[11px] font-extrabold uppercase tracking-wide text-ink">
+                The real site
+              </span>
+              <div className="inline-flex gap-1">
+                {(
+                  [
+                    ["/", "Landing"],
+                    ["/app", "App"],
+                  ] as const
+                ).map(([path, label]) => (
+                  <button
+                    key={path}
+                    onClick={() => setColourPath(path)}
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+                      colourPath === path
+                        ? "text-ink underline underline-offset-4"
+                        : "text-body/60 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="ml-auto inline-flex gap-1">
+                {(
+                  [
+                    ["phone", "Phone"],
+                    ["full", "Desktop"],
+                  ] as const
+                ).map(([w, label]) => (
+                  <button
+                    key={w}
+                    onClick={() => setFrameWidth(w)}
+                    className={`rounded-md px-2 py-0.5 text-[11px] font-semibold transition ${
+                      frameWidth === w
+                        ? "text-ink underline underline-offset-4"
+                        : "text-body/60 hover:text-ink"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  const f = colourFrameRef.current;
+                  if (f) f.src = colourPath;
+                }}
+                className="rounded-md border border-warm-border px-2 py-0.5 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+              >
+                Reload
+              </button>
+            </div>
+            <div className="flex justify-center bg-warm-bg/30 p-2">
+              <iframe
+                ref={colourFrameRef}
+                src={colourPath}
+                title="Scout in this palette"
+                onLoad={paintFrameSettled}
+                className="h-[560px] border-0 bg-cream transition-[width] duration-200"
+                style={{
+                  width: frameWidth === "phone" ? 390 : "100%",
+                  maxWidth: "100%",
+                  borderRadius: frameWidth === "phone" ? 18 : 8,
+                  boxShadow: frameWidth === "phone" ? "0 2px 20px rgba(0,0,0,.14)" : "none",
+                }}
+              />
+            </div>
+            <p className="border-t border-warm-border px-3 py-2 text-[11px] leading-relaxed text-body/65">
+              Painted live as you drag — no reload needed. Background, text and
+              the main accent are what change out here; the six meanings need
+              wiring into components before they reach the real screens.
+            </p>
+          </div>
+
+          {/* What several meanings on one screen would look like once they are. */}
           <div
             className="rounded-2xl border border-warm-border p-4 shadow-soft"
             style={{ background: ideaPalette.ground }}
@@ -880,8 +986,10 @@ export default function DesignView({
             </div>
             <p className="mt-3 text-[11px] leading-relaxed" style={{ color: lighten(ideaPalette.ink, 0.45) }}>
               Five colours on one screen, and every one of them is saying what
-              something is.
+              something is. This part is a mock-up — the frame above is the real
+              thing.
             </p>
+          </div>
           </div>
         </div>
       </section>

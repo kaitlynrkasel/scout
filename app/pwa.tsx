@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { DESIGN_KEY, applyPalette, loadSaved } from "@/lib/designLab";
 
 // Canvas colors behind the status bar when Scout runs installed (standalone).
 // These are --c-cream in each theme; keep them in sync with globals.css.
@@ -10,6 +11,24 @@ const THEME_COLOR = { light: "#f8f7f5", dark: "#1c1915" };
  * registering the service worker, and keeping the status-bar tint in step with
  * the theme. Renders nothing. */
 export function Pwa() {
+  // A palette being tried out in the /admin design lab paints every page, not
+  // just the lab — otherwise "paint the real app" would only ever recolour the
+  // admin screen it was ticked on. Local to this browser, so no real user is
+  // affected; the storage listener keeps other tabs (and the lab's own preview
+  // iframe) in step as sliders move.
+  useEffect(() => {
+    const paint = () => {
+      const saved = loadSaved();
+      applyPalette(saved && saved.whole ? saved.palette : null, true);
+    };
+    paint();
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === DESIGN_KEY || e.key === null) paint();
+    };
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, []);
+
   useEffect(() => {
     // The theme is a .dark class on <html> driven by localStorage, not by the
     // OS preference, so a media-query theme-color would guess wrong half the

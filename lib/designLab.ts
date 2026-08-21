@@ -202,9 +202,16 @@ function ideaVars(p: Palette): Record<string, string> {
  * variables (harmless — nothing reads them yet), so the lab's own preview can
  * use them without recolouring the admin page around it.
  */
-export function applyPalette(p: Palette | null, whole: boolean): void {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
+export function applyPalette(
+  p: Palette | null,
+  whole: boolean,
+  /** Where to paint. Defaults to this page; the lab passes its preview frame's
+   *  document so the real site recolours without a reload. */
+  target?: Document
+): void {
+  const doc = target ?? (typeof document === "undefined" ? null : document);
+  if (!doc) return;
+  const root = doc.documentElement;
   const all = { ...groundVars(SCOUT_TODAY), ...ideaVars(SCOUT_TODAY) };
   // Clear anything a previous palette set, so switching never leaves a stray
   // variable behind from the palette before it.
