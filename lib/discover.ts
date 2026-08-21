@@ -1358,7 +1358,16 @@ async function extract(
     `fit_score (0 to 1, follow the fit-scoring rules above exactly; do not apply extra industry alignment beyond what those rules say), ` +
     `components (an object grading WHY this is a good opportunity, each 0 to 1: {relevance = how squarely they match the ` +
     `goal/target profile — apply every fit-scoring rule above, INCLUDING any hard ceilings, to relevance exactly as you ` +
-    `do to fit_score; timing = whether NOW is a good moment to reach out based on recent/upcoming events (funding, ` +
+    `do to fit_score. COVERAGE: first count the DISTINCT requirements the goal actually asks for — each role or skill, ` +
+    `each availability or schedule condition, each location or logistical condition — then score relevance by the ` +
+    `FRACTION of them this candidate demonstrably meets, never by how strongly it meets the one it happens to match. ` +
+    `Meeting one requirement out of four is roughly 0.25, not 0.6, however good that single match looks: a goal asking ` +
+    `for several things at once is asking for someone who is ALL of them, and a candidate answering one facet is a long ` +
+    `shot worth showing honestly, not a good fit. Be harshest where the goal names a combination that is rare or ` +
+    `self-contradictory — that is precisely when a partial match is most tempting to overrate. An ORGANIZATION offered ` +
+    `where the goal asked for a PERSON is a partial match by construction (a lead on where such a person might be ` +
+    `found, not the person): cap it at 0.35 unless it also satisfies the goal's other stated requirements. Operating in ` +
+    `a field the goal merely mentions is not a requirement met; timing = whether NOW is a good moment to reach out based on recent/upcoming events (funding, ` +
     `hiring, a launch/release, a tour stop, a conference, a new role) — 0.5 when neutral/unknown; momentum = how active ` +
     `and in-motion they are right now (recent press, posts, growth, output)}), ` +
     `signals (an array of up to 5 SHORT concrete evidence phrases that justify the scores and answer "why now / why them", ` +
@@ -2006,7 +2015,14 @@ export async function discover(
           w.reachability * compReach +
           w.timing * (compTiming ?? 0.5) +
           w.momentum * (compMomentum ?? 0.5);
-        let headline = Math.min(weighted, compRelevance + 0.2);
+        // The sweetener is PROPORTIONAL, not flat. The flat +0.2 was rarely the
+        // binding constraint — a 62% headline came from the model rating
+        // relevance ~0.68, not from the bonus — but once relevance is scored by
+        // requirement coverage those numbers land low, and down there the flat
+        // version is exactly what props a weak match back up: relevance 0.25
+        // blends to 43% on reachability and neutral timing alone. Scaling caps
+        // that at 30%, while a strong match is unaffected (0.85 * 1.2 > 1).
+        let headline = Math.min(weighted, compRelevance * 1.2);
         if (fit != null && fit <= 0.15) headline = Math.min(headline, fit);
         fit = Math.round(Math.max(0, Math.min(1, headline)) * 100) / 100;
       }
@@ -2185,7 +2201,10 @@ export async function discover(
     const hosts = new Set((o.sources || []).map((s) => urlHost(s.url)).filter(Boolean));
     const extra = Math.max(0, hosts.size - 1);
     if (extra > 0 && o.fitScore != null) {
-      o.fitScore = Math.min(1, o.fitScore + Math.min(0.15, extra * 0.05));
+      // Scaled by the fit itself: corroboration says "this candidate is real",
+      // not "this candidate matches". Several sources agreeing on someone who
+      // answers one part of the goal shouldn't push them up the list.
+      o.fitScore = Math.min(1, o.fitScore + Math.min(0.15, extra * 0.05) * o.fitScore);
     }
   }
   // Best-fit first (evidence-boosted).
@@ -2328,6 +2347,21 @@ export async function discover(
         listings === 0
           ? "Few active postings matched right now, so these are good-fit companies worth reaching out to directly, not confirmed openings."
           : "Only a couple of active postings matched, so most of these are good-fit companies worth approaching proactively, not confirmed openings.";
+    }
+  }
+
+  // Partial-match disclosure. When a goal stacks several requirements and
+  // nothing clears a middling fit, what came back answers PARTS of the ask —
+  // and showing those silently alongside a percentage reads as "here are your
+  // matches" when it should read "nobody matches; here's the nearest thing".
+  // Say so, rather than leaving the number to carry the caveat alone.
+  if (!notice && kept.length) {
+    const asks = [...(plan?.required || []), ...(plan?.hard_constraints || [])].length;
+    const best = kept.reduce((m, o) => Math.max(m, o.fitScore ?? 0), 0);
+    if (asks >= 3 && best > 0 && best < 0.5) {
+      notice =
+        `Nothing matched everything you asked for. These each answer part of it, ` +
+        `so the fit scores are low on purpose — treat them as leads on where to look, not matches.`;
     }
   }
 
