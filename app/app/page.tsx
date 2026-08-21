@@ -21181,20 +21181,6 @@ function CompanyDetailsEditor({
   const [name, setName] = useState(companyName);
   const [about, setAbout] = useState("");
   const [website, setWebsite] = useState("");
-  // Deep link from the dashboard checklist: land ON the adding step.
-  useEffect(() => {
-    try {
-      if (sessionStorage.getItem("scout_jump") !== "linkedin") return;
-      sessionStorage.removeItem("scout_jump");
-    } catch {
-      return;
-    }
-    setTimeout(() => {
-      document
-        .getElementById("profile-linkedin")
-        ?.scrollIntoView({ behavior: "smooth", block: "center" });
-    }, 150);
-  }, []);
   const [industry, setIndustry] = useState("");
   const [stage, setStage] = useState("");
   const [location, setLocation] = useState("");
@@ -21843,6 +21829,51 @@ function ProfileTab({
   // Individual vs company is chosen once at signup (accountType), no in-profile
   // toggle. Company profiles fill from a website, individuals from a resume.
   const kind: "individual" | "company" = accountType === "company" ? "company" : "individual";
+  // Deep link from the dashboard's "Add your LinkedIn" step. This used to sit in
+  // the company-details component — not the tab the link opens — and only
+  // scrolled. Focus the field too, so the step lands you in the box.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("scout_jump") !== "linkedin") return;
+      sessionStorage.removeItem("scout_jump");
+    } catch {
+      return;
+    }
+    // The tab fades in, so a single fixed delay lands mid-animation and scrolls
+    // to a position that then moves. Poll for the field instead, and stop as
+    // soon as it's there.
+    // The tab fades in and sections reveal as they mount, so the page height
+    // keeps changing for a beat after the field exists. Scrolling once lands it
+    // somewhere that immediately moves — so keep nudging until the field is
+    // actually on screen, then stop.
+    let tries = 0;
+    const timers: number[] = [];
+    const id = window.setInterval(() => {
+      const el = document.getElementById("profile-linkedin-input") as HTMLInputElement | null;
+      if (!el) {
+        if (++tries > 60) window.clearInterval(id);
+        return;
+      }
+      const r = el.getBoundingClientRect();
+      const settled = r.top > 0 && r.bottom < window.innerHeight;
+      if (settled) {
+        window.clearInterval(id);
+        el.focus({ preventScroll: true });
+        return;
+      }
+      el.scrollIntoView({ block: "center" });
+      if (++tries > 60) {
+        window.clearInterval(id);
+        el.focus({ preventScroll: true });
+      }
+    }, 60);
+    return () => {
+      window.clearInterval(id);
+      timers.forEach(window.clearTimeout);
+    };
+  }, []);
+
+
   const [website, setWebsite] = useState("");
 
   // Read some source text (a resume, a LinkedIn PDF/About section, a bio) and let
@@ -22139,9 +22170,7 @@ function ProfileTab({
             resume/LinkedIn. */}
         {kind !== "company" && (
           <>
-            <div id="profile-linkedin">
-              <Label>Start with your resume or LinkedIn</Label>
-            </div>
+            <Label>Start with your resume or LinkedIn</Label>
             <FileDrop
               label={
                 parsing
@@ -22153,6 +22182,28 @@ function ProfileTab({
               onText={(t) => readAndFill(t)}
               onFile={(f) => onResumeFile(f)}
             />
+
+            {/* The dashboard's "Add your LinkedIn" step sent people here, but
+                the only thing to land on was a file drop — there was no field
+                for the profile URL at all, even though onLinkedin was already
+                wired to save one. This is that field. */}
+            <div id="profile-linkedin" className="mt-4">
+              <Label>Your LinkedIn profile</Label>
+              <input
+                id="profile-linkedin-input"
+                type="url"
+                inputMode="url"
+                value={linkedin || ""}
+                onChange={(e) => onLinkedin(e.target.value)}
+                placeholder="linkedin.com/in/your-name"
+                className="w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              />
+              <p className="mt-1.5 text-xs leading-relaxed text-body/70">
+                Paste the link to your profile. Scout uses it for context about
+                who you are when it writes, and includes it when a message is
+                better with a profile to point at.
+              </p>
+            </div>
           </>
         )}
 
