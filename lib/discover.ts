@@ -1400,7 +1400,11 @@ async function extract(
     `results that expose a contact route (careers/contact page, an email, a named recruiter or team member). ` +
     `PREFER THE ACTUAL EMPLOYER over a job-board aggregator: a specific company's own site is much better than a ` +
     `ZipRecruiter / Indeed / LinkedIn-Jobs / Glassdoor / BuiltIn search or aggregate listing page (which is a list of many ` +
-    `jobs, not one reachable employer), give those aggregate list pages a low fit_score. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
+    `jobs, not one reachable employer), give those aggregate list pages a low fit_score. EXCEPTION, CURATED NICHE BOARDS: ` +
+    `a trade magazine's marketplace or an industry job page where each posting names its own organization and a direct ` +
+    `contact is GOLD, not an aggregator. There, make the best fitting posting the main result and put EVERY other posting ` +
+    `that fits the GOAL in more_postings, one entry per posting, each with its own org and contact; missing even one ` +
+    `fitting posting on such a page is a miss. ${TUNABLE_LOCATION_ALIGNMENT_CLAUSE} ` +
     `NAMED EMPLOYER OVERRIDE: if the GOAL names a specific company or organization (e.g. "openings at Universal"), the user ` +
     `has chosen that employer deliberately — a real opening at that company or any of its divisions/subsidiaries/imprints is ` +
     `exactly what they asked for. For those results, IGNORE the accessibility-over-prestige preference and do NOT penalize ` +
@@ -1494,7 +1498,7 @@ async function extract(
     (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
-    `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), posting_window (string, ONLY when the source states when this org opens or posts roles, e.g. "Opens each January", "Recruits every fall", "Apply by March 1"; omit otherwise), ` +
+    `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), posting_window (string, ONLY when the source states when this org opens or posts roles, e.g. "Opens each January", "Recruits every fall", "Apply by March 1"; omit otherwise), more_postings (array, ONLY when this SAME page lists SEVERAL distinct fitting postings, each for a different organization or with its own contact — a niche job board, a trade magazine's marketplace: up to 6 additional postings besides the main result, each {"name" (ROLE at ORG), "outlet" (the org), "contact_email", "contact_name", "url" (direct link or this page), "location", "why_it_fits", "fit_score"}; NEVER duplicate the main result, and only include postings that genuinely fit the GOAL; omit otherwise), ` +
     `name (WHO this find is — when the target is a specific named individual, this MUST be that PERSON'S name, e.g. "Stacy Blythe" or "Stacy Blythe, EVP of Promotion", NEVER the company, page headline, or article title like "Big Loud Records, Executive Promotions & Hires". If a real person is named anywhere as the target or the point of contact, title the find by them and put their employer in outlet. Use a company/organization name here ONLY when there is genuinely no specific person), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown — this is a LABEL for the route, and on its own it is not a way to reach anyone: a result whose only contact information is a channel of "Website Form" or "Company Portal" is DROPPED before the user ever sees it, so spend the effort finding a real address, number, or handle in the source and put it in the fields below), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
@@ -2005,6 +2009,35 @@ export async function discover(
     for (const r of rawResults) {
       if (!r.multi) {
         flat.push({ rec: r.rec, cand: r.cand });
+        // A curated board page can carry several fitting postings beyond the
+        // main result; each becomes its own record, sharing the page as its
+        // source and exempt from host-dedup like listicle members.
+        const extra = Array.isArray((r.rec as any)?.more_postings)
+          ? (r.rec as any).more_postings.slice(0, 6)
+          : [];
+        for (const mp of extra) {
+          if (!mp || !mp.name) continue;
+          flat.push({
+            rec: {
+              isRelevant: true,
+              __member: true,
+              is_listing: true,
+              name: String(mp.name),
+              outlet: String(mp.outlet || ""),
+              contact_email: String(mp.contact_email || ""),
+              contact_name: String(mp.contact_name || ""),
+              contact_role: "",
+              location: String(mp.location || ""),
+              url: String(mp.url || r.cand.url || ""),
+              why_it_fits: String(mp.why_it_fits || ""),
+              fit_score: typeof mp.fit_score === "number" ? mp.fit_score : 0.6,
+              target_type: "listing",
+            } as any,
+            cand: r.cand,
+          });
+        }
+        if (extra.length)
+          emit(`That page lists ${extra.length + 1} fitting postings, keeping them all`);
         continue;
       }
       if (!r.people.length) {
