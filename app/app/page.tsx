@@ -7411,30 +7411,42 @@ function ScoutTool({
                     stageHasWorkBelow ? "" : "order-2 justify-center"
                   }`}
                 >
-                  <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+                  {/* On a phone the label takes its own line so the two
+                      choosers can share one — "Work Opportunities" and "Work
+                      Search" are a single thought and reading them on separate
+                      lines makes the project look like a heading. */}
+                  <span className="w-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 sm:w-auto">
                     Scouting for
                   </span>
-                  <div data-tour="project-switcher" className="stage-toggle">
-                    <PrettySelect
-                      ariaLabel="Project"
-                      bare
-                      value={activeId}
-                      onChange={selectProject}
-                      options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
-                    />
-                  </div>
-                  <span className="text-white/40">·</span>
-                  <div data-tour="category-switcher" className="stage-toggle">
-                    <PrettySelect
-                      ariaLabel="Category of search"
-                      bare
-                      value={catId}
-                      onChange={selectCategory}
-                      options={[
-                        ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                        { value: "", label: "Solo Search" },
-                      ]}
-                    />
+                  <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
+                    <div
+                      data-tour="project-switcher"
+                      className="stage-toggle min-w-0 flex-auto sm:flex-none"
+                    >
+                      <PrettySelect
+                        ariaLabel="Project"
+                        bare
+                        value={activeId}
+                        onChange={selectProject}
+                        options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
+                      />
+                    </div>
+                    <span className="hidden text-white/40 sm:inline">·</span>
+                    <div
+                      data-tour="category-switcher"
+                      className="stage-toggle min-w-0 flex-auto sm:flex-none"
+                    >
+                      <PrettySelect
+                        ariaLabel="Category of search"
+                        bare
+                        value={catId}
+                        onChange={selectCategory}
+                        options={[
+                          ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                          { value: "", label: "Solo Search" },
+                        ]}
+                      />
+                    </div>
                   </div>
                   {catId && (
                     <button
@@ -9174,7 +9186,7 @@ function PrettySelect({
         onClick={() => setOpen((v) => !v)}
         className={
           bare
-            ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-5 py-2.5 text-left text-base font-semibold text-inherit outline-none transition focus-visible:ring-2 focus-visible:ring-white/40"
+            ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-left text-sm font-semibold text-inherit outline-none transition sm:px-5 sm:py-2.5 sm:text-base focus-visible:ring-2 focus-visible:ring-white/40"
             : "pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
         }
       >
