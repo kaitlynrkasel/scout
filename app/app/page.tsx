@@ -22963,13 +22963,12 @@ function ProjectsTab({
               />
 
               <Label className="mt-4">What is this project for?</Label>
+              {/* Controlled, not defaultValue+key. Uncontrolled, the box only
+                  ever showed what it was mounted with, so dictated words landed
+                  in state and never appeared on screen. */}
               <textarea
-                defaultValue={selected.context || ""}
-                key={`${selected.id}-ctx`}
-                onBlur={(e) => {
-                  if (e.target.value !== (selected.context || ""))
-                    onSetContext(selected.id, e.target.value);
-                }}
+                value={selected.context || ""}
+                onChange={(e) => onSetContext(selected.id, e.target.value)}
                 rows={3}
                 placeholder="e.g. a sustainable-fashion brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                 className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
@@ -23596,12 +23595,8 @@ function ProjectsCategoriesEditor({
                   />
                 </div>
                 <textarea
-                  defaultValue={p.context || ""}
-                  key={p.context || ""}
-                  onBlur={(e) => {
-                    if (e.target.value !== (p.context || ""))
-                      onSetProjectContext(p.id, e.target.value);
-                  }}
+                  value={p.context || ""}
+                  onChange={(e) => onSetProjectContext(p.id, e.target.value)}
                   rows={2}
                   placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
                   className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
