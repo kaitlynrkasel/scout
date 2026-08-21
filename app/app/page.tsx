@@ -3462,6 +3462,9 @@ function ScoutTool({
   // render, callers that create finds in this same pass need the fresh id.
   function autoSaveCustomSearch(): string {
     if (catId || !goal.trim()) return catId;
+    // The project-level search (seeded from the description) stays the custom
+    // slot; only searches the user actually typed get promoted to categories.
+    if (projectGoalRef.current === activeId) return "";
     const c: Category = {
       id: `cat-${Date.now()}`,
       name: deriveCategoryName(goal),
@@ -4118,6 +4121,11 @@ function ScoutTool({
   // result lands in `goal`, so editing a bullet works exactly like a saved
   // category and running it still saves a category as before.
   const projSeedRef = useRef<Set<string>>(new Set());
+  // Which project's custom slot currently holds the PROJECT-LEVEL search
+  // (bullets distilled from its description). Running that must not mint a
+  // category: it is the project's own search, and every run was silently
+  // adding another category to the Projects tab.
+  const projectGoalRef = useRef<string>("");
   useEffect(() => {
     if (tab !== "outreach" || catId || goal.trim()) return;
     const ctx = (activeProject?.context || "").trim();
@@ -4135,7 +4143,10 @@ function ScoutTool({
         });
         const j = await r.json().catch(() => ({}));
         const got: string[] = Array.isArray(j?.bullets) ? j.bullets : [];
-        if (alive && got.length >= 2 && !goal.trim() && !catId) setGoal(got.join("; "));
+        if (alive && got.length >= 2 && !goal.trim() && !catId) {
+          setGoal(got.join("; "));
+          projectGoalRef.current = activeId; // this goal IS the project's search
+        }
       } catch {
         /* the empty ask stays typeable */
       }
@@ -7141,12 +7152,12 @@ function ScoutTool({
                 className={`w-full max-w-[1400px] ${
                   stageHasWorkBelow
                     ? ""
-                    : "my-auto lg:grid lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:items-center lg:gap-x-20 lg:gap-y-10"
+                    : "my-auto flex flex-col items-center gap-8 text-center"
                 }`}
               >
                 <div
                   className={`flex flex-wrap items-center gap-2 ${
-                    stageHasWorkBelow ? "" : "lg:col-start-1 lg:row-start-1 lg:self-end"
+                    stageHasWorkBelow ? "" : "order-2 justify-center"
                   }`}
                 >
                   <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
@@ -7176,7 +7187,10 @@ function ScoutTool({
                   </div>
                   {catId && (
                     <button
-                      onClick={() => selectCategory("")}
+                      onClick={() => {
+                        projectGoalRef.current = ""; // an explicit custom search saves normally
+                        selectCategory("");
+                      }}
                       title="Search without a saved category; running it saves a new one"
                       className="rounded-full border border-dashed border-white/30 px-4 py-2.5 text-base font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
                     >
@@ -7203,7 +7217,7 @@ function ScoutTool({
                   className={
                     stageHasWorkBelow
                       ? "mt-6"
-                      : "mt-6 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0"
+                      : "order-1 mt-0 w-full max-w-3xl"
                   }
                 >
                   {catId || goal.trim() ? (
@@ -7247,7 +7261,7 @@ function ScoutTool({
 
               <div
                 className={`flex flex-wrap items-center gap-3 ${
-                  stageHasWorkBelow ? "mt-7" : "mt-7 lg:col-start-1 lg:row-start-2 lg:mt-0 lg:self-start"
+                  stageHasWorkBelow ? "mt-7" : "order-3 mt-0 justify-center"
                 }`}
               >
                 <button
@@ -22442,7 +22456,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 [.text-center_&]:justify-center">
         This search finds
         {distilling && (
           <span className="scout-fade-in font-normal normal-case tracking-normal text-white/40">
