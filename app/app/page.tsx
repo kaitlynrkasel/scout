@@ -9262,8 +9262,14 @@ function SideNav({
         title="Back to homepage"
         className="su-logo flex items-center gap-2.5 px-2 pb-3 pt-1 transition hover:opacity-80"
       >
+        {/* The mark beside the wordmark is the dog on the Scout tab and the nose
+            mark everywhere else — the swap belongs to that one screen. */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src="/scout-logo.png" alt="Scout" width={22} height={22} className="h-[22px] w-[22px]" />
+        {tab === "outreach" ? (
+          <img src="/scout-dog.png" alt="Scout" width={26} height={26} className="h-[22px] w-auto" />
+        ) : (
+          <img src="/scout-logo.png" alt="Scout" width={22} height={22} className="h-[22px] w-[22px]" />
+        )}
         <b className="text-[16px] font-bold tracking-tight">Scout</b>
       </a>
 
@@ -9486,7 +9492,11 @@ function SideNav({
       <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
         <a href="/" aria-label="Scout home" className="flex items-center gap-2">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/scout-logo.png" alt="Scout" width={20} height={20} className="h-5 w-5" />
+          {tab === "outreach" ? (
+            <img src="/scout-dog.png" alt="Scout" width={24} height={24} className="h-5 w-auto" />
+          ) : (
+            <img src="/scout-logo.png" alt="Scout" width={20} height={20} className="h-5 w-5" />
+          )}
           <span className="text-[15px] font-semibold tracking-tight text-ink">Scout</span>
         </a>
         <button
@@ -23694,24 +23704,15 @@ function HeroArt() {
 
 function Logo({ small = false, white = false }: { small?: boolean; white?: boolean }) {
   const s = white ? 18 : small ? 18 : 24;
-  // `white` is the Avatar: a small round badge with the mark tinted to white.
-  // The dog is a full silhouette and turns to mush at that size, so the badge
-  // keeps the nose mark; everywhere the mark sits BESIDE the wordmark, it's the
-  // dog.
-  if (white) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src="/scout-logo.png"
-        alt="Scout"
-        width={s}
-        height={s}
-        className="[filter:brightness(0)_invert(1)]"
-      />
-    );
-  }
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src="/scout-dog.png" alt="Scout" height={s + 4} className="h-[22px] w-auto" />
+    <img
+      src="/scout-logo.png"
+      alt="Scout"
+      width={s}
+      height={s}
+      // On a brown background (the Avatar), tint the brown mark to white.
+      className={white ? "[filter:brightness(0)_invert(1)]" : ""}
+    />
   );
 }
