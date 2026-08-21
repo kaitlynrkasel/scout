@@ -190,7 +190,7 @@ export default function AdminPage() {
               of every look the app has shipped with.
             </p>
           </div>
-          <DesignView />
+          <DesignView getToken={getToken} />
         </main>
       ) : adminTab === "pricing" ? (
         <main className="mx-auto w-full max-w-6xl px-4 py-8 sm:px-6 sm:py-10">

@@ -15599,23 +15599,31 @@ ${body}
               Matches deliberately do NOT appear here: the dashboard is for
               impactful numbers and what Scout is learning about you; the
               pipeline itself lives on Finds. */}
-          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          <div className="scout-stage mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-3xl sm:grid-cols-3 xl:grid-cols-6">
             {(
               [
                 [String(finds.length), "Finds", newThisWeek > 0 ? `+${newThisWeek} this week` : ""],
                 [String(pipe.sent), "Messages sent", ""],
-                [replyRatePct, "Reply rate", ""],
-                [onTarget != null ? `${onTarget}%` : "·", "On-target", ""],
+                [replyRatePct === "·" ? "0%" : replyRatePct, "Reply rate", ""],
+                [onTarget != null ? `${onTarget}%` : "0%", "On-target", ""],
                 [String(activity.searches), "Searches run", ""],
                 [String(Math.round((activity.drafts * 6) / 60)), "Hours saved drafting", ""],
               ] as const
-            ).map(([v, label, sub]) => (
-              <div key={label} className="rounded-2xl border border-warm-border bg-surface p-5">
-                <div className="font-display text-[34px] font-bold leading-none tabular-nums text-ink">
+            ).map(([v, label, sub], i) => (
+              <div key={label} className="relative bg-white/5 p-6">
+                <div className="font-display text-[38px] font-bold leading-none tabular-nums text-cream">
                   {v}
                 </div>
-                <div className="mt-2 text-[12px] text-muted">{label}</div>
-                {sub && <div className="mt-0.5 text-[11px] font-semibold text-success-deep">{sub}</div>}
+                <div className="mt-2 text-[12px] font-medium text-white/60">{label}</div>
+                {sub ? (
+                  <div className="mt-0.5 text-[11px] font-semibold text-white/85">{sub}</div>
+                ) : null}
+                {/* a thread of the rainbow, one strand per tile */}
+                <span
+                  aria-hidden
+                  className="absolute inset-x-6 bottom-4 h-1 rounded-full opacity-80"
+                  style={{ background: FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length] }}
+                />
               </div>
             ))}
           </div>
@@ -15818,7 +15826,19 @@ ${body}
                   title="Open in Outreach and edit"
                   className="idx-flap relative flex items-start gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
                 >
-                  <span className="mt-0.5 h-10 w-10 shrink-0 rounded-xl bg-brown" />
+                  <span
+                    className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white"
+                    style={{
+                      background:
+                        FIND_AVATAR_COLORS[
+                          Math.abs(
+                            p.name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
+                          ) % FIND_AVATAR_COLORS.length
+                        ],
+                    }}
+                  >
+                    {p.name.trim().slice(0, 1).toUpperCase() || "P"}
+                  </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-bold text-ink">{p.name}</div>
                     <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">

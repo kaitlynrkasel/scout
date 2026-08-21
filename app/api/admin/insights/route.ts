@@ -48,6 +48,11 @@ export async function GET(req: Request) {
     if (u.email) emailByUser.set(u.id, u.email);
   }
 
+  // Timestamps for the weekly trend: when finds landed and when messages went
+  // out, straight off the finds arrays.
+  const findStamps: number[] = [];
+  const sentStamps: number[] = [];
+
   const totals = {
     users: 0,
     users_with_state_rows: 0, // every row in user_state, even ones with no finds
@@ -131,6 +136,12 @@ export async function GET(req: Request) {
     totals.users++;
     for (const f of finds) {
       totals.finds++;
+      {
+        const added = Number(f?.addedAt || 0);
+        if (added > 0) findStamps.push(added);
+        const sentAt = Number(f?.sentAt || 0);
+        if (sentAt > 0) sentStamps.push(sentAt);
+      }
       const status = String(f?.status || "").toLowerCase();
       if (status === "denied") totals.denied++;
       else if (status === "sent") {
@@ -235,7 +246,66 @@ export async function GET(req: Request) {
     .sort((a, b) => b.searches - a.searches || b.finds - a.finds)
     .slice(0, 25);
 
+  // ---- Growth health: the numbers a founder dashboard actually runs on ----
+  // (activation funnel by USERS, weekly trend, signups, WAU/MAU). Modeled on
+  // the standard early-stage playbook: activation and retention signals first,
+  // revenue-era metrics later.
+  const now = Date.now();
+  const WEEK = 7 * 86400000;
+  const weekKey = (t: number) => {
+    const d = new Date(t);
+    // ISO-ish week label: the Monday of that week, shown as M/D.
+    const day = (d.getDay() + 6) % 7;
+    const mon = new Date(d.getTime() - day * 86400000);
+    return `${mon.getMonth() + 1}/${mon.getDate()}`;
+  };
+  const weeks: string[] = [];
+  for (let i = 7; i >= 0; i--) weeks.push(weekKey(now - i * WEEK));
+  const inWeek = (t: number, label: string) => weekKey(t) === label;
+  const trend = weeks.map((label) => ({
+    week: label,
+    finds: findStamps.filter((t) => inWeek(t, label)).length,
+    sent: sentStamps.filter((t) => inWeek(t, label)).length,
+  }));
+
+  const authUsers = authRes?.data?.users || [];
+  const signupsByWeek = weeks.map((label) => ({
+    week: label,
+    signups: authUsers.filter((u) => inWeek(new Date(u.created_at).getTime(), label)).length,
+  }));
+  const lastSeen = (u: (typeof authUsers)[number]) =>
+    new Date(u.last_sign_in_at || u.created_at).getTime();
+  const wau = authUsers.filter((u) => now - lastSeen(u) < WEEK).length;
+  const mau = authUsers.filter((u) => now - lastSeen(u) < 30 * 86400000).length;
+  const newThisWeek = authUsers.filter(
+    (u) => now - new Date(u.created_at).getTime() < WEEK
+  ).length;
+  const dormant = authUsers.filter((u) => now - lastSeen(u) > 14 * 86400000).length;
+
+  // Activation funnel by USERS, not events: of everyone who signed up, how many
+  // ever reached each stage. The drop between stages is where onboarding work
+  // should go.
+  const funnelUsers = {
+    signedUp: authUsers.length,
+    searched: perUser.filter((u) => u.searches > 0).length,
+    found: perUser.filter((u) => u.finds > 0).length,
+    drafted: perUser.filter((u) => u.drafts > 0).length,
+    sent: perUser.filter((u) => u.sent > 0).length,
+    replied: perUser.filter((u) => u.replied > 0).length,
+  };
+
+  const health = {
+    wau,
+    mau,
+    newThisWeek,
+    dormant,
+    trend,
+    signupsByWeek,
+    funnelUsers,
+  };
+
   return NextResponse.json({
+    health,
     totals,
     averages,
     topUsers,

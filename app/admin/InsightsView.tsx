@@ -7,6 +7,22 @@
 import { useEffect, useState } from "react";
 
 interface AdminInsights {
+  health?: {
+    wau: number;
+    mau: number;
+    newThisWeek: number;
+    dormant: number;
+    trend: { week: string; finds: number; sent: number }[];
+    signupsByWeek: { week: string; signups: number }[];
+    funnelUsers: {
+      signedUp: number;
+      searched: number;
+      found: number;
+      drafted: number;
+      sent: number;
+      replied: number;
+    };
+  };
   totals: {
     users: number;
     users_with_state_rows: number;
@@ -157,42 +173,154 @@ export default function InsightsView({
 
       {data && (
         <>
-          {/* Top-line totals. "State rows" is every user_state row we can see
-              (including ones with no finds saved yet); "Users" is only those
-              with at least one find. If these two diverge a lot, some users'
-              finds aren't landing in Supabase. */}
-          <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            {[
-              [
-                "State rows / Users",
-                `${data.totals.users_with_state_rows} / ${data.totals.users}`,
-              ],
-              ["Finds", data.totals.finds],
-              ["Denied", data.totals.denied],
-              ["Approved", data.totals.approved],
-              ["Drafted", data.totals.drafted],
-              ["Sent", data.totals.sent],
-              ["Replied", data.totals.replied],
-              [
-                "Deny rate",
-                data.totals.finds
-                  ? `${Math.round((data.totals.denied / data.totals.finds) * 100)}%`
-                  : "-",
-              ],
-            ].map(([label, value]) => (
-              <div
-                key={String(label)}
-                className="rounded-2xl border border-warm-border bg-surface p-4"
-              >
-                <div className="text-[10px] font-bold uppercase tracking-[0.09em] text-muted">
-                  {label}
-                </div>
-                <div className="mt-1 text-2xl font-extrabold text-ink tabular-nums">
-                  {value}
-                </div>
-              </div>
-            ))}
-          </section>
+          {/* -------- The pulse: who is here, who is activating, what moved. --------
+              Modeled on the standard early-stage playbook: activation and
+              retention signals lead; totals are context, not the headline. */}
+          {(() => {
+            const h = data.health;
+            const t = data.totals;
+            const denyRate = t.finds ? Math.round((t.denied / t.finds) * 100) : 0;
+            const replyRate = t.sent + t.replied ? Math.round((t.replied / (t.sent + t.replied)) * 100) : 0;
+            const kpis: [string, string, string][] = h
+              ? [
+                  [String(h.wau), "Active this week", `${h.mau} this month`],
+                  [`+${h.newThisWeek}`, "New signups this week", `${h.funnelUsers.signedUp} accounts total`],
+                  [
+                    h.funnelUsers.signedUp
+                      ? `${Math.round((h.funnelUsers.searched / h.funnelUsers.signedUp) * 100)}%`
+                      : "0%",
+                    "Activation",
+                    "signed up and ran a search",
+                  ],
+                  [`${replyRate}%`, "Reply rate", `${t.replied} of ${t.sent + t.replied} sent`],
+                  [`${denyRate}%`, "Deny rate", `${t.denied} of ${t.finds} finds`],
+                  [String(h.dormant), "Dormant 14+ days", "worth a nudge email"],
+                ]
+              : [];
+            const funnel = h
+              ? ([
+                  ["Signed up", h.funnelUsers.signedUp],
+                  ["Ran a search", h.funnelUsers.searched],
+                  ["Saved finds", h.funnelUsers.found],
+                  ["Drafted", h.funnelUsers.drafted],
+                  ["Sent outreach", h.funnelUsers.sent],
+                  ["Got a reply", h.funnelUsers.replied],
+                ] as [string, number][])
+              : [];
+            const maxTrend = h ? Math.max(1, ...h.trend.map((w) => w.finds)) : 1;
+            const maxSign = h ? Math.max(1, ...h.signupsByWeek.map((w) => w.signups)) : 1;
+            return (
+              <>
+                <section className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+                  {kpis.map(([v, label, sub]) => (
+                    <div key={label} className="rounded-2xl border border-warm-border bg-surface p-4">
+                      <div className="font-display text-[30px] font-bold leading-none tabular-nums text-ink">{v}</div>
+                      <div className="mt-1.5 text-[11.5px] font-semibold text-body">{label}</div>
+                      <div className="mt-0.5 text-[10.5px] text-body/55">{sub}</div>
+                    </div>
+                  ))}
+                </section>
+
+                {h && (
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    {/* Activation funnel by users, drop-off between stages. */}
+                    <section className="rounded-2xl border border-warm-border bg-surface p-5">
+                      <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                        Activation funnel
+                      </h2>
+                      <p className="mt-0.5 text-[11px] text-body/60">
+                        Of everyone who ever signed up, how many reached each stage.
+                        The biggest drop is where onboarding work goes.
+                      </p>
+                      <div className="mt-3.5 space-y-2">
+                        {funnel.map(([label, n], i) => {
+                          const base = funnel[0][1] || 1;
+                          const prev = i > 0 ? funnel[i - 1][1] : n;
+                          const keep = prev ? Math.round((n / prev) * 100) : 0;
+                          return (
+                            <div key={label} className="flex items-center gap-3">
+                              <span className="w-24 shrink-0 text-xs font-semibold text-body">{label}</span>
+                              <div className="h-5 min-w-0 flex-1 overflow-hidden rounded-md bg-warm-bg">
+                                <div
+                                  className="flex h-full items-center rounded-md bg-brown px-2 text-[10px] font-bold text-white"
+                                  style={{ width: `${Math.max(6, (n / base) * 100)}%` }}
+                                >
+                                  {n}
+                                </div>
+                              </div>
+                              <span className="w-14 shrink-0 text-right text-[11px] tabular-nums text-body/60">
+                                {i > 0 ? `${keep}%` : ""}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </section>
+
+                    {/* Eight-week trend: finds landing, messages going out, signups. */}
+                    <section className="rounded-2xl border border-warm-border bg-surface p-5">
+                      <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                        Eight-week trend
+                      </h2>
+                      <p className="mt-0.5 text-[11px] text-body/60">
+                        Finds saved (brown), messages sent (blue), signups below.
+                      </p>
+                      <div className="mt-4 flex h-28 items-end gap-2">
+                        {h.trend.map((w) => (
+                          <div key={w.week} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                            <div className="flex w-full items-end justify-center gap-0.5" style={{ height: 84 }}>
+                              <div
+                                className="w-2/5 rounded-t bg-brown"
+                                title={`${w.finds} finds`}
+                                style={{ height: `${(w.finds / maxTrend) * 100}%`, minHeight: w.finds ? 3 : 0 }}
+                              />
+                              <div
+                                className="w-2/5 rounded-t bg-blue-deep"
+                                title={`${w.sent} sent`}
+                                style={{ height: `${(w.sent / maxTrend) * 100}%`, minHeight: w.sent ? 3 : 0 }}
+                              />
+                            </div>
+                            <span className="truncate text-[9px] tabular-nums text-body/50">{w.week}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 border-t border-warm-border pt-2">
+                        <div className="flex items-end gap-2">
+                          {h.signupsByWeek.map((w) => (
+                            <div key={w.week} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                              <div
+                                className="w-1/2 rounded-t bg-sage"
+                                title={`${w.signups} signups`}
+                                style={{ height: 4 + (w.signups / maxSign) * 22 }}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="mt-1 text-center text-[9.5px] text-body/50">signups per week</div>
+                      </div>
+                    </section>
+                  </div>
+                )}
+
+                {/* Raw totals, demoted to a single quiet strip. */}
+                <section className="mt-4 flex flex-wrap gap-x-5 gap-y-1 rounded-2xl border border-warm-border bg-surface px-4 py-3 text-xs text-body">
+                  {[
+                    ["Finds", t.finds],
+                    ["Approved", t.approved],
+                    ["Drafted", t.drafted],
+                    ["Sent", t.sent],
+                    ["Replied", t.replied],
+                    ["Denied", t.denied],
+                    ["State rows / users", `${t.users_with_state_rows} / ${t.users}`],
+                  ].map(([l, v]) => (
+                    <span key={String(l)}>
+                      <b className="tabular-nums text-ink">{v}</b> {l}
+                    </span>
+                  ))}
+                </section>
+              </>
+            );
+          })()}
 
           {/* How much the average user actually uses the platform. Averaged
               over ACTIVE users (ran at least one search or has a find) so

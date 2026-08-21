@@ -236,32 +236,116 @@ async function colorsFromImage(file: File): Promise<string[]> {
   }
 }
 
-// A spread of ready palettes, deliberately wide: warm, cool, loud, quiet.
-const PRESET_PALETTES: { name: string; colors: string[] }[] = [
-  { name: "Shipped Scout", colors: ["#2b2723", "#5c4634", "#536872", "#f6efe6", "#f8f7f5", "#377ec0"] },
-  { name: "Espresso", colors: ["#1f1712", "#3b2c20", "#6f4e37", "#c89f7c", "#efe3d5", "#a3542f"] },
-  { name: "Tidepool", colors: ["#0e2a33", "#155e63", "#12baaa", "#9fd2d6", "#f2f7f6", "#f7891f"] },
-  { name: "Sunset motel", colors: ["#241b2f", "#5460ac", "#f04f52", "#f7891f", "#fbdf54", "#fdf6ec"] },
-  { name: "Meadow", colors: ["#1e2a1c", "#3f5f3a", "#7ba05b", "#cfe3b8", "#f6f8ef", "#c96f3a"] },
-  { name: "Ink and paper", colors: ["#14161a", "#3a3f4a", "#7b8494", "#d8dbe0", "#fafbfc", "#b5443c"] },
-  { name: "Grape soda", colors: ["#231631", "#4a2d6b", "#7a5aa8", "#c9b6e4", "#f7f3fb", "#12baaa"] },
-  { name: "Desert clay", colors: ["#2c1c14", "#8a5a44", "#c98a5e", "#e8c9a8", "#faf3ea", "#3f5666"] },
-  { name: "Deep pine", colors: ["#0f1f18", "#1e4034", "#4a5f52", "#a8c5b2", "#f1f6f2", "#e0a53a"] },
-  { name: "Denim", colors: ["#141c26", "#2b3f57", "#537ba2", "#a9c2d8", "#f4f7fa", "#c96f3a"] },
-  { name: "Rosewood", colors: ["#26141a", "#5f2a3a", "#a04a5e", "#dba6b0", "#faf1f3", "#3f6b4f"] },
-  { name: "Citrus press", colors: ["#20250f", "#5a5f3f", "#a3b02a", "#fbdf54", "#fbfaef", "#f04f52"] },
-  { name: "Harbor slate", colors: ["#161c1f", "#2f4356", "#536872", "#a5b0b6", "#f3f5f6", "#12baaa"] },
-  { name: "Bubblegum", colors: ["#2a1622", "#8a2f5c", "#e0699e", "#f7c2d8", "#fdf3f7", "#377ec0"] },
-  { name: "Harvest", colors: ["#241a0e", "#6b4a1f", "#a9761f", "#e0b45c", "#faf3e3", "#6d3f52"] },
-  { name: "Night shift", colors: ["#0b0d12", "#1c2230", "#39415a", "#8b93ad", "#e8eaf1", "#f7891f"] },
+// A wide spread of ready palettes, grouped for the dropdown. Warm, cool,
+// bold, muted, dark: enough range that "try something different" always has
+// somewhere to go.
+const PRESET_PALETTES: { name: string; group: string; colors: string[] }[] = [
+  { name: "Shipped Scout", group: "Warm", colors: ["#2b2723", "#5c4634", "#536872", "#f6efe6", "#f8f7f5", "#377ec0"] },
+  { name: "Espresso", group: "Warm", colors: ["#1f1712", "#3b2c20", "#6f4e37", "#c89f7c", "#efe3d5", "#a3542f"] },
+  { name: "Desert clay", group: "Warm", colors: ["#2c1c14", "#8a5a44", "#c98a5e", "#e8c9a8", "#faf3ea", "#3f5666"] },
+  { name: "Harvest", group: "Warm", colors: ["#241a0e", "#6b4a1f", "#a9761f", "#e0b45c", "#faf3e3", "#6d3f52"] },
+  { name: "Terracotta", group: "Warm", colors: ["#2a1611", "#7a3b2a", "#c4664a", "#e8a186", "#faf0ea", "#3f5f4a"] },
+  { name: "Honey oak", group: "Warm", colors: ["#251b0f", "#5f4426", "#a97f3f", "#dcc08a", "#faf5e9", "#536872"] },
+  { name: "Cinnamon", group: "Warm", colors: ["#231210", "#6b3428", "#a45c3d", "#d9a37f", "#f9efe6", "#2f5d70"] },
+  { name: "Saddle", group: "Warm", colors: ["#1d1410", "#4a3524", "#8a6844", "#c9ae85", "#f6f0e6", "#7a3b2a"] },
+  { name: "Tidepool", group: "Cool", colors: ["#0e2a33", "#155e63", "#12baaa", "#9fd2d6", "#f2f7f6", "#f7891f"] },
+  { name: "Denim", group: "Cool", colors: ["#141c26", "#2b3f57", "#537ba2", "#a9c2d8", "#f4f7fa", "#c96f3a"] },
+  { name: "Harbor slate", group: "Cool", colors: ["#161c1f", "#2f4356", "#536872", "#a5b0b6", "#f3f5f6", "#12baaa"] },
+  { name: "Deep pine", group: "Cool", colors: ["#0f1f18", "#1e4034", "#4a5f52", "#a8c5b2", "#f1f6f2", "#e0a53a"] },
+  { name: "Glacier", group: "Cool", colors: ["#101d29", "#1f4e66", "#4a90b8", "#b5d8e8", "#f2f8fb", "#e0693a"] },
+  { name: "Juniper", group: "Cool", colors: ["#12201b", "#2a4f42", "#5f8a6f", "#bcd8c4", "#f2f7f3", "#a45c3d"] },
+  { name: "North sea", group: "Cool", colors: ["#0d151f", "#22364f", "#3f5f8a", "#9fb5d0", "#f1f4f9", "#c9a13f"] },
+  { name: "Eucalyptus", group: "Cool", colors: ["#152019", "#3a5f4a", "#7aa88a", "#cfe6d5", "#f4f9f5", "#8a5a9f"] },
+  { name: "Sunset motel", group: "Bold", colors: ["#241b2f", "#5460ac", "#f04f52", "#f7891f", "#fbdf54", "#fdf6ec"] },
+  { name: "Citrus press", group: "Bold", colors: ["#20250f", "#5a5f3f", "#a3b02a", "#fbdf54", "#fbfaef", "#f04f52"] },
+  { name: "Bubblegum", group: "Bold", colors: ["#2a1622", "#8a2f5c", "#e0699e", "#f7c2d8", "#fdf3f7", "#377ec0"] },
+  { name: "Arcade", group: "Bold", colors: ["#160f26", "#3b2a7a", "#7a5aa8", "#e0699e", "#f5f1fb", "#12baaa"] },
+  { name: "Poppy field", group: "Bold", colors: ["#1c1512", "#5f2a22", "#d64541", "#f2a48f", "#fbf2ec", "#3f6b4f"] },
+  { name: "Marigold", group: "Bold", colors: ["#231a08", "#7a5210", "#e8a417", "#f7d374", "#fdf8ea", "#5460ac"] },
+  { name: "Kingfisher", group: "Bold", colors: ["#0c1c26", "#155e8a", "#12a4d6", "#8fd8f0", "#f0f9fc", "#f0742a"] },
+  { name: "Watermelon", group: "Bold", colors: ["#152015", "#2f6b3f", "#6fc06a", "#f27d88", "#fbf5f0", "#26141a"] },
+  { name: "Meadow", group: "Muted", colors: ["#1e2a1c", "#3f5f3a", "#7ba05b", "#cfe3b8", "#f6f8ef", "#c96f3a"] },
+  { name: "Ink and paper", group: "Muted", colors: ["#14161a", "#3a3f4a", "#7b8494", "#d8dbe0", "#fafbfc", "#b5443c"] },
+  { name: "Rosewood", group: "Muted", colors: ["#26141a", "#5f2a3a", "#a04a5e", "#dba6b0", "#faf1f3", "#3f6b4f"] },
+  { name: "Grape soda", group: "Muted", colors: ["#231631", "#4a2d6b", "#7a5aa8", "#c9b6e4", "#f7f3fb", "#12baaa"] },
+  { name: "Oat milk", group: "Muted", colors: ["#221f1a", "#5f584a", "#a89f8a", "#ddd6c4", "#faf8f2", "#7a4a3c"] },
+  { name: "Sea fog", group: "Muted", colors: ["#1a1f20", "#48585c", "#8aa0a5", "#ccd9db", "#f5f8f8", "#a3542f"] },
+  { name: "Lavender field", group: "Muted", colors: ["#1e1a26", "#4f4468", "#8f82ad", "#d5cde5", "#f8f6fb", "#3f6b4f"] },
+  { name: "Clay pot", group: "Muted", colors: ["#211713", "#5c4634", "#9a7a5f", "#d8c3ad", "#f8f2ea", "#2f5d70"] },
+  { name: "Night shift", group: "Dark", colors: ["#0b0d12", "#1c2230", "#39415a", "#8b93ad", "#e8eaf1", "#f7891f"] },
+  { name: "Charcoal", group: "Dark", colors: ["#0e0e0e", "#262626", "#4a4a4a", "#9c9c9c", "#f0f0f0", "#e0693a"] },
+  { name: "Aubergine", group: "Dark", colors: ["#150b14", "#331f33", "#5f3a5f", "#a58aa5", "#f3edf3", "#c9a13f"] },
+  { name: "Forest floor", group: "Dark", colors: ["#0d120c", "#22301e", "#40543a", "#8fa585", "#eef2ec", "#a45c3d"] },
+  { name: "Midnight teal", group: "Dark", colors: ["#081418", "#12333d", "#1f5f6b", "#7fb0ba", "#ecf4f5", "#f0742a"] },
+  { name: "Espresso noir", group: "Dark", colors: ["#0f0a07", "#291b12", "#4a3323", "#9a8064", "#f1ebe3", "#537ba2"] },
 ];
 
-export default function DesignView() {
+export default function DesignView({
+  getToken,
+}: {
+  getToken?: () => Promise<string | null>;
+}) {
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
   const [copied, setCopied] = useState(false);
   const [typedColors, setTypedColors] = useState("");
   const [sourceNote, setSourceNote] = useState("");
+  const [designPrompt, setDesignPrompt] = useState("");
+  const [promptBusy, setPromptBusy] = useState(false);
+  const [promptSummary, setPromptSummary] = useState("");
+  const [briefCopied, setBriefCopied] = useState(false);
+
+  // Prompt -> proposal -> preview. The proposal only ever lands in the same
+  // tokens the preview renders, so what you see is exactly what was proposed.
+  async function runDesignPrompt() {
+    const pr = designPrompt.trim();
+    if (!pr || promptBusy || !getToken) return;
+    setPromptBusy(true);
+    setPromptSummary("");
+    try {
+      const token = await getToken();
+      if (!token) throw new Error("Sign in again.");
+      const r = await fetch("/api/admin/design-prompt", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ prompt: pr, scheme, rainbow }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j?.error || "Could not read that instruction.");
+      setScheme((prev) => ({ ...prev, ...j.scheme }));
+      if (j.rainbow) setRainbow(j.rainbow);
+      setSourceNote(`prompt: ${pr.slice(0, 40)}`);
+      setPromptSummary(j.summary || "Applied to the preview.");
+    } catch (e: any) {
+      setPromptSummary(e?.message || "Could not read that instruction.");
+    } finally {
+      setPromptBusy(false);
+    }
+  }
+
+  // "Implement" = a complete brief on the clipboard: the instruction, the
+  // resulting tokens, and where they go. Paste it to engineering and the
+  // change is unambiguous.
+  function copyImplementationBrief() {
+    const brief = [
+      "Scout design change request",
+      `Instruction: ${designPrompt.trim() || sourceNote || "(tuned by hand)"}`,
+      promptSummary ? `Summary: ${promptSummary}` : "",
+      "",
+      "Tokens (apply in app/globals.css + tailwind.config.ts):",
+      ...Object.entries(scheme).map(([k, v]) => `  ${k}: ${v}`),
+      `  Rainbow: ${rainbow.join(", ")}`,
+      "",
+      "Surfaces affected: Scout stage, work area, canvas, cards, tiles, monograms.",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    try {
+      navigator.clipboard.writeText(brief);
+      setBriefCopied(true);
+      setTimeout(() => setBriefCopied(false), 1800);
+    } catch {}
+  }
 
   const applyColors = (colors: string[], label: string) => {
     const { scheme: sc, rainbow: rb } = schemeFromColors(colors);
@@ -305,25 +389,66 @@ export default function DesignView() {
           Edit the tokens and the preview re-renders live. Nothing here touches
           the real app; when a scheme feels right, copy it out and hand it over.
         </p>
-        {/* Start from anywhere: a preset, a photo, or a pasted list. */}
-        <div className="mt-4 flex flex-wrap gap-2">
-          {PRESET_PALETTES.map((pp) => (
+        {/* Prompt a change: describe it, preview it, then hand it over. */}
+        <div className="mt-4 rounded-2xl border border-warm-border bg-surface p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={designPrompt}
+              onChange={(e) => setDesignPrompt(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") runDesignPrompt();
+              }}
+              placeholder={'Describe a change and press Enter, e.g. "warmer and softer, terracotta accent" or "make it feel like a bank"'}
+              className="min-w-[260px] flex-1 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-brown"
+            />
             <button
-              key={pp.name}
-              onClick={() => applyColors(pp.colors, pp.name)}
-              title={pp.name}
-              className={`group flex items-center gap-2 rounded-xl border px-2.5 py-1.5 transition hover:border-brown/50 ${
-                sourceNote === pp.name ? "border-brown bg-brown-tint/40" : "border-warm-border bg-surface"
-              }`}
+              onClick={runDesignPrompt}
+              disabled={promptBusy || !designPrompt.trim()}
+              className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
             >
-              <span className="flex overflow-hidden rounded-md">
-                {pp.colors.map((c) => (
-                  <span key={c} className="h-4 w-3.5" style={{ background: c }} />
-                ))}
-              </span>
-              <span className="text-xs font-semibold text-body group-hover:text-ink">{pp.name}</span>
+              {promptBusy ? "Designing…" : "Preview it"}
             </button>
-          ))}
+            <button
+              onClick={copyImplementationBrief}
+              className="rounded-xl border border-warm-border px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+              title="Copies the instruction and the exact tokens as a ready-to-implement brief"
+            >
+              {briefCopied ? "Brief copied" : "Implement: copy the brief"}
+            </button>
+          </div>
+          {promptSummary && (
+            <p className="mt-2 text-xs leading-relaxed text-body/70">{promptSummary}</p>
+          )}
+        </div>
+
+        {/* Start from anywhere: a preset, a photo, or a pasted list. */}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <select
+            value={PRESET_PALETTES.some((pp) => pp.name === sourceNote) ? sourceNote : ""}
+            onChange={(e) => {
+              const pp = PRESET_PALETTES.find((x) => x.name === e.target.value);
+              if (pp) applyColors(pp.colors, pp.name);
+            }}
+            className="scout-select min-w-[220px] rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none focus:border-brown"
+          >
+            <option value="">Pick a palette…</option>
+            {Array.from(new Set(PRESET_PALETTES.map((pp) => pp.group))).map((g) => (
+              <optgroup key={g} label={g}>
+                {PRESET_PALETTES.filter((pp) => pp.group === g).map((pp) => (
+                  <option key={pp.name} value={pp.name}>
+                    {pp.name}
+                  </option>
+                ))}
+              </optgroup>
+            ))}
+          </select>
+          {PRESET_PALETTES.some((pp) => pp.name === sourceNote) && (
+            <span className="flex overflow-hidden rounded-md border border-warm-border">
+              {PRESET_PALETTES.find((pp) => pp.name === sourceNote)!.colors.map((c) => (
+                <span key={c} className="h-6 w-6" style={{ background: c }} />
+              ))}
+            </span>
+          )}
         </div>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <label className="cursor-pointer rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-xs font-semibold text-body transition hover:border-brown/50 hover:text-ink">
@@ -485,6 +610,77 @@ export default function DesignView() {
                     <span key={i} className="h-4 flex-1 rounded" style={{ background: c }} />
                   ))}
                 </div>
+              </div>
+            </div>
+
+            {/* The rest of the site, same tokens: landing, dashboard, finds grid. */}
+            <div style={{ background: s("Canvas"), color: s("Ink") }} className="border-t p-6" >
+              <div className="text-[10px] font-bold uppercase tracking-[0.14em] opacity-50">
+                Landing
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-4">
+                <div>
+                  <div className="font-display text-2xl font-extrabold leading-tight">
+                    Find your people.
+                  </div>
+                  <div className="mt-0.5 text-xs opacity-60">
+                    Scout finds who to reach and writes the first note in your voice.
+                  </div>
+                </div>
+                <span
+                  className="rounded-xl px-4 py-2 text-sm font-bold"
+                  style={{ background: s("Stage brown"), color: s("Cream") }}
+                >
+                  Start free
+                </span>
+                <span
+                  className="rounded-xl border px-4 py-2 text-sm font-semibold"
+                  style={{ borderColor: `${s("Ink")}33` }}
+                >
+                  See how it works
+                </span>
+              </div>
+
+              <div className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] opacity-50">
+                Dashboard
+              </div>
+              <div className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-6">
+                {[["45", "Finds"], ["12", "Sent"], ["18%", "Replies"], ["50%", "On-target"], ["21", "Searches"], ["4", "Hours saved"]].map(([v, l]) => (
+                  <div
+                    key={l}
+                    className="rounded-xl border p-2.5"
+                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a` }}
+                  >
+                    <div className="font-display text-lg font-bold leading-none">{v}</div>
+                    <div className="mt-1 text-[10px] opacity-60">{l}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-5 text-[10px] font-bold uppercase tracking-[0.14em] opacity-50">
+                Finds grid
+              </div>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {["Slevin & Hart", "Kinkead", "McKay Law"].map((n, i) => (
+                  <div
+                    key={n}
+                    className="overflow-hidden rounded-xl border"
+                    style={{ background: "#ffffff", borderColor: `${s("Ink")}1a` }}
+                  >
+                    <div
+                      className="grid h-14 place-items-center"
+                      style={{ background: rainbow[i % rainbow.length] }}
+                    >
+                      <span
+                        className="grid h-6 w-6 place-items-center rounded bg-white/85 text-[10px] font-bold"
+                        style={{ color: rainbow[i % rainbow.length] }}
+                      >
+                        {n[0]}
+                      </span>
+                    </div>
+                    <div className="p-2 text-[11px] font-bold">{n}</div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
