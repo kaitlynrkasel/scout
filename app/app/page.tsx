@@ -1625,24 +1625,32 @@ function ScoutTool({
       "169 156 196", // lilac
       "143 188 180", // seafoam
     ];
-    // Three tints per visit, fading into one field. Rotate which trio leads
-    // so no single hue (looking at you, sky blue) ever owns the page.
+    // Three tints per visit, fading into one field — and deliberately
+    // temperature-diverse, so the alternation is visible in the FIRST
+    // viewport instead of three near-identical warms blurring into one.
+    const WARM = new Set(["217 161 180", "224 180 138"]);
     let lastT = -1;
     try {
       lastT = tints.indexOf(localStorage.getItem("scout_dash_last") || "");
     } catch {}
-    const tp = tints.map((_, k) => k).filter((k) => k !== lastT);
-    for (let k = tp.length - 1; k > 0; k--) {
-      const r = Math.floor(Math.random() * (k + 1));
-      [tp[k], tp[r]] = [tp[r], tp[k]];
-    }
-    const trio = tp.slice(0, 3);
+    const pick = (pool: number[]) => pool[Math.floor(Math.random() * pool.length)];
+    const all = tints.map((_, k) => k);
+    const lead = pick(all.filter((k) => k !== lastT));
+    const leadWarm = WARM.has(tints[lead]);
+    const second = pick(all.filter((k) => k !== lead && WARM.has(tints[k]) !== leadWarm));
+    const third = pick(all.filter((k) => k !== lead && k !== second));
     try {
-      localStorage.setItem("scout_dash_last", tints[trio[0]]);
+      localStorage.setItem("scout_dash_last", tints[lead]);
     } catch {}
-    document.documentElement.style.setProperty("--dash-tint", tints[trio[0]]);
-    document.documentElement.style.setProperty("--dash-tint2", tints[trio[1]]);
-    document.documentElement.style.setProperty("--dash-tint3", tints[trio[2]]);
+    document.documentElement.style.setProperty("--dash-tint", tints[lead]);
+    document.documentElement.style.setProperty("--dash-tint2", tints[second]);
+    document.documentElement.style.setProperty("--dash-tint3", tints[third]);
+    // Stat-band seams run against the ground's temperature: warm strands on a
+    // cool field, cool strands on a warm one.
+    const seams = leadWarm
+      ? ["#377ec0", "#12baaa", "#7a5aa8"]
+      : ["#f04f52", "#f7891f", "#d9a11c"];
+    seams.forEach((c, k) => document.documentElement.style.setProperty(`--seam-${k}`, c));
   }, []);
 
   const gateCancelRef = useRef(false);
@@ -8178,6 +8186,8 @@ function ScoutTool({
           projects={visibleProjects}
           categoriesCount={categories.length}
           finds={myFinds}
+          ownEmail={accountEmail}
+          teamOwner={!!teamLens && isOwner}
           community={community}
           coaching={coaching}
           dismissedAdvice={dismissedAdvice}
@@ -15382,6 +15392,8 @@ const FIND_STATUS: Record<
 function DashboardTab({
   news = [],
   onNewsRead,
+  ownEmail = "",
+  teamOwner = false,
   activity,
   profile,
   about,
@@ -15431,12 +15443,18 @@ function DashboardTab({
   getToken?: () => Promise<string | null>;
   openCommand: () => void;
   onOpenFind: (f: Find) => void;
+  ownEmail?: string;
+  teamOwner?: boolean;
   news?: { kind: string; who?: string; count: number; detail: string; at: string }[];
   onNewsRead?: () => void;
 }) {
   // Two-tab split: personal signal in "You", aggregate/community in "Scout-wide".
   const [dashTab, setDashTab] = useState<"you" | "scout">("you");
-  const learned = learnedFromFinds(finds);
+  // Personal sections stay PERSONAL even on a company lens: teammates'
+  // adopted finds carry foundByEmail, and they must not colour "what Scout
+  // has learned about YOU".
+  const ownFinds = finds.filter((f) => !f.foundByEmail || f.foundByEmail === ownEmail);
+  const learned = learnedFromFinds(ownFinds);
   const writing = learnedFromDrafts(finds);
   const insights = recentInsights(learned, writing, coaching, editPairs);
 
@@ -15937,8 +15955,26 @@ ${body}
     setReportOpen(false);
   }
 
+  // The ground leans toward the cursor: a soft glow of the day's tint
+  // follows the mouse and fades back out after ~3s of stillness.
+  const glowIdle = useRef<number | null>(null);
+  const onGlowMove = (e: React.MouseEvent<HTMLElement>) => {
+    const el = e.currentTarget;
+    const r = el.getBoundingClientRect();
+    el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    el.style.setProperty("--my", `${e.clientY - r.top}px`);
+    el.style.setProperty("--glow", "1");
+    if (glowIdle.current) window.clearTimeout(glowIdle.current);
+    glowIdle.current = window.setTimeout(() => {
+      el.style.setProperty("--glow", "0");
+    }, 3000);
+  };
+
   return (
-    <main className="dash-stage w-full flex-1 px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
+    <main
+      onMouseMove={onGlowMove}
+      className="dash-stage w-full flex-1 px-5 py-8 sm:px-8 sm:py-10 xl:px-12"
+    >
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
       {/* Wraps rather than squeezing: at 390px the title, the toggle and the CTA
           can't share a line, and the CTA was breaking mid-label. On a phone it
@@ -16146,7 +16182,9 @@ ${body}
                   <span
                     aria-hidden
                     className="absolute inset-y-5 right-0 w-[3px] rounded-full opacity-70"
-                    style={{ background: FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length] }}
+                    style={{
+                      background: `var(--seam-${i % 3}, ${FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length]})`,
+                    }}
                   />
                 )}
               </div>
@@ -16394,6 +16432,48 @@ ${body}
           })()}
         </div>
       </section>
+
+      {/* -------- Owner view: the same lens pointed at the TEAM -------- */}
+      {teamOwner && finds.some((f) => f.foundByEmail && f.foundByEmail !== ownEmail) && (
+        <section data-jig="5" className="mt-10">
+          <h2 className="text-lg font-semibold tracking-tight text-ink">
+            What makes your team special
+          </h2>
+          {(() => {
+            const byWho = new Map<string, number>();
+            for (const f of finds) {
+              const who = (f.foundByEmail || ownEmail || "").split("@")[0];
+              if (who) byWho.set(who, (byWho.get(who) || 0) + 1);
+            }
+            const top = [...byWho.entries()].sort((a, b) => b[1] - a[1])[0];
+            const decided = finds.filter((f) => f.status !== "new");
+            const kept = decided.filter(
+              (f) => f.status === "drafted" || f.status === "sent" || f.status === "replied"
+            );
+            const keepPct = decided.length
+              ? Math.round((kept.length / decided.length) * 100)
+              : null;
+            return (
+              <div
+                className="mt-4 rounded-2xl border border-warm-border p-5 backdrop-blur-sm"
+                style={{ background: "rgb(var(--c-blue) / 0.08)" }}
+              >
+                <p className="text-base leading-relaxed text-ink">
+                  {byWho.size} {byWho.size === 1 ? "person is" : "people are"} feeding this
+                  pipeline{top ? `, and ${top[0]} brings in the most (${top[1]} finds)` : ""}.
+                  {keepPct != null
+                    ? ` Together you keep ${keepPct}% of what Scout surfaces${
+                        keepPct < 30
+                          ? ", a picky team, so every kept find carries real signal"
+                          : ""
+                      }.`
+                    : " Decisions are still accumulating."}
+                </p>
+              </div>
+            );
+          })()}
+        </section>
+      )}
 
       {/* -------- You vs the community (real aggregate averages) --------
           Not rendered AT ALL until the cohort is big enough: a section whose
