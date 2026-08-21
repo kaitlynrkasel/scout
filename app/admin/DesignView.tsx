@@ -12,6 +12,20 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import dynamic from "next/dynamic";
+import {
+  IDEAS,
+  SIX_ON_WHITE,
+  applyPalette,
+  contrastOnWhite,
+  darken,
+  isHex,
+  lighten,
+  loadSaved,
+  saveSaved,
+  textOn,
+  type IdeaKey,
+  type Palette,
+} from "@/lib/designLab";
 
 type Scheme = Record<string, string>;
 
@@ -306,6 +320,26 @@ export default function DesignView({
   const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
   const [scheme, setScheme] = useState<Scheme>(() => ({ ...DEFAULT_SCHEME }));
   const [rainbow, setRainbow] = useState<string[]>([...DEFAULT_RAINBOW]);
+  // Colour-by-meaning: the six ideas, plus whether the palette is painted onto
+  // the real app so it can be walked through rather than only previewed here.
+  const [ideaPalette, setIdeaPalette] = useState<Palette>(SIX_ON_WHITE);
+  const [paintApp, setPaintApp] = useState(false);
+  const ideasLoaded = useRef(false);
+  useEffect(() => {
+    const saved = loadSaved();
+    if (saved) {
+      setIdeaPalette(saved.palette);
+      setPaintApp(saved.whole);
+    }
+    ideasLoaded.current = true;
+  }, []);
+  useEffect(() => {
+    if (!ideasLoaded.current) return;
+    applyPalette(ideaPalette, paintApp);
+    saveSaved({ palette: ideaPalette, whole: paintApp });
+  }, [ideaPalette, paintApp]);
+  const setIdea = (key: IdeaKey, hex: string) =>
+    setIdeaPalette((p) => ({ ...p, ideas: { ...p.ideas, [key]: hex } }));
   const [copied, setCopied] = useState(false);
   const [typedColors, setTypedColors] = useState("");
   const [sourceNote, setSourceNote] = useState("");
@@ -529,6 +563,160 @@ export default function DesignView({
 
       {mode === "playground" && (
       <>
+      {/* ---------------- Colour by meaning ----------------
+          The scheme above colours SURFACES. This colours IDEAS: a person is
+          always one colour, a reply always another, wherever either appears.
+          That's what makes a single screen carry four or five colours without
+          any of them being decoration. */}
+      <section className="mb-8">
+        <h2 className="text-lg font-bold text-ink">Colour by meaning</h2>
+        <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
+          Each colour belongs to a kind of thing rather than to a screen.
+          Wherever that thing shows up, its colour shows up — so a screen ends
+          up carrying several at once. Everything here stays in this browser.
+        </p>
+
+        <div className="mt-4 grid gap-5 lg:grid-cols-[340px_minmax(0,1fr)]">
+          <div className="space-y-2">
+            <button
+              onClick={() => setIdeaPalette(SIX_ON_WHITE)}
+              className="mb-2 flex w-full items-center gap-2 rounded-xl border border-warm-border px-3 py-2.5 text-left transition hover:border-brown/50 hover:bg-warm-bg/50"
+            >
+              {IDEAS.map(({ key }) => (
+                <span
+                  key={key}
+                  className="h-5 w-5 rounded-md"
+                  style={{ background: SIX_ON_WHITE.ideas[key] }}
+                />
+              ))}
+              <span className="ml-1 text-xs font-bold text-ink">Load the proposal</span>
+            </button>
+
+            {IDEAS.map(({ key, name, blurb }) => {
+              const hex = ideaPalette.ideas[key];
+              const ratio = contrastOnWhite(hex);
+              return (
+                <div key={key} className="flex items-center gap-2.5">
+                  <input
+                    type="color"
+                    value={isHex(hex) ? hex : "#888888"}
+                    onChange={(e) => setIdea(key, e.target.value)}
+                    className="h-9 w-10 shrink-0 cursor-pointer rounded border border-warm-border bg-transparent"
+                    aria-label={`Colour for ${name}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-bold text-ink">{name}</div>
+                    <div className="truncate text-[11px] text-body/60" title={blurb}>
+                      {blurb}
+                    </div>
+                  </div>
+                  <span
+                    className="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold tabular-nums"
+                    style={{ background: lighten(hex), color: darken(hex) }}
+                    title="Contrast against white. Under 4.5:1 can't carry small text."
+                  >
+                    {ratio}:1
+                  </span>
+                </div>
+              );
+            })}
+
+            <label className="mt-3 flex cursor-pointer items-start gap-2.5 rounded-xl border border-warm-border bg-surface p-3">
+              <input
+                type="checkbox"
+                checked={paintApp}
+                onChange={(e) => setPaintApp(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-brown"
+              />
+              <span className="text-xs leading-relaxed text-body">
+                <b className="text-ink">Paint the real app in this.</b> Open
+                Scout in another tab and use it normally. Background, text and
+                the main accent change; the six meanings need wiring into
+                components before they show up out there.
+              </span>
+            </label>
+          </div>
+
+          {/* What several meanings on one screen actually looks like. */}
+          <div
+            className="rounded-2xl border border-warm-border p-4 shadow-soft"
+            style={{ background: ideaPalette.ground }}
+          >
+            <div className="text-base font-extrabold tracking-tight" style={{ color: ideaPalette.ink }}>
+              Tuesday, Kaitlyn
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {(
+                [
+                  ["12", "People", ideaPalette.ideas.person],
+                  ["7", "Sent", ideaPalette.ideas.sent],
+                  ["2", "Replies", ideaPalette.ideas.reply],
+                ] as const
+              ).map(([n, label, hex]) => (
+                <div key={label} className="rounded-xl p-2.5" style={{ background: lighten(hex) }}>
+                  <div className="text-xl font-extrabold leading-none tabular-nums" style={{ color: darken(hex) }}>
+                    {n}
+                  </div>
+                  <div className="mt-1 text-[9px] font-bold uppercase tracking-wider" style={{ color: darken(hex) }}>
+                    {label}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div
+              className="mt-3 rounded-lg px-3 py-2 text-center text-xs font-bold"
+              style={{
+                background: ideaPalette.ideas.search,
+                color: textOn(ideaPalette.ideas.search),
+              }}
+            >
+              Run a search
+            </div>
+            <div
+              className="mt-3 flex flex-col gap-1.5 rounded-xl border p-3"
+              style={{ background: ideaPalette.surface, borderColor: lighten(ideaPalette.ink, 0.86) }}
+            >
+              <div className="flex flex-wrap gap-1.5">
+                {(
+                  [
+                    ["Person", ideaPalette.ideas.person],
+                    ["Replied", ideaPalette.ideas.reply],
+                    ["Cue Creative", ideaPalette.ideas.shared],
+                  ] as const
+                ).map(([label, hex]) => (
+                  <span
+                    key={label}
+                    className="rounded-full px-2 py-[3px] text-[9px] font-extrabold uppercase tracking-wider"
+                    style={{ background: lighten(hex), color: darken(hex) }}
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+              <div className="text-[13px] font-bold" style={{ color: ideaPalette.ink }}>
+                George Wang, MSEL &rsquo;22
+              </div>
+              <div className="text-[11px]" style={{ color: lighten(ideaPalette.ink, 0.42) }}>
+                Founder · Amptra Charging
+              </div>
+              <div
+                className="mt-1 rounded-lg px-3 py-1.5 text-center text-[11px] font-bold"
+                style={{
+                  background: ideaPalette.ideas.voice,
+                  color: textOn(ideaPalette.ideas.voice),
+                }}
+              >
+                Draft a message
+              </div>
+            </div>
+            <p className="mt-3 text-[11px] leading-relaxed" style={{ color: lighten(ideaPalette.ink, 0.45) }}>
+              Five colours on one screen, and every one of them is saying what
+              something is.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* ---------------- Playground ---------------- */}
       <section>
         <h2 className="text-lg font-bold text-ink">Try a design</h2>
