@@ -13564,7 +13564,7 @@ function FindsTab({
               <FindGridCard
                 key={f.id}
                 find={f}
-                shared={!!teamLens}
+                shared={!!teamName}
                 onOpen={() => setDetailId(f.id)}
                 onTogglePin={() => onTogglePin(f.id)}
               />
