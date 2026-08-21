@@ -815,6 +815,16 @@ select.scout-kind-picker option {
   background: #3a2c23;
 }
 
+/* The work area below the composer: the same room, one shade deeper, so the
+   stage reads as the lit part and the results as the desk. Light cards carry
+   the content. */
+.scout-results {
+  background: #4a3729;
+}
+.dark .scout-results {
+  background: #2e231c;
+}
+
 /* The two toggles. Rounded, translucent, sitting on the ground rather than in
    a box, and wide enough to read as a choice rather than a form field. */
 .stage-toggle {

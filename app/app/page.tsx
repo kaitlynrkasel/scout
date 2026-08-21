@@ -673,7 +673,16 @@ function contactNameAddsInfo(o: Opportunity): boolean {
 // find has a website, falling back to initials on a color derived from the
 // name (so the same contact always gets the same color). Purely visual, it
 // makes a long list scannable by shape and color instead of text alone.
-const FIND_AVATAR_COLORS = ["#8a5f42", "#6f7a4e", "#5c402f", "#a9761f", "#77563b", "#525c37"];
+// The same rainbow the tiles snap to, so a list of monogram squares reads as
+// part of one system instead of six shades of mud.
+const FIND_AVATAR_COLORS = [
+  "#377ec0", // blue
+  "#5460ac", // indigo
+  "#7a5aa8", // purple
+  "#12baaa", // teal
+  "#f7891f", // orange
+  "#f04f52", // red
+];
 function FindAvatar({ opp, size = 34 }: { opp: Opportunity; size?: number }) {
   const [logoFailed, setLogoFailed] = useState(false);
   let host = "";
@@ -4444,10 +4453,12 @@ function ScoutTool({
         });
         const data = await res.json().catch(() => ({}));
         if (!res.ok) {
+          // Name the actual failure. The generic line hid every real cause
+          // (and drew an em dash, which this product never uses).
           setTeamShareNote(
-            data?.error
-              ? `Your team can't see these yet: ${data.error}`
-              : "Your team can't see these yet — sharing them failed."
+            `Your team can't see these yet: ${
+              data?.error || `sharing failed with a ${res.status} error. Try one more search; if it repeats, tell us.`
+            }`
           );
           return;
         }
@@ -4456,7 +4467,7 @@ function ScoutTool({
         // landed, instead of waiting for the next tab switch to notice.
         refreshTeamLens();
       } catch {
-        setTeamShareNote("Your team can't see these yet — sharing them failed.");
+        setTeamShareNote("Your team can't see these yet: the request didn't reach the server. Check your connection and run another search.");
       }
     })();
   }
@@ -6964,7 +6975,7 @@ function ScoutTool({
       <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
-          <main className="w-full">
+          <main className="flex w-full flex-1 flex-col">
 
             {/* ---------------- The stage (gated behind a completed profile) ----------------
                 Not a card of inputs. The whole band is the composer: choose the
@@ -6999,6 +7010,15 @@ function ScoutTool({
                       ]}
                     />
                   </div>
+                  {catId && (
+                    <button
+                      onClick={() => selectCategory("")}
+                      title="Search without a saved category; running it saves a new one"
+                      className="rounded-full border border-dashed border-white/30 px-3.5 py-2 text-sm font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
+                    >
+                      Custom search
+                    </button>
+                  )}
                   <button
                     onClick={() => setTab("projects")}
                     className="ml-auto text-[11px] font-semibold text-white/50 transition hover:text-white"
@@ -7045,29 +7065,6 @@ function ScoutTool({
                       </p>
                     </>
                   )}
-
-                  {/* Optional exemplars: links / names / companies "like this".
-                      Fed to the engine as type-and-quality exemplars, never as
-                      scope filters — an explicit "any industry" goal still wins.
-                      A quiet second line, not a second bordered field: it only
-                      opens if you reach for it. */}
-                  <details className="group mt-4" open={!!examples.trim()}>
-                    <summary className="flex cursor-pointer list-none items-center gap-1.5 text-xs font-semibold text-white/55 transition hover:text-white/80">
-                      <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="transition group-open:rotate-90" aria-hidden><path d="m9 18 6-6-6-6" /></svg>
-                      Examples of what you want
-                      <span className="font-normal text-white/35">optional</span>
-                    </summary>
-                    <textarea
-                      value={examples}
-                      onChange={(e) => setExamples(e.target.value)}
-                      rows={2}
-                      placeholder={'Links, names, or companies like the ones you want, e.g. https://example.com/their-page, Jane Doe at Sub Pop, "something like Daytrotter"'}
-                      className="stage-sub mt-2 w-full text-sm leading-relaxed"
-                    />
-                    <p className="text-[11px] leading-relaxed text-white/40">
-                      Examples of the type you want; they won&apos;t narrow the search.
-                    </p>
-                  </details>
 
                   {!aboutText && (
                     <button
@@ -7116,6 +7113,12 @@ function ScoutTool({
                   <span className="scout-fade-in inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M20 6 9 17l-5-5" /></svg>
                     Scout understands your inquiry
+                  </span>
+                )}
+                {discovering && (
+                  <span className="scout-fade-in text-xs text-white/55">
+                    You can leave this tab; Scout keeps working and new finds
+                    land in Finds.
                   </span>
                 )}
                 {stats && <span className="text-xs text-white/60">{stats}</span>}
@@ -7288,7 +7291,11 @@ function ScoutTool({
               </div>
             )}
 
-            <div className="px-5 pb-16 sm:px-8 xl:px-12">
+            {/* Everything below the composer sits on a deeper shade of the
+                same ground, so the tab reads as one brown room with the work
+                area recessed. Content here lives in light cards, which is what
+                keeps it legible. */}
+            <div className="scout-results flex-1 px-5 pb-16 sm:px-8 xl:px-12">
 
             {error &&
               (apiReason ? (
@@ -7331,11 +7338,8 @@ function ScoutTool({
             )}
 
             {discovering && (
-              <div ref={searchingRef} className="mt-8 flex items-start gap-3 scroll-mt-24">
-                <Avatar />
-                <div className="relative w-full max-w-md rounded-2xl rounded-tl-sm border border-warm-border bg-surface px-4 py-3.5 shadow-card">
-                  <Tail side="left" />
-                  <SearchProgress active={discovering} startedAt={discoverStartedAt} />
+              <div ref={searchingRef} className="mt-8 max-w-md scroll-mt-24 rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5">
+                  <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
                   {(() => {
                     // Only the human-readable steps, newest last. Debug lines are
                     // filtered out (see friendlyProgress) so this never reads like
@@ -7346,7 +7350,7 @@ function ScoutTool({
                       .slice(-5);
                     if (!steps.length) return null;
                     return (
-                      <div className="mt-3 border-t border-warm-border pt-3">
+                      <div className="mt-3 border-t border-white/15 pt-3">
                         <ul className="space-y-1.5">
                           {steps.map((m, i, arr) => {
                             const latest = i === arr.length - 1;
@@ -7354,11 +7358,11 @@ function ScoutTool({
                               <li
                                 key={m}
                                 className={`scout-fade-in flex items-start gap-2 text-xs leading-relaxed transition ${
-                                  latest ? "text-ink" : "text-body/45"
+                                  latest ? "text-white/90" : "text-white/40"
                                 }`}
                               >
                                 {latest ? (
-                                  <span className="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-coral" />
+                                  <span className="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-cream" />
                                 ) : (
                                   <svg
                                     className="mt-0.5 h-3.5 w-3.5 shrink-0 text-sage"
@@ -7380,7 +7384,6 @@ function ScoutTool({
                       </div>
                     );
                   })()}
-                </div>
               </div>
             )}
 
@@ -8329,9 +8332,12 @@ function searchStageFor(startedAt: number | null): number {
 function SearchProgress({
   active,
   startedAt,
+  dark = false,
 }: {
   active: boolean;
   startedAt: number | null;
+  // On the Scout stage's dark ground: light text, cream bar.
+  dark?: boolean;
 }) {
   // Transient display values, updated every animation frame directly on the
   // DOM so we don't rerender the component 60×/sec. React state was churning
@@ -8366,22 +8372,24 @@ function SearchProgress({
   return (
     <div>
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-ink">Scout is searching</span>
+        <span className={`text-sm font-semibold ${dark ? "text-white" : "text-ink"}`}>
+          Scout is searching
+        </span>
         <span
           ref={pctRef}
-          className="ml-auto text-xs font-bold tabular-nums text-body/70"
+          className={`ml-auto text-xs font-bold tabular-nums ${dark ? "text-white/70" : "text-body/70"}`}
         >
           {Math.round(searchPctFor(startedAt))}%
         </span>
       </div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-brown-tint">
+      <div className={`mt-2 h-2 w-full overflow-hidden rounded-full ${dark ? "bg-white/15" : "bg-brown-tint"}`}>
         <div
           ref={barRef}
-          className="h-full rounded-full bg-brown transition-[width] duration-300 ease-out"
+          className={`h-full rounded-full transition-[width] duration-300 ease-out ${dark ? "bg-cream" : "bg-brown"}`}
           style={{ width: `${searchPctFor(startedAt)}%` }}
         />
       </div>
-      <p className="mt-2 text-xs text-body">
+      <p className={`mt-2 text-xs ${dark ? "text-white/60" : "text-body"}`}>
         <span ref={stageRef}>{SEARCH_STAGES[searchStageFor(startedAt)]}</span>… Usually 30
         to 60 seconds.
       </p>
@@ -22160,6 +22168,42 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
   const [editing, setEditing] = useState<number | null>(null); // index, or -1 = new
   const [draft, setDraft] = useState("");
 
+  // A goal written as prose splits into one long "bullet" that is just the
+  // paragraph reprinted. Distill it into real points once, server-side, and
+  // save the result back so it round-trips. The prose stays until the summary
+  // arrives, and stays for good if the summary can't preserve everything.
+  const summarizedRef = useRef<Set<string>>(new Set());
+  const [distilling, setDistilling] = useState(false);
+  useEffect(() => {
+    const isProse = bullets.length === 1 && bullets[0].length > 90;
+    if (!isProse || editing !== null) return;
+    const key = goal.trim();
+    if (summarizedRef.current.has(key)) return;
+    summarizedRef.current.add(key);
+    let alive = true;
+    setDistilling(true);
+    (async () => {
+      try {
+        const r = await fetch("/api/goal-bullets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ goal: key }),
+        });
+        const j = await r.json().catch(() => ({}));
+        const got: string[] = Array.isArray(j?.bullets) ? j.bullets : [];
+        if (alive && got.length >= 2) onGoal(got.join("; "));
+      } catch {
+        /* the prose is still a valid goal */
+      } finally {
+        if (alive) setDistilling(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [goal]);
+
   const commit = () => {
     const t = draft.trim();
     const next = [...bullets];
@@ -22176,8 +22220,13 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
 
   return (
     <div>
-      <div className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
         This search finds
+        {distilling && (
+          <span className="scout-fade-in font-normal normal-case tracking-normal text-white/40">
+            tidying into points…
+          </span>
+        )}
       </div>
       <div className="mt-3 grid gap-x-8 gap-y-2.5 sm:grid-cols-2">
         {bullets.map((b, i) =>

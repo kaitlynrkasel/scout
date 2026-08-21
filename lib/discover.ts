@@ -2337,6 +2337,44 @@ export async function discover(
     }
   }
 
+  // One directory must not become the whole result list. A single page that
+  // names twenty firms ("Directory of ERISA Boutique Law Firms") can out-vote
+  // every other source, and the user sees one niche where they asked for a
+  // spread; measured live, a wide-variety search came back as nine law firms,
+  // eight of them from one lawcrossing.com listing. Cap how many finds any one
+  // SOURCE host contributes, strictest when the goal explicitly asks for
+  // variety, and keep the highest-fit ones from each host.
+  {
+    const perHostCap = goalWantsAnyIndustry(goal) ? 2 : 3;
+    const hostOfSrc = (o: Opportunity): string => {
+      const src = o.sources?.[0]?.url || o.url || "";
+      const m = /^https?:\/\/([^\/?#]+)/i.exec(src);
+      return m ? m[1].replace(/^www\./, "").toLowerCase() : "";
+    };
+    const byHost = new Map<string, Opportunity[]>();
+    for (const o of kept) {
+      const h = hostOfSrc(o);
+      (byHost.get(h) || byHost.set(h, []).get(h)!).push(o);
+    }
+    const over = [...byHost.entries()].filter(([h, list]) => h && list.length > perHostCap);
+    if (over.length) {
+      const drop = new Set<Opportunity>();
+      for (const [, list] of over) {
+        const ranked = [...list].sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0));
+        for (const o of ranked.slice(perHostCap)) drop.add(o);
+      }
+      kept = kept.filter((o) => {
+        if (!drop.has(o)) return true;
+        logSkip(
+          o.name,
+          o.url,
+          "one source page already contributed enough finds; keeping the list varied"
+        );
+        return false;
+      });
+    }
+  }
+
   // Fallback disclosure: on a job/internship hunt, if actual open postings came
   // back thin, say so plainly instead of passing companies off as live openings.
   let notice: string | undefined;
