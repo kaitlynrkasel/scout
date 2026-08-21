@@ -7979,7 +7979,14 @@ function ScoutTool({
           onAdd={addProject}
           onRename={renameProject}
           onRemove={removeProject}
-          onSetContext={setProjectContext}
+          onSetContext={(id, context) => {
+            setProjectContext(id, context);
+            // Describing the project is the strongest signal of what it is
+            // for; retune its untouched seed categories to match, same as the
+            // old Scout-tab editor did. Only pristine seeds are replaced.
+            const proj = projects.find((x) => x.id === id);
+            void retuneProject(id, proj?.name || "", context);
+          }}
           onAddCategory={addCategoryToProject}
           onRenameCategory={renameCategory}
           onRemoveCategory={removeCategory}
