@@ -15953,7 +15953,7 @@ ${body}
               Matches deliberately do NOT appear here: the dashboard is for
               impactful numbers and what Scout is learning about you; the
               pipeline itself lives on Finds. */}
-          <div className="scout-stage mt-6 grid grid-cols-2 gap-px overflow-hidden rounded-3xl sm:grid-cols-3 xl:grid-cols-6">
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
             {(
               [
                 [String(finds.length), "Finds", newThisWeek > 0 ? `+${newThisWeek} this week` : ""],
@@ -15970,13 +15970,16 @@ ${body}
                 ],
               ] as const
             ).map(([v, label, sub], i) => (
-              <div key={label} className="relative bg-white/5 p-6">
-                <div className="font-display text-[38px] font-bold leading-none tabular-nums text-cream">
+              <div
+                key={label}
+                className="relative rounded-2xl border border-white/60 bg-white/40 p-6 backdrop-blur-md"
+              >
+                <div className="font-display text-[38px] font-bold leading-none tabular-nums text-ink">
                   {v}
                 </div>
-                <div className="mt-2 text-[12px] font-medium text-white/60">{label}</div>
+                <div className="mt-2 text-[12px] font-medium text-body/70">{label}</div>
                 {sub ? (
-                  <div className="mt-0.5 text-[11px] font-semibold text-white/85">{sub}</div>
+                  <div className="mt-0.5 text-[11px] font-semibold text-body">{sub}</div>
                 ) : null}
                 {/* a thread of the rainbow, one strand per tile */}
                 <span
