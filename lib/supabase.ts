@@ -232,13 +232,29 @@ export function forgetAccount(email: string) {
 export async function switchAccount(email: string): Promise<string | null> {
   const acc = listSavedAccounts().find((a) => a.email === email);
   if (!acc || !supabase) return "No saved session for that account.";
-  const { error } = await supabase.auth.setSession({
+  const { data, error } = await supabase.auth.setSession({
     access_token: acc.at,
     refresh_token: acc.rt,
   });
   if (error) {
-    forgetAccount(email); // stale — make them sign in once to re-link
+    forgetAccount(email); // stale, make them sign in once to re-link
     return "That saved session expired. Sign in once and it'll be one click from then on.";
+  }
+  // Supabase ROTATES the refresh token on use: the token we just spent is now
+  // dead, and the replacement lives in the returned session. Persist it here,
+  // synchronously, because the caller reloads the page immediately and the
+  // async TOKEN_REFRESHED event never got a chance to run. Without this, every
+  // switch killed the saved session it used; the second switch to the same
+  // account then failed and the account was silently forgotten, which is why
+  // the switcher seemed to tap out after a few accounts.
+  const fresh = data?.session;
+  if (fresh?.refresh_token) {
+    rememberAccount(
+      email,
+      fresh.access_token || "",
+      fresh.refresh_token,
+      (fresh.user?.user_metadata as any)?.full_name || acc.name || ""
+    );
   }
   return null;
 }
