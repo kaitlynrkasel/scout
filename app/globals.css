@@ -887,6 +887,17 @@ select.scout-kind-picker option {
   .scout-reveal { animation: none; }
 }
 
+/* A new card landing on the site deck: slides in from the right and settles,
+   the story-stack flip. */
+@keyframes deck-in {
+  from { transform: translateX(55%) rotate(4deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.deck-in { animation: deck-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) {
+  .deck-in { animation: none; }
+}
+
 .scout-rise {
   animation: scout-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
 }

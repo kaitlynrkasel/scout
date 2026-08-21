@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -122,6 +122,7 @@ function friendlyProgress(m: string): string {
     .replace(/\s+/g, " ")
     .trim();
   if (!s) return "";
+  if (/^@site\b/i.test(s)) return ""; // feeds the site deck, not the step list
   if (/^skipped\b/i.test(s)) return ""; // per-candidate rejections are noise
   if (/\b(target_type|is_relevant|fit_score|is_listing|components?|undefined|null)\b/i.test(s))
     return "";
@@ -7430,7 +7431,8 @@ function ScoutTool({
             )}
 
             {discovering && (
-              <div ref={searchingRef} className="mt-8 max-w-md scroll-mt-24 rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5">
+              <div ref={searchingRef} className="mt-8 flex scroll-mt-24 items-start gap-5">
+              <div className="w-full max-w-md rounded-2xl border border-white/15 bg-white/5 px-4 py-3.5">
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
                   {(() => {
                     // Only the human-readable steps, newest last. Debug lines are
@@ -7476,6 +7478,8 @@ function ScoutTool({
                       </div>
                     );
                   })()}
+              </div>
+              <SiteDeck log={searchLog} />
               </div>
             )}
 
@@ -8420,6 +8424,78 @@ function searchStageFor(startedAt: number | null): number {
   if (!startedAt) return 0;
   const t = Date.now() - startedAt;
   return Math.min(SEARCH_STAGES.length - 1, Math.floor(t / 7000));
+}
+
+/* ---------------- Site deck ----------------
+ * What Scout is reading, flipped through like a stack of story cards: each
+ * accepted candidate page streams in as an "@site host|title" progress line,
+ * and the deck advances through them, new card sliding in over the stack.
+ * Pure presentation; the step list stays the textual record. */
+function SiteDeck({ log }: { log: string[] }) {
+  const sites = useMemo(() => {
+    const seen = new Set<string>();
+    const out: { host: string; title: string }[] = [];
+    for (const l of log) {
+      const m = /^@site ([^|]*)\|(.*)$/.exec(l);
+      if (!m) continue;
+      const host = m[1].replace(/^www\./, "").trim();
+      if (!host || seen.has(host)) continue;
+      seen.add(host);
+      out.push({ host, title: m[2].trim() });
+    }
+    return out;
+  }, [log]);
+
+  // Advance on a heartbeat so the deck keeps flipping even while a slow page
+  // is being read; new arrivals extend the loop.
+  const [idx, setIdx] = useState(0);
+  useEffect(() => {
+    if (sites.length < 2) return;
+    const t = setInterval(() => setIdx((i) => i + 1), 1500);
+    return () => clearInterval(t);
+  }, [sites.length]);
+  if (!sites.length) return null;
+
+  const at = (k: number) => sites[(idx + k) % sites.length];
+  const card = (site: { host: string; title: string }, depth: number) => (
+    <div
+      key={`${site.host}-${depth === 0 ? idx : "b" + depth}`}
+      className={`absolute inset-x-0 rounded-2xl border border-white/15 bg-white/[0.07] p-3.5 backdrop-blur-sm ${
+        depth === 0 ? "deck-in z-30" : depth === 1 ? "z-20" : "z-10"
+      }`}
+      style={{
+        top: depth * 10,
+        transform: `scale(${1 - depth * 0.05})`,
+        opacity: depth === 0 ? 1 : depth === 1 ? 0.55 : 0.3,
+      }}
+    >
+      <div className="flex items-center gap-2.5">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://t1.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=64&url=${encodeURIComponent(`https://${site.host}`)}`}
+          alt=""
+          width={20}
+          height={20}
+          className="h-5 w-5 shrink-0 rounded"
+        />
+        <span className="truncate text-xs font-bold text-white">{site.host}</span>
+      </div>
+      <p className="mt-1.5 line-clamp-2 text-[11px] leading-snug text-white/60">{site.title}</p>
+    </div>
+  );
+
+  return (
+    <div className="hidden w-64 shrink-0 md:block" aria-hidden>
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
+        Reading {sites.length} site{sites.length === 1 ? "" : "s"}
+      </div>
+      <div className="relative h-24">
+        {sites.length > 2 && card(at(2), 2)}
+        {sites.length > 1 && card(at(1), 1)}
+        {card(at(0), 0)}
+      </div>
+    </div>
+  );
 }
 
 function SearchProgress({

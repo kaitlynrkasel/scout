@@ -1664,6 +1664,9 @@ export async function discover(
           continue;
         }
         seenLinks.add(k); // global dedupe as we collect
+        // Machine-readable line for the client's "flipping through sites"
+        // deck; friendlyProgress hides it from the step list.
+        emit(`@site ${(r.url.match(/^https?:\/\/([^\/?#]+)/i) || [])[1] || ""}|${(r.title || "").slice(0, 80)}`);
         bucket.push(r);
       }
       buckets.push(bucket);
