@@ -15369,6 +15369,21 @@ function StatBand({ items }: { items: { value: string; label: string }[] }) {
   );
 }
 
+// Light copy-editing for user-typed text echoed back in Scout's own voice:
+// sentence case, a capital I, and the apostrophes people skip when typing
+// fast. Never touches meaning.
+function tidyTyped(raw: string): string {
+  let t = String(raw || "").trim().replace(/\s+/g, " ");
+  if (!t) return t;
+  t = t
+    .replace(/\b(dont|cant|wont|isnt|arent|didnt|doesnt|wasnt|couldnt|shouldnt|wouldnt|havent|hasnt)\b/gi,
+      (m) => m.slice(0, -1) + "'" + m.slice(-1))
+    .replace(/\bim\b/gi, "I'm")
+    .replace(/\bive\b/gi, "I've")
+    .replace(/\bi\b/g, "I");
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 /* ---------------- Preference / deny-rate analytics from real finds ---------------- */
 function learnedFromFinds(finds: Find[]) {
   const decided = finds.filter((f) => f.status !== "new");
@@ -15589,7 +15604,7 @@ function recentInsights(
   const topReason = learned.denyReasons[0];
   if (topReason && topReason[1] >= 2) {
     out.push({
-      text: `Most often you pass because: ${topReason[0].toLowerCase()}. Scout steers away from those.`,
+      text: `Most often you pass because: ${tidyTyped(topReason[0])}. Scout steers away from those.`,
       basis: `${topReason[1]} times`,
     });
   }
@@ -17581,6 +17596,10 @@ function OutreachAdvice({
   // A small "turn this into a standing rule" control shown on each coachable
   // tip, plus a "not helpful" button next to it. Dismissed tips get hidden
   // right after via the isDismissed check on the parent renderer.
+  // Before any draft exists the button says what it really does — sets a
+  // standing rule for FUTURE drafts — so it can't contradict the "draft some
+  // first" notice above it.
+  const anyDrafts = finds.some((f) => f.draft && (f.draft.body || "").trim());
   const ApplyTip = ({ tip }: { tip: string }) =>
     isApplied(tip) ? (
       <span className="shrink-0 rounded-lg bg-sage/15 px-2.5 py-1 text-[11px] font-semibold text-sage">
@@ -17593,7 +17612,7 @@ function OutreachAdvice({
           className="rounded-lg border border-sage/50 px-2.5 py-1 text-[11px] font-semibold text-sage transition hover:bg-sage/10"
           title="Scout will follow this in every draft it writes for you"
         >
-          Apply to my drafts
+          {anyDrafts ? "Apply to my drafts" : "Use in future drafts"}
         </button>
         <button
           onClick={() => dismissTip(tip)}
