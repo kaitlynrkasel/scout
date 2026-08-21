@@ -1588,7 +1588,18 @@ function ScoutTool({
   // only, so the white stage text always holds.
   useEffect(() => {
     const deeps = ["#19455e", "#1f2f6e", "#0e5f5f", "#8e1d64", "#5b4aa8", "#28527a"];
-    const i = Math.floor(Math.random() * deeps.length);
+    // Guaranteed different from the LAST visit, not merely random: with six
+    // options a plain draw repeats one time in six, which reads as "it didn't
+    // change". Remember the previous deal and exclude it.
+    let last = -1;
+    try {
+      last = deeps.indexOf(localStorage.getItem("scout_stage_last") || "");
+    } catch {}
+    const pool = deeps.map((_, k) => k).filter((k) => k !== last);
+    const i = pool[Math.floor(Math.random() * pool.length)];
+    try {
+      localStorage.setItem("scout_stage_last", deeps[i]);
+    } catch {}
     let j = Math.floor(Math.random() * (deeps.length - 1));
     if (j >= i) j++;
     const shade = (hex: string) => {
