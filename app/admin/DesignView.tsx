@@ -933,8 +933,9 @@ export default function DesignView({
                 src={colourPath}
                 title="Scout in this palette"
                 onLoad={paintFrameSettled}
-                className="h-[560px] border-0 bg-cream transition-[width] duration-200"
+                className="border-0 bg-cream transition-[width] duration-200"
                 style={{
+                  height: frameWidth === "phone" ? 780 : 560,
                   width: frameWidth === "phone" ? 390 : "100%",
                   maxWidth: "100%",
                   borderRadius: frameWidth === "phone" ? 18 : 8,

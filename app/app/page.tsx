@@ -7267,7 +7267,7 @@ function ScoutTool({
             {profileComplete || guest ? (
             <section
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow ? "" : "flex min-h-[calc(100vh-130px)]"
+                stageHasWorkBelow ? "" : "flex flex-1"
               }`}
             >
               {/* Two shapes for one composer. Alone on the screen it sits as a
