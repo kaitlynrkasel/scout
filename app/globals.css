@@ -970,14 +970,19 @@ select.scout-kind-picker option {
   position: relative;
   isolation: isolate;
   border-radius: 24px;
-  /* Aura orbs: a soft core, a hotter ring, a warm halo — then plain paper. */
+  /* Aura orbs, scattered like prints on a wall: each one compact, its own
+     hue, with real paper between them. Fixed attachment sizes them to the
+     viewport, not the page, so a tall dashboard doesn't stretch one orb into
+     an all-over wash, and the field holds still while the page scrolls. */
   background:
-    radial-gradient(46% 36% at 16% 22%, rgb(224 105 158 / 0.34) 0%, rgb(240 79 82 / 0.4) 38%, rgb(247 137 31 / 0.3) 62%, transparent 78%),
-    radial-gradient(52% 40% at 68% 54%, rgb(240 79 82 / 0.26) 0%, rgb(247 137 31 / 0.34) 45%, rgb(255 215 71 / 0.22) 66%, transparent 80%),
-    radial-gradient(44% 32% at 84% 6%, rgb(85 126 192 / 0.3), transparent 70%),
-    radial-gradient(50% 38% at 6% 96%, rgb(196 213 68 / 0.3), transparent 74%),
-    radial-gradient(40% 30% at 94% 92%, rgb(18 186 170 / 0.18), transparent 72%),
-    #fdf8ec;
+    radial-gradient(480px 400px at 12% 10%, rgb(224 105 158 / 0.5) 0%, rgb(240 79 82 / 0.44) 40%, rgb(247 137 31 / 0.3) 65%, transparent 78%),
+    radial-gradient(420px 360px at 88% 16%, rgb(55 126 192 / 0.42) 0%, rgb(84 96 172 / 0.3) 55%, transparent 76%),
+    radial-gradient(360px 320px at 74% 58%, rgb(18 186 170 / 0.34) 0%, transparent 72%),
+    radial-gradient(440px 380px at 8% 78%, rgb(196 213 68 / 0.4) 0%, rgb(18 186 170 / 0.2) 60%, transparent 78%),
+    radial-gradient(400px 340px at 92% 90%, rgb(122 90 168 / 0.36) 0%, rgb(224 105 158 / 0.22) 58%, transparent 76%),
+    radial-gradient(340px 300px at 42% 34%, rgb(247 137 31 / 0.26) 0%, rgb(255 215 71 / 0.18) 55%, transparent 74%),
+    #fdf9f0;
+  background-attachment: fixed;
 }
 /* Film grain over the whole surface, content included — that is the look.
    Subtle, non-interactive, and cheap (one tiled SVG noise texture). */
@@ -990,7 +995,7 @@ select.scout-kind-picker option {
   border-radius: inherit;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 240px 240px;
-  opacity: 0.16;
+  opacity: 0.3;
   mix-blend-mode: overlay;
 }
 .dark .dash-stage {
