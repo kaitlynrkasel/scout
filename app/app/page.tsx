@@ -15891,66 +15891,72 @@ ${body}
         </section>
       )}
 
-      {/* -------- Your projects -------- */}
+
+      {/* -------- Activity graph: the week-by-week shape of the work -------- */}
       <section className="mt-10">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold tracking-tight text-ink">Your projects</h2>
-          <button
-            onClick={goOutreach}
-            className="text-xs font-bold text-accent transition hover:underline"
-          >
-            Go to Outreach →
-          </button>
+        <h2 className="text-lg font-semibold tracking-tight text-ink">Your activity</h2>
+        <div className="mt-4 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+          <ActivityChart data={weekly} />
+          <p className="mt-2 text-[11px] text-body/55">
+            Finds saved (neutral) and messages sent (accent), by week.
+          </p>
         </div>
-        <Reveal className="mt-4 grid gap-3 sm:grid-cols-2">
-          {projects.length === 0 ? (
-            <p className="text-sm text-muted">No projects yet.</p>
-          ) : (
-            projects.slice(0, 6).map((p) => {
-              const mine = finds.filter((f) => f.projectId === p.id);
-              const nw = mine.filter((f) => f.status === "new").length;
-              const sent = mine.filter((f) => f.status === "sent").length;
-              // Prefer the per-project context the user typed ("Anna Belt is a
-              // Nashville folk-rock artist…") over the shared profile use
-              // case, which is the same for every project and reads generic.
-              const description = (p.context || "").trim() || p.useCase;
-              return (
-                <button
-                  key={p.id}
-                  onClick={() => onEditProject(p.id)}
-                  title="Open in Outreach and edit"
-                  className="idx-flap relative flex items-start gap-3 rounded-xl border border-warm-border bg-surface p-4 paper-card text-left transition hover:border-brown/40 hover:bg-warm-bg/60"
-                >
-                  <span
-                    className="mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl text-sm font-bold text-white"
-                    style={{
-                      background:
-                        FIND_AVATAR_COLORS[
-                          Math.abs(
-                            p.name.split("").reduce((a, c) => a + c.charCodeAt(0), 0)
-                          ) % FIND_AVATAR_COLORS.length
-                        ],
-                    }}
-                  >
-                    {p.name.trim().slice(0, 1).toUpperCase() || "P"}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-ink">{p.name}</div>
-                    <p className="mt-0.5 line-clamp-2 text-xs leading-snug text-muted">
-                      {description}
-                    </p>
-                    <div className="mt-1 text-[11px] font-semibold text-body/60 tabular-nums">
-                      {nw} new · {sent} sent
-                    </div>
-                  </div>
-                  <span aria-hidden className="mt-0.5 text-body/40">
-                    <PencilIcon />
-                  </span>
-                </button>
-              );
-            })
-          )}
-        </Reveal>
+      </section>
+
+      {/* -------- What makes your Scout special --------
+          A comparison that always lands on something genuinely positive: pick
+          the strongest true angle from real numbers rather than shaming with
+          averages. Every user has one; a brand-new account's angle is freshness
+          of taste data, a picky user's is precision, a prolific one's volume. */}
+      <section className="mt-10">
+        <h2 className="text-lg font-semibold tracking-tight text-ink">What makes your Scout special</h2>
+        <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 p-5">
+          {(() => {
+            const denyRate = learned.decided ? learned.denyRate : null;
+            const avgDeny = community?.avgDenyRate ?? null;
+            const avgFinds = community?.avgFinds ?? null;
+            const avgDrafts = community?.avgDrafts ?? null;
+            const angles: { ok: boolean; text: string }[] = [
+              {
+                ok: denyRate != null && avgDeny != null && denyRate > avgDeny + 0.08,
+                text: `You are pickier than most: you pass on ${Math.round((denyRate || 0) * 100)}% of finds against a community ${Math.round((avgDeny || 0) * 100)}%, so your Scout learns a sharper taste profile than average and every kept find means more.`,
+              },
+              {
+                ok: denyRate != null && avgDeny != null && denyRate < avgDeny - 0.08,
+                text: `Your searches land: you keep ${100 - Math.round((denyRate || 0) * 100)}% of what Scout brings back, well above the community's ${100 - Math.round((avgDeny || 0) * 100)}%, which means your project descriptions are doing real work.`,
+              },
+              {
+                ok: avgFinds != null && finds.length > (avgFinds || 0) * 1.3,
+                text: `Your pipeline is deeper than most: ${finds.length} finds against a community average of ${Math.round(avgFinds || 0)}, so your Scout has more real signal to learn your taste from than almost anyone's.`,
+              },
+              {
+                ok: avgDrafts != null && activity.drafts > (avgDrafts || 0) * 1.3,
+                text: `You draft more than most: ${activity.drafts} messages against a community average of ${Math.round(avgDrafts || 0)}. Voice learning compounds with every edit, so your drafts are getting personal faster than average.`,
+              },
+              {
+                ok: (learned.replyRate ?? 0) > 0,
+                text: `You have real replies coming back, the rarest signal there is. Scout weights reply patterns heaviest of all, so your results are tuned by what actually worked, not just what looked right.`,
+              },
+              {
+                ok: learned.decided >= 5,
+                text: `You have taught your Scout ${learned.decided} real decisions. That taste data is yours alone, and it is why your results diverge, in a good way, from what anyone else would get for the same search.`,
+              },
+              {
+                ok: true,
+                text: `Your Scout is fresh: no inherited habits, no stale preferences. The next few keeps and passes will shape it faster than at any later point, so early decisions count double.`,
+              },
+            ];
+            const angle = angles.find((a) => a.ok)!;
+            return (
+              <div className="flex items-start gap-3">
+                <span aria-hidden className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-full bg-sage/20 text-sage-deep">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v4M12 18v4M4.9 4.9l2.8 2.8M16.3 16.3l2.8 2.8M2 12h4M18 12h4M4.9 19.1l2.8-2.8M16.3 7.7l2.8-2.8" /></svg>
+                </span>
+                <p className="text-sm leading-relaxed text-ink">{angle.text}</p>
+              </div>
+            );
+          })()}
+        </div>
       </section>
 
       {/* -------- You vs the community (real aggregate averages) -------- */}
