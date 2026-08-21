@@ -270,7 +270,7 @@ const DEFAULT_DATA: Data = {
 
 const STORE_KEY = "scout_admin_page_design";
 
-export default function PageEditor() {
+export default function PageEditor({ fill = false }: { fill?: boolean }) {
   const initial = useMemo<Data>(() => {
     try {
       const raw = localStorage.getItem(STORE_KEY);
@@ -281,7 +281,10 @@ export default function PageEditor() {
   const [saved, setSaved] = useState(false);
 
   return (
-    <div className="rounded-2xl border border-warm-border bg-surface p-2" style={{ height: "78vh" }}>
+    <div
+      className={fill ? "h-full bg-surface" : "rounded-2xl border border-warm-border bg-surface p-2"}
+      style={fill ? undefined : { height: "78vh" }}
+    >
       <Puck
         config={config}
         data={initial}

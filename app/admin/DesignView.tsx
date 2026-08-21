@@ -443,20 +443,27 @@ export default function DesignView({
       </div>
 
       {mode === "editor" && (
-        <section>
-          <h2 className="text-lg font-bold text-ink">Page editor</h2>
-          <p className="mt-1 max-w-[70ch] text-sm leading-relaxed text-body/70">
-            The site as draggable blocks: pull components from the left rail
-            onto the page, drag them into any order, drop blocks inside a
-            colored ground, and edit every color, word and size in the panel on
-            the right. Publish saves the arrangement on this device and copies
-            it as JSON to hand to engineering; the live site is never touched
-            from here.
-          </p>
-          <div className="mt-4">
-            <PageEditor />
+        // Full screen: an editor in a centered column wastes the one thing an
+        // editor needs, room. Fixed overlay over the whole viewport; Close
+        // drops back to the tokens view.
+        <div className="fixed inset-0 z-[80] flex flex-col bg-warm-bg">
+          <div className="flex items-center gap-3 border-b border-warm-border bg-surface px-4 py-2">
+            <span className="text-sm font-extrabold text-ink">Page editor</span>
+            <span className="hidden text-xs text-body/55 sm:block">
+              Drag blocks from the rail, edit every color and word on the right.
+              Publish saves here and copies JSON; the live site is not touched.
+            </span>
+            <button
+              onClick={() => setMode("playground")}
+              className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Close editor
+            </button>
           </div>
-        </section>
+          <div className="min-h-0 flex-1">
+            <PageEditor fill />
+          </div>
+        </div>
       )}
 
       {mode === "playground" && (
