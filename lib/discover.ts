@@ -37,7 +37,7 @@ export const TUNABLE_LOCATION_ALIGNMENT_CLAUSE =
 // be paid"), each find should ANSWER them, so the UI can show remote/in-person
 // etc. as fields instead of burying it in prose.
 export const ELIGIBILITY_AND_CRITERIA_CLAUSE =
-  `ELIGIBILITY GATE: if the source states requirements for participating (must be a student or alumnus of a SPECIFIC school, members only, licensed professionals only, residents of a place, an affiliation) that ABOUT THE USER clearly does not satisfy, set is_relevant false, whatever else fits; an opportunity the user cannot be accepted into is not an opportunity. When eligibility is stated and the user MEETS it, say so in why_it_fits. CRITERIA ANSWERS: also return "criteria": an array of up to 5 {"ask","answer"} pairs, one for each explicit requirement or preference in the GOAL (remote or in person, paid, timeframe, size, location), where ask is the user's criterion in 2-4 words and answer is what THIS source says about it in 2-6 words ("Remote?" -> "In person, Vancouver"; "Paid?" -> "Unpaid" or "Not stated"). Answer from the source only, "Not stated" when it is silent, never guess.`;
+  `ELIGIBILITY GATE: if the source states requirements for participating (must be a student or alumnus of a SPECIFIC school, members only, licensed professionals only, residents of a place, an affiliation) that ABOUT THE USER clearly does not satisfy, set is_relevant false, whatever else fits; an opportunity the user cannot be accepted into is not an opportunity. When eligibility is stated and the user MEETS it, say so in why_it_fits. CRITERIA ANSWERS: also return "criteria": an array of up to 5 {"ask","answer"} pairs, one for each explicit requirement or preference in the GOAL (remote or in person, paid, timeframe, size, location), where ask is the user's criterion in 2-4 words and answer is what THIS source says about it in 2-6 words ("Remote?" -> "In person, Vancouver"; "Paid?" -> "Unpaid" or "Not stated"). Answer from the source only, "Not stated" when it is silent, never guess. When the source states WHEN applications open, close, or recur, always include that as one of the pairs ("Applications?" -> "Open each January").`;
 
 export const TRANSIENT_PRESENCE_CLAUSE =
   ` TRANSIENT / EVENT PRESENCE OVERRIDE: this applies ONLY when the GOAL is about a person being physically present at a place for an event, appearance, tour stop, festival, conference, residency, or visit during a time window (e.g. "artists who will be in Nashville in March", "founders coming to Austin for SXSW", "a speaker in town the week of the 12th"). For such goals, location compatibility is about WHERE THE PERSON WILL BE during that window, NOT where they are based or headquartered — and the residence-based LOCATION ALIGNMENT ceiling above does NOT apply. A person based anywhere who has a confirmed appearance, booked show, tour date, festival slot, or scheduled visit at the goal's location within the window is a STRONG location match: do not penalize them for living elsewhere. Conversely, a local resident who is clearly touring/away during the window is a WEAKER match. Capture the specific appearance/tour date in why_it_fits when the source states it, and raise fit_score when that date falls inside the requested window; lower it (or set is_relevant false) only when the source explicitly shows the person will NOT be there in the window. A candidate is LOCATION-ELIGIBLE for such a goal if EITHER of these is true, and you must accept both paths (do not require a printed future date for everyone): (A) the source shows a confirmed appearance, booked show, tour date, festival slot, residency, or scheduled visit at the goal's location within the window — this is the STRONGEST match, rank it highest and capture the date in why_it_fits; OR (B) the person is openly BASED IN / headquartered in / local to the goal's location (their bio, profile, or the source says they live or are based there) — a local is present by default, so being based there IS sufficient proof they can be in town, treat it as a STRONG match even with no specific date. Reject (set is_relevant false) only when the person is NEITHER confirmed-present in the window NOR based at the location — e.g. an out-of-town person with no booked appearance there — because someone who won't be in town cannot be used. Do NOT reject a locally-based person merely for lacking a printed date; their home base is the proof. Rank confirmed-in-window above merely-local. This eligibility rule SUPERSEDES any required/hard_constraint that would demand a specific printed date and reject locals along with everyone else. If the goal is NOT about transient presence, ignore this override entirely.`;
@@ -74,8 +74,21 @@ function rankWeights(): typeof DEFAULT_RANK_WEIGHTS {
 
 // What the user has taught Scout by denying / keeping past finds. Fed into query
 // planning and extraction so the search learns their taste over time.
+// Deny reasons that are ONLY about timing (nothing open right now, deadline
+// passed) rather than fit. These targets stay watchable: re-check them, and
+// the moment they have a live opening they're a top recommendation again.
+export function isTimingDenyReason(r: string): boolean {
+  return /\b(no open|not (currently |actively )?hiring|nothing (open|posted|available)|no (positions?|openings?|roles?|listings?|jobs?)|positions? (are )?(closed|filled)|applications? closed|deadline (passed|closed)|expired|closed for|not accepting|too (early|late)|wrong (semester|year|season|window)|next (year|semester|cycle|fall|spring|summer|winter)|check back|reopens?)\b/i.test(
+    String(r || "")
+  );
+}
+
 export interface DiscoverFeedback {
   avoid?: { name: string; reason: string }[]; // denied finds + why
+  // Set per-run by discover(): roughly one run in three is a "check-in" run
+  // where timing-denied orgs may resurface even without a confirmed opening,
+  // so they get sprinkled back in occasionally instead of vanishing.
+  reopenCheckIn?: boolean;
   favor?: { name: string; why: string }[]; // kept / drafted finds + why they fit
   // Phase 4 — outcome learning. Compact, plain-English facts about what actually
   // produced results for THIS user (replies vs silence vs denies), computed from
@@ -88,7 +101,9 @@ export interface DiscoverFeedback {
 
 // Compact "learned from your feedback" block for the Claude prompts.
 function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
-  const avoid = (feedback?.avoid || []).filter((a) => a && (a.name || a.reason)).slice(0, 12);
+  const avoidAll = (feedback?.avoid || []).filter((a) => a && (a.name || a.reason));
+  const reopen = avoidAll.filter((a) => isTimingDenyReason(a.reason)).slice(0, 8);
+  const avoid = avoidAll.filter((a) => !isTimingDenyReason(a.reason)).slice(0, 12);
   const favor = (feedback?.favor || []).filter((f) => f && f.name).slice(0, 10);
   const outcomes = (feedback?.outcomes || [])
     .map((s) => String(s || "").trim())
@@ -122,6 +137,18 @@ function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
     s +=
       "\n\nREJECTED BEFORE, the user passed on these; treat the reasons as firm rules and steer away from similar results:\n" +
       avoid.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n");
+  }
+  if (reopen.length) {
+    s +=
+      "\n\nPASSED ONLY FOR TIMING, not fit. The user liked these but nothing was open at the time; they are on a " +
+      "reopen watch, NOT a blocklist:\n" +
+      reopen.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n") +
+      "\nIf a source shows a LIVE opening at one of them now, that is a TOP result: high fit_score, and say in " +
+      "why_it_fits that positions have opened since the user last checked. " +
+      (feedback?.reopenCheckIn
+        ? "This run is a periodic check-in: even without a confirmed opening, one of these may return as a modest-fit " +
+          "reminder, with why_it_fits noting it is a re-check of a place the user liked."
+        : "Without a live opening, leave them out this run.");
   }
   return s;
 }
@@ -892,6 +919,14 @@ const PLATFORM_SWEEPS: {
     unless: /\b(music|musician|band|artist|fashion|restaurant|realtor|real estate)\b/i,
   },
   {
+    // Mostly login-walled, so yield is thin; swept anyway at the user's
+    // request because employer/job pages that ARE public are high-signal.
+    key: "handshake",
+    label: "public Handshake employer and job pages",
+    domains: ["joinhandshake.com"],
+    when: /\b(intern|internships?|jobs?|entry[- ]?level|new ?grad|students?|campus|university|college|hiring|apply|co-?ops?)\b/i,
+  },
+  {
     key: "academic",
     label: "university and program pages",
     domains: ["edu"],
@@ -1449,7 +1484,7 @@ async function extract(
     (personalOverride ? `\n\n${personalOverride}` : "");
   const fields =
     `Fields: is_relevant (bool), target_type (one of "person", "organization", "other", use "other" for any article/guide/advice/listicle), ` +
-    `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), ` +
+    `is_listing (bool: true ONLY when this result is a specific open job/internship posting the user can apply to, with the application/posting link in url; false for a company, a person, or anything else), posting_window (string, ONLY when the source states when this org opens or posts roles, e.g. "Opens each January", "Recruits every fall", "Apply by March 1"; omit otherwise), ` +
     `name (WHO this find is — when the target is a specific named individual, this MUST be that PERSON'S name, e.g. "Stacy Blythe" or "Stacy Blythe, EVP of Promotion", NEVER the company, page headline, or article title like "Big Loud Records, Executive Promotions & Hires". If a real person is named anywhere as the target or the point of contact, title the find by them and put their employer in outlet. Use a company/organization name here ONLY when there is genuinely no specific person), outlet (org/company/publication), ` +
     `channel (how to reach them: one of Email, LinkedIn, Website Form, Company Portal, Phone, Unknown — this is a LABEL for the route, and on its own it is not a way to reach anyone: a result whose only contact information is a channel of "Website Form" or "Company Portal" is DROPPED before the user ever sees it, so spend the effort finding a real address, number, or handle in the source and put it in the fields below), ` +
     `contact_email, contact_name (a named person if shown), contact_role, contact_handle (a LinkedIn URL or @handle), ` +
@@ -1700,7 +1735,10 @@ export async function discover(
             dated.length
               ? `Some past matches were dated postings (a season or year in the title); recurring programs repeat every cycle, so search for the ${year} and ${year + 1} editions by name, not the old year. `
               : ""
-          }Never let these crowd out fresh discovery; the rest of the queries explore as usual.`;
+          }CADENCE EDGE: entries noting a hiring cadence or months when live postings were seen tell you WHEN each org ` +
+          `posts. It is ${new Date().toLocaleString("en-US", { month: "long" })} now; if an org's window is open or ` +
+          `about to open, write a query straight at its live postings, being first to catch a fresh posting is the ` +
+          `whole edge. Never let these crowd out fresh discovery; the rest of the queries explore as usual.`;
       }
     } catch {
       /* compass is optional */
@@ -1722,9 +1760,15 @@ export async function discover(
     emit(`Read the goal: looking for ${plan.target_type.toLowerCase()}${plan.goal ? ` — ${plan.goal}` : ""}`);
   emit(`Planned ${queries.length} search${queries.length === 1 ? "" : "es"} across the web`);
   const networking = isNetworkingUseCase(useCase);
-  // Skip anyone the user already denied by name, never resurface a rejected find.
+  // Skip anyone the user denied by name, never resurface a rejected find,
+  // EXCEPT timing-only denies ("no open positions"): those stay watchable so
+  // they can come back the moment something opens (see feedbackBlock).
+  if (feedback) feedback.reopenCheckIn = Math.random() < 0.34;
   const deniedNames = new Set(
-    (feedback?.avoid || []).map((a) => normName(a.name)).filter(Boolean)
+    (feedback?.avoid || [])
+      .filter((a) => !isTimingDenyReason(a.reason))
+      .map((a) => normName(a.name))
+      .filter(Boolean)
   );
 
   // Per-candidate log of what got skipped and why. Populated at every skip
@@ -2228,6 +2272,7 @@ export async function discover(
             ? "person"
             : "company",
         whyItFits: noDash(r.why_it_fits || ""), // no em dashes in rendered LLM copy
+        postingWindow: noDash(String(r.posting_window || "")).slice(0, 80) || undefined,
         criteria: Array.isArray(r.criteria)
           ? r.criteria
               .map((c: any) => ({

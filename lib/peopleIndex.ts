@@ -46,6 +46,15 @@ export function personKey(o: Opportunity): string {
 // Merge a fresh sighting over a stored record: newest role/why win (they age),
 // but a known contact route is never blanked by a sighting that lacks it.
 function mergeOpp(stored: any, fresh: Opportunity): any {
+  // Posting-cadence memory: keep the stated window, and log the months in
+  // which this org was seen with a LIVE posting. Over cycles that history
+  // becomes "they post every January", which the planner uses to check an
+  // org right as its window opens (see indexCompass in lib/discover).
+  const months: string[] = Array.isArray(stored?.postingMonths) ? [...stored.postingMonths] : [];
+  if (fresh.targetType === "listing") {
+    const m = new Date().toISOString().slice(0, 7); // "2026-08"
+    if (!months.includes(m)) months.push(m);
+  }
   return {
     ...stored,
     ...fresh,
@@ -54,6 +63,8 @@ function mergeOpp(stored: any, fresh: Opportunity): any {
     contactPhone: fresh.contactPhone || stored?.contactPhone || "",
     url: fresh.url || stored?.url || "",
     location: fresh.location || stored?.location || "",
+    postingWindow: fresh.postingWindow || stored?.postingWindow || undefined,
+    postingMonths: months.slice(-24).length ? months.slice(-24) : undefined,
   };
 }
 
@@ -179,6 +190,10 @@ export async function searchPeopleIndex(
             o.location && `Location: ${o.location}.`,
             o.contactEmail && `Email: ${o.contactEmail}.`,
             o.contactHandle && `Profile: ${o.contactHandle}.`,
+            o.postingWindow && `Hiring cadence: ${o.postingWindow}.`,
+            Array.isArray(o.postingMonths) &&
+              o.postingMonths.length &&
+              `Live postings seen in: ${o.postingMonths.slice(-6).join(", ")}.`,
             o.whyItFits && `Notes: ${o.whyItFits}`,
           ]
             .filter(Boolean)

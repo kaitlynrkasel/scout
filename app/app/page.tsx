@@ -3469,6 +3469,33 @@ function ScoutTool({
     // The project-level search (seeded from the description) stays the Solo
     // Search slot; only searches the user actually typed get promoted.
     if (projectGoalRef.current === activeId) return "";
+    // Only promote a goal that ADDS something: a near-duplicate of the
+    // project's own description or of an existing category is redundant
+    // clutter, not a new saved search.
+    const tok = (t: string) =>
+      new Set(
+        t
+          .toLowerCase()
+          .replace(/[^a-z0-9\s]/g, " ")
+          .split(/\s+/)
+          .filter((w) => w.length > 3)
+      );
+    const overlap = (a: string, b: string) => {
+      const A = tok(a);
+      const B = tok(b);
+      if (!A.size || !B.size) return 0;
+      let hit = 0;
+      A.forEach((w) => {
+        if (B.has(w)) hit++;
+      });
+      return hit / Math.min(A.size, B.size);
+    };
+    const proj = projects.find((pr) => pr.id === activeId);
+    const rivals = [
+      proj?.context || "",
+      ...categories.filter((c) => c.projectId === activeId).map((c) => c.goal || ""),
+    ].filter(Boolean);
+    if (rivals.some((r) => overlap(goal, r) >= 0.7)) return "";
     const c: Category = {
       id: `cat-${Date.now()}`,
       name: deriveCategoryName(goal),
@@ -7296,7 +7323,7 @@ function ScoutTool({
                   ref={scoutBtnRef}
                   onClick={startScout}
                   disabled={discovering || gating || !goal.trim()}
-                  className="rounded-full bg-cream px-8 py-3 text-sm font-bold text-brown-deep shadow-soft transition hover:bg-white disabled:opacity-50"
+                  className="rounded-full bg-cream px-14 py-4 text-lg font-bold text-brown-deep shadow-soft transition hover:bg-white hover:shadow-lg disabled:opacity-50"
                 >
                   {discovering ? "Scouting…" : gating ? "Understanding…" : "Scout"}
                 </button>
@@ -12410,9 +12437,19 @@ function FindGridCard({ find, onOpen }: { find: Find; onOpen: () => void }) {
           )}
         </div>
         {role && <div className="mt-1 truncate text-xs text-muted">{role}</div>}
-        <div className="mt-3 flex items-center justify-between">
-          <span className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
-          <span className="text-xs font-bold text-brown-deep">Open →</span>
+        <div className="mt-3 flex items-center justify-between gap-2">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
+            {find.foundByEmail && (
+              <span
+                title={`Found by ${find.foundByEmail}`}
+                className="truncate rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold text-body/60"
+              >
+                {find.foundByEmail.split("@")[0]}
+              </span>
+            )}
+          </span>
+          <span className="shrink-0 text-xs font-bold text-brown-deep">Open →</span>
         </div>
       </div>
     </button>
@@ -13855,7 +13892,9 @@ function FindCard({
                 ? "Imported"
                 : via === "auto-search"
                   ? "Auto-search"
-                  : "Found by you";
+                  : find.foundByEmail
+                    ? `Found by ${find.foundByEmail.split("@")[0]}`
+                    : "Found by you";
           return (
             <span
               title="How this contact got into your pipeline"
@@ -15445,7 +15484,17 @@ function DashboardTab({
       .filter((v): v is number => typeof v === "number");
     return fs.length ? fs.reduce((a, b) => a + b, 0) / fs.length : null;
   })();
+  // Time saved vs doing it by hand. Honest, conservative estimate: sourcing a
+  // qualified lead manually (search, vet the page, hunt a contact route) runs
+  // ~15 min, and writing a personalized first note ~10 min.
+  const draftedCount = finds.filter((f) => !!f.draft).length;
+  const minutesScouting = finds.length * 15 + draftedCount * 10;
+  const timeSavedScouting =
+    minutesScouting >= 90
+      ? `${(minutesScouting / 60).toFixed(minutesScouting >= 600 ? 0 : 1).replace(/\.0$/, "")} hrs`
+      : `${minutesScouting} min`;
   const statPool: { value: string; label: string; ok: boolean }[] = [
+    { value: timeSavedScouting, label: "Time saved scouting", ok: minutesScouting >= 30 },
     { value: String(newThisWeek), label: "Finds this week", ok: newThisWeek > 0 },
     { value: String(pipe.drafted), label: "Ready to send", ok: pipe.drafted > 0 },
     { value: String(dueFollowUps), label: "Follow-ups due", ok: dueFollowUps > 0 },
@@ -15807,7 +15856,13 @@ ${body}
                 [replyRatePct === "·" ? "0%" : replyRatePct, "Reply rate", ""],
                 [onTarget != null ? `${onTarget}%` : "0%", "On-target", ""],
                 [String(activity.searches), "Searches run", ""],
-                [String(Math.round((activity.drafts * 6) / 60)), "Hours saved drafting", ""],
+                // Estimate: ~15 min to source + vet a lead by hand, ~10 more
+                // to write the personal note Scout drafts.
+                [
+                  String(Math.max(1, Math.round((finds.length * 15 + activity.drafts * 10) / 60))),
+                  "Hours saved scouting",
+                  "",
+                ],
               ] as const
             ).map(([v, label, sub], i) => (
               <div key={label} className="relative bg-white/5 p-6">

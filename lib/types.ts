@@ -70,6 +70,10 @@ export interface Opportunity {
   // cold-email (often with a contact person attached); "person" = a named contact.
   targetType?: "listing" | "company" | "person";
   whyItFits: string; // recent/specific note used to personalize
+  // When this org opens applications / posts roles, as stated by the source
+  // ("Opens each January", "Posted every fall"). Feeds the index's cadence
+  // memory so Scout can recommend the moment a window opens.
+  postingWindow?: string;
   // The user's own stated criteria, answered for THIS find ("Remote?" ->
   // "In person, Vancouver"). Shown as static rows in the detail rail.
   criteria?: { ask: string; answer: string }[];
