@@ -321,7 +321,7 @@ export default function DesignView({
   // Two rooms: the token playground, and the full drag-and-drop page editor.
   const [mode, setMode] = useState<"playground" | "editor">("playground");
   // Inside the editor overlay: the live site first, blocks only behind Edit.
-  const [editorView, setEditorView] = useState<"preview" | "edit">("preview");
+  const [editorView, setEditorView] = useState<"preview" | "colour" | "edit">("preview");
   const [previewPath, setPreviewPath] = useState<"/" | "/app">("/");
   const liveFrameRef = useRef<HTMLIFrameElement | null>(null);
   const [liveChanges, setLiveChanges] = useState<LiveChange[]>([]);
@@ -558,7 +558,8 @@ export default function DesignView({
               {(
                 [
                   ["preview", "Preview"],
-                  ["edit", "Edit"],
+                  ["colour", "Edit colours"],
+                  ["edit", "Edit design"],
                 ] as const
               ).map(([v, label]) => (
                 <button
@@ -598,6 +599,12 @@ export default function DesignView({
                 it on the right. Changes preview here only.
               </span>
             )}
+            {editorView === "colour" && (
+              <span className="hidden text-xs text-body/55 lg:block">
+                Try a palette from the side, or click anything in the page to
+                recolour just that piece. Changes preview here only.
+              </span>
+            )}
             <button
               onClick={() => setMode("playground")}
               className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -619,6 +626,7 @@ export default function DesignView({
                 setChanges={setLiveChanges}
               />
             )}
+            {editorView === "colour" && <ColourEditPanel frameRef={liveFrameRef} />}
           </div>
         </div>
       )}
@@ -1664,6 +1672,217 @@ function cssPath(el: Element): string {
     cur = parent;
   }
   return `body > ${parts.join(" > ")}`;
+}
+
+/* ---------------- Edit colours: palettes + per-element recolour ----------------
+   The middle editor view. The whole-page moves live in the palette list (paint
+   the frame's CSS variables); the scalpel is click-to-recolour: pick any
+   element in the page and set its own text/background. Everything stays in
+   the preview frame; nothing ships. */
+function ColourEditPanel({
+  frameRef,
+}: {
+  frameRef: React.RefObject<HTMLIFrameElement | null>;
+}) {
+  const [mine, setMine] = useState<Palette[]>([]);
+  useEffect(() => setMine(loadPalettes()), []);
+  const [appliedLabel, setAppliedLabel] = useState("");
+  const [sel, setSel] = useState<HTMLElement | null>(null);
+  const [tick, setTick] = useState(0); // re-render after inline edits
+  const editsRef = useRef<
+    { el: HTMLElement; prop: "color" | "backgroundColor"; prev: string; label: string }[]
+  >([]);
+
+  // rgb(…) → #hex for the colour inputs.
+  const toHex = (v: string): string => {
+    const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(v || "");
+    if (!m) return "#888888";
+    return (
+      "#" +
+      [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, "0")).join("")
+    );
+  };
+
+  // Click in the page selects; re-attached whenever the frame reloads.
+  useEffect(() => {
+    const frame = frameRef.current;
+    if (!frame) return;
+    let cleanup = () => {};
+    const attach = () => {
+      cleanup();
+      const doc = frame.contentDocument;
+      if (!doc) return;
+      const onClick = (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const el = e.target as HTMLElement;
+        setSel((prev) => {
+          if (prev) prev.style.outline = "";
+          el.style.outline = "2px solid #e0699e";
+          return el;
+        });
+      };
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key === "Escape")
+          setSel((prev) => {
+            if (prev) prev.style.outline = "";
+            return null;
+          });
+      };
+      doc.addEventListener("click", onClick, true);
+      doc.addEventListener("keydown", onKey);
+      cleanup = () => {
+        doc.removeEventListener("click", onClick, true);
+        doc.removeEventListener("keydown", onKey);
+      };
+    };
+    attach();
+    frame.addEventListener("load", attach);
+    return () => {
+      frame.removeEventListener("load", attach);
+      cleanup();
+      setSel((prev) => {
+        if (prev) prev.style.outline = "";
+        return null;
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [frameRef]);
+
+  const recolour = (prop: "color" | "backgroundColor", hex: string) => {
+    if (!sel) return;
+    const already = editsRef.current.find((c) => c.el === sel && c.prop === prop);
+    if (!already) {
+      editsRef.current.push({
+        el: sel,
+        prop,
+        prev: sel.style[prop] || "",
+        label: (sel.innerText || sel.tagName).trim().slice(0, 32),
+      });
+    }
+    sel.style[prop] = hex;
+    setTick((t) => t + 1);
+  };
+
+  const tryPalette = (p: Palette | null, label: string) => {
+    applyPalette(p, true, frameRef.current?.contentDocument ?? undefined);
+    setAppliedLabel(label);
+  };
+
+  const doc = frameRef.current?.contentDocument;
+  const cs = sel && doc?.defaultView ? doc.defaultView.getComputedStyle(sel) : null;
+
+  return (
+    <div className="w-72 shrink-0 overflow-y-auto border-l border-warm-border bg-surface p-3">
+      <div className="text-[11px] font-extrabold uppercase tracking-wide text-ink">
+        Whole-page palettes
+      </div>
+      <div className="mt-2 space-y-1.5">
+        <button
+          onClick={() => tryPalette(null, "")}
+          className={`flex w-full items-center rounded-xl border px-3 py-2 text-left text-xs font-bold transition ${
+            appliedLabel === ""
+              ? "border-brown bg-brown-tint/40 text-ink"
+              : "border-warm-border text-body hover:bg-warm-bg"
+          }`}
+        >
+          As shipped
+        </button>
+        {[...PRESETS, ...mine].map((p) => (
+          <button
+            key={p.label}
+            onClick={() => tryPalette(p, p.label)}
+            className={`flex w-full items-center gap-2 rounded-xl border px-3 py-2 text-left transition ${
+              appliedLabel === p.label
+                ? "border-brown bg-brown-tint/40"
+                : "border-warm-border hover:bg-warm-bg"
+            }`}
+          >
+            {IDEAS.map(({ key }) => (
+              <span
+                key={key}
+                className="h-4 w-4 rounded"
+                style={{ background: p.ideas[key] }}
+              />
+            ))}
+            <span className="ml-1 min-w-0 flex-1 truncate text-xs font-bold text-ink">
+              {p.label}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 text-[11px] font-extrabold uppercase tracking-wide text-ink">
+        This piece only
+      </div>
+      {sel && cs ? (
+        <div className="mt-2 space-y-3">
+          <div className="truncate rounded-lg bg-warm-bg px-2.5 py-1.5 text-[11px] font-semibold text-body">
+            {(sel.innerText || sel.tagName).trim().slice(0, 40) || sel.tagName}
+          </div>
+          {(
+            [
+              ["Text", "color"],
+              ["Background", "backgroundColor"],
+            ] as const
+          ).map(([label, prop]) => (
+            <label key={prop} className="flex items-center gap-2.5">
+              <input
+                type="color"
+                value={toHex(cs[prop])}
+                onChange={(e) => recolour(prop, e.target.value)}
+                className="h-8 w-10 cursor-pointer rounded border border-warm-border bg-transparent"
+              />
+              <span className="text-xs font-semibold text-body">{label}</span>
+            </label>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-[11px] leading-relaxed text-body/60">
+          Click anything in the page to recolour just that piece. Esc clears
+          the selection.
+        </p>
+      )}
+
+      {editsRef.current.length > 0 && (
+        <>
+          <div className="mt-5 text-[11px] font-extrabold uppercase tracking-wide text-ink">
+            Changed here
+          </div>
+          <ul className="mt-1.5 space-y-1 text-[11px] text-body/70">
+            {editsRef.current.map((c, i) => (
+              <li key={i} className="flex items-center gap-1.5">
+                <span className="min-w-0 flex-1 truncate">
+                  {c.label || c.el.tagName}: {c.prop === "color" ? "text" : "background"}
+                </span>
+                <button
+                  onClick={() => {
+                    c.el.style[c.prop] = c.prev;
+                    editsRef.current.splice(i, 1);
+                    setTick((t) => t + 1);
+                  }}
+                  className="shrink-0 font-bold text-body/50 hover:text-danger"
+                  title="Undo this change"
+                >
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+          <button
+            onClick={() => {
+              for (const c of editsRef.current) c.el.style[c.prop] = c.prev;
+              editsRef.current = [];
+              setTick((t) => t + 1);
+            }}
+            className="mt-2 w-full rounded-lg border border-warm-border px-3 py-1.5 text-[11px] font-bold text-body transition hover:bg-warm-bg"
+          >
+            Reset everything
+          </button>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function LiveEditPanel({
