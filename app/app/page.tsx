@@ -3235,12 +3235,19 @@ function ScoutTool({
     const proj = projects.find((p) => p.id === id);
     const findCount = finds.filter((f) => f.projectId === id).length;
     const catCount = categories.filter((c) => c.projectId === id).length;
+    // On a team lens the finds also exist as shared copies, and those have to go
+    // too — the shared pipeline is re-fetched on every lens refresh, so anything
+    // left behind reappears in the Finds tab and the delete looks like it did
+    // nothing. Say so in the prompt rather than surprising anyone.
+    const sharedToo = !!teamLens && !!proj?.name;
     // Deleting a project removes its categories AND its finds, so confirm first.
     if (typeof window !== "undefined" && (findCount || catCount)) {
       const ok = window.confirm(
         `Delete "${proj?.name || "this project"}"? This also removes its ` +
           `${catCount} categor${catCount === 1 ? "y" : "ies"} and ${findCount} ` +
-          `find${findCount === 1 ? "" : "s"}. This can't be undone.`
+          `find${findCount === 1 ? "" : "s"}` +
+          (sharedToo ? `, including the copies you shared with the team` : "") +
+          `. This can't be undone.`
       );
       if (!ok) return;
     }
@@ -3263,6 +3270,25 @@ function ScoutTool({
     saveCats(nextCats);
     saveFinds(finds.filter((f) => f.projectId !== id));
     if (activeId === id) selectProject(nextProjects[0].id);
+    // Best-effort, and only ever removes the shared rows THIS user added — a
+    // teammate's finds in the same shared project are their work, not something
+    // to destroy while tidying up your own project.
+    if (sharedToo && getToken) {
+      (async () => {
+        try {
+          const token = await getToken();
+          if (!token) return;
+          await fetch("/api/team/finds", {
+            method: "DELETE",
+            headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+            body: JSON.stringify({ workspaceId: teamLens, projectName: proj?.name || "" }),
+          });
+          refreshTeamLens();
+        } catch {
+          /* the local delete stands; the shared copies can be cleared again */
+        }
+      })();
+    }
   }
 
   // A company was deleted — wipe every local project that belonged to it, plus

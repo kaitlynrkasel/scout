@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { userFromReq } from "@/lib/supabaseAdmin";
-import { listSharedFinds, addSharedFinds, publishFindsToTeam, TeamError } from "@/lib/teams";
+import {
+  listSharedFinds,
+  addSharedFinds,
+  publishFindsToTeam,
+  removeMyFindsFromTeamProject,
+  TeamError,
+} from "@/lib/teams";
 
 export const runtime = "nodejs";
 
@@ -42,6 +48,27 @@ export async function POST(req: NextRequest) {
     }
     const r = await addSharedFinds(u.id, u.email, String(body.sharedProjectId || ""), finds);
     return NextResponse.json(r);
+  } catch (e: any) {
+    const status = e instanceof TeamError ? e.status : 500;
+    return NextResponse.json({ error: e?.message || "Failed." }, { status });
+  }
+}
+
+// Drop this user's shared copies of a project's finds — used when they delete
+// the project locally, so the finds don't reappear on the next lens refresh.
+// Only ever removes rows the caller added; teammates' finds are left alone.
+export async function DELETE(req: NextRequest) {
+  const u = await userFromReq(req);
+  if (!u) return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
+  try {
+    const body = await req.json();
+    return NextResponse.json(
+      await removeMyFindsFromTeamProject(
+        u.id,
+        String(body.workspaceId || ""),
+        String(body.projectName || "")
+      )
+    );
   } catch (e: any) {
     const status = e instanceof TeamError ? e.status : 500;
     return NextResponse.json({ error: e?.message || "Failed." }, { status });

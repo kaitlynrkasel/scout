@@ -1133,6 +1133,56 @@ export async function publishFindsToTeam(
   return { ...added, sharedProjectId: String(proj.id) };
 }
 
+// Deleting a project locally has to take its shared copies with it, or the
+// finds come straight back: the shared pipeline is re-fetched on every lens
+// refresh, so rows left behind reappear in the Finds tab and the delete looks
+// like it silently failed.
+//
+// Scoped to rows THIS user added. A teammate's contributions to the same shared
+// project are their work, not this user's to destroy by tidying up their own
+// project — so those stay, and the shared project itself stays with them.
+export async function removeMyFindsFromTeamProject(
+  uid: string,
+  workspaceId: string,
+  projectName: string
+) {
+  const nm = String(projectName || "").trim();
+  if (!nm) return { removed: 0 };
+  await assertRole(uid, workspaceId, "editor");
+  const { data: projs } = await db()
+    .from("shared_projects")
+    .select("id, name, owner_user_id")
+    .eq("workspace_id", workspaceId);
+  const proj = (projs || []).find(
+    (p: any) => String(p.name || "").trim().toLowerCase() === nm.toLowerCase()
+  );
+  if (!proj) return { removed: 0 };
+
+  const { data: mine } = await db()
+    .from("shared_finds")
+    .select("id")
+    .eq("shared_project_id", proj.id)
+    .eq("added_by", uid);
+  const ids = (mine || []).map((r: any) => r.id);
+  if (ids.length) {
+    const { error } = await db().from("shared_finds").delete().in("id", ids);
+    if (error) throw new TeamError(error.message, 500);
+  }
+
+  // If that emptied a project this user opened themselves, take the empty shell
+  // with it. Someone else's project is left alone even when empty.
+  const { data: left } = await db()
+    .from("shared_finds")
+    .select("id")
+    .eq("shared_project_id", proj.id)
+    .limit(1);
+  if (!left?.length && String(proj.owner_user_id) === String(uid)) {
+    await db().from("shared_project_members").delete().eq("shared_project_id", proj.id);
+    await db().from("shared_projects").delete().eq("id", proj.id);
+  }
+  return { removed: ids.length };
+}
+
 // How many teammates must independently deny a shared find before it goes
 // denied for the whole team (hidden from the default view and excluded from
 // future team searches). Below this, a deny is just a flag — "Denied by
