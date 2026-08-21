@@ -157,10 +157,46 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // Search history: the throughline of what this user keeps asking for.
+    // Recorded for signed-in users only, used ONLY to sharpen their own future
+    // searches (that promise is in the privacy policy), and best-effort: a
+    // missing table costs nothing but the feature.
+    let historyOverride = "";
+    if (uid && supabaseAdmin) {
+      try {
+        const { data: hist } = await supabaseAdmin
+          .from("search_history")
+          .select("goal, use_case, created_at")
+          .eq("user_id", uid)
+          .order("created_at", { ascending: false })
+          .limit(8);
+        const lines = (hist || [])
+          .map((h: any) => String(h.goal || "").slice(0, 140))
+          .filter(Boolean);
+        if (lines.length >= 2) {
+          historyOverride =
+            "RECENT SEARCHES BY THIS USER (newest first). Use them to ANTICIPATE, never to narrow: " +
+            "recurring places, industries, or target types across these are strong context for ambiguous " +
+            "parts of today's goal, but today's goal always wins where they disagree.\n" +
+            lines.map((l) => `- ${l}`).join("\n");
+        }
+        // Record today's search, fire-and-forget.
+        void supabaseAdmin.from("search_history").insert({
+          user_id: uid,
+          goal: String(goal).slice(0, 800),
+          use_case: String(useCase || "").slice(0, 120),
+        });
+      } catch (e) {
+        console.warn("search history unavailable (search proceeds without it):", e);
+      }
+    }
+
     // Compose the override block: team first (highest priority), then personal.
     // discover() appends this after the scout-wide baseline, and each tier's text
     // states its own precedence, so the model resolves team > personal > scout-wide.
-    const combinedOverride = [teamOverride, personalOverride].filter(Boolean).join("\n\n");
+    const combinedOverride = [teamOverride, personalOverride, historyOverride]
+      .filter(Boolean)
+      .join("\n\n");
 
     // Stream results as NDJSON so the client can show finds as they're scouted
     // and — if the user cancels mid-run — keep what was already found. Each line

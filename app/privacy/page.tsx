@@ -104,9 +104,22 @@ export default function Privacy() {
           out. You are responsible for contacting people lawfully (see our Terms).
         </P>
 
+        <H>Search history</H>
+        <P>
+          We keep a history of the searches you run in Scout. It is used for one
+          thing: making your own future searches better, for example noticing
+          the places, industries, or kinds of people you keep looking for so
+          results anticipate what you need. We will never sell your search
+          history or your profile, never share them with advertisers or
+          marketing companies, and never use them for anything beyond running
+          Scout for you. Deleting your account deletes your search history, and
+          you can ask us to clear it at any time at
+          scout.source.contact@gmail.com.
+        </P>
+
         <H>Who we share data with</H>
         <P>
-          We do not sell your personal data. We share it only with service providers that
+          We do not sell your personal data, and we never will. We share it only with service providers that
           help us run Scout, under contract and only as needed:
         </P>
         <ul className="mt-3 list-disc space-y-2 pl-5">
