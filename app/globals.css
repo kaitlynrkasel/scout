@@ -959,3 +959,56 @@ select.scout-kind-picker option {
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* ---------------- Dashboard on the Scout stage ----------------
+   The dashboard wears the same brown room as the Scout tab: one dark ground,
+   open sections instead of white cards. Scoped remap so the existing section
+   markup keeps working; small light chips (finds, avatars) stay light so they
+   lift off the ground the way result cards do on the stage. */
+.dash-stage {
+  background: #5c4634;
+  border-radius: 24px;
+}
+.dark .dash-stage { background: #3f3128; }
+/* Section sheets stop being cards: quiet translucent panels, no shadow. */
+.dash-stage .bg-surface {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: rgba(255, 255, 255, 0.14);
+  box-shadow: none;
+}
+.dash-stage .bg-warm-bg { background: rgba(255, 255, 255, 0.09); }
+.dash-stage .bg-surface\/60, .dash-stage .bg-surface\/70, .dash-stage .bg-surface\/80 {
+  background: rgba(255, 255, 255, 0.06);
+}
+.dash-stage .bg-brown-tint, .dash-stage .bg-brown-tint\/50 { background: rgba(255, 255, 255, 0.1); }
+.dash-stage .bg-warm-bg\/40, .dash-stage .bg-warm-bg\/50 { background: rgba(255, 255, 255, 0.05); }
+.dash-stage .bg-white { background: rgba(255, 255, 255, 0.08); }
+.dash-stage .border-warm-border { border-color: rgba(255, 255, 255, 0.13); }
+.dash-stage .shadow-soft { box-shadow: none; }
+/* Type flips to the stage palette. */
+.dash-stage .text-ink { color: #f6efe6; }
+.dash-stage .text-body { color: rgba(255, 255, 255, 0.78); }
+.dash-stage .text-muted { color: rgba(255, 255, 255, 0.55); }
+.dash-stage .text-brown,
+.dash-stage .text-brown-deep,
+.dash-stage .text-accent { color: #f6efe6; }
+.dash-stage .text-accent { text-decoration-line: underline; text-underline-offset: 3px; }
+.dash-stage .text-body\/80, .dash-stage .text-body\/70 { color: rgba(255, 255, 255, 0.7); }
+.dash-stage .text-body\/60, .dash-stage .text-body\/50 { color: rgba(255, 255, 255, 0.55); }
+.dash-stage .text-body\/40 { color: rgba(255, 255, 255, 0.4); }
+.dash-stage .text-ink\/60 { color: rgba(246, 239, 230, 0.6); }
+/* The stat band inside already sits on .scout-stage; keep its deeper shade. */
+.dash-stage .scout-stage { background: #4a3729; }
+/* Brand CTAs read cream-on-brown here, like the stage's Scout button. */
+.dash-stage .bg-brown { background: #f6efe6; color: #4a3729; }
+.dash-stage .bg-brown:hover { background: #ffffff; }
+/* Chart ink: the activity chart hardcodes the light-canvas browns; on the
+   stage those lines vanish into the ground, so repaint them cream. CSS wins
+   over SVG presentation attributes. */
+.dash-stage svg [stroke="#7c5837"] { stroke: #f6efe6; }
+.dash-stage svg [stroke="#5c4634"] { stroke: #e8d9c4; }
+.dash-stage svg [stroke="#eceae4"] { stroke: rgba(255, 255, 255, 0.16); }
+.dash-stage svg [stroke="#c8b899"] { stroke: rgba(255, 255, 255, 0.45); }
+.dash-stage svg [fill="#7c5837"] { fill: #f6efe6; }
+.dash-stage svg [fill="#5c4634"] { fill: #f6efe6; }
+.dash-stage svg text { fill: rgba(255, 255, 255, 0.6); }

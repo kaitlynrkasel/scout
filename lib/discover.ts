@@ -135,7 +135,9 @@ function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
   }
   if (avoid.length) {
     s +=
-      "\n\nREJECTED BEFORE, the user passed on these; treat the reasons as firm rules and steer away from similar results:\n" +
+      "\n\nREJECTED BEFORE, the user passed on these; treat the reasons as firm rules and steer away from similar results. " +
+      "When a reason names a subject, genre, or industry the user does not want (\"I don't want to work in country music\"), " +
+      "that is a HARD filter: any result squarely in that world is is_relevant false, not merely a low fit_score:\n" +
       avoid.map((a) => `- ${a.name}${a.reason ? `: ${a.reason}` : ""}`).join("\n");
   }
   if (reopen.length) {
@@ -1381,8 +1383,11 @@ async function extract(
     `the BEST kind of result: set is_listing true, put the direct application / posting link in url, name it as the ROLE at ` +
     `the COMPANY, and give it the HIGHEST fit_score. A real COMPANY in the user's field even with NO public listing is also ` +
     `valid (is_listing false): the user will send a proactive note asking to be considered, so target_type "organization" is ` +
-    `fully valid, do NOT set is_relevant false just because there's no posted role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the user's ` +
-    `industry. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms, ` +
+    `fully valid, do NOT set is_relevant false just because there's no posted role or named person. Reject only advice/how-to/listicle content, dead links, and companies clearly outside the industries the GOAL ` +
+    `allows; when the GOAL says other industries are welcome, industry is NOT a filter and a solid employer in any field ` +
+    `counts. SCARCITY RESCUE: when live postings run thin, do NOT come back nearly empty; return fittable employers with a ` +
+    `contact route for a proactive cold note instead, with why_it_fits saying plainly that this is an employer to approach, ` +
+    `not a confirmed opening. ACCESSIBILITY OVER PRESTIGE: strongly prefer small companies, startups, studios, boutiques, and local firms, ` +
     `they are realistic to hear back from. If the GOAL text says to favor beginner-friendly / small / less-selective ` +
     `employers, give ultra-selective, famous, big-name targets a LOW fit_score even when they're on-industry. WHY_IT_FITS: a ` +
     `specific true detail about the COMPANY (what they do, their size/stage, why they'd be a good place for someone at the ` +
@@ -2336,8 +2341,11 @@ export async function discover(
   // empty screen. Reuses the same candidate/opp/dedup state and only extracts the
   // freshly-gathered pages. Skipped for creator searches (which depend on
   // roundup listicles, a different strategy) and when there were no queries.
+  // Floor: every scout should hand back at least 5 real results. Under that,
+  // widen once even if a few survived the specific pass.
+  const MIN_FINDS = 5;
   let broadenedQueries = 0;
-  if (opps.length === 0 && queries.length && !creatorSearch) {
+  if (opps.length < MIN_FINDS && queries.length && !creatorSearch) {
     const alreadyProcessed = candidates.length;
     const broadened = await planQueries(
       goal,

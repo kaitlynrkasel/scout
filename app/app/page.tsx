@@ -7195,7 +7195,7 @@ function ScoutTool({
             {profileComplete || guest ? (
             <section
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow ? "" : "flex min-h-[calc(100vh-40px)]"
+                stageHasWorkBelow ? "" : "flex min-h-[calc(100vh-130px)]"
               }`}
             >
               {/* Two shapes for one composer. Alone on the screen it sits as a
@@ -7720,21 +7720,20 @@ function ScoutTool({
               <section className="mt-10">
                 <div className="flex items-start gap-3">
                   <Avatar />
-                  <div className="relative w-full rounded-3xl rounded-tl-md border border-warm-border bg-surface shadow-soft">
-                    <Tail side="left" />
+                  <div className="relative w-full rounded-3xl rounded-tl-md border border-white/15 bg-white/[0.06]">
                     <button
                       onClick={() => setExpanded(true)}
-                      className="flex w-full items-center gap-3 border-b border-warm-border px-5 py-4 text-left transition hover:bg-warm-bg/40"
+                      className="flex w-full items-center gap-3 border-b border-white/10 px-5 py-4 text-left transition hover:bg-white/5"
                     >
                       <div>
-                        <div className="text-sm font-bold text-ink">Scout</div>
-                        <div className="text-xs text-body/80">
+                        <div className="text-sm font-bold text-cream">Scout</div>
+                        <div className="text-xs text-white/70">
                           I found {visibleOpps.length} {uc.targetNoun} who fit. Pick who to
                           reach out to.
                           {opps.length > visibleOpps.length && (
                             <>
                               {" "}
-                              <span className="text-body/50">
+                              <span className="text-white/45">
                                 ({opps.length - visibleOpps.length} you already passed on
                                 hidden)
                               </span>
@@ -7742,7 +7741,7 @@ function ScoutTool({
                           )}
                         </div>
                       </div>
-                      <span className="ml-auto flex items-center gap-1.5 rounded-lg border border-warm-border px-2.5 py-1.5 text-xs font-semibold text-body">
+                      <span className="ml-auto flex items-center gap-1.5 rounded-lg border border-white/25 px-2.5 py-1.5 text-xs font-semibold text-white/80">
                         <ExpandIcon /> Expand
                       </span>
                     </button>
@@ -7758,8 +7757,8 @@ function ScoutTool({
                       />
                     </div>
 
-                    <div className="flex flex-wrap items-center gap-3 border-t border-warm-border px-5 py-4">
-                      <span className="text-sm text-body/80">
+                    <div className="flex flex-wrap items-center gap-3 border-t border-white/10 px-5 py-4">
+                      <span className="text-sm text-white/70">
                         {selectedCount} approved
                       </span>
                       <button
@@ -15676,7 +15675,7 @@ ${body}
   }
 
   return (
-    <main className="w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
+    <main className="dash-stage w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
       {/* Wraps rather than squeezing: at 390px the title, the toggle and the CTA
           can't share a line, and the CTA was breaking mid-label. On a phone it
@@ -15794,14 +15793,14 @@ ${body}
                 <span className="min-w-0">
                   {n.kind === "searches" ? (
                     <>
-                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> ran searches and
-                      found <b className="text-ink">{n.count}</b>
+                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> found{" "}
+                      <b className="text-ink">{n.count}</b> new{" "}
+                      {n.count === 1 ? "prospect" : "prospects"}
                       {n.detail ? <> in {n.detail}</> : null}
                     </>
                   ) : n.kind === "outreach" ? (
                     <>
-                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> moved outreach:{" "}
-                      {n.detail}
+                      <b className="text-ink">{(n.who || "").split("@")[0]}</b> {n.detail}
                     </>
                   ) : (
                     <>

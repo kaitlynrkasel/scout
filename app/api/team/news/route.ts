@@ -98,8 +98,8 @@ export async function GET(req: NextRequest) {
     }
     for (const [who, v] of byMover) {
       const bits = [];
-      if (v.drafted) bits.push(`${v.drafted} draft${v.drafted === 1 ? "" : "s"}`);
-      if (v.sent) bits.push(`sent ${v.sent}`);
+      if (v.drafted) bits.push(`wrote ${v.drafted} draft${v.drafted === 1 ? "" : "s"}`);
+      if (v.sent) bits.push(`sent ${v.sent} message${v.sent === 1 ? "" : "s"}`);
       items.push({
         kind: "outreach",
         who,
