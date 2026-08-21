@@ -1242,8 +1242,31 @@ export function LiveEditPanel({
     const SELECTED = "3px solid #f7891f";
     let hovered: HTMLElement | null = null;
     let drag:
-      | { els: { el: HTMLElement; ox: number; oy: number }[]; sx: number; sy: number; moved: boolean }
+      | {
+          els: { el: HTMLElement; ox: number; oy: number }[];
+          sx: number;
+          sy: number;
+          moved: boolean;
+          axis?: boolean;
+        }
       | null = null;
+    // Alignment guides, Canva-style: while one element drags, its edges and
+    // center snap to nearby elements' edges and centers, with pink guide
+    // lines while the snap holds. Rects are cached at drag start.
+    let guideRects: { l: number; r: number; t: number; b: number; cx: number; cy: number }[] = [];
+    let guideEls: HTMLDivElement[] = [];
+    const clearGuides = () => {
+      for (const g of guideEls) g.remove();
+      guideEls = [];
+    };
+    const drawGuide = (vertical: boolean, pos: number) => {
+      const g = doc.createElement("div");
+      g.style.cssText = `position:fixed;z-index:2147483646;background:#e0699e;pointer-events:none;${
+        vertical ? `left:${pos}px;top:0;width:1px;height:100vh` : `top:${pos}px;left:0;height:1px;width:100vw`
+      }`;
+      doc.body.appendChild(g);
+      guideEls.push(g);
+    };
 
     const readOffset = (el: HTMLElement): [number, number] => {
       const m = /translate\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/.exec(
@@ -1274,18 +1297,90 @@ export function LiveEditPanel({
       if (t && !selRef.current.includes(t)) t.style.outline = "";
       if (hovered === t) hovered = null;
     };
+    // Shift-drag rubber band: everything the rectangle touches joins the
+    // selection. A shift-press that never moves stays a plain toggle click.
+    let marquee: { sx: number; sy: number; box: HTMLDivElement; moved: boolean } | null = null;
+    const startMarquee = (e: MouseEvent) => {
+      const box = doc.createElement("div");
+      box.style.cssText =
+        "position:fixed;z-index:2147483647;border:1.5px solid #377ec0;background:rgba(55,126,192,.12);pointer-events:none;left:0;top:0;width:0;height:0";
+      doc.body.appendChild(box);
+      marquee = { sx: e.clientX, sy: e.clientY, box, moved: false };
+    };
+    const marqueeRect = (e: MouseEvent) => {
+      const x = Math.min(marquee!.sx, e.clientX);
+      const y = Math.min(marquee!.sy, e.clientY);
+      const w = Math.abs(e.clientX - marquee!.sx);
+      const h = Math.abs(e.clientY - marquee!.sy);
+      return { x, y, w, h };
+    };
+    const finishMarquee = (e: MouseEvent) => {
+      if (!marquee) return;
+      const { x, y, w, h } = marqueeRect(e);
+      marquee.box.remove();
+      const wasDrag = marquee.moved && w + h > 8;
+      marquee = null;
+      if (!wasDrag) {
+        // No real rectangle: plain shift-click toggle on the target.
+        const t = e.target as HTMLElement;
+        if (t && t !== doc.body) {
+          const next = selRef.current.includes(t)
+            ? selRef.current.filter((el) => el !== t)
+            : [...selRef.current, t];
+          clearPaint(selRef.current);
+          setSels(next);
+          paint(next);
+        }
+        return;
+      }
+      const vw = doc.documentElement.clientWidth;
+      const vh = doc.documentElement.clientHeight;
+      const hits: HTMLElement[] = [];
+      for (const el of Array.from(doc.body.querySelectorAll("*")) as HTMLElement[]) {
+        if (el === marqueeBoxGuard) continue;
+        const r = el.getBoundingClientRect();
+        if (!r.width || !r.height) continue;
+        // Skip page-scale containers; a marquee means discrete pieces.
+        if (r.width * r.height > vw * vh * 0.5) continue;
+        const intersects = r.left < x + w && r.right > x && r.top < y + h && r.bottom > y;
+        if (intersects) hits.push(el);
+      }
+      // Keep the outermost of any nested chain so a card counts once, not the
+      // card plus all its children.
+      const keep = hits.filter((el) => !hits.includes(el.parentElement as HTMLElement));
+      const next = Array.from(new Set([...selRef.current, ...keep])).slice(0, 80);
+      clearPaint(selRef.current);
+      setSels(next);
+      paint(next);
+    };
+    const marqueeBoxGuard: HTMLElement | null = null;
+
     const down = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
-      if (!t || t === doc.body) return;
       e.preventDefault();
       e.stopPropagation();
+      // Canva rules: dragging from empty space draws the marquee (no modifier
+      // needed); shift also forces a marquee from anywhere.
+      // "Empty" includes page-scale wrappers: clicking a section's background
+      // between items reads as clicking off, so it deselects and can start a
+      // marquee, exactly like the canvas in Canva.
+      const vw2 = doc.documentElement.clientWidth;
+      const vh2 = doc.documentElement.clientHeight;
+      const tr = t && t !== doc.body ? t.getBoundingClientRect() : null;
+      const isHuge = !!tr && tr.width * tr.height > vw2 * vh2 * 0.45;
+      const onEmpty = !t || t === doc.body || t === doc.documentElement || isHuge;
+      if (onEmpty || (e.shiftKey && !selRef.current.includes(t))) {
+        if (e.shiftKey || onEmpty) {
+          startMarquee(e);
+          if (onEmpty && !e.shiftKey) {
+            clearPaint(selRef.current);
+            setSels([]);
+          }
+          return;
+        }
+      }
       let next: HTMLElement[];
-      if (e.shiftKey) {
-        // Shift-click toggles membership without dropping the rest.
-        next = selRef.current.includes(t)
-          ? selRef.current.filter((x) => x !== t)
-          : [...selRef.current, t];
-      } else if (selRef.current.includes(t)) {
+      if (selRef.current.includes(t)) {
         next = selRef.current; // dragging an already-selected group keeps it
       } else {
         clearPaint(selRef.current);
@@ -1301,17 +1396,97 @@ export function LiveEditPanel({
         sx: e.clientX,
         sy: e.clientY,
         moved: false,
+        axis: e.shiftKey, // Canva: shift-drag on an element moves in a straight line
       };
+      guideRects = [];
+      if (next.length === 1) {
+        const self = next[0];
+        for (const el of Array.from(doc.body.querySelectorAll("*")) as HTMLElement[]) {
+          if (el === self || self.contains(el) || el.contains(self)) continue;
+          const r = el.getBoundingClientRect();
+          if (!r.width || !r.height || r.width * r.height > 300000) continue;
+          guideRects.push({ l: r.left, r: r.right, t: r.top, b: r.bottom, cx: r.left + r.width / 2, cy: r.top + r.height / 2 });
+          if (guideRects.length >= 150) break;
+        }
+      }
     };
     const move = (e: MouseEvent) => {
+      if (marquee) {
+        marquee.moved = true;
+        const { x, y, w, h } = marqueeRect(e);
+        marquee.box.style.left = `${x}px`;
+        marquee.box.style.top = `${y}px`;
+        marquee.box.style.width = `${w}px`;
+        marquee.box.style.height = `${h}px`;
+        return;
+      }
       if (!drag) return;
       const dx = e.clientX - drag.sx;
       const dy = e.clientY - drag.sy;
       if (!drag.moved && Math.abs(dx) + Math.abs(dy) < 3) return;
       drag.moved = true;
-      for (const d of drag.els) setOffset(d.el, grid(d.ox + dx), grid(d.oy + dy));
+      let ddx = dx;
+      let ddy = dy;
+      if (drag.axis) {
+        // straight-line move: the dominant axis wins
+        if (Math.abs(ddx) >= Math.abs(ddy)) ddy = 0;
+        else ddx = 0;
+      }
+      clearGuides();
+      if (drag.els.length === 1 && guideRects.length) {
+        const el = drag.els[0].el;
+        // Where the element WOULD land
+        const base = el.getBoundingClientRect();
+        const [curX, curY] = readOffset(el);
+        const nx = drag.els[0].ox + ddx;
+        const ny = drag.els[0].oy + ddy;
+        const left = base.left + (nx - curX);
+        const top = base.top + (ny - curY);
+        const right = left + base.width;
+        const bottom = top + base.height;
+        const cx = left + base.width / 2;
+        const cy = top + base.height / 2;
+        const T = 6;
+        let sx: number | null = null;
+        let sy: number | null = null;
+        for (const g of guideRects) {
+          for (const [mine, theirs] of [
+            [cx, g.cx],
+            [left, g.l],
+            [right, g.r],
+          ] as const) {
+            if (sx === null && Math.abs(mine - theirs) <= T) {
+              sx = theirs - (mine - (nx - curX) - curX) - (curX - nx) + nx + (theirs - mine);
+              sx = nx + (theirs - mine);
+              drawGuide(true, theirs);
+              break;
+            }
+          }
+          for (const [mine, theirs] of [
+            [cy, g.cy],
+            [top, g.t],
+            [bottom, g.b],
+          ] as const) {
+            if (sy === null && Math.abs(mine - theirs) <= T) {
+              sy = ny + (theirs - mine);
+              drawGuide(false, theirs);
+              break;
+            }
+          }
+          if (sx !== null && sy !== null) break;
+        }
+        setOffset(el, sx !== null ? sx : grid(nx), sy !== null ? sy : grid(ny));
+        return;
+      }
+      for (const d of drag.els) setOffset(d.el, grid(d.ox + ddx), grid(d.oy + ddy));
     };
-    const up = () => {
+    const up = (e: MouseEvent) => {
+      clearGuides();
+      if (marquee) {
+        finishMarquee(e);
+        drag = null;
+        return;
+      }
       if (drag?.moved) {
         const g = ++gestureRef.current;
         for (const d of drag.els) {
@@ -1416,6 +1591,7 @@ export function LiveEditPanel({
       doc.removeEventListener("keydown", key, true);
       window.removeEventListener("keydown", key, true);
       if (hovered) hovered.style.outline = "";
+      clearGuides();
       clearPaint(selRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1431,6 +1607,58 @@ export function LiveEditPanel({
     }
     bump((n) => n + 1);
   };
+  // Canva-style arrange tools. "Center in page" moves the whole selection as
+  // one unit so stacked pieces keep their relationship; the align buttons line
+  // the selected items up against each other. Every arrange is one undo.
+  const arrange = (kind: string) => {
+    const doc = frameRef.current?.contentDocument;
+    if (!doc || !sels.length) return;
+    const readOffset = (el: HTMLElement): [number, number] => {
+      const m = /translate\((-?\d+(?:\.\d+)?)px,\s*(-?\d+(?:\.\d+)?)px\)/.exec(el.style.transform || "");
+      return m ? [parseFloat(m[1]), parseFloat(m[2])] : [0, 0];
+    };
+    const rects = sels.map((el) => ({ el, r: el.getBoundingClientRect(), o: readOffset(el) }));
+    const union = {
+      l: Math.min(...rects.map((x) => x.r.left)),
+      r: Math.max(...rects.map((x) => x.r.right)),
+      t: Math.min(...rects.map((x) => x.r.top)),
+      b: Math.max(...rects.map((x) => x.r.bottom)),
+    };
+    const vw = doc.documentElement.clientWidth;
+    const vh = doc.documentElement.clientHeight;
+    const g = ++gestureRef.current;
+    const moveBy = (x: { el: HTMLElement; o: [number, number] }, dx: number, dy: number) => {
+      if (!dx && !dy) return;
+      const nx = x.o[0] + dx;
+      const ny = x.o[1] + dy;
+      pushUndo(x.el, "transform", `translate(${x.o[0]}px, ${x.o[1]}px)`, `translate(${nx}px, ${ny}px)`, g);
+      x.el.style.transform = `translate(${nx}px, ${ny}px)`;
+      record(x.el, "transform", `translate(${nx}px, ${ny}px)`);
+    };
+    if (kind === "page-h") {
+      const dx = vw / 2 - (union.l + union.r) / 2;
+      for (const x of rects) moveBy(x, dx, 0);
+    } else if (kind === "page-v") {
+      const dy = vh / 2 - (union.t + union.b) / 2;
+      for (const x of rects) moveBy(x, 0, dy);
+    } else if (kind === "left") {
+      for (const x of rects) moveBy(x, union.l - x.r.left, 0);
+    } else if (kind === "center") {
+      const cx = (union.l + union.r) / 2;
+      for (const x of rects) moveBy(x, cx - (x.r.left + x.r.width / 2), 0);
+    } else if (kind === "right") {
+      for (const x of rects) moveBy(x, union.r - x.r.right, 0);
+    } else if (kind === "top") {
+      for (const x of rects) moveBy(x, 0, union.t - x.r.top);
+    } else if (kind === "middle") {
+      const cy = (union.t + union.b) / 2;
+      for (const x of rects) moveBy(x, 0, cy - (x.r.top + x.r.height / 2));
+    } else if (kind === "bottom") {
+      for (const x of rects) moveBy(x, 0, union.b - x.r.bottom);
+    }
+    bump((n) => n + 1);
+  };
+
   const toHex = (rgb: string): string => {
     const m = /rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(rgb || "");
     if (!m) return "#000000";
@@ -1443,7 +1671,7 @@ export function LiveEditPanel({
     <div className="flex w-[300px] shrink-0 flex-col overflow-y-auto border-l border-warm-border bg-surface p-4">
       {!sel ? (
         <p className="text-sm leading-relaxed text-body/70">
-          Click anything to select it, shift-click to add more, drag to move
+          Click selects, shift-click adds, shift-drag sweeps up everything the rectangle touches, drag moves
           (snapped to an 8px grid, toggleable). Cmd+Z undoes, cmd+shift+Z
           redoes, cmd+A selects everything like the selection, arrows nudge
           (shift for 10px), delete hides, esc deselects.
@@ -1482,6 +1710,40 @@ export function LiveEditPanel({
               />
             </>
           )}
+
+          <div className="mt-4">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">Arrange</div>
+            <div className="mt-1.5 grid grid-cols-2 gap-1.5">
+              <button onClick={() => arrange("page-h")} className="rounded-lg border border-warm-border px-2 py-1.5 text-[11px] font-semibold text-body transition hover:bg-warm-bg">
+                Center in page
+              </button>
+              <button onClick={() => arrange("page-v")} className="rounded-lg border border-warm-border px-2 py-1.5 text-[11px] font-semibold text-body transition hover:bg-warm-bg">
+                Middle of page
+              </button>
+            </div>
+            {sels.length > 1 && (
+              <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                {(
+                  [
+                    ["left", "Left"],
+                    ["center", "Center"],
+                    ["right", "Right"],
+                    ["top", "Top"],
+                    ["middle", "Middle"],
+                    ["bottom", "Bottom"],
+                  ] as const
+                ).map(([k, label]) => (
+                  <button
+                    key={k}
+                    onClick={() => arrange(k)}
+                    className="rounded-lg border border-warm-border px-2 py-1.5 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {(
             [
