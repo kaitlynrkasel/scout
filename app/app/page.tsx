@@ -8222,7 +8222,11 @@ function ScoutTool({
 
       {/* ---------------- Footer ---------------- */}
       <footer className="relative border-t border-warm-border bg-surface/70">
-        <CornerDog />
+        {/* Everywhere but the Scout tab. The mascot is lifted out of the footer
+            onto whatever sits above it, and on this tab that's the deep-brown
+            stage — a brown dog on brown, landing on top of the run button. It
+            reads fine over the light tabs, so it only sits this one out. */}
+        {tab !== "outreach" && <CornerDog />}
         <div className="flex w-full flex-wrap items-center gap-2 px-6 py-6 text-xs text-body/70">
           <Logo small />
           <span className="font-semibold text-ink">
