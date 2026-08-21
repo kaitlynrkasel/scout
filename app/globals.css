@@ -973,6 +973,23 @@ select.scout-kind-picker option {
 .dash-stage {
   position: relative;
   isolation: isolate;
+}
+/* Jigsaw layout: on a wide screen the dashboard is a 12-column mosaic, so
+   neighbouring sections sit side by side and share a horizontal line instead
+   of stacking as full-width rows. Anything untagged spans the full width. */
+@media (min-width: 1280px) {
+  .dash-stage {
+    display: grid;
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: 2rem;
+    align-content: start;
+  }
+  .dash-stage > * { grid-column: 1 / -1; min-width: 0; }
+  .dash-stage > [data-jig="5"] { grid-column: span 5; }
+  .dash-stage > [data-jig="6"] { grid-column: span 6; }
+  .dash-stage > [data-jig="7"] { grid-column: span 7; }
+}
+.dash-stage {
   /* Aura orbs, scattered like prints on a wall: each one compact, its own
      hue, with real paper between them. Fixed attachment sizes them to the
      viewport, not the page, so a tall dashboard doesn't stretch one orb into

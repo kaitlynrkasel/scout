@@ -16042,9 +16042,15 @@ ${body}
             {strongThisWeek > 0 ? (
               <>
                 <span className="font-semibold text-ink">
-                  {strongThisWeek} {strongThisWeek === 1 ? "match" : "matches"}
+                  {strongThisWeek} strong {strongThisWeek === 1 ? "match" : "matches"}
                 </span>{" "}
-                ready to send
+                from this week&apos;s finds, waiting in{" "}
+                <button
+                  onClick={goFinds}
+                  className="font-semibold text-accent underline-offset-2 hover:underline"
+                >
+                  Finds
+                </button>
               </>
             ) : newThisWeek > 0 ? (
               <>
@@ -16138,7 +16144,7 @@ ${body}
       <>
 
       {/* -------- What Scout has learned about YOU lately (individual) -------- */}
-      <section className="mt-10">
+      <section data-jig="5" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">What Scout has learned about you</h2>
         {insights.length ? (
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -16176,7 +16182,7 @@ ${body}
 
       {/* -------- Fit + preferences (only once there's data to show) -------- */}
       {learned.decided > 0 && (
-        <section className="mt-10">
+        <section data-jig="7" className="mt-10">
           <h2 className="text-lg font-semibold tracking-tight text-ink">Your fit and preferences</h2>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
@@ -16275,7 +16281,7 @@ ${body}
 
 
       {/* -------- Activity graph: the week-by-week shape of the work -------- */}
-      <section className="mt-10">
+      <section data-jig="7" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">Your activity</h2>
         <div className="mt-4 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
           <ActivityChart data={weekly} />
@@ -16290,7 +16296,7 @@ ${body}
           the strongest true angle from real numbers rather than shaming with
           averages. Every user has one; a brand-new account's angle is freshness
           of taste data, a picky user's is precision, a prolific one's volume. */}
-      <section className="mt-10">
+      <section data-jig="7" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">What makes your Scout special</h2>
         <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 p-5">
           {(() => {
@@ -16342,7 +16348,7 @@ ${body}
       </section>
 
       {/* -------- You vs the community (real aggregate averages) -------- */}
-      <section className="mt-10">
+      <section data-jig="5" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">You vs the community</h2>
         {/* Hold the comparison (and the user count) until the cohort is big
             enough to mean something — a benchmark against a handful of people
@@ -16475,7 +16481,7 @@ ${body}
       <>
       {/* -------- Applied coaching: tips the user turned into standing rules -------- */}
       {coaching.length > 0 && (
-        <section className="mt-10">
+        <section data-jig="6" className="mt-10">
           <h2 className="text-lg font-bold text-ink">Coaching you turned on</h2>
           <div className="mt-4 space-y-2">
             {coaching.map((c) => (
@@ -16516,7 +16522,7 @@ ${body}
       />
 
       {/* -------- How Scout learns YOU -------- */}
-      <section className="mt-10">
+      <section data-jig="6" className="mt-10">
         <h2 className="text-lg font-bold text-ink">How Scout is learning you</h2>
         <div className="mt-4 space-y-2.5">
           {signals.map((s) => (
