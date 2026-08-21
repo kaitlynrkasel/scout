@@ -988,6 +988,12 @@ select.scout-kind-picker option {
   .dash-stage > [data-jig="5"] { grid-column: span 5; }
   .dash-stage > [data-jig="6"] { grid-column: span 6; }
   .dash-stage > [data-jig="7"] { grid-column: span 7; }
+  /* Fill each row: dense packing lets a later short piece slide up into a
+     gap, and stretched sections share the row's bottom line instead of
+     leaving a lake of empty ground beside a taller neighbour. */
+  .dash-stage { grid-auto-flow: dense; }
+  .dash-stage > [data-jig] { display: flex; flex-direction: column; }
+  .dash-stage > [data-jig] > :last-child { flex: 1 1 auto; }
 }
 .dash-stage {
   /* Aura orbs, scattered like prints on a wall: each one compact, its own

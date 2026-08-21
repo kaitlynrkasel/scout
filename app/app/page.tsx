@@ -15638,7 +15638,17 @@ function DashboardTab({
       hint: "Adds context about who you are to every message.",
       cta: (profile.linkedin || "").trim()
         ? null
-        : { label: "Add your LinkedIn", go: goProfile },
+        : {
+            label: "Add your LinkedIn",
+            // Straight to the adding step, not just the Profile tab: Profile
+            // reads this flag on mount and scrolls to the resume/LinkedIn drop.
+            go: () => {
+              try {
+                sessionStorage.setItem("scout_jump", "linkedin");
+              } catch {}
+              goProfile();
+            },
+          },
     },
     {
       done: templates.length > 0,
@@ -16296,7 +16306,7 @@ ${body}
           the strongest true angle from real numbers rather than shaming with
           averages. Every user has one; a brand-new account's angle is freshness
           of taste data, a picky user's is precision, a prolific one's volume. */}
-      <section data-jig="7" className="mt-10">
+      <section data-jig="5" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">What makes your Scout special</h2>
         <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 p-5">
           {(() => {
@@ -16347,17 +16357,14 @@ ${body}
         </div>
       </section>
 
-      {/* -------- You vs the community (real aggregate averages) -------- */}
-      <section data-jig="5" className="mt-10">
+      {/* -------- You vs the community (real aggregate averages) --------
+          Not rendered AT ALL until the cohort is big enough: a section whose
+          only content is "this will exist someday" is dead weight on the page. */}
+      {community && community.users >= 50 && (
+      <section data-jig="6" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">You vs the community</h2>
-        {/* Hold the comparison (and the user count) until the cohort is big
-            enough to mean something — a benchmark against a handful of people
-            is noise, and surfacing a tiny headcount undersells Scout. */}
-        {!community || community.users < 50 ? (
-          <div className="mt-4 rounded-2xl border border-dashed border-warm-border bg-surface/60 p-8 text-center text-sm text-body/70">
-            Community benchmarks unlock once enough people are using Scout with
-            your use case. Yours are ready, everyone else&apos;s are still coming.
-          </div>
+        {false ? (
+          <div />
         ) : (
           <>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -16384,6 +16391,7 @@ ${body}
           </>
         )}
       </section>
+      )}
 
 
       </>
@@ -21055,6 +21063,20 @@ function CompanyDetailsEditor({
   const [name, setName] = useState(companyName);
   const [about, setAbout] = useState("");
   const [website, setWebsite] = useState("");
+  // Deep link from the dashboard checklist: land ON the adding step.
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem("scout_jump") !== "linkedin") return;
+      sessionStorage.removeItem("scout_jump");
+    } catch {
+      return;
+    }
+    setTimeout(() => {
+      document
+        .getElementById("profile-linkedin")
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 150);
+  }, []);
   const [industry, setIndustry] = useState("");
   const [stage, setStage] = useState("");
   const [location, setLocation] = useState("");
@@ -21999,7 +22021,9 @@ function ProfileTab({
             resume/LinkedIn. */}
         {kind !== "company" && (
           <>
-            <Label>Start with your resume or LinkedIn</Label>
+            <div id="profile-linkedin">
+              <Label>Start with your resume or LinkedIn</Label>
+            </div>
             <FileDrop
               label={
                 parsing
