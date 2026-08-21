@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { extractText, extractTextItems, getDocumentProxy } from "unpdf";
 
 export const runtime = "nodejs";
@@ -97,6 +98,12 @@ function tidy(s: string): string {
 }
 
 export async function POST(req: NextRequest) {
+  // Open to pre-login flows by design, so the guard is per-IP rate
+  // limiting: without it this endpoint spends our API money for anyone
+  // who curls it in a loop.
+  if (!withinRateLimit(`readpdf:${requestIp(req.headers)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const buf = Buffer.from(await req.arrayBuffer());
     if (!buf.length) {

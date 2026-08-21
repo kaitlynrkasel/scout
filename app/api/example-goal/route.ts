@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -11,6 +12,12 @@ export const maxDuration = 20;
 // and it varies per person via the salt, so no two people see the same example.
 // This is an inviting sample the user could type verbatim, not the actual search.
 export async function POST(req: NextRequest) {
+  // Open to pre-login flows by design, so the guard is per-IP rate
+  // limiting: without it this endpoint spends our API money for anyone
+  // who curls it in a loop.
+  if (!withinRateLimit(`example:${requestIp(req.headers)}`, 40, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { category, useCase, about, salt, projectName, projectContext } =
       await req.json();

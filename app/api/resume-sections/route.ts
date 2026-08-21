@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -12,6 +13,12 @@ export const maxDuration = 30;
 // paraphrased someone's resume would feed that paraphrase into every search and
 // every draft, so verbatim is a correctness requirement, not a style preference.
 export async function POST(req: NextRequest) {
+  // Open to pre-login flows by design, so the guard is per-IP rate
+  // limiting: without it this endpoint spends our API money for anyone
+  // who curls it in a loop.
+  if (!withinRateLimit(`resume:${requestIp(req.headers)}`, 20, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { text } = await req.json();
     const t = String(text || "").slice(0, 20000);

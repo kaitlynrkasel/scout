@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 export const maxDuration = 15;
@@ -110,6 +111,12 @@ async function hasFavicon(host: string): Promise<boolean> {
 }
 
 export async function GET(req: NextRequest) {
+  // Open to pre-login flows by design, so the guard is per-IP rate
+  // limiting: without it this endpoint spends our API money for anyone
+  // who curls it in a loop.
+  if (!withinRateLimit(`sitecolor:${requestIp(req.headers)}`, 120, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   const url = req.nextUrl.searchParams.get("url") || "";
   const host = hostOf(url);
   if (!host)
