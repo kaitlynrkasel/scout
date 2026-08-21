@@ -998,14 +998,14 @@ select.scout-kind-picker option {
      hue, with real paper between them. Fixed attachment sizes them to the
      viewport, not the page, so a tall dashboard doesn't stretch one orb into
      an all-over wash, and the field holds still while the page scrolls. */
-  /* One colour field, not floating orbs: the ground is mostly THE colour of
-     the day (a soft mid-tone dealt fresh each visit, --dash-tint), breathing
-     back to warm cream at the corners, like a printed gradient. */
+  /* One continuous field fading between THREE of the accent tints (dealt
+     fresh each visit), kept subtle: low alphas over warm cream so the colour
+     reads as atmosphere behind the text, never a wall of one hue. */
   background:
-    radial-gradient(120% 55% at 50% 36%, rgb(var(--dash-tint, 143 188 180) / 0.85) 0%, rgb(var(--dash-tint, 143 188 180) / 0.55) 48%, transparent 78%),
-    radial-gradient(90% 50% at 88% 88%, rgb(var(--dash-tint, 143 188 180) / 0.6) 0%, transparent 75%),
-    radial-gradient(70% 40% at 6% 74%, rgb(var(--dash-tint, 143 188 180) / 0.45) 0%, transparent 72%),
-    #f5f0e1;
+    radial-gradient(110% 50% at 28% 22%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, rgb(var(--dash-tint, 143 188 180) / 0.24) 45%, transparent 80%),
+    radial-gradient(100% 55% at 80% 55%, rgb(var(--dash-tint2, 217 161 180) / 0.36) 0%, transparent 78%),
+    radial-gradient(110% 50% at 30% 92%, rgb(var(--dash-tint3, 224 180 138) / 0.34) 0%, transparent 78%),
+    #f7f3e8;
   background-attachment: fixed;
 }
 /* Film grain over the whole surface, content included — that is the look.

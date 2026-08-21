@@ -1625,16 +1625,24 @@ function ScoutTool({
       "169 156 196", // lilac
       "143 188 180", // seafoam
     ];
+    // Three tints per visit, fading into one field. Rotate which trio leads
+    // so no single hue (looking at you, sky blue) ever owns the page.
     let lastT = -1;
     try {
       lastT = tints.indexOf(localStorage.getItem("scout_dash_last") || "");
     } catch {}
     const tp = tints.map((_, k) => k).filter((k) => k !== lastT);
-    const ti = tp[Math.floor(Math.random() * tp.length)];
+    for (let k = tp.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1));
+      [tp[k], tp[r]] = [tp[r], tp[k]];
+    }
+    const trio = tp.slice(0, 3);
     try {
-      localStorage.setItem("scout_dash_last", tints[ti]);
+      localStorage.setItem("scout_dash_last", tints[trio[0]]);
     } catch {}
-    document.documentElement.style.setProperty("--dash-tint", tints[ti]);
+    document.documentElement.style.setProperty("--dash-tint", tints[trio[0]]);
+    document.documentElement.style.setProperty("--dash-tint2", tints[trio[1]]);
+    document.documentElement.style.setProperty("--dash-tint3", tints[trio[2]]);
   }, []);
 
   const gateCancelRef = useRef(false);
