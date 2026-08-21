@@ -102,7 +102,17 @@ export default function AuthScreen({
         typeof window !== "undefined" ? `${window.location.origin}/app` : undefined;
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) throw error;
-      setNotice(`We sent a 6-digit code to ${email.trim()}. Enter it below with your new password.`);
+      // Deliberately conditional. Supabase returns success for an address with
+      // NO account — it sends nothing rather than confirm the address isn't
+      // registered — so "we sent a code" is a claim this code cannot make, and
+      // stating it flatly sends someone hunting through their inbox for a mail
+      // that was never sent. The wording has to cover both outcomes without
+      // revealing which one happened.
+      setNotice(
+        `If ${email.trim()} has a Scout account, a 6-digit code is on its way — ` +
+          `enter it below with your new password. Nothing arriving after a minute or two ` +
+          `usually means the account is under a different address; check your spam folder too.`
+      );
       setMode("reset-code");
     } catch (e: any) {
       setError(e?.message || "Couldn't send the code. Please try again.");
@@ -314,7 +324,7 @@ export default function AuthScreen({
               : mode === "forgot"
               ? "Enter your email and we'll send a code to reset it."
               : mode === "reset-code"
-              ? `Enter the code we sent to ${email} and your new password.`
+              ? `Enter the code sent to ${email} and your new password.`
               : mode === "newpw"
               ? "Choose a new password for your account."
               : `Enter the 6-digit code we sent to ${email}.`}
