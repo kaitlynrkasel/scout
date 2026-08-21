@@ -10,6 +10,7 @@ import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
 import { pdlEnabled, goalToPdlFilters, pdlRosterCached, pdlPeopleAsCandidates, type PdlFilters } from "./pdl";
 import type { Opportunity } from "./types";
+import { todayLine } from "./today";
 
 // ---- Auto-tunable fit-scoring clauses ----
 // Isolated as single-string constants (not woven into the surrounding
@@ -433,6 +434,7 @@ export async function decomposeGoal(
         .join("; ")}`
     : ``;
   const user =
+    `${todayLine()}\n\n` +
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their field, sub-field, seniority, city are in here): ` +
     `${String(about || "").slice(0, 1600)}` +
     prospectingNote +
@@ -765,6 +767,7 @@ async function planQueries(
     // drafting), see buildPersonalOverride in lib/autotune.ts.
     (personalOverride ? `\n\n${personalOverride}` : "");
   const user =
+    `${todayLine()}\n\n` +
     `USE CASE: ${useCase}\nGOAL: ${g}\nABOUT THE USER (their industry, sub-field, seniority and city are in here): ${about.slice(0, 1600)}` +
     planBlock(plan) +
     feedbackBlock(feedback, g);

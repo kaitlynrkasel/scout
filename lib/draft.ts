@@ -7,6 +7,7 @@ import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { goalWantsAnyIndustry, goalWantsJobs } from "./discover";
 import { ApiCreditError } from "./apiErrors";
 import type { Draft, Opportunity, OutreachTemplate } from "./types";
+import { todayLine } from "./today";
 
 // A LinkedIn target is defined by the actual recipient, their channel or
 // handle URL, not just by which draft "kind" happens to be selected.
@@ -357,7 +358,7 @@ export async function draftFor(
     gen = parseJsonLoose(
       await claudeJson(
         sys,
-        `${sender}\n\n${recipient}\n\n${purpose}\n\n${task}${tpl}${extras}`
+        `${todayLine()}\n\n${sender}\n\n${recipient}\n\n${purpose}\n\n${task}${tpl}${extras}`
       )
     );
   } catch (e) {

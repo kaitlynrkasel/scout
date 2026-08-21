@@ -5,6 +5,7 @@
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { ApiCreditError } from "./apiErrors";
 import { safeUrl, gatherPages } from "./pageText";
+import { todayLine } from "./today";
 
 // kinds Scout can DRAFT (written prose) vs. ones the applicant must supply.
 const WRITABLE = new Set(["cover_letter", "essay", "short_answer", "form_field"]);
@@ -131,7 +132,7 @@ export async function draftApplication(opts: {
 
     let drafted: any = null;
     try {
-      drafted = parseJsonLoose(await claudeJson(drSys, drUser));
+      drafted = parseJsonLoose(await claudeJson(drSys, `${todayLine()}\n\n${drUser}`));
     } catch (e) {
       if (e instanceof ApiCreditError) throw e;
       drafted = null;
