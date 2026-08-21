@@ -1206,6 +1206,7 @@ export function LiveEditPanel({
     record(el, prop, value);
   };
   const undo = () => {
+    liveEditRef.current = null;
     const last = undoRef.current[undoRef.current.length - 1];
     if (!last) return;
     while (undoRef.current.length && undoRef.current[undoRef.current.length - 1].g === last.g) {
@@ -1216,6 +1217,7 @@ export function LiveEditPanel({
     bump((n) => n + 1);
   };
   const redo = () => {
+    liveEditRef.current = null;
     const last = redoRef.current[redoRef.current.length - 1];
     if (!last) return;
     while (redoRef.current.length && redoRef.current[redoRef.current.length - 1].g === last.g) {
@@ -1598,12 +1600,33 @@ export function LiveEditPanel({
   }, [frameRef, frameRef.current?.contentDocument]);
 
   const style = sel ? (frameRef.current?.contentWindow?.getComputedStyle(sel) as CSSStyleDeclaration | undefined) : undefined;
+  // Continuous inputs (a color wheel, a slider) fire dozens of changes per
+  // drag. Coalesce a run of edits to the same property on the same selection
+  // into ONE undo step per element, updating its end value in place, so cmd+Z
+  // jumps back to before the drag instead of replaying every hue.
+  const liveEditRef = useRef<{ key: string; g: number } | null>(null);
+  useEffect(() => {
+    liveEditRef.current = null; // new selection = new gesture
+  }, [sels]);
   const apply = (prop: string, value: string) => {
-    const g = ++gestureRef.current;
-    for (const el of sels) {
-      const prev = prop === "text" ? el.innerText : (el.style as any)[prop] || "";
-      pushUndo(el, prop, prev, value, g);
-      applyRaw(el, prop, value);
+    const key = prop + "|" + sels.map((el) => cssPath(el)).join(",");
+    const cont = liveEditRef.current?.key === key ? liveEditRef.current : null;
+    if (cont) {
+      for (const el of sels) {
+        const step = undoRef.current.find(
+          (u) => u.g === cont.g && u.el === el && u.prop === prop
+        );
+        if (step) step.next = value;
+        applyRaw(el, prop, value);
+      }
+    } else {
+      const g = ++gestureRef.current;
+      for (const el of sels) {
+        const prev = prop === "text" ? el.innerText : (el.style as any)[prop] || "";
+        pushUndo(el, prop, prev, value, g);
+        applyRaw(el, prop, value);
+      }
+      liveEditRef.current = { key, g };
     }
     bump((n) => n + 1);
   };
