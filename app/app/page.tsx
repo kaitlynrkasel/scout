@@ -13502,11 +13502,15 @@ function FindsTab({
 
       {/* Status filter (the main control) + a quiet side group of view toggle,
           Filters, and Export — sub-options, pushed to the edge. */}
-      <div className={`${srcCounts.manual > 0 && srcCounts.scout > 0 ? "mt-3" : "mt-6"} flex items-center gap-3`}>
+      <div
+        className={`${
+          srcCounts.manual > 0 && srcCounts.scout > 0 ? "mt-3" : "mt-6"
+        } flex flex-col items-stretch gap-2 lg:flex-row lg:items-center lg:gap-3`}
+      >
         {/* One scrolling strip, never a wrap. Wrapping left a single orphaned
             chip on a second line with the side controls stranded beside the
             first, which is what made this toolbar look thrown together. */}
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [mask-image:linear-gradient(to_right,#000_calc(100%-26px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {FIND_STATUSES.map((s) => {
             const on = filter === s.key;
             return (
@@ -13528,7 +13532,11 @@ function FindsTab({
             );
           })}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
+        {/* Below `sm` this drops to its own row. Sharing one line with the
+            status strip left the chips about 130px to live in, so "New 11" was
+            sliced down the middle — which reads as broken rather than as
+            something you can scroll. */}
+        <div className="flex shrink-0 items-center gap-1 self-end lg:self-auto">
           {shown.length > 0 && !selectMode && (
             <button
               onClick={() => setSelectMode(true)}
