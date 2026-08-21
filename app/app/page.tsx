@@ -17616,10 +17616,6 @@ function OutreachAdvice({
   return (
     <section className="mt-10">
       <h2 className="text-lg font-bold text-ink">Outreach advice</h2>
-      <p className="mt-1 text-sm text-body/80">
-        Coaching on your own drafts, what&apos;s working for other people on Scout,
-        and the fundamentals that always hold.
-      </p>
 
       {/* Tailored coaching from the user's own drafts */}
       <div className="mt-4">

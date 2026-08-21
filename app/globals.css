@@ -815,7 +815,9 @@ select.scout-kind-picker option {
   background:
     radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
     radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
-    radial-gradient(70% 50% at 46% 52%, rgb(255 255 255 / 0.5) 0%, transparent 72%),
+    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 217 161 180) / 0.16) 0%, transparent 85%),
+    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 143 188 180) / 0.14) 0%, transparent 85%),
+    radial-gradient(60% 44% at 48% 50%, rgb(255 255 255 / 0.38) 0%, transparent 75%),
     radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
     radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
     #f8f4ea;
@@ -852,22 +854,19 @@ select.scout-kind-picker option {
   border-top: 1px solid rgb(var(--c-warm-border));
 }
 .dark .scout-results { background: rgb(var(--c-surface)); }
-.dark .scout-results {
-  background: #102c3c;
-}
 
 /* The two toggles. Rounded, translucent, sitting on the ground rather than in
    a box, and wide enough to read as a choice rather than a form field. */
 .stage-toggle {
   border-radius: 9999px;
-  border: 1px solid rgb(255 255 255 / 0.22);
-  background: rgb(255 255 255 / 0.09);
-  color: #f6efe6;
+  border: 1px solid rgb(var(--c-ink) / 0.22);
+  background: rgb(255 255 255 / 0.55);
+  color: rgb(var(--c-ink));
   transition: background-color 0.2s ease, border-color 0.2s ease;
 }
 .stage-toggle:hover {
-  background: rgb(255 255 255 / 0.16);
-  border-color: rgb(255 255 255 / 0.34);
+  background: rgb(255 255 255 / 0.8);
+  border-color: rgb(var(--c-ink) / 0.4);
 }
 
 /* The ask itself: no border, no fill, no focus ring. Just words on the ground. */
@@ -1032,7 +1031,9 @@ select.scout-kind-picker option {
   background:
     radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
     radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
-    radial-gradient(70% 50% at 46% 52%, rgb(255 255 255 / 0.5) 0%, transparent 72%),
+    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 217 161 180) / 0.16) 0%, transparent 85%),
+    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 143 188 180) / 0.14) 0%, transparent 85%),
+    radial-gradient(60% 44% at 48% 50%, rgb(255 255 255 / 0.38) 0%, transparent 75%),
     radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
     radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
     #f8f4ea;
