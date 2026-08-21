@@ -969,7 +969,6 @@ select.scout-kind-picker option {
 .dash-stage {
   position: relative;
   isolation: isolate;
-  border-radius: 24px;
   /* Aura orbs, scattered like prints on a wall: each one compact, its own
      hue, with real paper between them. Fixed attachment sizes them to the
      viewport, not the page, so a tall dashboard doesn't stretch one orb into
@@ -977,13 +976,12 @@ select.scout-kind-picker option {
   /* Blobs, not polka dots: stretched ellipses that lean into each other and
      share soft connecting washes, so the colour reads as one drifting field.
      Alphas stay low so text always wins. */
+  /* Four quiet blobs, one per region, lots of open paper between. */
   background:
-    radial-gradient(900px 420px at 22% 6%, rgb(224 105 158 / 0.22) 0%, rgb(240 79 82 / 0.16) 40%, transparent 85%),
-    radial-gradient(700px 560px at 76% 22%, rgb(55 126 192 / 0.18) 0%, rgb(84 96 172 / 0.1) 55%, transparent 85%),
-    radial-gradient(1100px 500px at 48% 40%, rgb(247 137 31 / 0.12) 0%, rgb(255 215 71 / 0.08) 50%, transparent 88%),
-    radial-gradient(800px 640px at 14% 74%, rgb(196 213 68 / 0.16) 0%, rgb(18 186 170 / 0.1) 55%, transparent 86%),
-    radial-gradient(760px 520px at 88% 78%, rgb(122 90 168 / 0.15) 0%, rgb(224 105 158 / 0.08) 55%, transparent 86%),
-    radial-gradient(1200px 700px at 55% 96%, rgb(18 186 170 / 0.1) 0%, transparent 85%),
+    radial-gradient(1000px 480px at 20% 4%, rgb(224 105 158 / 0.2) 0%, rgb(247 137 31 / 0.1) 45%, transparent 85%),
+    radial-gradient(800px 620px at 84% 30%, rgb(55 126 192 / 0.15) 0%, transparent 84%),
+    radial-gradient(900px 680px at 10% 82%, rgb(196 213 68 / 0.14) 0%, rgb(18 186 170 / 0.08) 50%, transparent 85%),
+    radial-gradient(860px 560px at 90% 94%, rgb(122 90 168 / 0.13) 0%, transparent 84%),
     #fdfbf6;
   background-attachment: fixed;
 }
@@ -996,9 +994,9 @@ select.scout-kind-picker option {
   z-index: 5;
   pointer-events: none;
   border-radius: inherit;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-size: 240px 240px;
-  opacity: 0.3;
+  opacity: 0.5;
   mix-blend-mode: overlay;
 }
 .dark .dash-stage {

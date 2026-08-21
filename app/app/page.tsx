@@ -15781,7 +15781,7 @@ ${body}
   }
 
   return (
-    <main className="dash-stage w-full px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
+    <main className="dash-stage w-full flex-1 px-5 py-8 sm:px-8 sm:py-10 xl:px-12">
       {/* -------- Header: title + You/Scout toggle + Search -------- */}
       {/* Wraps rather than squeezing: at 390px the title, the toggle and the CTA
           can't share a line, and the CTA was breaking mid-label. On a phone it

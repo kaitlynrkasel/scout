@@ -99,7 +99,15 @@ export async function GET(req: NextRequest) {
     for (const [who, v] of byMover) {
       const bits = [];
       if (v.drafted) bits.push(`wrote ${v.drafted} draft${v.drafted === 1 ? "" : "s"}`);
-      if (v.sent) bits.push(`sent ${v.sent} message${v.sent === 1 ? "" : "s"}`);
+      // "Marked sent", not "sent": a bulk sheet import can flip hundreds of
+      // rows to sent at once, and claiming the person mailed 1000 strangers
+      // reads very differently from recording history.
+      if (v.sent)
+        bits.push(
+          v.sent >= 50
+            ? `marked ${v.sent} finds sent (bulk update)`
+            : `marked ${v.sent} find${v.sent === 1 ? "" : "s"} sent`
+        );
       items.push({
         kind: "outreach",
         who,
