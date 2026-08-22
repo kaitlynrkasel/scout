@@ -735,13 +735,13 @@
             },
             {
               "sev": "must",
-              "title": "Grouped by what it is, not which project caught it",
-              "good": "Toggles read Internships / Jobs / Schools / Submissions / Other, classified from each find's own name, role, and posting text. An internship found in a general project files under Internships.",
+              "title": "Organized by your projects and categories",
+              "good": "The toggles mirror your own structure: one chip per project (with counts), and picking a project reveals its categories as a second row. Filtering never loses anything; All brings it back.",
               "steps": [
-                "Check a few finds against their chips.",
-                "A misfiled type (an internship under Other, a playlist under Jobs) is a needs-work."
+                "Click through the project chips and a category sub-chip.",
+                "Counts must add up, and All must always show everything."
               ],
-              "key": "applications::grouped-by-what-it-is-not-which-project-caught-it"
+              "key": "applications::organized-by-your-projects-and-categories"
             },
             {
               "sev": "must",

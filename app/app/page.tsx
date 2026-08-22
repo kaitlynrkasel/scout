@@ -8662,6 +8662,7 @@ function ScoutTool({
         <ApplicationsTab
           finds={finds}
           projects={visibleProjects}
+          categories={categories}
           onSetRank={(id, rank) => patchFind(id, { appRank: rank })}
           onOpenKit={(f) => setAppKitId(f.id)}
           onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
@@ -10941,6 +10942,7 @@ function StepMark({ n, title }: { n: number; title: string }) {
    programs, submissions) or marked by hand, each opening its full kit. Paste
    a whole posting to build a prospect from nothing. */
 function ApplicationsTab({
+  categories = [],
   finds,
   projects,
   onOpenKit,
@@ -10950,6 +10952,7 @@ function ApplicationsTab({
   building,
   goFinds,
 }: {
+  categories?: Category[];
   finds: Find[];
   projects: Project[];
   onOpenKit: (f: Find) => void;
@@ -10962,23 +10965,31 @@ function ApplicationsTab({
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [err, setErr] = useState("");
-  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [projFilter, setProjFilter] = useState<string>("");
+  const [catFilter, setCatFilter] = useState<string>("");
   const [view, setView] = useState<"list" | "compare">("list");
   const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
-  // Grouped by what the application IS (internship, school, submission…),
-  // not by which project happened to catch it.
-  const byType = new Map<string, Find[]>();
+  // Grouped by PROJECT, then by category inside it — the structure the user
+  // already built is the structure of their applications.
+  const byProject = new Map<string, Find[]>();
   for (const f of apps) {
-    const k = applicationType(f);
-    const arr = byType.get(k) || [];
+    const arr = byProject.get(f.projectId) || [];
     arr.push(f);
-    byType.set(k, arr);
+    byProject.set(f.projectId, arr);
   }
-  const TYPE_ORDER = ["Internships", "Jobs", "Schools", "Submissions", "Other"];
-  const typeEntries = [...byType.entries()].sort(
-    (a, b) => TYPE_ORDER.indexOf(a[0]) - TYPE_ORDER.indexOf(b[0])
-  );
-  const shown = typeFilter ? apps.filter((f) => applicationType(f) === typeFilter) : apps;
+  const projName = (id: string) => projects.find((p) => p.id === id)?.name || "Other";
+  const inProject = projFilter ? apps.filter((f) => f.projectId === projFilter) : apps;
+  const byCat = new Map<string, Find[]>();
+  if (projFilter)
+    for (const f of inProject) {
+      const k = f.categoryId || "";
+      const arr = byCat.get(k) || [];
+      arr.push(f);
+      byCat.set(k, arr);
+    }
+  const catName = (id: string) =>
+    categories.find((c) => c.id === id)?.name || "Solo searches";
+  const shown = catFilter ? inProject.filter((f) => (f.categoryId || "") === catFilter) : inProject;
   // Comparison columns: the union of the group's criteria asks, most common
   // first — for schools that's Tuition?/Deadline?, for jobs Paid?/Remote?.
   const askCounts = new Map<string, number>();
@@ -11010,9 +11021,9 @@ function ApplicationsTab({
         </button>
       </div>
       <p className="mt-1 max-w-[62ch] text-sm text-body/70">
-        Everything you are applying to, grouped by what it is. Open one and
-        its kit is ready; Compare puts a group side by side so you can weigh
-        and rank them yourself.
+        Everything you are applying to, organized by your projects and their
+        categories. Open one and its kit is ready; Compare puts a group side
+        by side so you can weigh and rank them yourself.
       </p>
 
       {showPaste && (
@@ -11051,26 +11062,32 @@ function ApplicationsTab({
       {/* Type toggles: one per project that actually has applications. */}
       <div className="mt-6 flex flex-wrap items-center gap-1.5">
         <button
-          onClick={() => setTypeFilter("")}
+          onClick={() => {
+            setProjFilter("");
+            setCatFilter("");
+          }}
           className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-            !typeFilter
+            !projFilter
               ? "bg-brown text-white"
               : "border border-warm-border text-body hover:bg-warm-bg"
           }`}
         >
           All · {apps.length}
         </button>
-        {typeEntries.map(([ty, arr]) => (
+        {[...byProject.entries()].map(([pid, arr]) => (
           <button
-            key={ty}
-            onClick={() => setTypeFilter(typeFilter === ty ? "" : ty)}
+            key={pid}
+            onClick={() => {
+              setProjFilter(projFilter === pid ? "" : pid);
+              setCatFilter("");
+            }}
             className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-              typeFilter === ty
+              projFilter === pid
                 ? "bg-brown text-white"
                 : "border border-warm-border text-body hover:bg-warm-bg"
             }`}
           >
-            {ty} · {arr.length}
+            {projName(pid)} · {arr.length}
           </button>
         ))}
         <div className="ml-auto inline-flex gap-1 rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
@@ -11092,6 +11109,24 @@ function ApplicationsTab({
           ))}
         </div>
       </div>
+
+      {projFilter && byCat.size > 1 && (
+        <div className="mt-2.5 flex flex-wrap items-center gap-1.5">
+          {[...byCat.entries()].map(([cid, arr]) => (
+            <button
+              key={cid || "solo"}
+              onClick={() => setCatFilter(catFilter === cid ? "" : cid)}
+              className={`rounded-full px-3 py-1 text-[11px] font-semibold transition ${
+                catFilter === cid
+                  ? "bg-brown-tint text-brown-deep"
+                  : "border border-warm-border text-body/70 hover:bg-warm-bg"
+              }`}
+            >
+              {catName(cid)} · {arr.length}
+            </button>
+          ))}
+        </div>
+      )}
 
       {shown.length === 0 ? (
         <p className="mt-6 max-w-[56ch] rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-sm text-body/70">
