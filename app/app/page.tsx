@@ -8377,6 +8377,16 @@ function ScoutTool({
         <TemplatesTab
           kinds={OUTREACH_KINDS}
           about={aboutText}
+          onAddCoverLetter={(text) =>
+            saveTpls([
+              ...myTemplates,
+              {
+                id: `tpl-${Date.now()}`,
+                channel: "Cover letter",
+                text,
+              } as OutreachTemplate,
+            ])
+          }
           resumeFileName={resumeFile?.name || ""}
           onResumeFile={storeResumeFile}
           onClearResume={() => saveResumeFile(null)}
@@ -20915,6 +20925,7 @@ function CoverLetterTailor({
 function TemplatesTab({
   kinds,
   about = "",
+  onAddCoverLetter,
   resumeFileName = "",
   onResumeFile,
   onClearResume,
@@ -20945,6 +20956,7 @@ function TemplatesTab({
 }: {
   kinds: string[];
   about?: string;
+  onAddCoverLetter?: (text: string) => void;
   resumeFileName?: string;
   onResumeFile?: (f: File) => void;
   onClearResume?: () => void;
@@ -20979,6 +20991,9 @@ function TemplatesTab({
   // (the endpoint requires sign-in so strangers can't burn API credits).
   getToken?: (() => Promise<string | null>) | null;
 }) {
+  // Three pages behind one top toggle: outreach templates, application
+  // materials (resume + cover letters + tailoring), and email signatures.
+  const [tView, setTView] = useState<"outreach" | "materials" | "signatures">("outreach");
   // Email-signature editor state: which project (if any) the per-project
   // signature editor is pointed at, and whether a "build from resume" is running.
   // Defaults to the project you're currently working in so it opens ready to edit.
@@ -21123,6 +21138,28 @@ function TemplatesTab({
         </div>
       )}
 
+      {/* Page toggle: three rooms, no scrolling between them. */}
+      <div className="mb-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+        {(
+          [
+            ["outreach", "Outreach"],
+            ["materials", "Application materials"],
+            ["signatures", "Email signatures"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setTView(v)}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+              tView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tView === "outreach" && (<>
       <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <div className="grid gap-5 sm:grid-cols-[210px_1fr] [&>*]:min-w-0">
           <div>
@@ -21370,6 +21407,9 @@ function TemplatesTab({
         )}
       </section>
 
+      </>)}
+
+      {tView === "materials" && (<>
       {/* ---------------- Application materials ----------------
           The other half of the tab: the resume file Scout attaches to
           applications, saved cover letters, and the tailoring walkthrough. */}
@@ -21430,12 +21470,32 @@ function TemplatesTab({
                 <button
                   onClick={() => {
                     setChannel("Cover letter");
+                    setTView("outreach");
                     window.scrollTo({ top: 0, behavior: "smooth" });
                   }}
                   className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg"
                 >
                   Write one in the builder
                 </button>
+                {/* Or hand over the file you already have; Scout reads the
+                    text out of it and saves it as your cover letter. */}
+                <label className="cursor-pointer rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg">
+                  Upload a cover letter
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx,.txt,.md,.html,.htm"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f = e.target.files?.[0];
+                      e.currentTarget.value = "";
+                      if (!f || !onAddCoverLetter) return;
+                      try {
+                        const txt = (await fileToText(f)).trim();
+                        if (txt) onAddCoverLetter(txt);
+                      } catch {}
+                    }}
+                  />
+                </label>
               </div>
               {coverLetters.length === 0 ? (
                 <p className="mt-2 text-xs leading-relaxed text-body/70">
@@ -21472,12 +21532,16 @@ function TemplatesTab({
             onLoadIntoBuilder={(finalText) => {
               setChannel("Cover letter");
               setText(finalText);
+              setTView("outreach");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
           />
         </div>
       </section>
 
+      </>)}
+
+      {tView === "outreach" && (<>
       {/* Teammates' shared templates, with attribution + one-tap copy. */}
       {teamName && teamShown.length > 0 && (
         <section className="mt-8">
@@ -21525,6 +21589,9 @@ function TemplatesTab({
         </section>
       )}
 
+      </>)}
+
+      {tView === "signatures" && (<>
       {/* -------- Email signatures -------- */}
       <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Email signatures</h2>
@@ -21610,6 +21677,7 @@ function TemplatesTab({
           </div>
         )}
       </section>
+    </>)}
     </main>
   );
 }
