@@ -266,6 +266,28 @@ function sensesApplication(f: Find): boolean {
   );
 }
 
+// Best-effort deadline for an application, pulled from the criteria answers
+// ("Apply by March 1"), the stored posting text, or the posting window.
+function applicationDeadline(f: Find): number | undefined {
+  const hay = [
+    ...(f.opp.criteria || []).map((c) => `${c.ask} ${c.answer}`),
+    f.opp.postingWindow || "",
+    (f.requirements || "").slice(0, 1500),
+  ].join(" · ");
+  const m =
+    hay.match(
+      /\b(?:deadline|apply by|due|applications? close[sd]?(?: on| by)?|closes)\D{0,12}((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s*\d{4})?|\d{1,2}\/\d{1,2}(?:\/\d{2,4})?)/i
+    ) ||
+    hay.match(
+      /\b((?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s+\d{1,2}(?:,?\s*\d{4})?)\s+(?:deadline|due)\b/i
+    );
+  if (!m) return undefined;
+  let str = m[1];
+  if (!/\d{4}/.test(str)) str = `${str}, ${new Date().getFullYear()}`;
+  const t = Date.parse(str);
+  return Number.isNaN(t) ? undefined : t;
+}
+
 function cohortHintFrom(community: CommunityStats | null): string {
   const c = community?.cohort;
   if (!c) return "";
@@ -656,6 +678,7 @@ interface Find {
   // Application tracking: true/false when the user set it themselves;
   // undefined means "let Scout sense it" (listings, programs, submissions).
   isApplication?: boolean;
+  appRank?: number; // the user's own 1-N ranking inside the applications chart
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
@@ -1690,13 +1713,15 @@ function ScoutTool({
   // same lead twice in a row.
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "outreach") return;
+    // Warm family only: beiges, creams, tans — the field keeps its motion
+    // and grain, coloured the way the house is.
     const tints = [
-      "186 205 172", // soft sage
-      "147 174 203", // sky
-      "217 161 180", // blush
-      "224 180 138", // apricot
-      "169 156 196", // lilac
-      "176 209 201", // soft seafoam
+      "214 198 178", // warm beige
+      "201 182 158", // tan
+      "228 216 198", // cream
+      "190 170 146", // camel
+      "222 206 186", // sand
+      "206 188 164", // latte
     ];
     // Three tints per visit, fading into one field — and deliberately
     // temperature-diverse, so the alternation is visible in the FIRST
@@ -1849,6 +1874,34 @@ function ScoutTool({
   // posting builder's in-flight state.
   const [appKitId, setAppKitId] = useState<string | null>(null);
   const [appBuilding, setAppBuilding] = useState(false);
+  // Paste a whole posting anywhere (Applications or Manual): Scout parses it,
+  // researches the org, and the prospect lands in Finds + Applications.
+  async function buildApplicationFromPosting(jobText: string): Promise<string> {
+    setAppBuilding(true);
+    try {
+      const r = await fetch("/api/application-kit", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ jobText, about: aboutText }),
+      });
+      const j = await r.json();
+      if (!r.ok) return j.error || "Couldn't read that posting.";
+      const p = j.parsed || {};
+      if (!p.role && !p.org) return "Couldn't find a role or organization in that text.";
+      const err = addManualFind({
+        name: p.role ? `${p.role}${p.org ? ` at ${p.org}` : ""}` : p.org,
+        outlet: p.org || "",
+        email: p.contact_email || "",
+        url: p.url || "",
+        location: p.location || "",
+        requirements: jobText.slice(0, 4000),
+        isApplication: true,
+      });
+      return err || "";
+    } finally {
+      setAppBuilding(false);
+    }
+  }
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
   const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
@@ -8347,6 +8400,8 @@ function ScoutTool({
 
       {tab === "manual" && (
         <ManualTab
+          onBuildFromPosting={buildApplicationFromPosting}
+          buildingApplication={appBuilding}
           projects={visibleProjects}
           activeProjectId={activeId}
           onAddManual={addManualFind}
@@ -8560,37 +8615,13 @@ function ScoutTool({
       {tab === "applications" && (
         <ApplicationsTab
           finds={finds}
+          projects={visibleProjects}
+          onSetRank={(id, rank) => patchFind(id, { appRank: rank })}
           onOpenKit={(f) => setAppKitId(f.id)}
           onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
           building={appBuilding}
           goFinds={() => setTab("finds")}
-          onBuildFromPosting={async (jobText) => {
-            setAppBuilding(true);
-            try {
-              const r = await fetch("/api/application-kit", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({ jobText, about: aboutText }),
-              });
-              const j = await r.json();
-              if (!r.ok) return j.error || "Couldn't read that posting.";
-              const p = j.parsed || {};
-              if (!p.role && !p.org)
-                return "Couldn't find a role or organization in that text.";
-              const err = addManualFind({
-                name: p.role ? `${p.role}${p.org ? ` at ${p.org}` : ""}` : p.org,
-                outlet: p.org || "",
-                email: p.contact_email || "",
-                url: p.url || "",
-                location: p.location || "",
-                requirements: jobText.slice(0, 4000),
-                isApplication: true,
-              });
-              return err || "";
-            } finally {
-              setAppBuilding(false);
-            }
-          }}
+          onBuildFromPosting={buildApplicationFromPosting}
         />
       )}
 
@@ -9685,21 +9716,7 @@ function SideNav({
   // Colour by meaning: each tab's active pill wears the colour of the IDEA
   // that tab is about — searching cobalt, people teal, your-voice magenta,
   // company denim. There is deliberately no single main accent.
-  const TAB_IDEA: Record<string, string> = {
-    dashboard: "#19455e",
-    outreach: "#19455e",
-    manual: "#4e9c9c",
-    finds: "#4e9c9c",
-    applications: "#19455e",
-    spreadsheet: "#4e9c9c",
-    projects: "#19455e",
-    templates: "#aa2377",
-    profile: "#aa2377",
-    team: "#5b4aa8",
-    account: "#19455e",
-    billing: "#19455e",
-    settings: "#19455e",
-  };
+  const TAB_IDEA: Record<string, string> = {};
   // Rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the idea-coloured active pill.
   const railItem = (
@@ -10795,6 +10812,18 @@ function AskAboutFind({ opp }: { opp: Opportunity }) {
 }
 
 
+// Numbered waypoints for the application walkthrough.
+function StepMark({ n, title }: { n: number; title: string }) {
+  return (
+    <div className="mt-8 flex items-center gap-3 first:mt-0">
+      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-brown text-xs font-bold text-white">
+        {n}
+      </span>
+      <span className="text-sm font-bold tracking-tight text-ink">{title}</span>
+    </div>
+  );
+}
+
 /* ---------------- The application desk ----------------
    One popup per application prospect with everything needed to apply well:
    the point of contact, your resume ready to download, the right stored
@@ -10808,114 +10837,293 @@ function AskAboutFind({ opp }: { opp: Opportunity }) {
    a whole posting to build a prospect from nothing. */
 function ApplicationsTab({
   finds,
+  projects,
   onOpenKit,
   onToggleApplication,
+  onSetRank,
   onBuildFromPosting,
   building,
   goFinds,
 }: {
   finds: Find[];
+  projects: Project[];
   onOpenKit: (f: Find) => void;
   onToggleApplication: (id: string, v: boolean) => void;
+  onSetRank: (id: string, rank: number | undefined) => void;
   onBuildFromPosting: (jobText: string) => Promise<string>;
   building: boolean;
   goFinds: () => void;
 }) {
   const [paste, setPaste] = useState("");
+  const [showPaste, setShowPaste] = useState(false);
   const [err, setErr] = useState("");
+  const [projFilter, setProjFilter] = useState<string>("");
+  const [view, setView] = useState<"list" | "compare">("list");
   const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
+  const byProject = new Map<string, Find[]>();
+  for (const f of apps) {
+    const arr = byProject.get(f.projectId) || [];
+    arr.push(f);
+    byProject.set(f.projectId, arr);
+  }
+  const projName = (id: string) => projects.find((p) => p.id === id)?.name || "Other";
+  const shown = projFilter ? apps.filter((f) => f.projectId === projFilter) : apps;
+  // Comparison columns: the union of the group's criteria asks, most common
+  // first — for schools that's Tuition?/Deadline?, for jobs Paid?/Remote?.
+  const askCounts = new Map<string, number>();
+  for (const f of shown)
+    for (const c of f.opp.criteria || []) askCounts.set(c.ask, (askCounts.get(c.ask) || 0) + 1);
+  const asks = [...askCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([a]) => a);
+  // Deadline urgency wins by default; your own rank breaks ties, then fit.
+  const ranked = [...shown].sort((a, b) => {
+    const da = applicationDeadline(a) ?? Infinity;
+    const db = applicationDeadline(b) ?? Infinity;
+    if (da !== db) return da - db;
+    return (
+      (a.appRank ?? 999) - (b.appRank ?? 999) ||
+      (b.opp.fitScore || 0) - (a.opp.fitScore || 0)
+    );
+  });
+
   return (
     <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">
-        Your <span className="text-brown">applications</span>
-      </h1>
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
+          Your <span className="text-brown">applications</span>
+        </h1>
+        <button
+          onClick={() => setShowPaste((v) => !v)}
+          className="ml-auto rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+        >
+          {showPaste ? "Hide" : "Paste a posting"}
+        </button>
+      </div>
       <p className="mt-1 max-w-[62ch] text-sm text-body/70">
-        Everything you are applying to: jobs, internships, programs, playlist
-        submissions. Open one and the whole kit is ready — contact, files,
-        tailored cover letter, research, prep.
+        Everything you are applying to, grouped by project. Open one and its
+        kit is ready; Compare puts a group side by side so you can weigh and
+        rank them yourself.
       </p>
 
-      {/* Build one from a pasted posting. */}
-      <section className="mt-6 max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
-        <div className="text-sm font-bold text-ink">Paste a posting</div>
-        <p className="mt-1 text-xs leading-relaxed text-body/70">
-          Drop in a whole job description or program page. Scout reads it,
-          researches the organization, and sets the application up for you.
-        </p>
-        <textarea
-          value={paste}
-          onChange={(e) => setPaste(e.target.value)}
-          rows={4}
-          placeholder="Paste the job description or program details"
-          className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
-        />
-        <button
-          onClick={async () => {
-            setErr("");
-            try {
-              const msg = await onBuildFromPosting(paste);
-              if (msg) setErr(msg);
-              else setPaste("");
-            } catch (e: any) {
-              setErr(e?.message || "Couldn't read that posting.");
-            }
-          }}
-          disabled={building || !paste.trim()}
-          className="mt-3 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
-        >
-          {building ? "Reading and researching…" : "Build my application"}
-        </button>
-        {err && <p className="mt-2 text-sm text-danger">{err}</p>}
-      </section>
+      {showPaste && (
+        <section className="mt-5 max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+          <div className="text-sm font-bold text-ink">Paste a posting</div>
+          <textarea
+            value={paste}
+            onChange={(e) => setPaste(e.target.value)}
+            rows={4}
+            placeholder="Paste the job description or program details; Scout reads it, researches the organization, and sets the application up"
+            className="mt-2 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+          />
+          <button
+            onClick={async () => {
+              setErr("");
+              try {
+                const msg = await onBuildFromPosting(paste);
+                if (msg) setErr(msg);
+                else {
+                  setPaste("");
+                  setShowPaste(false);
+                }
+              } catch (e: any) {
+                setErr(e?.message || "Couldn't read that posting.");
+              }
+            }}
+            disabled={building || !paste.trim()}
+            className="mt-3 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+          >
+            {building ? "Reading and researching…" : "Build my application"}
+          </button>
+          {err && <p className="mt-2 text-sm text-danger">{err}</p>}
+        </section>
+      )}
 
-      <section className="mt-8">
-        <h2 className="text-lg font-bold text-ink">In progress ({apps.length})</h2>
-        {apps.length === 0 ? (
-          <p className="mt-3 max-w-[56ch] rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-sm text-body/70">
-            Nothing tracked yet. Scout marks postings, programs, and
-            submissions automatically as it finds them — or open any find in{" "}
-            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
-              Finds
-            </button>{" "}
-            and choose “Track as application”.
-          </p>
-        ) : (
-          <div className="mt-4 grid gap-3 xl:grid-cols-2">
-            {apps.map((f) => {
-              const st = FIND_STATUS[f.status];
-              return (
-                <div
-                  key={f.id}
-                  className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
-                    <div className="truncate text-xs text-body/70">
-                      {[f.opp.outlet, f.opp.location].filter(Boolean).join(" · ")}
-                    </div>
-                  </div>
-                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>
-                    {st.label}
-                  </span>
-                  <button
-                    onClick={() => onOpenKit(f)}
-                    className="shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-                  >
-                    My application
-                  </button>
-                  <button
-                    onClick={() => onToggleApplication(f.id, false)}
-                    title="Not an application: remove from this list"
-                    className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
-                  >
-                    ×
-                  </button>
+      {/* Type toggles: one per project that actually has applications. */}
+      <div className="mt-6 flex flex-wrap items-center gap-1.5">
+        <button
+          onClick={() => setProjFilter("")}
+          className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
+            !projFilter
+              ? "bg-brown text-white"
+              : "border border-warm-border text-body hover:bg-warm-bg"
+          }`}
+        >
+          All · {apps.length}
+        </button>
+        {[...byProject.entries()].map(([pid, arr]) => (
+          <button
+            key={pid}
+            onClick={() => setProjFilter(projFilter === pid ? "" : pid)}
+            className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
+              projFilter === pid
+                ? "bg-brown text-white"
+                : "border border-warm-border text-body hover:bg-warm-bg"
+            }`}
+          >
+            {projName(pid)} · {arr.length}
+          </button>
+        ))}
+        <div className="ml-auto inline-flex gap-1 rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
+          {(
+            [
+              ["list", "List"],
+              ["compare", "Compare"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-md px-3 py-1 text-xs font-bold transition ${
+                view === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {shown.length === 0 ? (
+        <p className="mt-6 max-w-[56ch] rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-sm text-body/70">
+          Nothing tracked here yet. Scout marks postings, programs, and
+          submissions automatically as it finds them — or open any find in{" "}
+          <button onClick={goFinds} className="font-semibold text-accent hover:underline">
+            Finds
+          </button>{" "}
+          and choose “Track as application”.
+        </p>
+      ) : view === "list" ? (
+        <div className="mt-5 space-y-3">
+          {ranked.map((f) => {
+            const st = FIND_STATUS[f.status];
+            const dl = applicationDeadline(f);
+            const days = dl ? Math.ceil((dl - Date.now()) / 86400000) : null;
+            return (
+              <div
+                key={f.id}
+                className="flex flex-wrap items-center gap-4 rounded-2xl border border-warm-border bg-surface px-5 py-4 shadow-card"
+              >
+                {/* Deadline first: it decides the order, so it leads the row. */}
+                <div className="w-24 shrink-0">
+                  {dl ? (
+                    <>
+                      <div
+                        className={`text-sm font-bold tabular-nums ${
+                          days != null && days <= 7 ? "text-danger" : "text-ink"
+                        }`}
+                      >
+                        {new Date(dl).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </div>
+                      <div className="text-[11px] text-body/60">
+                        {days != null && days >= 0 ? `${days}d left` : "deadline"}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="text-[11px] text-body/40">no deadline found</div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </section>
+                {typeof f.appRank === "number" && (
+                  <span className="shrink-0 rounded-lg bg-brown-tint px-2 py-0.5 text-xs font-bold tabular-nums text-brown-deep">
+                    #{f.appRank}
+                  </span>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
+                  <div className="truncate text-xs text-body/70">
+                    {[f.opp.outlet, f.opp.location].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                  {st.label}
+                </span>
+                <button
+                  onClick={() => onOpenKit(f)}
+                  className="shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+                >
+                  My application
+                </button>
+                <button
+                  onClick={() => onToggleApplication(f.id, false)}
+                  title="Not an application: remove from this list"
+                  className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
+                >
+                  ×
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* The application chart: every prospect in the group side by side,
+           differences (tuition, deadline, pay — whatever the goal asked) in
+           columns, with your own ranking in the first one. */
+        <div className="mt-5 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
+          <table className="w-full min-w-[760px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-warm-border text-left">
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">My rank</th>
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">Application</th>
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">Location</th>
+                {asks.map((a) => (
+                  <th key={a} className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                    {a}
+                  </th>
+                ))}
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">Fit</th>
+                <th className="px-3 py-2.5 text-[11px] font-bold uppercase tracking-wider text-body/50">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {ranked.map((f) => {
+                const crit = new Map((f.opp.criteria || []).map((c) => [c.ask, c.answer]));
+                const st = FIND_STATUS[f.status];
+                return (
+                  <tr key={f.id} className="border-b border-warm-border/60 align-top last:border-0 hover:bg-warm-bg/40">
+                    <td className="px-3 py-2.5">
+                      <input
+                        type="number"
+                        min={1}
+                        max={99}
+                        value={f.appRank ?? ""}
+                        onChange={(e) =>
+                          onSetRank(
+                            f.id,
+                            e.target.value === "" ? undefined : Math.max(1, Number(e.target.value))
+                          )
+                        }
+                        className="w-14 rounded-lg border border-warm-border px-2 py-1 text-sm tabular-nums text-ink outline-none focus:border-coral"
+                      />
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <button
+                        onClick={() => onOpenKit(f)}
+                        className="text-left font-semibold text-ink underline-offset-2 hover:text-accent hover:underline"
+                      >
+                        {f.opp.name}
+                      </button>
+                      {f.opp.outlet && <div className="text-xs text-body/60">{f.opp.outlet}</div>}
+                    </td>
+                    <td className="px-3 py-2.5 text-body">{f.opp.location || "·"}</td>
+                    {asks.map((a) => (
+                      <td key={a} className="px-3 py-2.5 text-body">
+                        {crit.get(a) || "·"}
+                      </td>
+                    ))}
+                    <td className="px-3 py-2.5 tabular-nums text-body">
+                      {typeof f.opp.fitScore === "number" ? `${Math.round(f.opp.fitScore * 100)}%` : "·"}
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
     </main>
   );
 }
@@ -11009,27 +11217,41 @@ function ApplicationKitModal({
   );
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8" onClick={onClose}>
+    <div className="fixed inset-0 z-[70] bg-ink/40 p-2 sm:p-4" onClick={onClose}>
+      {/* Full screen, like a find's detail view: the application IS the work,
+          so it gets the whole room and a numbered walk-through. */}
       <div
-        className="w-full max-w-3xl rounded-3xl border border-warm-border bg-surface p-6 shadow-xl sm:p-8"
+        className="flex h-full w-full flex-col overflow-hidden rounded-3xl border border-warm-border bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-lg font-bold tracking-tight text-ink">{o.name}</div>
-            <div className="text-sm text-body/70">
+        <div className="flex flex-wrap items-center gap-3 border-b border-warm-border px-6 py-4">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-lg font-bold tracking-tight text-ink">{o.name}</div>
+            <div className="truncate text-sm text-body/70">
               {[o.outlet, o.location].filter(Boolean).join(" · ")}
             </div>
           </div>
+          {o.url && (
+            <a
+              href={o.url}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              Open posting ↗
+            </a>
+          )}
           <button
             onClick={onClose}
-            className="rounded-xl border border-warm-border px-3 py-1.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+            className="shrink-0 rounded-xl border border-warm-border px-3 py-1.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
           >
             Close
           </button>
         </div>
 
-        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 sm:px-8">
+        <StepMark n={1} title="Your point of contact and your materials" />
+        <div className="mt-3 grid gap-5 sm:grid-cols-2">
           <div>
             {label("Point of contact")}
             {o.contactName || o.contactEmail ? (
@@ -11146,8 +11368,9 @@ function ApplicationKitModal({
           </div>
         </div>
 
-        <div className="mt-6">
-          {label("Cover letter, tailored to this posting")}
+        <StepMark n={2} title="Your cover letter, tailored to this posting" />
+        <div className="mt-3">
+          {null}
           {baseCoverLetter ? (
             letterBusy ? (
               <p className="text-sm text-body/60">Tailoring your letter (smallest possible edits)…</p>
@@ -11194,8 +11417,9 @@ function ApplicationKitModal({
           )}
         </div>
 
-        <div className="mt-6">
-          {label("Know the organization")}
+        <StepMark n={3} title="Know them before you apply" />
+        <div className="mt-3">
+          {null}
           {kitErr && <p className="text-sm text-danger">{kitErr}</p>}
           {!kit && !kitErr && <p className="text-sm text-body/60">Researching {o.outlet || "them"}…</p>}
           {kit && (
@@ -11259,6 +11483,7 @@ function ApplicationKitModal({
               )}
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>
@@ -12985,7 +13210,54 @@ function SpreadsheetTab({
 // contact, or import a whole sheet of outreach you've already done — and both
 // land in Finds where your templates + voice draft and send. Lives here (not
 // Profile) so the "find it yourself" path has its own clear home.
+function ManualPostingBox({
+  onBuild,
+  building,
+}: {
+  onBuild: (jobText: string) => Promise<string>;
+  building: boolean;
+}) {
+  const [text, setText] = useState("");
+  const [err, setErr] = useState("");
+  const [okMsg, setOkMsg] = useState("");
+  return (
+    <div className="mt-4">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        rows={4}
+        placeholder="Paste the full job description or program details"
+        className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+      />
+      <button
+        onClick={async () => {
+          setErr("");
+          setOkMsg("");
+          try {
+            const msg = await onBuild(text);
+            if (msg) setErr(msg);
+            else {
+              setText("");
+              setOkMsg("Built. It's in Finds and Applications now.");
+            }
+          } catch (e: any) {
+            setErr(e?.message || "Couldn't read that posting.");
+          }
+        }}
+        disabled={building || !text.trim()}
+        className="mt-3 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+      >
+        {building ? "Reading and researching…" : "Build my application"}
+      </button>
+      {err && <p className="mt-2 text-sm text-danger">{err}</p>}
+      {okMsg && <p className="mt-2 text-sm text-success-deep">{okMsg}</p>}
+    </div>
+  );
+}
+
 function ManualTab({
+  onBuildFromPosting,
+  buildingApplication = false,
   projects,
   activeProjectId,
   onAddManual,
@@ -12998,6 +13270,8 @@ function ManualTab({
   onRemoveSync,
   goFinds,
 }: {
+  onBuildFromPosting: (jobText: string) => Promise<string>;
+  buildingApplication?: boolean;
   projects: Project[];
   activeProjectId: string;
   onAddManual: (input: {
@@ -13062,6 +13336,16 @@ function ManualTab({
       </section>
 
       {/* Import a sheet of existing outreach */}
+      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+        <h2 className="text-base font-extrabold tracking-tight text-ink">Paste a posting</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-body">
+          Drop in a whole job description or program page. Scout reads it,
+          researches the organization, and the prospect lands in Finds and
+          Applications with its kit ready.
+        </p>
+        <ManualPostingBox onBuild={onBuildFromPosting} building={buildingApplication} />
+      </section>
+
       <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
         <h2 className="text-base font-extrabold text-ink">Import your outreach</h2>
         <p className="mt-0.5 text-sm leading-relaxed text-body/80">
@@ -24141,29 +24425,7 @@ function ProfileTab({
           <span className="shrink-0 text-sm font-bold text-accent">Manual tab →</span>
         </button>
 
-        <hr className="my-7 border-warm-border" />
-
-        {/* -------- Projects & categories, editable here as well as on Outreach -------- */}
-        <ProjectsCategoriesEditor
-          projects={projects}
-          categories={categories}
-          onAddProject={onAddProject}
-          onRenameProject={onRenameProject}
-          onRemoveProject={onRemoveProject}
-          onAddCategory={onAddCategory}
-          onRenameCategory={onRenameCategory}
-          onRemoveCategory={onRemoveCategory}
-          onRemoveCategories={onRemoveCategories}
-          onReorderCategories={onReorderCategories}
-          onDeriveGoal={onDeriveGoal}
-          onSetProjectContext={onSetProjectContext}
-          onSetProjectUsesProfile={onSetProjectUsesProfile}
-          onSetProjectUsesCompany={onSetProjectUsesCompany}
-          onSetProjectCompany={onSetProjectCompany}
-          companies={companies}
-          primaryCompanyId={primaryCompanyId}
-          isCompany={accountType === "company"}
-        />
+        {/* Projects & categories moved wholly to the Projects tab. */}
 
         <div className="mt-6 flex flex-wrap items-center gap-3 border-t border-warm-border pt-6">
           <button
