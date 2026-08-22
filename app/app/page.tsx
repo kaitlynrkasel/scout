@@ -7917,8 +7917,8 @@ function ScoutTool({
               </div>
             )}
             {discovering && (
-              <div ref={searchingRef} className="mt-8 flex scroll-mt-24 items-start gap-5">
-              <div className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-5 py-4">
+              <div ref={searchingRef} className="mt-10 flex scroll-mt-24 items-start gap-8">
+              <div className="min-w-0 flex-1">
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
                   {(() => {
                     // Only the human-readable steps, newest last. Debug lines are
@@ -7938,14 +7938,14 @@ function ScoutTool({
                       .map((x) => (x.n > 1 ? `${x.m} (x${x.n})` : x.m));
                     if (!steps.length) return null;
                     return (
-                      <div className="mt-3 border-t border-white/15 pt-3">
-                        <ul className="grid gap-1.5 lg:grid-cols-2">
+                      <div className="mt-5">
+                        <ul className="grid gap-x-10 gap-y-2.5 lg:grid-cols-2">
                           {steps.map((m, i, arr) => {
                             const latest = i === arr.length - 1;
                             return (
                               <li
                                 key={m}
-                                className={`scout-fade-in flex items-start gap-2 text-xs leading-relaxed transition ${
+                                className={`scout-fade-in flex items-start gap-2.5 text-sm leading-relaxed transition ${
                                   latest ? "text-white/90" : "text-white/40"
                                 }`}
                               >
