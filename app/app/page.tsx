@@ -32,6 +32,7 @@ import {
 import ComboInput from "./ComboInput";
 import { CITY_SUGGESTIONS, SCHOOL_SUGGESTIONS } from "./suggest";
 import { fileToText } from "@/lib/fileText";
+import { saveAsset, listAssets, removeAsset, assetsFor, type StoredAsset } from "@/lib/assets";
 import { bucketDenyReason } from "@/lib/denyBuckets";
 import {
   guessTimezone,
@@ -249,6 +250,19 @@ function handleFieldGlow(e: React.MouseEvent<HTMLElement>) {
   glowTimers.set(
     el,
     window.setTimeout(() => el.style.setProperty("--glow", "0"), 3000)
+  );
+}
+
+// Does this find look like something you APPLY to (job posting, internship,
+// degree program, playlist submission), as opposed to someone you network
+// with? The user's own setting always wins; this is the default read.
+function sensesApplication(f: Find): boolean {
+  if (typeof f.isApplication === "boolean") return f.isApplication;
+  const o = f.opp;
+  if (o.targetType === "listing") return true;
+  const t = `${o.name} ${o.contactRole || ""} ${o.outlet || ""}`.toLowerCase();
+  return /\b(intern|internship|apply|application|posting|program|fellowship|scholarship|university|college|school|masters?|mba|submission|submit|playlist|demo)\b/.test(
+    t
   );
 }
 
@@ -639,6 +653,9 @@ interface Find {
   outlookThreadId?: string; // Outlook conversation id, enables reply tracking
   denyReason?: string; // why the user passed on this find
   foundVia?: string; // how it entered the pipeline: search | auto-search | import | manual
+  // Application tracking: true/false when the user set it themselves;
+  // undefined means "let Scout sense it" (listings, programs, submissions).
+  isApplication?: boolean;
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
@@ -1459,6 +1476,7 @@ const TABS = [
   "settings",
   "billing",
   "manual",
+  "applications",
   "spreadsheet",
   // "lists" is deliberately absent: the Lists tab is pulled until it is good
   // enough to ship. Saved lists are untouched in state, and ListsTab still
@@ -1827,6 +1845,10 @@ function ScoutTool({
 
   // ---- Persisted state ----
   const [myTemplates, setMyTemplates] = useState<OutreachTemplate[]>([]);
+  // The application desk: which find's kit popup is open, and the paste-a-
+  // posting builder's in-flight state.
+  const [appKitId, setAppKitId] = useState<string | null>(null);
+  const [appBuilding, setAppBuilding] = useState(false);
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
   const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
@@ -5348,6 +5370,9 @@ function ScoutTool({
   }
 
   // Edit a find's contact fields from the spreadsheet view. Patches the opp.
+  function patchFind(id: string, patch: Partial<Find>) {
+    saveFinds(finds.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+  }
   function updateFindOpp(id: string, patch: Partial<Opportunity>) {
     saveFinds(
       finds.map((f) => (f.id === id ? { ...f, opp: { ...f.opp, ...patch } } : f))
@@ -5368,6 +5393,8 @@ function ScoutTool({
     location?: string;
     notes?: string;
     projectId?: string;
+    requirements?: string;
+    isApplication?: boolean;
   }): string | null {
     const name = (input.name || "").trim();
     if (!name) return "Give them at least a name.";
@@ -5406,7 +5433,16 @@ function ScoutTool({
     if (finds.some((f) => f.id === id))
       return "They're already in your finds (check the status tabs).";
     saveFinds([
-      { id, projectId, status: "new" as FindStatus, opp, addedAt: Date.now(), foundVia: "manual" },
+      {
+        id,
+        projectId,
+        status: "new" as FindStatus,
+        opp,
+        addedAt: Date.now(),
+        foundVia: "manual",
+        requirements: (input.requirements || "").trim() || undefined,
+        isApplication: input.isApplication,
+      },
       ...finds,
     ]);
     // On a team lens, mirror the manual add into the shared pipeline so
@@ -8188,6 +8224,8 @@ function ScoutTool({
       {tab === "finds" && (
         <FindsTab
           finds={myFinds}
+          onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
+          onOpenApplicationKit={(id) => setAppKitId(id)}
           categories={categories}
           teamName={teamLensName}
           teamFinds={teamFinds}
@@ -8510,6 +8548,62 @@ function ScoutTool({
           onSignature={saveSignature}
         />
       )}
+
+      {tab === "applications" && (
+        <ApplicationsTab
+          finds={finds}
+          onOpenKit={(f) => setAppKitId(f.id)}
+          onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
+          building={appBuilding}
+          goFinds={() => setTab("finds")}
+          onBuildFromPosting={async (jobText) => {
+            setAppBuilding(true);
+            try {
+              const r = await fetch("/api/application-kit", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({ jobText, about: aboutText }),
+              });
+              const j = await r.json();
+              if (!r.ok) return j.error || "Couldn't read that posting.";
+              const p = j.parsed || {};
+              if (!p.role && !p.org)
+                return "Couldn't find a role or organization in that text.";
+              const err = addManualFind({
+                name: p.role ? `${p.role}${p.org ? ` at ${p.org}` : ""}` : p.org,
+                outlet: p.org || "",
+                email: p.contact_email || "",
+                url: p.url || "",
+                location: p.location || "",
+                requirements: jobText.slice(0, 4000),
+                isApplication: true,
+              });
+              return err || "";
+            } finally {
+              setAppBuilding(false);
+            }
+          }}
+        />
+      )}
+
+      {appKitId &&
+        (() => {
+          const f = finds.find((x) => x.id === appKitId);
+          if (!f) return null;
+          return (
+            <ApplicationKitModal
+              find={f}
+              about={aboutText}
+              resumeFile={resumeFile}
+              baseCoverLetter={myTemplates.find((t) => t.channel === "Cover letter")?.text || ""}
+              onClose={() => setAppKitId(null)}
+              goTemplates={() => {
+                setAppKitId(null);
+                setTab("templates");
+              }}
+            />
+          );
+        })()}
 
       {tab === "account" && accountEmail && (
         <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
@@ -9420,6 +9514,18 @@ function SideNav({
       ),
     },
     {
+      key: "applications",
+      label: "Applications",
+      // A checked document, for the application desk.
+      icon: (
+        <>
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" />
+          <path d="M14 2v6h6" />
+          <path d="m9 15 2 2 4-4" />
+        </>
+      ),
+    },
+    {
       key: "spreadsheet",
       label: "Spreadsheet",
       // A grid, for the sheet view of finds.
@@ -9576,6 +9682,7 @@ function SideNav({
     outreach: "#19455e",
     manual: "#4e9c9c",
     finds: "#4e9c9c",
+    applications: "#19455e",
     spreadsheet: "#4e9c9c",
     projects: "#19455e",
     templates: "#aa2377",
@@ -10679,9 +10786,466 @@ function AskAboutFind({ opp }: { opp: Opportunity }) {
   );
 }
 
+
+/* ---------------- The application desk ----------------
+   One popup per application prospect with everything needed to apply well:
+   the point of contact, your resume ready to download, the right stored
+   assets (a song for a playlist submission), a cover letter tailored to THIS
+   posting with minimal edits, fresh company research, interview prep, and
+   scholarship leads when the target is a school. */
+
+/* ---------------- Applications tab ----------------
+   Every application prospect in one place: sensed automatically (postings,
+   programs, submissions) or marked by hand, each opening its full kit. Paste
+   a whole posting to build a prospect from nothing. */
+function ApplicationsTab({
+  finds,
+  onOpenKit,
+  onToggleApplication,
+  onBuildFromPosting,
+  building,
+  goFinds,
+}: {
+  finds: Find[];
+  onOpenKit: (f: Find) => void;
+  onToggleApplication: (id: string, v: boolean) => void;
+  onBuildFromPosting: (jobText: string) => Promise<string>;
+  building: boolean;
+  goFinds: () => void;
+}) {
+  const [paste, setPaste] = useState("");
+  const [err, setErr] = useState("");
+  const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
+  return (
+    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
+        Your <span className="text-brown">applications</span>
+      </h1>
+      <p className="mt-1 max-w-[62ch] text-sm text-body/70">
+        Everything you are applying to: jobs, internships, programs, playlist
+        submissions. Open one and the whole kit is ready — contact, files,
+        tailored cover letter, research, prep.
+      </p>
+
+      {/* Build one from a pasted posting. */}
+      <section className="mt-6 max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+        <div className="text-sm font-bold text-ink">Paste a posting</div>
+        <p className="mt-1 text-xs leading-relaxed text-body/70">
+          Drop in a whole job description or program page. Scout reads it,
+          researches the organization, and sets the application up for you.
+        </p>
+        <textarea
+          value={paste}
+          onChange={(e) => setPaste(e.target.value)}
+          rows={4}
+          placeholder="Paste the job description or program details"
+          className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+        />
+        <button
+          onClick={async () => {
+            setErr("");
+            try {
+              const msg = await onBuildFromPosting(paste);
+              if (msg) setErr(msg);
+              else setPaste("");
+            } catch (e: any) {
+              setErr(e?.message || "Couldn't read that posting.");
+            }
+          }}
+          disabled={building || !paste.trim()}
+          className="mt-3 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+        >
+          {building ? "Reading and researching…" : "Build my application"}
+        </button>
+        {err && <p className="mt-2 text-sm text-danger">{err}</p>}
+      </section>
+
+      <section className="mt-8">
+        <h2 className="text-lg font-bold text-ink">In progress ({apps.length})</h2>
+        {apps.length === 0 ? (
+          <p className="mt-3 max-w-[56ch] rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-sm text-body/70">
+            Nothing tracked yet. Scout marks postings, programs, and
+            submissions automatically as it finds them — or open any find in{" "}
+            <button onClick={goFinds} className="font-semibold text-accent hover:underline">
+              Finds
+            </button>{" "}
+            and choose “Track as application”.
+          </p>
+        ) : (
+          <div className="mt-4 grid gap-3 xl:grid-cols-2">
+            {apps.map((f) => {
+              const st = FIND_STATUS[f.status];
+              return (
+                <div
+                  key={f.id}
+                  className="flex flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
+                >
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
+                    <div className="truncate text-xs text-body/70">
+                      {[f.opp.outlet, f.opp.location].filter(Boolean).join(" · ")}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>
+                    {st.label}
+                  </span>
+                  <button
+                    onClick={() => onOpenKit(f)}
+                    className="shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+                  >
+                    My application
+                  </button>
+                  <button
+                    onClick={() => onToggleApplication(f.id, false)}
+                    title="Not an application: remove from this list"
+                    className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function ApplicationKitModal({
+  find,
+  about,
+  resumeFile,
+  baseCoverLetter,
+  onClose,
+  goTemplates,
+}: {
+  find: Find;
+  about: string;
+  resumeFile: { name: string; dataUrl: string } | null;
+  baseCoverLetter: string;
+  onClose: () => void;
+  goTemplates: () => void;
+}) {
+  const o = find.opp;
+  const jobText = [
+    `${o.name}${o.outlet ? ` at ${o.outlet}` : ""}.`,
+    o.location || "",
+    o.whyItFits || "",
+    find.requirements || "",
+    ...(o.sources || []).map((sc) => sc.snippet || ""),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .slice(0, 6000);
+
+  const [kit, setKit] = useState<any>(null);
+  const [kitErr, setKitErr] = useState("");
+  const [letter, setLetter] = useState("");
+  const [letterBusy, setLetterBusy] = useState(!!baseCoverLetter);
+  const [assets, setAssets] = useState<StoredAsset[]>([]);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const r = await fetch("/api/application-kit", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name: o.name, outlet: o.outlet, url: o.url, about, jobText }),
+        });
+        const j = await r.json();
+        if (!alive) return;
+        if (!r.ok) setKitErr(j.error || "Research failed.");
+        else setKit(j);
+      } catch (e: any) {
+        if (alive) setKitErr(e?.message || "Research failed.");
+      }
+    })();
+    (async () => {
+      const all = await listAssets();
+      if (alive) setAssets(assetsFor(`${o.name} ${o.outlet} ${o.contactRole || ""}`, all));
+    })();
+    if (baseCoverLetter) {
+      (async () => {
+        try {
+          const r = await fetch("/api/cover-letter", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ letter: baseCoverLetter, job: jobText, about }),
+          });
+          const j = await r.json();
+          if (!alive) return;
+          if (r.ok && Array.isArray(j.edits)) {
+            // Auto-apply the minimal edits; bracketed scaffolds stay visible
+            // for the user to fill, exactly like the walkthrough would leave.
+            let out = baseCoverLetter;
+            for (const e of j.edits) out = out.replace(e.original, e.suggestion);
+            setLetter(out);
+          } else setLetter(baseCoverLetter);
+        } catch {
+          if (alive) setLetter(baseCoverLetter);
+        } finally {
+          if (alive) setLetterBusy(false);
+        }
+      })();
+    }
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.id]);
+
+  const label = (t: string) => (
+    <div className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-body/50">{t}</div>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto bg-ink/40 p-4 sm:p-8" onClick={onClose}>
+      <div
+        className="w-full max-w-3xl rounded-3xl border border-warm-border bg-surface p-6 shadow-xl sm:p-8"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-lg font-bold tracking-tight text-ink">{o.name}</div>
+            <div className="text-sm text-body/70">
+              {[o.outlet, o.location].filter(Boolean).join(" · ")}
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-warm-border px-3 py-1.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Close
+          </button>
+        </div>
+
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <div>
+            {label("Point of contact")}
+            {o.contactName || o.contactEmail ? (
+              <div className="rounded-xl border border-warm-border bg-warm-bg/40 p-3.5 text-sm">
+                {o.contactName && <div className="font-semibold text-ink">{o.contactName}</div>}
+                {o.contactRole && <div className="text-body/70">{o.contactRole}</div>}
+                {o.contactEmail && (
+                  <div className="mt-1 flex items-center gap-2">
+                    <span className="min-w-0 truncate text-accent">{o.contactEmail}</span>
+                    <button
+                      onClick={() => {
+                        try {
+                          navigator.clipboard.writeText(o.contactEmail);
+                        } catch {}
+                      }}
+                      className="shrink-0 rounded border border-warm-border px-1.5 py-0.5 text-[10px] font-bold text-body/70 hover:bg-warm-bg"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-body/60">
+                No direct contact yet; the find's Deep scan can hunt one.
+              </p>
+            )}
+          </div>
+          <div>
+            {label("Your files")}
+            <div className="space-y-2">
+              {resumeFile ? (
+                <a
+                  href={resumeFile.dataUrl}
+                  download={resumeFile.name}
+                  className="flex items-center justify-between rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2.5 text-sm font-semibold text-ink transition hover:bg-warm-bg"
+                >
+                  <span className="min-w-0 truncate">{resumeFile.name}</span>
+                  <span className="shrink-0 text-[11px] font-bold text-accent">Download</span>
+                </a>
+              ) : (
+                <button
+                  onClick={goTemplates}
+                  className="w-full rounded-xl border border-dashed border-warm-border px-3.5 py-2.5 text-left text-sm text-body/70 transition hover:bg-warm-bg"
+                >
+                  No resume on file: add it in Templates
+                </button>
+              )}
+              {Object.entries(
+                (() => {
+                  try {
+                    return JSON.parse(localStorage.getItem("scout_app_links") || "{}");
+                  } catch {
+                    return {};
+                  }
+                })() as Record<string, string>
+              )
+                .filter(([, v]) => v && String(v).trim())
+                .map(([k, v]) => (
+                  <div
+                    key={k}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
+                  >
+                    <span className="min-w-0 truncate text-body">{v}</span>
+                    <button
+                      onClick={() => {
+                        try {
+                          navigator.clipboard.writeText(String(v));
+                        } catch {}
+                      }}
+                      className="shrink-0 rounded border border-warm-border px-1.5 py-0.5 text-[10px] font-bold text-body/70 hover:bg-warm-bg"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                ))}
+              {assets.map((a) => (
+                <button
+                  key={a.name}
+                  onClick={() => {
+                    const u = URL.createObjectURL(a.blob);
+                    const el = document.createElement("a");
+                    el.href = u;
+                    el.download = a.name;
+                    el.click();
+                    setTimeout(() => URL.revokeObjectURL(u), 4000);
+                  }}
+                  className="flex w-full items-center justify-between rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2.5 text-sm font-semibold text-ink transition hover:bg-warm-bg"
+                >
+                  <span className="min-w-0 truncate">
+                    {a.type.startsWith("audio/") ? "♪ " : ""}
+                    {a.name}
+                  </span>
+                  <span className="shrink-0 text-[11px] font-bold text-accent">Download</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6">
+          {label("Cover letter, tailored to this posting")}
+          {baseCoverLetter ? (
+            letterBusy ? (
+              <p className="text-sm text-body/60">Tailoring your letter (smallest possible edits)…</p>
+            ) : (
+              <>
+                <textarea
+                  value={letter}
+                  onChange={(e) => setLetter(e.target.value)}
+                  rows={8}
+                  className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    onClick={() => {
+                      try {
+                        navigator.clipboard.writeText(letter);
+                      } catch {}
+                    }}
+                    className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+                  >
+                    Copy letter
+                  </button>
+                  <button
+                    onClick={goTemplates}
+                    className="rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                  >
+                    Fine-tune step by step in Templates
+                  </button>
+                </div>
+                {/[\[]/.test(letter) && (
+                  <p className="mt-1.5 text-[11px] text-attention">
+                    Bracketed spots are yours to fill: only you know those facts.
+                  </p>
+                )}
+              </>
+            )
+          ) : (
+            <button
+              onClick={goTemplates}
+              className="w-full rounded-xl border border-dashed border-warm-border px-3.5 py-2.5 text-left text-sm text-body/70 transition hover:bg-warm-bg"
+            >
+              Save a base cover letter in Templates and it gets tailored here automatically
+            </button>
+          )}
+        </div>
+
+        <div className="mt-6">
+          {label("Know the organization")}
+          {kitErr && <p className="text-sm text-danger">{kitErr}</p>}
+          {!kit && !kitErr && <p className="text-sm text-body/60">Researching {o.outlet || "them"}…</p>}
+          {kit && (
+            <div className="space-y-4">
+              {kit.companyBrief?.length > 0 && (
+                <ul className="space-y-1.5 text-sm leading-relaxed text-body">
+                  {kit.companyBrief.map((b: string, i: number) => (
+                    <li key={i} className="flex gap-2">
+                      <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-blue" />
+                      {b}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {kit.mustKnow?.length > 0 && (
+                <div>
+                  {label("Before you apply")}
+                  <ul className="space-y-1.5 text-sm leading-relaxed text-body">
+                    {kit.mustKnow.map((b: string, i: number) => (
+                      <li key={i} className="flex gap-2">
+                        <span className="mt-2 h-1.5 w-1.5 shrink-0 rounded-full bg-attention" />
+                        {b}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {kit.interviewPrep?.length > 0 && (
+                <div>
+                  {label("Interview prep")}
+                  <div className="space-y-2.5">
+                    {kit.interviewPrep.map((p: any, i: number) => (
+                      <div key={i} className="rounded-xl border border-warm-border bg-warm-bg/40 p-3.5">
+                        <div className="text-sm font-semibold text-ink">{p.q}</div>
+                        {p.angle && (
+                          <p className="mt-1 text-xs leading-relaxed text-body/70">{p.angle}</p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {kit.isSchool && kit.scholarships?.length > 0 && (
+                <div>
+                  {label("Scholarships worth a look")}
+                  <div className="space-y-2">
+                    {kit.scholarships.map((sc: any, i: number) => (
+                      <div key={i} className="rounded-xl border border-warm-border bg-warm-bg/40 p-3.5 text-sm">
+                        {sc.url ? (
+                          <a href={sc.url} target="_blank" rel="noreferrer" className="font-semibold text-accent underline-offset-2 hover:underline">
+                            {sc.name} ↗
+                          </a>
+                        ) : (
+                          <span className="font-semibold text-ink">{sc.name}</span>
+                        )}
+                        {sc.why && <p className="mt-0.5 text-xs leading-relaxed text-body/70">{sc.why}</p>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FindDetailModal({
   find,
   onClose,
+  onToggleApplication,
+  onOpenApplicationKit,
   wantedChannels,
   gmail,
   drafting,
@@ -10723,6 +11287,8 @@ function FindDetailModal({
   onRegenerate,
   signatureOptions,
 }: {
+  onToggleApplication?: (v: boolean) => void;
+  onOpenApplicationKit?: () => void;
   find: Find;
   onClose: () => void;
   position: number;
@@ -11180,6 +11746,24 @@ function FindDetailModal({
                 Deny
               </button>
             ))}
+          {/* Application tracking: sensed automatically, settable by hand. */}
+          {onOpenApplicationKit && sensesApplication(find) && (
+            <button
+              onClick={onOpenApplicationKit}
+              className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              My application
+            </button>
+          )}
+          {onToggleApplication && (
+            <button
+              onClick={() => onToggleApplication(!sensesApplication(find))}
+              title="Applications get a full kit: tailored cover letter, research, prep"
+              className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg"
+            >
+              {sensesApplication(find) ? "Untrack application" : "Track as application"}
+            </button>
+          )}
           <button
             onClick={onClose}
             className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
@@ -12977,7 +13561,7 @@ function FindGridCard({
             <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${st.cls}`}>{st.label}</span>
             {find.foundByEmail ? (
               <span
-                title={`Found by ${find.foundByEmail}`}
+                title={`Found by ${find.foundByEmail}${find.addedAt ? `, ${timeAgo(find.addedAt)}` : ""}`}
                 className="truncate rounded-full border border-warm-border bg-warm-bg px-2 py-0.5 text-[10px] font-semibold text-body/60"
               >
                 {find.foundByEmail.split("@")[0]}
@@ -12999,6 +13583,8 @@ function FindGridCard({
 }
 
 function FindsTab({
+  onToggleApplication,
+  onOpenApplicationKit,
   finds,
   categories,
   projectName,
@@ -13056,6 +13642,8 @@ function FindsTab({
   onTeamPatch,
   onAddManual,
 }: {
+  onToggleApplication: (id: string, v: boolean) => void;
+  onOpenApplicationKit: (id: string) => void;
   finds: Find[];
   categories: Category[];
   projectName: string;
@@ -14064,6 +14652,8 @@ shared={shown.some((x) => !!x.foundByEmail)}
         <FindDetailModal
           find={detailFind}
           onClose={() => setDetailId("")}
+          onToggleApplication={(v) => onToggleApplication(detailFind.id, v)}
+          onOpenApplicationKit={() => onOpenApplicationKit(detailFind.id)}
           wantedChannels={
             categories.find((c) => c.id === detailFind.categoryId)?.wantedChannels || []
           }
@@ -15381,6 +15971,17 @@ function StatBand({ items }: { items: { value: string; label: string }[] }) {
 // Light copy-editing for user-typed text echoed back in Scout's own voice:
 // sentence case, a capital I, and the apostrophes people skip when typing
 // fast. Never touches meaning.
+// "2h ago" / "3d ago" for team activity stamps.
+function timeAgo(iso: string | number): string {
+  const t = typeof iso === "number" ? iso : Date.parse(String(iso || ""));
+  if (!t) return "";
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return "just now";
+  if (s < 5400) return `${Math.round(s / 60)}m ago`;
+  if (s < 129600) return `${Math.round(s / 3600)}h ago`;
+  return `${Math.round(s / 86400)}d ago`;
+}
+
 function tidyTyped(raw: string): string {
   let t = String(raw || "").trim().replace(/\s+/g, " ");
   if (!t) return t;
@@ -16390,10 +16991,12 @@ ${body}
                       <b className="text-ink">{n.count}</b> new{" "}
                       {n.count === 1 ? "prospect" : "prospects"}
                       {n.detail ? <> in {n.detail}</> : null}
+                      <span className="text-body/50"> · {timeAgo(n.at)}</span>
                     </>
                   ) : n.kind === "outreach" ? (
                     <>
                       <b className="text-ink">{(n.who || "").split("@")[0]}</b> {n.detail}
+                      <span className="text-body/50"> · {timeAgo(n.at)}</span>
                     </>
                   ) : (
                     <>
@@ -16675,29 +17278,30 @@ ${body}
               <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                 Your preferences so far
               </div>
-              <div className="mt-3 grid gap-4 sm:grid-cols-2">
+              {/* Relevance only, never "nothing yet": a side with no data
+                  simply doesn't render, and the other side takes the room. */}
+              <div
+                className={`mt-3 grid gap-4 ${
+                  (learned.keptOutlets.length || learned.keptRoles.length) ? "sm:grid-cols-2" : ""
+                }`}
+              >
+                {(learned.keptOutlets.length || learned.keptRoles.length) > 0 && (
                 <div>
                   <div className="text-xs font-semibold text-sage">You reach out to</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {(learned.keptOutlets.length
-                      ? learned.keptOutlets
-                      : learned.keptRoles
-                    ).length ? (
-                      (learned.keptOutlets.length ? learned.keptOutlets : learned.keptRoles)
-                        .slice(0, 4)
-                        .map(([c, n]) => (
-                          <span
-                            key={c}
-                            className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
-                          >
-                            {c} · {n}
-                          </span>
-                        ))
-                    ) : (
-                      <span className="text-xs text-body/50">nothing yet</span>
-                    )}
+                    {(learned.keptOutlets.length ? learned.keptOutlets : learned.keptRoles)
+                      .slice(0, 4)
+                      .map(([c, n]) => (
+                        <span
+                          key={c}
+                          className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-1 text-xs font-medium text-ink"
+                        >
+                          {c} · {n}
+                        </span>
+                      ))}
                   </div>
                 </div>
+                )}
                 <div>
                   <div className="text-xs font-semibold text-body/60">You tend to pass on</div>
                   <div className="mt-1.5 flex flex-wrap gap-1.5">
@@ -20713,6 +21317,105 @@ function ListsTab({
    Paste your letter and a job description; Scout proposes the SMALLEST set
    of spot edits (your words stay yours), highlights the truly incompatible
    passages, and walks you through resolving each one yourself. */
+// Files Scout keeps forever (IndexedDB): a song for playlist submissions, a
+// portfolio, a headshot. The application kit pulls the right ones up.
+function AssetShelf() {
+  const [assets, setAssets] = useState<StoredAsset[]>([]);
+  const refresh = () => listAssets().then(setAssets);
+  useEffect(() => {
+    refresh();
+  }, []);
+  return (
+    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+      <div className="text-sm font-bold text-ink">Files Scout keeps ({assets.length})</div>
+      <p className="mt-1 text-xs leading-relaxed text-body/70">
+        Upload once, keep forever: your song for playlist submissions, a
+        portfolio, anything applications ask for. The application kit pulls
+        the right file up automatically.
+      </p>
+      <div className="mt-3 space-y-2">
+        {assets.map((a) => (
+          <div
+            key={a.name}
+            className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
+          >
+            <span className="min-w-0 truncate font-semibold text-ink">
+              {a.type.startsWith("audio/") ? "♪ " : ""}
+              {a.name}
+            </span>
+            <button
+              onClick={() => removeAsset(a.name).then(refresh)}
+              className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
+            >
+              Remove
+            </button>
+          </div>
+        ))}
+      </div>
+      <label className="mt-3 inline-block cursor-pointer rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg">
+        Upload a file
+        <input
+          type="file"
+          className="hidden"
+          onChange={async (e) => {
+            const f = e.target.files?.[0];
+            e.currentTarget.value = "";
+            if (f) {
+              await saveAsset(f);
+              refresh();
+            }
+          }}
+        />
+      </label>
+    </div>
+  );
+}
+
+// A small in-place cover letter writer for the Application materials page.
+function CoverLetterWriter({ onSave }: { onSave?: (text: string) => void }) {
+  const [text, setTextLocal] = useState("");
+  const [open, setOpen] = useState(false);
+  if (!open)
+    return (
+      <button
+        onClick={() => setOpen(true)}
+        className="mt-2 w-full rounded-xl border border-dashed border-warm-border px-3.5 py-2.5 text-left text-sm text-body/70 transition hover:bg-warm-bg"
+      >
+        + Write a cover letter
+      </button>
+    );
+  return (
+    <div className="mt-2">
+      <textarea
+        value={text}
+        onChange={(e) => setTextLocal(e.target.value)}
+        rows={7}
+        placeholder="Dear Hiring Manager, ... (your words; Scout only ever makes the smallest edits when tailoring)"
+        className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+      />
+      <div className="mt-2 flex gap-2">
+        <button
+          onClick={() => {
+            if (text.trim() && onSave) onSave(text.trim());
+            setTextLocal("");
+            setOpen(false);
+          }}
+          disabled={!text.trim()}
+          className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+        >
+          Save cover letter
+        </button>
+        <button
+          onClick={() => setOpen(false)}
+          className="rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function CoverLetterTailor({
   seedLetter,
   about,
@@ -20994,6 +21697,22 @@ function TemplatesTab({
   // Three pages behind one top toggle: outreach templates, application
   // materials (resume + cover letters + tailoring), and email signatures.
   const [tView, setTView] = useState<"outreach" | "materials" | "signatures">("outreach");
+  // The links you paste into every application: portfolio site, LinkedIn,
+  // the email you apply from. Kept on this device; the application kit
+  // surfaces them with one-tap copy.
+  const [appLinks, setAppLinks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      setAppLinks(JSON.parse(localStorage.getItem("scout_app_links") || "{}"));
+    } catch {}
+  }, []);
+  const saveAppLink = (k: string, v: string) => {
+    const next = { ...appLinks, [k]: v };
+    setAppLinks(next);
+    try {
+      localStorage.setItem("scout_app_links", JSON.stringify(next));
+    } catch {}
+  };
   // Email-signature editor state: which project (if any) the per-project
   // signature editor is pointed at, and whether a "build from resume" is running.
   // Defaults to the project you're currently working in so it opens ready to edit.
@@ -21139,7 +21858,7 @@ function TemplatesTab({
       )}
 
       {/* Page toggle: three rooms, no scrolling between them. */}
-      <div className="mb-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+      <div className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
         {(
           [
             ["outreach", "Outreach"],
@@ -21461,22 +22180,47 @@ function TemplatesTab({
                 </label>
               )}
             </div>
+            {/* Your links: what every application form asks for */}
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+              <div className="text-sm font-bold text-ink">Your links</div>
+              <p className="mt-1 text-xs leading-relaxed text-body/70">
+                What applications keep asking for. Saved once, surfaced with
+                copy buttons in every application kit.
+              </p>
+              <div className="mt-3 space-y-2.5">
+                {(
+                  [
+                    ["website", "Website / portfolio", "https://…"],
+                    ["linkedin", "LinkedIn", "linkedin.com/in/…"],
+                    ["email", "Contact email", "you@example.com"],
+                    ["phone", "Phone", "(615) …"],
+                    ["other", "Anything else", "GitHub, Spotify, reel…"],
+                  ] as const
+                ).map(([k, label, ph]) => (
+                  <label key={k} className="block">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                      {label}
+                    </span>
+                    <input
+                      value={appLinks[k] || ""}
+                      onChange={(e) => saveAppLink(k, e.target.value)}
+                      placeholder={ph}
+                      className="mt-0.5 w-full rounded-lg border border-warm-border px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            {/* Files Scout keeps forever: the song for playlist submissions,
+                a portfolio PDF — pulled up whenever an application needs them. */}
+            <AssetShelf />
             {/* Saved cover letters */}
             <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="text-sm font-bold text-ink">
                   Cover letters ({coverLetters.length})
                 </div>
-                <button
-                  onClick={() => {
-                    setChannel("Cover letter");
-                    setTView("outreach");
-                    window.scrollTo({ top: 0, behavior: "smooth" });
-                  }}
-                  className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg"
-                >
-                  Write one in the builder
-                </button>
+
                 {/* Or hand over the file you already have; Scout reads the
                     text out of it and saves it as your cover letter. */}
                 <label className="cursor-pointer rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg">
@@ -21497,10 +22241,13 @@ function TemplatesTab({
                   />
                 </label>
               </div>
+              {/* Written right here; application materials is where a cover
+                  letter belongs, no hopping to the outreach builder. */}
+              <CoverLetterWriter onSave={onAddCoverLetter} />
               {coverLetters.length === 0 ? (
                 <p className="mt-2 text-xs leading-relaxed text-body/70">
-                  Save your base cover letter here (it is a template with the
-                  Cover letter kind), then tailor it per job on the right.
+                  Nothing saved yet. Write one above, upload a file, or paste
+                  your usual letter, then tailor it per job on the right.
                 </p>
               ) : (
                 <div className="mt-3 space-y-3">
