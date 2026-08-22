@@ -238,6 +238,26 @@
                 "You should arrive with the upload area centred on screen."
               ],
               "key": "setup::add-your-linkedin-lands-on-the-adding-step"
+            },
+            {
+              "sev": "should",
+              "title": "Templates is three pages behind one toggle",
+              "good": "Outreach, Application materials, and Email signatures are separate pages switched at the top — no scrolling between worlds. Cover letters are written, uploaded, or pasted IN Application materials; the outreach builder is not involved.",
+              "steps": [
+                "Flip through all three pages.",
+                "Write and upload a cover letter without leaving Application materials."
+              ],
+              "key": "setup::templates-is-three-pages-behind-one-toggle"
+            },
+            {
+              "sev": "should",
+              "title": "Your links prefill from the profile",
+              "good": "The Your links card starts filled with what Scout already knows (LinkedIn, account email, site/phone when present) and stays editable; nothing you typed is ever overwritten. Every kit surfaces them with copy buttons.",
+              "steps": [
+                "On a fresh device, open Application materials and confirm the prefill.",
+                "Edit one, reload, confirm your edit stuck."
+              ],
+              "key": "setup::your-links-prefill-from-the-profile"
             }
           ]
         },
@@ -695,6 +715,103 @@
                 "Confirm two columns on a wide screen and no line running off the card."
               ],
               "key": "finding::the-progress-log-stays-readable"
+            }
+          ]
+        },
+        {
+          "id": "applications",
+          "title": "The application desk",
+          "blurb": "Applying well is half the product now. Every item here is about the Applications tab and its kits.",
+          "items": [
+            {
+              "sev": "must",
+              "title": "Only real application prospects reach the desk",
+              "good": "The Applications tab holds things you APPLY to. People (coordinators, professors, contacts) never appear automatically, and a school name in the organization field alone does not qualify a find.",
+              "steps": [
+                "Open Applications on a pipeline that includes networking contacts.",
+                "Any bare person auto-listed is a fail; mark one by hand from its detail view and confirm it appears, untrack and it leaves."
+              ],
+              "key": "applications::only-real-application-prospects-reach-the-desk"
+            },
+            {
+              "sev": "must",
+              "title": "Grouped by what it is, not which project caught it",
+              "good": "Toggles read Internships / Jobs / Schools / Submissions / Other, classified from each find's own name, role, and posting text. An internship found in a general project files under Internships.",
+              "steps": [
+                "Check a few finds against their chips.",
+                "A misfiled type (an internship under Other, a playlist under Jobs) is a needs-work."
+              ],
+              "key": "applications::grouped-by-what-it-is-not-which-project-caught-it"
+            },
+            {
+              "sev": "must",
+              "title": "Deadline first, full-width rows",
+              "good": "The list is ordered by parsed deadline (soonest first, red under a week, 'no deadline found' honest when absent), one application per row across the screen.",
+              "steps": [
+                "Add a posting with a stated deadline ('apply by …') and confirm it sorts above undated ones with the right date and days-left.",
+                "Rows must never sit two-across."
+              ],
+              "key": "applications::deadline-first-full-width-rows"
+            },
+            {
+              "sev": "must",
+              "title": "The kit walks you through the whole application",
+              "good": "Opening a prospect is a full-screen, numbered walkthrough: (1) point of contact and your materials, (2) a cover letter tailored to THIS posting with minimal edits and bracketed fill-ins, (3) know-them research with interview prep — plus Open posting up top.",
+              "steps": [
+                "Open a kit on a real posting.",
+                "Check the contact copies, the resume downloads, the letter reads as YOUR letter lightly edited, and the research cites real facts."
+              ],
+              "key": "applications::the-kit-walks-you-through-the-whole-application"
+            },
+            {
+              "sev": "should",
+              "title": "Paste a posting builds the prospect from nothing",
+              "good": "Pasting a whole job description (Applications or Manual) parses role/org/contact, researches the organization, and lands the prospect in Finds and Applications with its kit ready.",
+              "steps": [
+                "Paste a real posting from the web.",
+                "Confirm the created find carries the right role, org, and any stated contact, and opens a working kit."
+              ],
+              "key": "applications::paste-a-posting-builds-the-prospect-from-nothing"
+            },
+            {
+              "sev": "should",
+              "title": "Schools bring scholarship leads",
+              "good": "When the target is a school or degree program, the kit's research includes real scholarship or aid leads with links — never fabricated ones.",
+              "steps": [
+                "Build an application for a masters program.",
+                "Check each scholarship link actually resolves and relates."
+              ],
+              "key": "applications::schools-bring-scholarship-leads"
+            },
+            {
+              "sev": "should",
+              "title": "Application files persist and match the moment",
+              "good": "A file added during one application (a song, a portfolio) is kept and pulled up automatically the next time it fits — audio for playlist/music submissions, documents broadly. Files are grouped by kind in Templates > Application materials.",
+              "steps": [
+                "Add a file from inside a kit; reload; open another kit of the same kind and confirm it surfaces.",
+                "Remove it from Application files and confirm it stays gone."
+              ],
+              "key": "applications::application-files-persist-and-match-the-moment"
+            },
+            {
+              "sev": "should",
+              "title": "Compare charts a group with your own ranking",
+              "good": "Compare view shows a type group side by side — location, the group's own criteria (tuition, paid, remote, deadline…), fit, status — with a My-rank column you type into that reorders the list.",
+              "steps": [
+                "Switch a group with several prospects to Compare.",
+                "Set ranks 1-3 and confirm the ordering follows; clear a rank and it falls back to deadline order."
+              ],
+              "key": "applications::compare-charts-a-group-with-your-own-ranking"
+            },
+            {
+              "sev": "should",
+              "title": "Cover letter mastery keeps your voice",
+              "good": "Tailoring (in a kit or Templates > Application materials) proposes the SMALLEST spot edits: your sentences survive, truly incompatible passages are flagged for YOU to resolve, and suggestions never point at text that isn't in your letter.",
+              "steps": [
+                "Run your real letter against a real posting.",
+                "Count the edits (should be a handful), verify each 'original' really is in your letter, and that Keep-my-original works."
+              ],
+              "key": "applications::cover-letter-mastery-keeps-your-voice"
             }
           ]
         },
