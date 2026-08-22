@@ -1153,3 +1153,14 @@ select.scout-kind-picker option {
   border-color: rgb(var(--c-warm-border));
 }
 .dark .tpl-open { background: rgb(var(--c-cream)); }
+
+/* Application materials: structured room. Cards stay, and inputs get a soft
+   fill so white boxes never float on white. */
+.tpl-materials input,
+.tpl-materials textarea {
+  background: rgb(var(--c-warm-bg) / 0.55);
+}
+.tpl-materials input:focus,
+.tpl-materials textarea:focus {
+  background: #ffffff;
+}

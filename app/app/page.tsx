@@ -9432,7 +9432,7 @@ function SideNav({
   const BOTTOM_TABS = ["outreach", "finds", "dashboard", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "spreadsheet"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "applications", "spreadsheet"] },
     { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
@@ -11106,6 +11106,22 @@ function ApplicationKitModal({
                     </button>
                   </div>
                 ))}
+              <label className="block cursor-pointer rounded-xl border border-dashed border-warm-border px-3.5 py-2 text-center text-xs font-semibold text-body/70 transition hover:bg-warm-bg">
+                + Add a file this application needs (kept for next time)
+                <input
+                  type="file"
+                  className="hidden"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.currentTarget.value = "";
+                    if (f) {
+                      await saveAsset(f);
+                      const all = await listAssets();
+                      setAssets(assetsFor(`${o.name} ${o.outlet} ${o.contactRole || ""}`, all));
+                    }
+                  }}
+                />
+              </label>
               {assets.map((a) => (
                 <button
                   key={a.name}
@@ -21335,32 +21351,52 @@ function AssetShelf() {
   }, []);
   return (
     <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
-      <div className="text-sm font-bold text-ink">Files Scout keeps ({assets.length})</div>
+      <div className="text-sm font-bold text-ink">Application files ({assets.length})</div>
       <p className="mt-1 text-xs leading-relaxed text-body/70">
-        Upload once, keep forever: your song for playlist submissions, a
-        portfolio, anything applications ask for. The application kit pulls
-        the right file up automatically.
+        The files applications ask for: your song for playlist submissions, a
+        portfolio, a headshot. They land here when you add one during an
+        application, sorted by kind, and the kit pulls the right one up next
+        time.
       </p>
-      <div className="mt-3 space-y-2">
-        {assets.map((a) => (
-          <div
-            key={a.name}
-            className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
-          >
-            <span className="min-w-0 truncate font-semibold text-ink">
-              {a.type.startsWith("audio/") ? "♪ " : ""}
-              {a.name}
-            </span>
-            <button
-              onClick={() => removeAsset(a.name).then(refresh)}
-              className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
-            >
-              Remove
-            </button>
-          </div>
-        ))}
-      </div>
-      <label className="mt-3 inline-block cursor-pointer rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg">
+      {(() => {
+        const groups: [string, StoredAsset[]][] = [
+          ["Audio", assets.filter((a) => a.type.startsWith("audio/"))],
+          ["Images", assets.filter((a) => a.type.startsWith("image/"))],
+          [
+            "Documents",
+            assets.filter((a) => !a.type.startsWith("audio/") && !a.type.startsWith("image/")),
+          ],
+        ];
+        return groups
+          .filter(([, g]) => g.length)
+          .map(([label, g]) => (
+            <div key={label} className="mt-3">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                {label}
+              </div>
+              <div className="mt-1.5 space-y-2">
+                {g.map((a) => (
+                  <div
+                    key={a.name}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
+                  >
+                    <span className="min-w-0 truncate font-semibold text-ink">
+                      {a.type.startsWith("audio/") ? "♪ " : ""}
+                      {a.name}
+                    </span>
+                    <button
+                      onClick={() => removeAsset(a.name).then(refresh)}
+                      className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-danger"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ));
+      })()}
+            <label className="mt-3 inline-block cursor-pointer rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg">
         Upload a file
         <input
           type="file"
@@ -21863,7 +21899,7 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   return (
-    <main className="tpl-open w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
       <div className="kicker mb-2">Your voice</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
