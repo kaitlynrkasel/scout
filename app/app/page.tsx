@@ -7973,7 +7973,7 @@ function ScoutTool({
                     );
                   })()}
               </div>
-              <SiteDeck log={searchLog} />
+              <SiteDeck log={searchLog} deckStartedAt={discoverStartedAt} />
               {myTemplates.length === 0 && !templateNudgeDone && (
                 <div className="hidden w-72 shrink-0 rounded-2xl border border-white/15 bg-white/5 p-4 xl:block">
                   <div className="text-sm font-bold text-white">
@@ -9052,7 +9052,51 @@ function searchStageFor(startedAt: number | null): number {
  * accepted candidate page streams in as an "@site host|title" progress line,
  * and the deck advances through them, new card sliding in over the stack.
  * Pure presentation; the step list stays the textual record. */
-function SiteDeck({ log }: { log: string[] }) {
+// The three honest timers under the reading deck. Nothing is made up:
+// scouting is the measured clock; searching-yourself is computed from the
+// run's REAL event counts (each web search Scout ran ~= 90s of your time to
+// type it, scan the results page, and pick links; each site actually opened
+// ~= 2 minutes to skim for fit and hunt a contact); saving is the difference.
+function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string[] }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => tick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, []);
+  const searches = log.filter((l) => /^Searching:/.test(l)).length;
+  const sitesRead = new Set(
+    log.filter((l) => l.startsWith("@site")).map((l) => l.slice(0, 80))
+  ).size;
+  const scoutingS = startedAt ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
+  const manualS = searches * 90 + sitesRead * 120;
+  const savingS = Math.max(0, manualS - scoutingS);
+  const fmt = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s2 = Math.floor(sec % 60);
+    return m ? `${m}m ${String(s2).padStart(2, "0")}s` : `${s2}s`;
+  };
+  return (
+    <div
+      className="mt-4 space-y-1 text-[11px]"
+      title={`Searching yourself = ${searches} web searches × 90s + ${sitesRead} sites × 2min, counted from this run's real activity`}
+    >
+      <div className="flex justify-between gap-3">
+        <span className="text-white/50">Time scouting</span>
+        <span className="font-bold tabular-nums text-white/80">{fmt(scoutingS)}</span>
+      </div>
+      <div className="flex justify-between gap-3">
+        <span className="text-white/50">Time searching yourself</span>
+        <span className="font-bold tabular-nums text-white/80">{fmt(manualS)}</span>
+      </div>
+      <div className="flex justify-between gap-3">
+        <span className="text-white/50">Time saving</span>
+        <span className="font-bold tabular-nums text-white/80">{fmt(savingS)}</span>
+      </div>
+    </div>
+  );
+}
+
+function SiteDeck({ log, deckStartedAt = null }: { log: string[]; deckStartedAt?: number | null }) {
   const sites = useMemo(() => {
     const seen = new Set<string>();
     const out: { host: string; title: string }[] = [];
@@ -9115,6 +9159,7 @@ function SiteDeck({ log }: { log: string[] }) {
         {sites.length > 1 && card(at(1), 1)}
         {card(at(0), 0)}
       </div>
+      <ScoutTimers startedAt={deckStartedAt} log={log} />
     </div>
   );
 }

@@ -1808,6 +1808,10 @@ export async function discover(
   const perQuery = creatorSearch ? 10 : 10;
   const depth: "basic" | "advanced" = creatorSearch ? "advanced" : "basic";
 
+  // Late passes (the scarcity rescue) relax the extraction bar by appending
+  // to this override; the main pass runs with the plain personal override.
+  let extractOverride = personalOverride;
+
   // 1+2: gather + dedupe candidate pages. Wrapped so a broadening retry can
   // append a fresh batch of candidates from wider queries when the first pass
   // comes up empty.
@@ -1994,7 +1998,7 @@ export async function discover(
             emit(`Pulled ${people.length} ${people.length === 1 ? "person" : "people"} from that list`);
           return { multi: true as const, people, cand: c };
         }
-        const rec = await extract(c, goal, about, useCase, feedback, personalOverride, plan);
+        const rec = await extract(c, goal, about, useCase, feedback, extractOverride, plan);
         return { multi: false as const, rec, cand: c };
       })
     );
@@ -2399,6 +2403,44 @@ export async function discover(
     broadenedQueries = broadened.length;
     await gather(broadened);
     await extractFrom(alreadyProcessed);
+  }
+
+  // Scarcity rescue: still under the floor after widening. When the goal
+  // permits it (and job searches always permit proactive employers), go find
+  // the missing finds in OTHER industries instead of coming back short —
+  // fresh queries that deliberately span several fields, and an extraction
+  // override that accepts honest moderate fits.
+  if (opps.length < MIN_FINDS && queries.length && !creatorSearch && !aborted()) {
+    emit(
+      `Only ${opps.length} so far; widening into other industries to reach ${MIN_FINDS}`
+    );
+    const already = candidates.length;
+    const SCARCITY_PLAN =
+      `SCARCITY: the specific pass found under ${MIN_FINDS} results. Write queries that deliberately span SEVERAL ` +
+      `DIFFERENT industries and target types the GOAL allows (when the goal welcomes other industries, USE that ` +
+      `permission now), favouring small reachable employers and live postings. Do not repeat earlier angles.`;
+    const rescueQueries = await planQueries(
+      goal,
+      about,
+      useCase,
+      feedback,
+      salt + ":rescue",
+      cohortHint,
+      [personalOverride, SCARCITY_PLAN].filter(Boolean).join("\n\n"),
+      true,
+      plan
+    ).catch(() => [] as string[]);
+    if (rescueQueries.length) {
+      extractOverride =
+        (personalOverride || "") +
+        `\n\nSCARCITY MODE: earlier passes rejected nearly everything and the user is owed at least ${MIN_FINDS} real ` +
+        `results. Unless a result is a private individual, a dead link, or advice content, lean toward is_relevant true ` +
+        `with an HONEST moderate fit_score (0.35-0.6) and a why_it_fits framed as a proactive outreach target. When the ` +
+        `GOAL welcomes other industries, industry is not a reason to reject anything.`;
+      await gather(rescueQueries.slice(0, 6));
+      await extractFrom(already);
+      extractOverride = personalOverride;
+    }
   }
 
   // The same company can slip past name/host dedup by appearing both as a generic
