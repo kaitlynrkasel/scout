@@ -8415,6 +8415,14 @@ function ScoutTool({
         <TemplatesTab
           kinds={OUTREACH_KINDS}
           about={aboutText}
+          linkSeed={{
+            linkedin: profile.linkedin || "",
+            email: accountEmail || "",
+            website:
+              (profile as any).website ||
+              (profile.accountType === "company" ? (profile as any).companyWebsite || "" : ""),
+            phone: (profile as any).phone || "",
+          }}
           onAddCoverLetter={(text) =>
             saveTpls([
               ...myTemplates,
@@ -21628,6 +21636,7 @@ function CoverLetterTailor({
 function TemplatesTab({
   kinds,
   about = "",
+  linkSeed = {},
   onAddCoverLetter,
   resumeFileName = "",
   onResumeFile,
@@ -21659,6 +21668,7 @@ function TemplatesTab({
 }: {
   kinds: string[];
   about?: string;
+  linkSeed?: Record<string, string>;
   onAddCoverLetter?: (text: string) => void;
   resumeFileName?: string;
   onResumeFile?: (f: File) => void;
@@ -21702,9 +21712,28 @@ function TemplatesTab({
   // surfaces them with one-tap copy.
   const [appLinks, setAppLinks] = useState<Record<string, string>>({});
   useEffect(() => {
+    let stored: Record<string, string> = {};
     try {
-      setAppLinks(JSON.parse(localStorage.getItem("scout_app_links") || "{}"));
+      stored = JSON.parse(localStorage.getItem("scout_app_links") || "{}");
     } catch {}
+    // Prefill from the profile: anything Scout already knows (LinkedIn, the
+    // account email, phone, website) lands here automatically, and the user
+    // edits it if an application should say something different.
+    const seeded = { ...stored };
+    let changed = false;
+    for (const [k, v] of Object.entries(linkSeed)) {
+      if (v && !(seeded[k] || "").trim()) {
+        seeded[k] = v;
+        changed = true;
+      }
+    }
+    setAppLinks(seeded);
+    if (changed) {
+      try {
+        localStorage.setItem("scout_app_links", JSON.stringify(seeded));
+      } catch {}
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const saveAppLink = (k: string, v: string) => {
     const next = { ...appLinks, [k]: v };
