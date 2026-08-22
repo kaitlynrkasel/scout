@@ -715,6 +715,35 @@
                 "Confirm two columns on a wide screen and no line running off the card."
               ],
               "key": "finding::the-progress-log-stays-readable"
+            },
+            {
+              "sev": "should",
+              "title": "Scouting shows honest live timers",
+              "good": "Under the reading deck: Time saving leads at display size, with 'Xm scouting vs Ym doing these searches yourself' beneath. The manual estimate is computed from the run's real counts (90s per web search, 2min per site read) and the tooltip shows the exact formula — nothing invented.",
+              "steps": [
+                "Run a search and watch the numbers move.",
+                "Hover the block and check the formula matches the run's own search/site counts."
+              ],
+              "key": "finding::scouting-shows-honest-live-timers"
+            },
+            {
+              "sev": "should",
+              "title": "Variety searches rotate industries run over run",
+              "good": "When a goal welcomes many industries, back-to-back scouts don't find the same field twice: the planner reads which industries past keeps already cover and points the new run at ones not yet represented.",
+              "steps": [
+                "On a variety goal, run two scouts in a row and compare the industries of the results."
+              ],
+              "key": "finding::variety-searches-rotate-industries-run-over-run"
+            },
+            {
+              "sev": "must",
+              "title": "The scarcity rescue reaches the five-find floor",
+              "good": "A run still short after widening plans fresh queries that deliberately span the other industries the goal allows, and accepts honest moderate fits (never inflated scores). The log says 'Only N so far; widening into other industries to reach 5.'",
+              "steps": [
+                "Run a narrow search where the specific ask runs dry.",
+                "Confirm at least five results, the log line, and that rescue results carry honest moderate fit bands."
+              ],
+              "key": "finding::the-scarcity-rescue-reaches-the-five-find-floor"
             }
           ]
         },
@@ -812,6 +841,44 @@
                 "Count the edits (should be a handful), verify each 'original' really is in your letter, and that Keep-my-original works."
               ],
               "key": "applications::cover-letter-mastery-keeps-your-voice"
+            },
+            {
+              "sev": "should",
+              "title": "Deadlines are editable in place",
+              "good": "Clicking the deadline spot on any Applications row (or its 'set deadline' placeholder) opens the native date picker right there. A hand-set date wins over the parsed one and the list re-sorts immediately; clearing it falls back to the parsed date.",
+              "steps": [
+                "Click a row's deadline, pick a date next week: it should turn red-ish with days-left and re-sort.",
+                "Clear it and confirm the parsed deadline (or 'set deadline') returns."
+              ],
+              "key": "applications::deadlines-are-editable-in-place"
+            },
+            {
+              "sev": "should",
+              "title": "A kit can skip the cover letter",
+              "good": "'Don't need a cover letter' on a kit's cover-letter step removes that section for THIS application only (the next step renumbers), with a small link to bring it back. The choice sticks across reopens.",
+              "steps": [
+                "Remove it on one application, close and reopen the kit: still gone.",
+                "Open a different application: its cover-letter step is untouched."
+              ],
+              "key": "applications::a-kit-can-skip-the-cover-letter"
+            },
+            {
+              "sev": "should",
+              "title": "Research cites real sources",
+              "good": "Know-them ends with Sources and recent news: the actual pages the research read, linked with their real titles. Every link resolves and relates; none are invented.",
+              "steps": [
+                "Open a few links from one kit and confirm they're real, relevant pages about the organization."
+              ],
+              "key": "applications::research-cites-real-sources"
+            },
+            {
+              "sev": "could",
+              "title": "Your links read as links, not stray files",
+              "good": "In the kit's files column, saved links sit under their own 'Your links (what forms ask for)' heading with LINKEDIN / EMAIL / WEBSITE labels and copy buttons — never as unexplained bare values among the files.",
+              "steps": [
+                "Open a kit with saved links and check the labeling."
+              ],
+              "key": "applications::your-links-read-as-links-not-stray-files"
             }
           ]
         },
@@ -1888,6 +1955,15 @@
                 "With a small cohort, confirm the section is absent entirely."
               ],
               "key": "feel::empty-sections-stay-off-the-page"
+            },
+            {
+              "sev": "could",
+              "title": "The update banner can be dismissed",
+              "good": "'A newer Scout is ready' has a close button; dismissing keeps the current version for this session without reloading, and the banner returns on the next deploy.",
+              "steps": [
+                "Dismiss it mid-work and confirm nothing reloads."
+              ],
+              "key": "feel::the-update-banner-can-be-dismissed"
             }
           ]
         }
