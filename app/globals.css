@@ -875,6 +875,16 @@ select.scout-kind-picker option {
    part" — but at that small a gap it doesn't read as depth, it reads as two
    browns that failed to match, with a visible seam where they meet. One room,
    one colour; the light cards inside carry the separation instead. */
+/* The shelf went white while its inner progress/results markup still spoke
+   dark-room (cream + white/NN text). Remap centrally, same trick as the
+   stage, so every line reads as ink on paper. */
+.scout-results .text-cream,
+.scout-results [class*="text-cream/"] { color: rgb(var(--c-ink)); }
+.scout-results .text-white,
+.scout-results [class*="text-white/"] { color: rgb(var(--c-ink) / 0.75); }
+.scout-results [class*="border-white/"] { border-color: rgb(var(--c-ink) / 0.18); }
+.scout-results [class*="bg-white/"] { background-color: rgb(var(--c-warm-bg) / 0.75); }
+.scout-results .bg-cream { background: rgb(var(--c-brown)); }
 .scout-results {
   background: rgb(255 255 255 / 0.9);
   -webkit-backdrop-filter: blur(8px);

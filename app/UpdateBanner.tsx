@@ -16,6 +16,7 @@ const EVERY_MS = 120000;
 
 export function UpdateBanner() {
   const [stale, setStale] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
 
   const check = useCallback(async () => {
     if (!MINE || stale) return;
@@ -42,7 +43,7 @@ export function UpdateBanner() {
     };
   }, [check]);
 
-  if (!stale) return null;
+  if (!stale || dismissed) return null;
 
   return (
     <div
@@ -50,6 +51,14 @@ export function UpdateBanner() {
       className="fixed bottom-4 left-1/2 z-[95] w-[min(92vw,26rem)] -translate-x-1/2 rounded-2xl border border-warm-border bg-surface px-4 py-3 shadow-float"
       style={{ marginBottom: "env(safe-area-inset-bottom)" }}
     >
+      <button
+        onClick={() => setDismissed(true)}
+        aria-label="Dismiss, keep this version for now"
+        title="Dismiss, keep this version for now"
+        className="absolute right-2 top-2 rounded p-1 text-body/50 transition hover:text-ink"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+      </button>
       <div className="flex items-center gap-3">
         <div className="min-w-0">
           <p className="text-sm font-bold text-ink">A newer Scout is ready</p>
