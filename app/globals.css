@@ -811,7 +811,7 @@ select.scout-kind-picker option {
    reads as a place you ask for something. Scoped to `.scout-stage` so nothing
    else in the app inherits a dark canvas.
    ========================================================================== */
-.scout-stage {
+.scout-field {
   background:
     radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
     radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
@@ -822,6 +822,10 @@ select.scout-kind-picker option {
     radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
     #f8f4ea;
   background-attachment: fixed;
+  
+}
+.scout-stage {
+  background: transparent;
   color: rgb(var(--c-ink));
 }
 /* The stage markup was written for a dark room (white/cream utilities
@@ -872,8 +876,13 @@ select.scout-kind-picker option {
    browns that failed to match, with a visible seam where they meet. One room,
    one colour; the light cards inside carry the separation instead. */
 .scout-results {
-  background: #ffffff;
-  border-top: 1px solid rgb(var(--c-warm-border));
+  background: rgb(255 255 255 / 0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border-top: 1px solid rgb(255 255 255 / 0.8);
+  border-top-left-radius: 28px;
+  border-top-right-radius: 28px;
+  box-shadow: 0 -12px 34px rgb(31 37 48 / 0.07);
 }
 .dark .scout-results { background: rgb(var(--c-surface)); }
 

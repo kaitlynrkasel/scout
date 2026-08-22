@@ -7386,7 +7386,7 @@ function ScoutTool({
       <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
-          <main className="flex w-full flex-1 flex-col">
+          <main className="scout-field flex w-full flex-1 flex-col">
 
             {/* ---------------- The stage (gated behind a completed profile) ----------------
                 Not a card of inputs. The whole band is the composer: choose the
@@ -7553,7 +7553,7 @@ function ScoutTool({
                 )}
                 {/* Understanding phase status, so it never looks frozen while
                     Scout reads the goal before searching. */}
-                {gating && !stageHasWorkBelow && (
+                {gating && !discovering && (
                   <div className="scout-fade-in flex min-w-0 flex-1 items-center gap-2.5">
                     <div className="h-1.5 w-32 overflow-hidden rounded-full bg-white/15">
                       <div className="scout-indeterminate h-full w-1/2 rounded-full bg-cream" />
