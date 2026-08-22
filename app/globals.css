@@ -885,6 +885,15 @@ select.scout-kind-picker option {
 .scout-results [class*="border-white/"] { border-color: rgb(var(--c-ink) / 0.18); }
 .scout-results [class*="bg-white/"] { background-color: rgb(var(--c-warm-bg) / 0.75); }
 .scout-results .bg-cream { background: rgb(var(--c-brown)); }
+/* Solid accent fills keep white text: the remap above must never darken the
+   label on a filled pill or button (Perfect fit, Draft, Approve). */
+.scout-results .bg-brand-gradient,
+.scout-results .bg-brand-gradient .text-white,
+.scout-results .bg-brown,
+.scout-results .bg-brown .text-white,
+.scout-results .bg-accent {
+  color: #ffffff;
+}
 .scout-results {
   background: rgb(255 255 255 / 0.9);
   -webkit-backdrop-filter: blur(8px);

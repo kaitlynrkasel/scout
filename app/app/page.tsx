@@ -280,12 +280,22 @@ function sensesApplication(f: Find): boolean {
 function applicationType(f: Find): string {
   const t = `${f.opp.name} ${f.opp.contactRole || ""} ${(f.requirements || "").slice(0, 400)}`.toLowerCase();
   if (/\bintern|internship/.test(t)) return "Internships";
-  if (/\b(university|college|school|masters?|mba|ph\.?d|degree|admissions?|undergraduate|graduate program)\b/.test(t))
-    return "Schools";
   if (/\b(playlist|curator|submission|submit|demo|radio|sync|audition)\b/.test(t))
     return "Submissions";
-  if (/\b(job|position|role|opening|hiring|employment)\b/.test(t) || f.opp.targetType === "listing")
-    return "Jobs";
+  // A JOB TITLE containing a school word is still a job: "College Marketing
+  // Representative" applies you to a company, not a campus. Schools only when
+  // the thing itself is a program you enrol in.
+  const jobTitle =
+    /\b(representative|rep|manager|coordinator|assistant|director|specialist|associate|analyst|engineer|designer|position|role|opening|hiring|employment|job)\b/.test(
+      t
+    );
+  const enrols =
+    /\b(admissions?|degree|masters? program|graduate program|undergraduate|mba|ph\.?d|conservatory|semester program|study abroad)\b/.test(
+      t
+    ) ||
+    (/\b(university|college|school)\b/.test(t) && /\b(program|enroll?|apply to attend|tuition)\b/.test(t));
+  if (enrols && !jobTitle) return "Schools";
+  if (jobTitle || f.opp.targetType === "listing") return "Jobs";
   return "Other";
 }
 
@@ -7916,9 +7926,13 @@ function ScoutTool({
                 </span>
               </div>
             )}
-            {discovering && (
-              <div ref={searchingRef} className="mt-10 flex scroll-mt-24 items-start gap-8">
-              <div className="min-w-0 flex-1">
+            {discovering && (() => {
+              // Open text while it's only the bar; the moment the finding
+              // dialogue starts (and the site deck appears) the card returns.
+              const hasDialogue = searchLog.map(friendlyProgress).filter(Boolean).length > 0;
+              return (
+              <div ref={searchingRef} className={`mt-10 flex scroll-mt-24 items-start ${hasDialogue ? "gap-5" : "gap-8"}`}>
+              <div className={hasDialogue ? "min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-5 py-4" : "min-w-0 flex-1"}>
                   <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
                   {(() => {
                     // Only the human-readable steps, newest last. Debug lines are
@@ -8006,7 +8020,8 @@ function ScoutTool({
                 </div>
               )}
               </div>
-            )}
+              );
+            })()}
 
             {/* ---------------- Results as a chat bubble ---------------- */}
             {/* Real empty state: shown only after a completed search AND its
@@ -9077,21 +9092,21 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
   };
   return (
     <div
-      className="mt-4 space-y-1 text-[11px]"
+      className="mt-5"
       title={`Searching yourself = ${searches} web searches × 90s + ${sitesRead} sites × 2min, counted from this run's real activity`}
     >
-      <div className="flex justify-between gap-3">
-        <span className="text-white/50">Time scouting</span>
-        <span className="font-bold tabular-nums text-white/80">{fmt(scoutingS)}</span>
+      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
+        Time saving
       </div>
-      <div className="flex justify-between gap-3">
-        <span className="text-white/50">Time searching yourself</span>
-        <span className="font-bold tabular-nums text-white/80">{fmt(manualS)}</span>
+      <div className="mt-0.5 font-display text-3xl font-bold leading-none tabular-nums text-white">
+        {fmt(savingS)}
       </div>
-      <div className="flex justify-between gap-3">
-        <span className="text-white/50">Time saving</span>
-        <span className="font-bold tabular-nums text-white/80">{fmt(savingS)}</span>
-      </div>
+      <p className="mt-1.5 text-[11px] leading-relaxed text-white/55">
+        <span className="font-semibold tabular-nums text-white/75">{fmt(scoutingS)}</span> scouting
+        {" vs "}
+        <span className="font-semibold tabular-nums text-white/75">{fmt(manualS)}</span> doing
+        these {searches} searches and {sitesRead} pages yourself
+      </p>
     </div>
   );
 }

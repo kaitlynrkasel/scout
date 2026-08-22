@@ -120,7 +120,10 @@ function feedbackBlock(feedback?: DiscoverFeedback, goal = ""): string {
       "\n\nINSTRUCTION OVERRIDE: this search explicitly asks for a VARIETY of industries. The learned " +
       "preferences below are secondary — use them ONLY to judge quality/reachability WITHIN each industry, " +
       "never to narrow WHICH industries appear. Keep the results spread across many distinct industries even " +
-      "if the user has kept or replied to some industries more than others. The explicit ask wins.";
+      "if the user has kept or replied to some industries more than others. The explicit ask wins. " +
+      "ROTATE, TOO: read the learned lists below for industries ALREADY well represented from past runs (a wall of " +
+      "music-industry keeps means music is covered) and point most of THIS run at industries not yet represented, " +
+      "so coverage widens run over run instead of finding the same field again.";
   }
   if (outcomes.length) {
     s +=
