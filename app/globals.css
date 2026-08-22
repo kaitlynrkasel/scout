@@ -1125,3 +1125,31 @@ select.scout-kind-picker option {
     radial-gradient(50% 38% at 8% 96%, rgb(196 213 68 / 0.12), transparent 74%),
     #221c17;
 }
+
+/* ---------------- Templates: open concept ----------------
+   The tab sheds its form-in-a-box feel: white ground, no card chrome on the
+   big containers (inputs and buttons keep their own shells), display-size
+   section headings, and hairlines instead of boxes between saved items.
+   Deliberately no gradients or colour fields here. */
+.tpl-open { background: #ffffff; }
+.tpl-open section > div.bg-surface,
+.tpl-open section div.rounded-2xl.border.bg-surface,
+.tpl-open section div.rounded-3xl.border.bg-surface {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+.tpl-open section div.shadow-card { box-shadow: none; }
+.tpl-open h2 {
+  font-size: 1.55rem;
+  letter-spacing: -0.015em;
+}
+/* Saved items separate with a hairline, not a box each. */
+.tpl-open section div.rounded-2xl.border.border-warm-border:not(:has(input)):not(:has(textarea)) {
+  border-radius: 0;
+  border-width: 0 0 1px 0;
+  border-color: rgb(var(--c-warm-border));
+}
+.dark .tpl-open { background: rgb(var(--c-cream)); }

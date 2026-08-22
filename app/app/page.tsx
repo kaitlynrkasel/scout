@@ -21834,7 +21834,7 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   return (
-    <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
+    <main className="tpl-open w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">Your voice</div>
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
