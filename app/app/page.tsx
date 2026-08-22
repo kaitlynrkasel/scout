@@ -300,6 +300,7 @@ function applicationType(f: Find): string {
 }
 
 function applicationDeadline(f: Find): number | undefined {
+  if (typeof f.appDeadline === "number") return f.appDeadline;
   const hay = [
     ...(f.opp.criteria || []).map((c) => `${c.ask} ${c.answer}`),
     f.opp.postingWindow || "",
@@ -710,6 +711,8 @@ interface Find {
   // undefined means "let Scout sense it" (listings, programs, submissions).
   isApplication?: boolean;
   appRank?: number; // the user's own 1-N ranking inside the applications chart
+  appDeadline?: number; // user-set deadline (epoch ms); wins over the parsed one
+  noCoverLetter?: boolean; // this application doesn't take a cover letter
   requirements?: string; // what this target asks for (pasted or found by deep-scan)
   sentAt?: number; // when the outreach actually went out (drives follow-up timing)
   bounced?: boolean; // the send bounced (dead address); not a real reply, not "silent"
@@ -8663,6 +8666,7 @@ function ScoutTool({
           finds={finds}
           projects={visibleProjects}
           categories={categories}
+          onSetDeadline={(id, ts) => patchFind(id, { appDeadline: ts })}
           onSetRank={(id, rank) => patchFind(id, { appRank: rank })}
           onOpenKit={(f) => setAppKitId(f.id)}
           onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
@@ -8679,6 +8683,7 @@ function ScoutTool({
           return (
             <ApplicationKitModal
               find={f}
+              onPatch={(patch) => patchFind(f.id, patch)}
               about={aboutText}
               resumeFile={resumeFile}
               baseCoverLetter={myTemplates.find((t) => t.channel === "Cover letter")?.text || ""}
@@ -10942,6 +10947,7 @@ function StepMark({ n, title }: { n: number; title: string }) {
    programs, submissions) or marked by hand, each opening its full kit. Paste
    a whole posting to build a prospect from nothing. */
 function ApplicationsTab({
+  onSetDeadline,
   categories = [],
   finds,
   projects,
@@ -10952,6 +10958,7 @@ function ApplicationsTab({
   building,
   goFinds,
 }: {
+  onSetDeadline: (id: string, ts: number | undefined) => void;
   categories?: Category[];
   finds: Find[];
   projects: Project[];
@@ -11148,8 +11155,9 @@ function ApplicationsTab({
                 key={f.id}
                 className="flex flex-wrap items-center gap-4 rounded-2xl border border-warm-border bg-surface px-5 py-4 shadow-card"
               >
-                {/* Deadline first: it decides the order, so it leads the row. */}
-                <div className="w-24 shrink-0">
+                {/* Deadline leads the row, and clicking it edits it: the
+                    hidden date input opens the native picker in place. */}
+                <label className="w-24 shrink-0 cursor-pointer" title="Click to set or correct the deadline">
                   {dl ? (
                     <>
                       <div
@@ -11167,9 +11175,20 @@ function ApplicationsTab({
                       </div>
                     </>
                   ) : (
-                    <div className="text-[11px] text-body/40">no deadline found</div>
+                    <div className="text-[11px] text-body/40 underline decoration-dotted underline-offset-2">
+                      set deadline
+                    </div>
                   )}
-                </div>
+                  <input
+                    type="date"
+                    value={dl ? new Date(dl).toISOString().slice(0, 10) : ""}
+                    onChange={(e) => {
+                      const t = e.target.value ? Date.parse(`${e.target.value}T12:00:00`) : NaN;
+                      onSetDeadline(f.id, Number.isNaN(t) ? undefined : t);
+                    }}
+                    className="h-0 w-0 opacity-0"
+                  />
+                </label>
                 {typeof f.appRank === "number" && (
                   <span className="shrink-0 rounded-lg bg-brown-tint px-2 py-0.5 text-xs font-bold tabular-nums text-brown-deep">
                     #{f.appRank}
@@ -11276,12 +11295,14 @@ function ApplicationsTab({
 
 function ApplicationKitModal({
   find,
+  onPatch,
   about,
   resumeFile,
   baseCoverLetter,
   onClose,
   goTemplates,
 }: {
+  onPatch?: (patch: Partial<Find>) => void;
   find: Find;
   about: string;
   resumeFile: { name: string; dataUrl: string } | null;
@@ -11446,34 +11467,51 @@ function ApplicationKitModal({
                   No resume on file: add it in Templates
                 </button>
               )}
-              {Object.entries(
-                (() => {
-                  try {
-                    return JSON.parse(localStorage.getItem("scout_app_links") || "{}");
-                  } catch {
-                    return {};
-                  }
-                })() as Record<string, string>
-              )
-                .filter(([, v]) => v && String(v).trim())
-                .map(([k, v]) => (
-                  <div
-                    key={k}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
-                  >
-                    <span className="min-w-0 truncate text-body">{v}</span>
-                    <button
-                      onClick={() => {
-                        try {
-                          navigator.clipboard.writeText(String(v));
-                        } catch {}
-                      }}
-                      className="shrink-0 rounded border border-warm-border px-1.5 py-0.5 text-[10px] font-bold text-body/70 hover:bg-warm-bg"
-                    >
-                      Copy
-                    </button>
+              {(() => {
+                let links: Record<string, string> = {};
+                try {
+                  links = JSON.parse(localStorage.getItem("scout_app_links") || "{}");
+                } catch {}
+                const NAMES: Record<string, string> = {
+                  website: "Website",
+                  linkedin: "LinkedIn",
+                  email: "Email",
+                  phone: "Phone",
+                  other: "Link",
+                };
+                const rows = Object.entries(links).filter(([, v]) => v && String(v).trim());
+                if (!rows.length) return null;
+                return (
+                  <div className="pt-1">
+                    <div className="mb-1 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                      Your links (what forms ask for)
+                    </div>
+                    <div className="space-y-1.5">
+                      {rows.map(([k, v]) => (
+                        <div
+                          key={k}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-2 text-sm"
+                        >
+                          <span className="w-16 shrink-0 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                            {NAMES[k] || k}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-body">{v}</span>
+                          <button
+                            onClick={() => {
+                              try {
+                                navigator.clipboard.writeText(String(v));
+                              } catch {}
+                            }}
+                            className="shrink-0 rounded border border-warm-border px-1.5 py-0.5 text-[10px] font-bold text-body/70 hover:bg-warm-bg"
+                          >
+                            Copy
+                          </button>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
+                );
+              })()}
               <label className="block cursor-pointer rounded-xl border border-dashed border-warm-border px-3.5 py-2 text-center text-xs font-semibold text-body/70 transition hover:bg-warm-bg">
                 + Add a file this application needs (kept for next time)
                 <input
@@ -11514,7 +11552,20 @@ function ApplicationKitModal({
           </div>
         </div>
 
-        <StepMark n={2} title="Your cover letter, tailored to this posting" />
+        {!find.noCoverLetter && (
+        <>
+        <div className="flex items-center justify-between gap-3">
+          <StepMark n={2} title="Your cover letter, tailored to this posting" />
+          {onPatch && (
+            <button
+              onClick={() => onPatch({ noCoverLetter: true })}
+              className="mt-8 shrink-0 text-xs font-semibold text-body/50 transition hover:text-ink"
+              title="This application doesn't take a cover letter; remove the section"
+            >
+              Don&apos;t need a cover letter
+            </button>
+          )}
+        </div>
         <div className="mt-3">
           {null}
           {baseCoverLetter ? (
@@ -11563,7 +11614,17 @@ function ApplicationKitModal({
           )}
         </div>
 
-        <StepMark n={3} title="Know them before you apply" />
+        </>
+        )}
+        {find.noCoverLetter && onPatch && (
+          <button
+            onClick={() => onPatch({ noCoverLetter: false })}
+            className="mt-8 text-xs font-semibold text-body/40 transition hover:text-ink"
+          >
+            + Add the cover letter section back
+          </button>
+        )}
+        <StepMark n={find.noCoverLetter ? 2 : 3} title="Know them before you apply" />
         <div className="mt-3">
           {null}
           {kitErr && <p className="text-sm text-danger">{kitErr}</p>}
@@ -11606,6 +11667,25 @@ function ApplicationKitModal({
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+              {kit.links?.length > 0 && (
+                <div>
+                  {label("Sources and recent news")}
+                  <ul className="space-y-1.5 text-sm">
+                    {kit.links.map((l: any, i2: number) => (
+                      <li key={i2}>
+                        <a
+                          href={l.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-accent underline-offset-2 hover:underline"
+                        >
+                          {l.title || l.url} ↗
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
               {kit.isSchool && kit.scholarships?.length > 0 && (

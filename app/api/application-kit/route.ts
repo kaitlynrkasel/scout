@@ -84,6 +84,12 @@ export async function POST(req: NextRequest) {
     const arr = (v: any, n: number) =>
       Array.isArray(v) ? v.map((x: any) => noDash(String(x || ""))).filter(Boolean).slice(0, n) : [];
     return NextResponse.json({
+      // Real pages the research actually read: titles + urls, no model in
+      // the loop, so every link is a genuine source.
+      links: [...orgHits, ...schHits]
+        .map((h: any) => ({ title: String(h.title || h.url || ""), url: String(h.url || "") }))
+        .filter((l: any) => l.url)
+        .slice(0, 5),
       parsed: parsed
         ? {
             role: noDash(String(parsed.role || "")),
