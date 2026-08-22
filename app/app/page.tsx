@@ -1700,12 +1700,7 @@ function ScoutTool({
     document.documentElement.style.setProperty("--dash-tint", tints[lead]);
     document.documentElement.style.setProperty("--dash-tint2", tints[second]);
     document.documentElement.style.setProperty("--dash-tint3", tints[third]);
-    // Stat-band seams run against the ground's temperature: warm strands on a
-    // cool field, cool strands on a warm one.
-    const seams = leadWarm
-      ? ["#377ec0", "#12baaa", "#7a5aa8"]
-      : ["#f04f52", "#f7891f", "#d9a11c"];
-    seams.forEach((c, k) => document.documentElement.style.setProperty(`--seam-${k}`, c));
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -16474,7 +16469,7 @@ ${body}
                 : cand.filter((c) => c[3]).slice(0, 6);
               return chosen;
             })().map(([v, label, sub], i, all) => {
-              const seam = `var(--seam-${i % 3}, ${FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length]})`;
+              const seam = FIND_AVATAR_COLORS[i % FIND_AVATAR_COLORS.length];
               const last = i === all.length - 1;
               // A seam belongs BETWEEN two numbers, never on the card's own
               // outer edge — so it has to know which cells end a row, and that
