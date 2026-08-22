@@ -8376,6 +8376,10 @@ function ScoutTool({
       {tab === "templates" && (
         <TemplatesTab
           kinds={OUTREACH_KINDS}
+          about={aboutText}
+          resumeFileName={resumeFile?.name || ""}
+          onResumeFile={storeResumeFile}
+          onClearResume={() => saveResumeFile(null)}
           channel={mtChannel}
           setChannel={setMtChannel}
           text={mtText}
@@ -20694,8 +20698,226 @@ function ListsTab({
 }
 
 /* ---------------- Templates tab ---------------- */
+
+/* ---------------- Cover letter mastery ----------------
+   Paste your letter and a job description; Scout proposes the SMALLEST set
+   of spot edits (your words stay yours), highlights the truly incompatible
+   passages, and walks you through resolving each one yourself. */
+function CoverLetterTailor({
+  seedLetter,
+  about,
+  onLoadIntoBuilder,
+}: {
+  seedLetter: string;
+  about: string;
+  onLoadIntoBuilder: (finalText: string) => void;
+}) {
+  const [letter, setLetter] = useState(seedLetter);
+  const [job, setJob] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const [note, setNote] = useState("");
+  const [edits, setEdits] = useState<
+    { original: string; suggestion: string; why: string; severity: string }[]
+  >([]);
+  const [step, setStep] = useState(-1); // -1 = not started
+  const [working, setWorking] = useState("");
+  const [draftText, setDraftText] = useState(""); // the editable suggestion for the current step
+  const [done, setDone] = useState(false);
+
+  async function analyze() {
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/cover-letter", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ letter, job, about }),
+      });
+      const j = await r.json();
+      if (!r.ok) throw new Error(j.error || "Tailoring failed.");
+      setNote(j.note || "");
+      const es = Array.isArray(j.edits) ? j.edits : [];
+      if (!es.length) {
+        setErr("No changes needed: this letter already fits the posting.");
+        setEdits([]);
+        return;
+      }
+      setEdits(es);
+      setWorking(letter);
+      setStep(0);
+      setDraftText(es[0].suggestion);
+      setDone(false);
+    } catch (e: any) {
+      setErr(e?.message || "Tailoring failed.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function advance(next: string) {
+    const n = step + 1;
+    if (n >= edits.length) {
+      setWorking(next);
+      setDone(true);
+      setStep(-1);
+    } else {
+      setWorking(next);
+      setStep(n);
+      setDraftText(edits[n].suggestion);
+    }
+  }
+
+  const cur = step >= 0 ? edits[step] : null;
+  // Where the current span sits, for the highlighted context view.
+  const at = cur ? working.indexOf(cur.original) : -1;
+
+  return (
+    <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+      <div className="text-sm font-bold text-ink">Tailor it to a job</div>
+      <p className="mt-1 text-xs leading-relaxed text-body/70">
+        Paste a job description and Scout finds the fewest possible edits.
+        Your sentences stay yours; anything truly incompatible gets
+        highlighted for you to resolve, one at a time.
+      </p>
+
+      {step < 0 && !done && (
+        <>
+          <textarea
+            value={letter}
+            onChange={(e) => setLetter(e.target.value)}
+            rows={6}
+            placeholder="Paste your cover letter (your real one, in your words)"
+            className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+          />
+          <textarea
+            value={job}
+            onChange={(e) => setJob(e.target.value)}
+            rows={4}
+            placeholder="Paste the job description to tailor it to"
+            className="mt-2 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+          />
+          <button
+            onClick={analyze}
+            disabled={busy || !letter.trim() || !job.trim()}
+            className="mt-3 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
+          >
+            {busy ? "Reading both…" : "Find the smallest changes"}
+          </button>
+          {err && <p className="mt-2 text-sm text-danger">{err}</p>}
+        </>
+      )}
+
+      {cur && at >= 0 && (
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <span
+              className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                cur.severity === "mismatch"
+                  ? "bg-danger/10 text-danger"
+                  : "bg-attention/10 text-attention"
+              }`}
+            >
+              {cur.severity === "mismatch" ? "Doesn't fit this job" : "Optional sharpening"}
+            </span>
+            <span className="text-xs tabular-nums text-body/60">
+              {step + 1} of {edits.length}
+            </span>
+          </div>
+          {note && step === 0 && (
+            <p className="mt-2 text-xs leading-relaxed text-body/70">{note}</p>
+          )}
+          {/* The passage in context, the span itself highlighted. */}
+          <div className="mt-3 max-h-40 overflow-y-auto rounded-xl border border-warm-border bg-warm-bg/50 p-3.5 text-sm leading-relaxed text-body">
+            …{working.slice(Math.max(0, at - 140), at)}
+            <mark
+              className={`rounded px-0.5 ${
+                cur.severity === "mismatch" ? "bg-danger/20" : "bg-attention/20"
+              }`}
+            >
+              {cur.original}
+            </mark>
+            {working.slice(at + cur.original.length, at + cur.original.length + 140)}…
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-body">
+            <span className="font-semibold text-ink">Why:</span> {cur.why}
+          </p>
+          {/* The suggestion is a starting point; the user owns the final words. */}
+          <textarea
+            value={draftText}
+            onChange={(e) => setDraftText(e.target.value)}
+            rows={2}
+            className="mt-2 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => advance(working.replace(cur.original, draftText))}
+              className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              Use this change
+            </button>
+            <button
+              onClick={() => advance(working)}
+              className="rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Keep my original
+            </button>
+          </div>
+        </div>
+      )}
+
+      {done && (
+        <div className="mt-4">
+          <div className="text-xs font-bold uppercase tracking-wider text-body/50">
+            Your tailored letter
+          </div>
+          <textarea
+            value={working}
+            onChange={(e) => setWorking(e.target.value)}
+            rows={10}
+            className="mt-2 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+          />
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              onClick={() => {
+                try {
+                  navigator.clipboard.writeText(working);
+                } catch {}
+              }}
+              className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              Copy letter
+            </button>
+            <button
+              onClick={() => onLoadIntoBuilder(working)}
+              className="rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg"
+            >
+              Save as my cover letter template
+            </button>
+            <button
+              onClick={() => {
+                setDone(false);
+                setEdits([]);
+                setJob("");
+                setLetter(working);
+              }}
+              className="rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body/70 transition hover:bg-warm-bg"
+            >
+              Tailor to another job
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TemplatesTab({
   kinds,
+  about = "",
+  resumeFileName = "",
+  onResumeFile,
+  onClearResume,
   channel,
   setChannel,
   text,
@@ -20722,6 +20944,10 @@ function TemplatesTab({
   getToken,
 }: {
   kinds: string[];
+  about?: string;
+  resumeFileName?: string;
+  onResumeFile?: (f: File) => void;
+  onClearResume?: () => void;
   channel: string;
   setChannel: (v: string) => void;
   text: string;
@@ -20856,6 +21082,10 @@ function TemplatesTab({
   const myShown = list
     .filter((t) => !fltChannel || t.channel === fltChannel)
     .filter(() => !fltPerson || fltPerson === (accountEmail || ""));
+  // The tab reads in two halves: outreach, then application materials
+  // (cover letters + the resume) below.
+  const coverLetters = myShown.filter((t) => t.channel === "Cover letter");
+  const myOutreach = myShown.filter((t) => t.channel !== "Cover letter");
   const teamShown = teamRows
     .filter((r: any) => !fltChannel || (r.template?.channel || "") === fltChannel)
     .filter((r: any) => !fltPerson || r.added_email === fltPerson);
@@ -21005,7 +21235,7 @@ function TemplatesTab({
       <section className="mt-8">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-bold text-ink">
-            Your Templates ({myShown.length})
+            Outreach templates ({myOutreach.length})
           </h2>
           {/* Toggleable filters: by format, and (on a team) by person. */}
           {(channelOptions.length > 1 || personOptions.length > 0) && (
@@ -21089,12 +21319,12 @@ function TemplatesTab({
           </div>
         ) : (
           <Reveal className="space-y-3" stagger={0.05}>
-            {myShown.length === 0 && (
+            {myOutreach.length === 0 && (
               <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-center text-sm text-body/70">
                 No templates match your filters.
               </div>
             )}
-            {myShown.map((s) => (
+            {myOutreach.map((s) => (
               <div
                 key={s.id}
                 className={`rounded-2xl border p-5 shadow-card transition ${
@@ -21138,6 +21368,114 @@ function TemplatesTab({
             ))}
           </Reveal>
         )}
+      </section>
+
+      {/* ---------------- Application materials ----------------
+          The other half of the tab: the resume file Scout attaches to
+          applications, saved cover letters, and the tailoring walkthrough. */}
+      <section className="mt-10">
+        <div className="mb-1 flex flex-wrap items-baseline gap-2">
+          <h2 className="text-lg font-bold text-ink">Application materials</h2>
+          <span className="text-[12px] text-body/60">
+            Your resume and cover letters, for job and internship applications.
+          </span>
+        </div>
+        <div className="mt-4 grid items-start gap-4 xl:grid-cols-2">
+          <div className="space-y-4">
+            {/* Resume file */}
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+              <div className="text-sm font-bold text-ink">Resume</div>
+              {resumeFileName ? (
+                <div className="mt-2 flex flex-wrap items-center gap-3">
+                  <span className="min-w-0 flex-1 truncate rounded-lg bg-warm-bg px-3 py-2 text-sm font-semibold text-ink">
+                    {resumeFileName}
+                  </span>
+                  {onClearResume && (
+                    <button
+                      onClick={onClearResume}
+                      className="shrink-0 text-xs font-semibold text-body/60 transition hover:text-danger"
+                    >
+                      Remove
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <p className="mt-1 text-xs leading-relaxed text-body/70">
+                  Nothing on file yet. Scout attaches it when you apply or
+                  draft an application email.
+                </p>
+              )}
+              {onResumeFile && (
+                <label className="mt-3 inline-block cursor-pointer rounded-xl border border-warm-border px-4 py-2 text-xs font-semibold text-body transition hover:bg-warm-bg">
+                  {resumeFileName ? "Replace file" : "Upload resume"}
+                  <input
+                    type="file"
+                    accept=".pdf,.doc,.docx"
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) onResumeFile(f);
+                      e.currentTarget.value = "";
+                    }}
+                  />
+                </label>
+              )}
+            </div>
+            {/* Saved cover letters */}
+            <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="text-sm font-bold text-ink">
+                  Cover letters ({coverLetters.length})
+                </div>
+                <button
+                  onClick={() => {
+                    setChannel("Cover letter");
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  className="rounded-lg border border-warm-border px-2.5 py-1 text-[11px] font-bold text-body transition hover:bg-warm-bg"
+                >
+                  Write one in the builder
+                </button>
+              </div>
+              {coverLetters.length === 0 ? (
+                <p className="mt-2 text-xs leading-relaxed text-body/70">
+                  Save your base cover letter here (it is a template with the
+                  Cover letter kind), then tailor it per job on the right.
+                </p>
+              ) : (
+                <div className="mt-3 space-y-3">
+                  {coverLetters.map((s2) => (
+                    <div key={s2.id} className="rounded-xl border border-warm-border bg-warm-bg/40 p-3.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                          Cover letter
+                        </span>
+                        <button
+                          onClick={() => remove(s2.id)}
+                          className="text-xs font-semibold text-body/60 transition hover:text-danger"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <pre className="mt-1.5 max-h-36 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
+                        {s2.text}
+                      </pre>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <CoverLetterTailor
+            seedLetter={coverLetters[0]?.text || ""}
+            about={about}
+            onLoadIntoBuilder={(finalText) => {
+              setChannel("Cover letter");
+              setText(finalText);
+              window.scrollTo({ top: 0, behavior: "smooth" });
+            }}
+          />
+        </div>
       </section>
 
       {/* Teammates' shared templates, with attribution + one-tap copy. */}
