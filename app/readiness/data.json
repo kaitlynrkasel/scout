@@ -719,7 +719,7 @@
             {
               "sev": "should",
               "title": "Scouting shows honest live timers",
-              "good": "Under the reading deck: Time saving leads at display size, with 'Xm scouting vs Ym doing these searches yourself' beneath. The manual estimate is computed from the run's real counts (90s per web search, 2min per site read) and the tooltip shows the exact formula — nothing invented.",
+              "good": "Under the reading deck: Time saving leads at display size, with 'Xm scouting vs Ym doing these searches yourself' beneath. The manual estimate is computed from the run's real counts with research-backed rates: 30s per web search (eye-tracking puts picking a result at ~9s, plus typing and reformulating; Mediative 2014, Granka et al.) and 60s per site opened (Nielsen Norman Group: average page visit just under a minute). The tooltip shows the formula — nothing invented.",
               "steps": [
                 "Run a search and watch the numbers move.",
                 "Hover the block and check the formula matches the run's own search/site counts."

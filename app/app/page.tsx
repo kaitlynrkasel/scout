@@ -9075,9 +9075,14 @@ function searchStageFor(startedAt: number | null): number {
  * Pure presentation; the step list stays the textual record. */
 // The three honest timers under the reading deck. Nothing is made up:
 // scouting is the measured clock; searching-yourself is computed from the
-// run's REAL event counts (each web search Scout ran ~= 90s of your time to
-// type it, scan the results page, and pick links; each site actually opened
-// ~= 2 minutes to skim for fit and hunt a contact); saving is the difference.
+// run's REAL event counts, with per-item rates grounded in published research:
+// - 30s per web search: eye-tracking puts finding a desirable SERP result at
+//   8-9s (Mediative 2014) and ~6.3s to first click (Granka et al., Cornell),
+//   plus typing the query and the reformulations real searching involves.
+// - 60s per site opened: Nielsen Norman Group measures the average page
+//   visit at just under a minute — and our task per page (judge fit AND hunt
+//   a contact route) uses the whole visit.
+// Saving is the difference. The tooltip discloses the formula per run.
 function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string[] }) {
   const [, tick] = useState(0);
   useEffect(() => {
@@ -9089,7 +9094,7 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
     log.filter((l) => l.startsWith("@site")).map((l) => l.slice(0, 80))
   ).size;
   const scoutingS = startedAt ? Math.max(0, (Date.now() - startedAt) / 1000) : 0;
-  const manualS = searches * 90 + sitesRead * 120;
+  const manualS = searches * 30 + sitesRead * 60;
   const savingS = Math.max(0, manualS - scoutingS);
   const fmt = (sec: number) => {
     const m = Math.floor(sec / 60);
@@ -9099,7 +9104,7 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
   return (
     <div
       className="mt-5"
-      title={`Searching yourself = ${searches} web searches × 90s + ${sitesRead} sites × 2min, counted from this run's real activity`}
+      title={`Searching yourself = ${searches} web searches × 30s + ${sitesRead} sites × 60s, counted from this run's real activity. Rates from published research: ~9s to pick a result on a search page (Mediative eye-tracking) plus typing/reformulating; average page visit just under a minute (Nielsen Norman Group).`}
     >
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
         Time saving
@@ -17208,9 +17213,10 @@ function DashboardTab({
       .filter((v): v is number => typeof v === "number");
     return fs.length ? fs.reduce((a, b) => a + b, 0) / fs.length : null;
   })();
-  // Time saved vs doing it by hand. Honest, conservative estimate: sourcing a
-  // qualified lead manually (search, vet the page, hunt a contact route) runs
-  // ~15 min, and writing a personalized first note ~10 min.
+  // Time saved vs doing it by hand. 15 min per sourced lead sits inside the
+  // documented 12-20 minutes SDRs spend manually researching one prospect
+  // (industry time studies), and ~10 min per personalized first note is the
+  // conservative end of cold-email writing guides.
   const draftedCount = finds.filter((f) => !!f.draft).length;
   const minutesScouting = finds.length * 15 + draftedCount * 10;
   const timeSavedScouting =
