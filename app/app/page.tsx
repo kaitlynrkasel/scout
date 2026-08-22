@@ -1713,15 +1713,13 @@ function ScoutTool({
   // same lead twice in a row.
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "outreach") return;
-    // Warm family only: beiges, creams, tans — the field keeps its motion
-    // and grain, coloured the way the house is.
     const tints = [
-      "214 198 178", // warm beige
-      "201 182 158", // tan
-      "228 216 198", // cream
-      "190 170 146", // camel
-      "222 206 186", // sand
-      "206 188 164", // latte
+      "186 205 172", // soft sage
+      "147 174 203", // sky
+      "217 161 180", // blush
+      "224 180 138", // apricot
+      "169 156 196", // lilac
+      "176 209 201", // soft seafoam
     ];
     // Three tints per visit, fading into one field — and deliberately
     // temperature-diverse, so the alternation is visible in the FIRST
@@ -9716,7 +9714,21 @@ function SideNav({
   // Colour by meaning: each tab's active pill wears the colour of the IDEA
   // that tab is about — searching cobalt, people teal, your-voice magenta,
   // company denim. There is deliberately no single main accent.
-  const TAB_IDEA: Record<string, string> = {};
+  const TAB_IDEA: Record<string, string> = {
+    dashboard: "#19455e",
+    outreach: "#19455e",
+    manual: "#4e9c9c",
+    finds: "#4e9c9c",
+    applications: "#19455e",
+    spreadsheet: "#4e9c9c",
+    projects: "#19455e",
+    templates: "#aa2377",
+    profile: "#aa2377",
+    team: "#5b4aa8",
+    account: "#19455e",
+    billing: "#19455e",
+    settings: "#19455e",
+  };
   // Rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the idea-coloured active pill.
   const railItem = (
