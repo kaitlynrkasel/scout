@@ -7904,6 +7904,18 @@ function ScoutTool({
               </div>
             )}
 
+            {/* Understanding phase with the shelf already open: show the
+                reading state instead of a blank white sheet that looks broken. */}
+            {gating && !discovering && !error && (
+              <div className="mt-8 flex items-center gap-3 rounded-2xl border border-warm-border bg-warm-bg/50 px-5 py-4">
+                <div className="h-1.5 w-40 overflow-hidden rounded-full bg-warm-border">
+                  <div className="scout-indeterminate h-full w-1/2 rounded-full bg-brown" />
+                </div>
+                <span className="text-sm font-medium text-body/70">
+                  Reading your goal before searching…
+                </span>
+              </div>
+            )}
             {discovering && (
               <div ref={searchingRef} className="mt-8 flex scroll-mt-24 items-start gap-5">
               <div className="min-w-0 flex-1 rounded-2xl border border-white/15 bg-white/5 px-5 py-4">

@@ -709,7 +709,7 @@
             {
               "sev": "should",
               "title": "The progress log stays readable",
-              "good": "The live search log spreads side to side, clips long queries, collapses duplicates with a count, and never grows past the screen.",
+              "good": "The live search log spreads side to side, clips long queries, and if the same status line would print again back-to-back it prints once with a count (like 'Skipped a duplicate (x4)') instead of repeating. It never grows past the screen.",
               "steps": [
                 "Start a search and watch the progress card.",
                 "Confirm two columns on a wide screen and no line running off the card."
