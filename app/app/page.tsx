@@ -274,6 +274,21 @@ function sensesApplication(f: Find): boolean {
 
 // Best-effort deadline for an application, pulled from the criteria answers
 // ("Apply by March 1"), the stored posting text, or the posting window.
+// What KIND of application a find is — the desk groups by this, not by
+// which project happened to catch it (an internship found in a general
+// project is still an internship).
+function applicationType(f: Find): string {
+  const t = `${f.opp.name} ${f.opp.contactRole || ""} ${(f.requirements || "").slice(0, 400)}`.toLowerCase();
+  if (/\bintern|internship/.test(t)) return "Internships";
+  if (/\b(university|college|school|masters?|mba|ph\.?d|degree|admissions?|undergraduate|graduate program)\b/.test(t))
+    return "Schools";
+  if (/\b(playlist|curator|submission|submit|demo|radio|sync|audition)\b/.test(t))
+    return "Submissions";
+  if (/\b(job|position|role|opening|hiring|employment)\b/.test(t) || f.opp.targetType === "listing")
+    return "Jobs";
+  return "Other";
+}
+
 function applicationDeadline(f: Find): number | undefined {
   const hay = [
     ...(f.opp.criteria || []).map((c) => `${c.ask} ${c.answer}`),
@@ -10875,17 +10890,23 @@ function ApplicationsTab({
   const [paste, setPaste] = useState("");
   const [showPaste, setShowPaste] = useState(false);
   const [err, setErr] = useState("");
-  const [projFilter, setProjFilter] = useState<string>("");
+  const [typeFilter, setTypeFilter] = useState<string>("");
   const [view, setView] = useState<"list" | "compare">("list");
   const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
-  const byProject = new Map<string, Find[]>();
+  // Grouped by what the application IS (internship, school, submission…),
+  // not by which project happened to catch it.
+  const byType = new Map<string, Find[]>();
   for (const f of apps) {
-    const arr = byProject.get(f.projectId) || [];
+    const k = applicationType(f);
+    const arr = byType.get(k) || [];
     arr.push(f);
-    byProject.set(f.projectId, arr);
+    byType.set(k, arr);
   }
-  const projName = (id: string) => projects.find((p) => p.id === id)?.name || "Other";
-  const shown = projFilter ? apps.filter((f) => f.projectId === projFilter) : apps;
+  const TYPE_ORDER = ["Internships", "Jobs", "Schools", "Submissions", "Other"];
+  const typeEntries = [...byType.entries()].sort(
+    (a, b) => TYPE_ORDER.indexOf(a[0]) - TYPE_ORDER.indexOf(b[0])
+  );
+  const shown = typeFilter ? apps.filter((f) => applicationType(f) === typeFilter) : apps;
   // Comparison columns: the union of the group's criteria asks, most common
   // first — for schools that's Tuition?/Deadline?, for jobs Paid?/Remote?.
   const askCounts = new Map<string, number>();
@@ -10917,9 +10938,9 @@ function ApplicationsTab({
         </button>
       </div>
       <p className="mt-1 max-w-[62ch] text-sm text-body/70">
-        Everything you are applying to, grouped by project. Open one and its
-        kit is ready; Compare puts a group side by side so you can weigh and
-        rank them yourself.
+        Everything you are applying to, grouped by what it is. Open one and
+        its kit is ready; Compare puts a group side by side so you can weigh
+        and rank them yourself.
       </p>
 
       {showPaste && (
@@ -10958,26 +10979,26 @@ function ApplicationsTab({
       {/* Type toggles: one per project that actually has applications. */}
       <div className="mt-6 flex flex-wrap items-center gap-1.5">
         <button
-          onClick={() => setProjFilter("")}
+          onClick={() => setTypeFilter("")}
           className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-            !projFilter
+            !typeFilter
               ? "bg-brown text-white"
               : "border border-warm-border text-body hover:bg-warm-bg"
           }`}
         >
           All · {apps.length}
         </button>
-        {[...byProject.entries()].map(([pid, arr]) => (
+        {typeEntries.map(([ty, arr]) => (
           <button
-            key={pid}
-            onClick={() => setProjFilter(projFilter === pid ? "" : pid)}
+            key={ty}
+            onClick={() => setTypeFilter(typeFilter === ty ? "" : ty)}
             className={`rounded-full px-3.5 py-1.5 text-xs font-bold transition ${
-              projFilter === pid
+              typeFilter === ty
                 ? "bg-brown text-white"
                 : "border border-warm-border text-body hover:bg-warm-bg"
             }`}
           >
-            {projName(pid)} · {arr.length}
+            {ty} · {arr.length}
           </button>
         ))}
         <div className="ml-auto inline-flex gap-1 rounded-lg border border-warm-border bg-warm-bg/40 p-0.5">
