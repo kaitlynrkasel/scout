@@ -260,8 +260,14 @@ function sensesApplication(f: Find): boolean {
   if (typeof f.isApplication === "boolean") return f.isApplication;
   const o = f.opp;
   if (o.targetType === "listing") return true;
-  const t = `${o.name} ${o.contactRole || ""} ${o.outlet || ""}`.toLowerCase();
-  return /\b(intern|internship|apply|application|posting|program|fellowship|scholarship|university|college|school|masters?|mba|submission|submit|playlist|demo)\b/.test(
+  // A PERSON is never auto-sensed as an application: a coordinator or
+  // professor you'd network with is outreach, not something you apply to.
+  // (You can still mark one by hand.)
+  if (o.targetType === "person") return false;
+  // Only the find's own NAME/ROLE counts — an outlet containing "University"
+  // must not drag every contact at a school into the applications desk.
+  const t = `${o.name} ${o.contactRole || ""}`.toLowerCase();
+  return /\b(interns?|internships?|apply|applications?|posting|fellowship|scholarship|admissions?|submissions?|submit|playlist|demo|audition|residency|masters? program|degree program)\b/.test(
     t
   );
 }
