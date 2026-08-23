@@ -258,6 +258,11 @@
                 "Edit one, reload, confirm your edit stuck."
               ],
               "key": "setup::your-links-prefill-from-the-profile"
+            },
+            {
+              "key": "setup::template-scope-new-project",
+              "title": "Templates can mint a project on the spot",
+              "good": "In Templates' Where-it-applies picker (a house-styled dropdown, not the OS menu), '+ New project…' opens an inline name field; Create makes the project and scopes the template to it in one motion, same as Add-a-contact."
             }
           ]
         },
@@ -744,6 +749,16 @@
                 "Confirm at least five results, the log line, and that rescue results carry honest moderate fit bands."
               ],
               "key": "finding::the-scarcity-rescue-reaches-the-five-find-floor"
+            },
+            {
+              "key": "finding::trash-restore",
+              "title": "Deleted finds come back",
+              "good": "Deleting a find drops it into 'Show recently deleted' at the foot of Finds (this device). Bring it back restores it exactly as it was, draft and status intact; Delete forever really removes it."
+            },
+            {
+              "key": "finding::tile-pastel",
+              "title": "Find tiles read as Scout, not as brand slabs",
+              "good": "Grid tiles paint a soft pastel of the site's brand color with the logo or dog in the deepened color itself. No full-strength color blocks, and a find with no known color gets a pastel from the field deck, never a dead grey tile."
             }
           ]
         },
@@ -989,6 +1004,11 @@
                 "The personal one must never surface in another account's search results."
               ],
               "tech": "isBusinessContact gates what crosses into the shared index: role-style inboxes on non-freemail domains only."
+            },
+            {
+              "key": "importing::manual-research",
+              "title": "A hand-added contact researches itself",
+              "good": "Right after adding a contact by hand, Scout quietly runs the same public-web enrichment as Autofill: blank fields (role, outlet, link, location) fill in and the 'Added by you' placeholder becomes one real factual line when the web has one. Nothing invented; blanks stay blank when nothing is found."
             }
           ]
         },
@@ -1098,6 +1118,16 @@
                 "One slip is a needs-work, a pattern is broken."
               ],
               "key": "writing::house-writing-rules-are-respected"
+            },
+            {
+              "key": "writing::template-choice",
+              "title": "You choose which template a draft starts from",
+              "good": "On a find with two or more templates in scope, the Draft button grows a 'Best template (auto)' picker listing each template by kind and first words. Picking one drafts from that voice alone; auto still matches by format."
+            },
+            {
+              "key": "writing::no-double-email",
+              "title": "One email link, not two",
+              "good": "The find detail shows the address itself as the contact link; there is no separate Email chip repeating it (Call chip gone the same way)."
             }
           ]
         },
