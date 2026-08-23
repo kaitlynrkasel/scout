@@ -1585,6 +1585,37 @@ function ScoutTool({
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // Deep guidance links: /app?guide=tab.spot (the readiness checklist's "Show
+  // me where" buttons use these). Land on the tab, then pulse a ring around
+  // the element tagged data-guide=spot once it has rendered.
+  useEffect(() => {
+    let cancelled = false;
+    let g = "";
+    try {
+      g = new URLSearchParams(window.location.search).get("guide") || "";
+    } catch {}
+    if (!g) return;
+    const [gtab, spot] = g.split(".");
+    if (gtab && (TABS as readonly string[]).includes(gtab)) setTab(gtab as TabId);
+    if (!spot) return;
+    const started = Date.now();
+    const tick = () => {
+      if (cancelled) return;
+      const el = document.querySelector(`[data-guide="${spot}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.add("guide-glow");
+        setTimeout(() => el.classList.remove("guide-glow"), 8000);
+        return;
+      }
+      if (Date.now() - started < 15000) setTimeout(tick, 300);
+    };
+    setTimeout(tick, 500);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   useEffect(() => {
     // Skip until the restore above has run, or the default tab would overwrite
     // the hash we're about to read.
@@ -2158,7 +2189,59 @@ function ScoutTool({
     }
     setMyTemplates(tpls);
     if (act) setActivity({ ...ZERO_ACTIVITY, ...act });
-    setFinds(Array.isArray(savedFinds) ? savedFinds : []);
+    {
+      // Imported junk sweep: older imports let spreadsheet boolean artifacts
+      // ("FALSE", "TRUE", "x") through as names, links, and contacts, and some
+      // rows arrived with a bare id where the name should be. Scrub those
+      // values; a find left with no real name moves to the recycle bin
+      // (recoverable in Finds > recently deleted) instead of haunting the grid.
+      const boolish = (v: any) =>
+        /^(true|false|yes|no|x|\u2713|\u2714|n\/?a|-|\u2014)$/i.test(String(v || "").trim());
+      const uuidish = (v: any) =>
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(v || "").trim());
+      const raw: Find[] = Array.isArray(savedFinds) ? savedFinds : [];
+      const junk: Find[] = [];
+      const kept: Find[] = [];
+      let scrubbed = false;
+      for (const f of raw) {
+        if (!f?.opp) continue;
+        const o: any = { ...f.opp };
+        let dirty = false;
+        for (const kk of [
+          "name","outlet","url","contactEmail","contactName","contactRole",
+          "contactHandle","contactPhone","location","whyItFits",
+        ]) {
+          if (boolish(o[kk])) { o[kk] = ""; dirty = true; }
+        }
+        if (uuidish(o.name)) { o.name = ""; dirty = true; }
+        if (!String(o.name || "").trim()) {
+          junk.push(dirty ? { ...f, opp: o } : f);
+          scrubbed = true;
+          continue;
+        }
+        kept.push(dirty ? { ...f, opp: o } : f);
+        if (dirty) scrubbed = true;
+      }
+      setFinds(kept);
+      if (scrubbed) {
+        try { localStorage.setItem(FINDS_KEY, JSON.stringify(kept)); } catch {}
+      }
+      if (junk.length) {
+        let prior: { find: Find; deletedAt: number }[] = [];
+        try {
+          const rawT = localStorage.getItem(TRASH_KEY);
+          const a = rawT ? JSON.parse(rawT) : [];
+          if (Array.isArray(a)) prior = a;
+        } catch {}
+        const ids = new Set(junk.map((f) => f.id));
+        const merged = [
+          ...junk.map((find) => ({ find, deletedAt: Date.now() })),
+          ...prior.filter((r) => !ids.has(r?.find?.id)),
+        ].slice(0, 200);
+        try { localStorage.setItem(TRASH_KEY, JSON.stringify(merged)); } catch {}
+        setTrash(merged);
+      }
+    }
     setSyncedSheets(
       Array.isArray((initialState as any)?.syncedSheets) ? (initialState as any).syncedSheets : []
     );
@@ -7691,6 +7774,7 @@ function ScoutTool({
                         </label>
                         <textarea
                           id="stage-goal"
+                          data-guide="goal"
                           ref={goalInputRef}
                           value={goal}
                           onChange={(e) => setGoal(e.target.value)}
@@ -7724,6 +7808,7 @@ function ScoutTool({
               >
                 <button
                   ref={scoutBtnRef}
+                  data-guide="start"
                   onClick={startScout}
                   disabled={discovering || gating || !goal.trim()}
                   className="rounded-full bg-cream px-14 py-4 text-lg font-bold text-brown-deep shadow-soft transition hover:bg-white hover:shadow-lg disabled:opacity-50"
@@ -8739,7 +8824,7 @@ function ScoutTool({
       {tab === "applications" && (
         <ApplicationsTab
           finds={finds}
-          projects={visibleProjects}
+          projects={projects}
           categories={categories}
           onSetDeadline={(id, ts) => patchFind(id, { appDeadline: ts })}
           onSetRank={(id, rank) => patchFind(id, { appRank: rank })}
@@ -11058,14 +11143,21 @@ function ApplicationsTab({
   const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
   // Grouped by PROJECT, then by category inside it — the structure the user
   // already built is the structure of their applications.
+  // A find whose project no longer exists (deleted, or made before projects
+  // did) can't show a name — but every such stray CAN'T get its own chip all
+  // reading "Other", so they pool into one shared group.
+  const knownProj = (id: string) => projects.some((p) => p.id === id);
+  const groupKey = (f: Find) => (knownProj(f.projectId) ? f.projectId : "__other__");
   const byProject = new Map<string, Find[]>();
   for (const f of apps) {
-    const arr = byProject.get(f.projectId) || [];
+    const k = groupKey(f);
+    const arr = byProject.get(k) || [];
     arr.push(f);
-    byProject.set(f.projectId, arr);
+    byProject.set(k, arr);
   }
-  const projName = (id: string) => projects.find((p) => p.id === id)?.name || "Other";
-  const inProject = projFilter ? apps.filter((f) => f.projectId === projFilter) : apps;
+  const projName = (id: string) =>
+    id === "__other__" ? "Past projects" : projects.find((p) => p.id === id)?.name || "Past projects";
+  const inProject = projFilter ? apps.filter((f) => groupKey(f) === projFilter) : apps;
   const byCat = new Map<string, Find[]>();
   if (projFilter)
     for (const f of inProject) {
@@ -13611,6 +13703,7 @@ function ManualTab({
             </p>
           </div>
           <button
+            data-guide="add-contact"
             onClick={() => setAddOpen(true)}
             className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
           >
@@ -13631,7 +13724,7 @@ function ManualTab({
       </section>
 
       {/* Import a sheet of existing outreach */}
-      <section className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+      <section data-guide="paste-posting" className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Paste a posting</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-body">
           Drop in a whole job description or program page. Scout reads it,
@@ -13641,7 +13734,7 @@ function ManualTab({
         <ManualPostingBox onBuild={onBuildFromPosting} building={buildingApplication} />
       </section>
 
-      <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
+      <section data-guide="import" className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
         <h2 className="text-base font-extrabold text-ink">Import your outreach</h2>
         <p className="mt-0.5 text-sm leading-relaxed text-body/80">
           Drop in a tracking sheet, CSV, Excel, Numbers, or a Google Sheet link.
@@ -14053,8 +14146,8 @@ function SiteTile({
   // always visible. Sizing by width cropped him: the artwork is wider than it
   // is tall, so a width big enough to read overflowed a 176px-tall tile and
   // left only a haunch on screen.
-  const dogHeight = 58 + (h % 4) * 6;
-  const dogLeft = 26 + ((h >> 3) % 4) * 16;
+  const dogHeight = 50 + (h % 4) * 5;
+  const dogLeft = 36 + ((h >> 3) % 4) * 10;
   const dogBottom = 8 + ((h >> 6) % 3) * 5;
   const flip = h % 2 ? -1 : 1;
   const tilt = ((h >> 9) % 5) - 2;
@@ -14110,7 +14203,7 @@ function SiteTile({
         // and drawn as a white line, so re-trace that PNG if it ever changes.
         <svg
           aria-hidden
-          viewBox="0 0 100.0 88.39"
+          viewBox="-21 0 121 88.39"
           preserveAspectRatio="xMidYMid meet"
           fill="none"
           stroke="currentColor"
@@ -14127,6 +14220,9 @@ function SiteTile({
           }}
         >
           <path d="M69.3 0C70.5 -0.2 70.5 -0.2 71.5 0C72.6 0.2 74.5 0.9 75.7 1.5C76.8 2.1 77.5 2.7 78.7 3.7C79.8 4.8 81.3 6.9 82.4 7.9C83.5 8.8 83.3 9.1 85 9.4C86.8 9.6 91.3 9.2 92.9 9.4C94.5 9.5 94.3 10.4 94.8 10.1C95.2 9.9 95.1 8.5 95.5 7.9C95.9 7.2 96.8 6.6 97.4 6.4C98 6.1 98.8 6.1 99.3 6.4C99.7 6.7 100 7.7 100 8.2C100 8.8 99.8 9.2 99.3 9.7C98.7 10.3 96.9 10.9 96.6 11.6C96.4 12.3 97.6 13.1 97.8 13.9C97.9 14.6 97.9 15.2 97.8 16.1C97.6 17 97.3 18 96.6 19.1C96 20.2 95.4 21.3 94 22.8C92.6 24.4 90.9 26.4 88 28.5C85.1 30.5 78.2 33.5 76.4 35.2C74.6 37 77 37.3 77.2 39C77.3 40.6 77.4 42.8 77.2 45.3C76.9 47.9 76.3 51.7 75.7 54.3C75 56.9 75.1 56.9 73 61C71 65.2 64.9 76.2 63.3 79.4C61.7 82.6 63 80 63.3 80.5C63.6 81 64.6 81.4 65.2 82.4C65.7 83.4 69.2 85.8 66.7 86.5C64.2 87.2 52.9 87.6 50.2 86.5C47.5 85.4 50.3 81.5 50.6 79.8C50.8 78.1 51.6 77.2 51.7 76.4C51.7 75.6 51.3 74.7 50.9 74.9C50.6 75.2 49.8 76.7 49.4 77.9C49.1 79.2 49.7 81.5 48.7 82.4C47.7 83.3 44.5 83.3 43.4 83.1C42.4 83 42.9 82.1 42.3 81.6C41.8 81.2 40.9 80.7 40.1 80.5C39.3 80.3 37.3 81.5 37.5 80.5C37.6 79.6 40.3 76.5 40.8 74.9C41.4 73.3 41.3 72.2 40.8 71.2C40.4 70.1 39.6 69 38.2 68.5C36.8 68.1 33.7 68.4 32.6 68.5C31.5 68.7 31 69.2 31.5 69.3C31.9 69.4 33.9 69 35.2 69.3C36.5 69.6 38.7 70.1 39.3 71.2C40 72.2 39.7 74 39 75.7C38.2 77.3 34.8 80.3 34.8 81.3C34.9 82.3 38.2 81.4 39.3 81.6C40.4 81.9 40.9 82.1 41.6 82.8C42.3 83.4 43.3 84.6 43.4 85.4C43.6 86.1 43.1 86.8 42.3 87.3C41.5 87.8 40.4 88.2 38.6 88.4C36.7 88.6 34.6 88.7 31.1 88.4C27.6 88.1 21.4 86.8 17.6 86.5C13.8 86.2 9.6 87.4 8.2 86.5C6.9 85.6 10.2 82.8 9.4 81.3C8.6 79.7 4.9 79 3.4 77.2C1.8 75.3 0.6 72.7 0 70.4C-0.6 68.1 -0.5 65.6 0 63.3C0.5 61 1.9 58.2 3 56.6C4.1 54.9 4.9 54.2 6.4 53.2C7.9 52.1 10.1 50.9 12 50.2C13.9 49.4 14.7 49.2 17.6 48.7C20.5 48.2 26.7 47.8 29.6 47.2C32.5 46.6 33.7 45.9 35.2 44.9C36.7 44 37.7 42 38.6 41.6C39.5 41.1 39.6 42.2 40.4 42.3C41.3 42.4 42.4 42.7 43.8 42.3C45.3 41.9 47.5 41.1 49.1 40.1C50.6 39 52.1 37.3 53.2 36C54.2 34.6 54.8 33.4 55.4 31.8C56.1 30.3 56.6 28.2 56.9 26.6C57.2 25 57.4 23.3 57.3 22.5C57.2 21.7 56.8 21.8 56.6 21.7C56.3 21.7 56 21.1 55.8 22.1C55.6 23.1 55.7 26.2 55.4 27.7C55.2 29.3 55 30 54.3 31.5C53.6 32.9 52.3 35.1 51.3 36.3C50.3 37.6 49.6 38.1 48.3 39C47 39.8 45.1 41 43.4 41.2C41.8 41.4 39.5 40.8 38.6 40.1C37.7 39.4 37.9 38.3 38.2 37.1C38.5 35.8 38.6 35.3 40.4 32.6C42.3 29.9 47.6 23.3 49.4 21C51.3 18.7 50.6 19.4 51.7 18.7C52.8 18 55.6 17.3 56.2 16.9C56.8 16.4 56.1 16.1 55.4 16.1C54.7 16.1 52.7 16.9 52.1 16.9C51.4 16.9 51.6 16.9 51.7 16.1C51.7 15.4 51.9 13.6 52.4 12.4C52.9 11.1 53.4 10.1 54.7 8.6C56 7.1 58.7 4.6 60.3 3.4C61.9 2.2 62.5 2.1 64 1.5C65.5 0.9 68 0.2 69.3 0Z" />
+          {/* The tail. It is a separate shape in scout-dog.png, so the body
+              trace never picked it up and the doodle dogs shipped tailless. */}
+          <path d="M-7.1 39.4C-13 43 -16.5 47.5 -17.1 52.5C-17.8 57 -18.6 60.5 -16.5 64.5C-14.8 67.3 -12.5 68.8 -11 68.2C-9 67.4 -4.5 65.6 -2.9 64.2C-6.5 62.2 -8.6 58 -9.4 52C-9.9 47.5 -8.9 42.6 -7.1 39.4Z" />
         </svg>
       )}
       {(label || host) && (
@@ -14284,7 +14380,7 @@ function TrashSection({
 }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="mt-10">
+    <div data-guide="deleted" className="mt-10">
       <button
         onClick={() => setOpen((v) => !v)}
         className="text-xs font-semibold text-body/50 transition hover:text-body"
@@ -14887,7 +14983,7 @@ function FindsTab({
         {/* One scrolling strip, never a wrap. Wrapping left a single orphaned
             chip on a second line with the side controls stranded beside the
             first, which is what made this toolbar look thrown together. */}
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [mask-image:linear-gradient(to_right,#000_calc(100%-26px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <div data-guide="status-tabs" className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [mask-image:linear-gradient(to_right,#000_calc(100%-26px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           {FIND_STATUSES.map((s) => {
             const on = filter === s.key;
             return (
@@ -14945,6 +15041,7 @@ function FindsTab({
             </button>
           </div>
           <button
+            data-guide="filters"
             onClick={() => setFiltersOpen((v) => !v)}
             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg hover:text-ink"
           >
@@ -16415,7 +16512,7 @@ function FindWorkflow({
       {/* Actions */}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {find.status === "new" && (
-          <span className="inline-flex items-center overflow-hidden rounded-lg shadow-card">
+          <span data-guide="draft-btn" className="inline-flex items-center overflow-hidden rounded-lg shadow-card">
             <button
               onClick={() =>
                 onDraft({
@@ -20351,6 +20448,7 @@ function TeamTab({
               <div className="mt-4 border-t border-warm-border pt-4">
                 <div className="flex flex-wrap items-start gap-2">
                   <textarea
+                    data-guide="invite"
                     value={inviteEmail}
                     onChange={(e) => setInviteEmail(e.target.value)}
                     rows={2}
@@ -22712,7 +22810,7 @@ function TemplatesTab({
       )}
 
       {/* Page toggle: three rooms, no scrolling between them. */}
-      <div className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+      <div data-guide="tpl-pages" className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
         {(
           [
             ["outreach", "Outreach"],
@@ -22772,6 +22870,7 @@ function TemplatesTab({
               <button
                 type="button"
                 onClick={templatize}
+                data-guide="tpl-clean"
                 disabled={cleaning || !text.trim()}
                 title="Paste a real email you sent someone. Scout removes the names, company, and one-off details and leaves reusable placeholders."
                 className="inline-flex items-center gap-1.5 rounded-lg border border-sage/50 bg-sage/10 px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-sage/20 disabled:opacity-50"
@@ -22791,7 +22890,7 @@ function TemplatesTab({
             )}
           </div>
         </div>
-        <div className="mt-6 border-t border-warm-border pt-5">
+        <div data-guide="tpl-scope" className="mt-6 border-t border-warm-border pt-5">
           <Label>Where it applies</Label>
           <div className="mt-1 grid gap-3 sm:grid-cols-2">
             <PrettySelect

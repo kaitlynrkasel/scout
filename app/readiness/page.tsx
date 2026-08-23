@@ -47,6 +47,37 @@ const SEV_LABEL: Record<string, string> = {
   should: "Should work",
   later: "Later",
 };
+// "Show me where": each section (and some specific items) maps to a guided
+// deep link the live pane can open — /app?guide=tab.spot lands the app on the
+// right tab and pulses a ring around the tagged control. Item entries win over
+// their section's default; sections with no in-app home (database, billing
+// infra, the runbook) simply have no link.
+const SECTION_GUIDE: Record<string, string> = {
+  "getting-in": "outreach",
+  setup: "profile",
+  finding: "outreach.start",
+  applications: "applications",
+  importing: "manual.import",
+  writing: "templates.tpl-pages",
+  sending: "finds.draft-btn",
+  autopilot: "outreach",
+  learning: "dashboard",
+  tracking: "dashboard",
+  teams: "team.invite",
+  feel: "dashboard",
+  paying: "billing",
+  settings: "settings",
+};
+const ITEM_GUIDE: Record<string, string> = {
+  "finding::trash-restore": "finds.deleted",
+  "finding::tile-pastel": "finds.status-tabs",
+  "writing::template-choice": "finds.draft-btn",
+  "writing::no-double-email": "finds.status-tabs",
+  "setup::template-scope-new-project": "templates.tpl-scope",
+  "importing::manual-research": "manual.add-contact",
+  "applications::paste-posting": "applications",
+};
+
 const VERDICTS: { v: Verdict; label: string }[] = [
   { v: "ok", label: "Works" },
   { v: "warn", label: "Needs work" },
@@ -83,6 +114,14 @@ function ReadinessInner() {
   }, [checks, auto, autoAt]);
   const isAuto = (key: string) => !!auto[key] && !checks[key]?.verdict;
   const [status, setStatus] = useState<"loading" | "live" | "denied" | "notReady">("loading");
+  // What the live pane is showing. "Show me where" swaps in a guided URL; the
+  // cache-buster lets the same spot be summoned twice in a row.
+  const [liveSrc, setLiveSrc] = useState("/app");
+  function goLive(guide: string) {
+    const url = `/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`;
+    if (typeof window !== "undefined" && window.innerWidth >= 900) setLiveSrc(url);
+    else if (typeof window !== "undefined") window.open(url, "_blank");
+  }
   const [openKey, setOpenKey] = useState("");
   // Split position as a percentage of the window width (checklist column).
   // Dragged with a real divider and remembered per device, because how much
@@ -362,6 +401,14 @@ function ReadinessInner() {
                             <b className="text-ink/80">Good looks like:</b> {it.good}
                           </p>
                         )}
+                        {!folded && (ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id]) && (
+                          <button
+                            onClick={() => goLive(ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id])}
+                            className="ml-5 mt-1.5 text-xs font-bold text-accent hover:underline"
+                          >
+                            Show me where in Scout →
+                          </button>
+                        )}
                         <div className={`ml-5 mt-2.5 flex flex-wrap items-center gap-2 ${folded ? "hidden" : ""}`}>
                           <span
                             className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
@@ -498,7 +545,7 @@ function ReadinessInner() {
             Open in its own tab
           </a>
         </div>
-        <iframe src="/app" title="Scout" className="min-h-0 w-full flex-1 bg-cream" />
+        <iframe src={liveSrc} title="Scout" className="min-h-0 w-full flex-1 bg-cream" />
       </div>
 
     </div>
