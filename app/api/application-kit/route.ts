@@ -64,12 +64,14 @@ export async function POST(req: NextRequest) {
       `You prepare someone to apply WELL to one specific opportunity, from real evidence only. Return ONLY JSON ` +
       `{"companyBrief": [..], "mustKnow": [..], "interviewPrep": [{"q","angle"}], "isSchool": bool, ` +
       `"scholarships": [{"name","why","url"}]}.\n` +
-      `- companyBrief: 3-5 short factual lines about the organization (what it does, size/stage, anything recent) drawn ` +
-      `from the evidence; skip what you cannot support.\n` +
-      `- mustKnow: 2-4 things worth knowing before applying (deadlines, values they repeat, red flags, what they say ` +
-      `they look for).\n` +
-      `- interviewPrep: 3-5 likely questions for THIS role at THIS org, each with "angle": one line on how the ` +
-      `APPLICANT (see ABOUT) can answer from their real background. Never invent facts about them.\n` +
+      `SPEAK TO THE APPLICANT: second person, "you" and "your", never their name, never the third person.\n` +
+      `KEEP IT SCANNABLE: every line under ~14 words, one fact each, no lead-ins, no filler. Nobody reads paragraphs ` +
+      `here.\n` +
+      `- companyBrief: 2-3 short factual lines about the organization drawn from the evidence; skip what you cannot ` +
+      `support.\n` +
+      `- mustKnow: 2-3 sharp things to know before applying (deadline, values they repeat, what they screen for).\n` +
+      `- interviewPrep: 3-4 likely questions for THIS role at THIS org, each with "angle": ONE short line on how you ` +
+      `(see ABOUT) can answer from your real background. Never invent facts.\n` +
       `- scholarships: ONLY when the target is a school/degree program and the evidence shows real scholarship or aid ` +
       `leads: name + one line why it fits + url. Empty array otherwise, never fabricate.\n` +
       `Plain language, no em-dashes, no flattery.`;
@@ -100,8 +102,8 @@ export async function POST(req: NextRequest) {
             location: noDash(String(parsed.location || "")),
           }
         : null,
-      companyBrief: arr(out.companyBrief, 5),
-      mustKnow: arr(out.mustKnow, 4),
+      companyBrief: arr(out.companyBrief, 3),
+      mustKnow: arr(out.mustKnow, 3),
       interviewPrep: Array.isArray(out.interviewPrep)
         ? out.interviewPrep
             .map((p: any) => ({
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
               angle: noDash(String(p?.angle || "")),
             }))
             .filter((p: any) => p.q)
-            .slice(0, 5)
+            .slice(0, 4)
         : [],
       isSchool: !!out.isSchool || looksSchool,
       scholarships: Array.isArray(out.scholarships)
