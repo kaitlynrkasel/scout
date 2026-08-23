@@ -38,8 +38,9 @@ export async function POST(req: NextRequest) {
       "leave it where it already sits rather than moving it.\n\n" +
       "label = the section's own heading when the document has one, copied as written but in " +
       'Sentence case ("EXPERIENCE" becomes "Experience"). When a block has no heading, give it ' +
-      'the plainest accurate one: "Contact" for a name and contact details, "Summary" for an ' +
-      'opening paragraph about the person, "Other" only as a last resort. Do not repeat the ' +
+      'the plainest accurate one: "Contact" for a name and ways to reach the person (email, phone, ' +
+      'links), "Location" for city/state/address lines (location is NOT contact info; give it its ' +
+      'own section), "Summary" for an opening paragraph about the person, "Other" only as a last resort. Do not repeat the ' +
       "heading inside that section's text.\n\n" +
       "Keep the document's own sections; do not invent a structure it does not have. A resume " +
       "with Experience, Education, and Skills returns exactly those three (plus Contact if the " +

@@ -24693,7 +24693,7 @@ function ProfileTab({
                 <FileDrop
                   label="Or drop your resume/CV here to fill this in"
                   accept=".pdf,.docx,.html,.htm,.txt,.md,.jpg,.jpeg,.png,.webp"
-                  hint="PDF, image, Word, HTML, or text, we read it into your experience above"
+                  hint="PDF, image, Word, HTML, or text; read into your experience above, and the file is kept to attach to emails"
                   onText={(t) => {
                     const raw = String(t || "").trim().slice(0, 4000);
                     onCompanyExpertise(raw);
@@ -24701,7 +24701,23 @@ function ProfileTab({
                       if (sectioned !== raw) onCompanyExpertise(sectioned);
                     });
                   }}
+                  onFile={(f) => onResumeFile(f)}
                 />
+                {/* The one and only resume home on a company profile: the same
+                    drop fills the experience AND keeps the file for emails. */}
+                {resumeFileName && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49" /></svg>
+                    <span className="font-semibold">{resumeFileName}</span>
+                    <span className="text-body/70">saved to attach to emails when you choose</span>
+                    <button
+                      onClick={onClearResume}
+                      className="ml-auto font-semibold text-body/50 transition hover:text-accent"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                )}
               </div>
               {!useExpertise && (
                 <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
@@ -24767,8 +24783,9 @@ function ProfileTab({
           </>
         )}
 
-        {/* Resume kept for email attachments */}
-        {resumeFileName && (
+        {/* Resume kept for email attachments (individuals; a company profile
+            shows this chip beside its own dropzone above). */}
+        {resumeFileName && kind !== "company" && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49" /></svg>
             <span className="font-semibold">{resumeFileName}</span>
@@ -25402,6 +25419,44 @@ async function autoSection(text: string): Promise<string> {
   }
 }
 
+/* One profile section, typeset: bullets get dots, an entry line that ends in a
+ * date range ("Founder - Cue Creative  Dec 2025 - Present") shows the title
+ * bold with the dates set off to the right, everything else is plain prose.
+ * Purely presentational; the stored text is untouched. */
+function SectionLines({ text }: { text: string }) {
+  const DATE_RE =
+    /^(.*?)[\s,·|-]*((?:[A-Za-z]{3,9}\.? )?(?:19|20)\d{2}\s*(?:-|–|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.? )?(?:19|20)\d{2}))\s*$/i;
+  const lines = text.replace(/\r/g, "").split("\n");
+  return (
+    <div className="space-y-1">
+      {lines.map((ln, i) => {
+        const t = ln.trim();
+        if (!t) return <div key={i} className="h-2" aria-hidden />;
+        const bullet = /^[-•·*]\s+/.test(t);
+        const body = bullet ? t.replace(/^[-•·*]\s+/, "") : t;
+        const m = body.match(DATE_RE);
+        const main = m ? m[1].replace(/[\s,·|-]+$/, "") : body;
+        const date = m && m[1].trim() ? m[2] : "";
+        return (
+          <div key={i} className="flex items-baseline gap-3">
+            {bullet && <span className="w-3 shrink-0 text-center text-body/40">·</span>}
+            <span
+              className={`min-w-0 flex-1 text-sm leading-relaxed ${
+                date ? "font-semibold text-ink" : "text-body"
+              }`}
+            >
+              {date ? main : body}
+            </span>
+            {date && (
+              <span className="shrink-0 text-xs font-medium tabular-nums text-body/50">{date}</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function SectionedText({
   value,
   onChange,
@@ -25418,6 +25473,9 @@ function SectionedText({
   getToken?: () => Promise<string | null>;
 }) {
   const sections = parseSections(value);
+  // Which section is being edited; the rest sit as typeset text, because a
+  // resume that is merely editable should not read like a form.
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [splitting, setSplitting] = useState(false);
   const [splitNote, setSplitNote] = useState("");
   const boxCls = `w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 ${
@@ -25513,12 +25571,36 @@ function SectionedText({
               Remove
             </button>
           </div>
-          <textarea
-            value={s.text}
-            onChange={(e) => setSection(i, { text: e.target.value })}
-            rows={Math.min(12, Math.max(3, s.text.split("\n").length + 1))}
-            className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-          />
+          {editingIdx === i ? (
+            <textarea
+              value={s.text}
+              onChange={(e) => setSection(i, { text: e.target.value })}
+              onBlur={() => setEditingIdx(null)}
+              autoFocus
+              rows={Math.min(12, Math.max(3, s.text.split("\n").length + 1))}
+              className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+          ) : (
+            <div
+              role="button"
+              tabIndex={0}
+              title="Click to edit"
+              onClick={() => setEditingIdx(i)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setEditingIdx(i);
+                }
+              }}
+              className="cursor-text rounded-lg bg-surface px-3.5 py-3 transition hover:ring-1 hover:ring-warm-border"
+            >
+              {s.text.trim() ? (
+                <SectionLines text={s.text} />
+              ) : (
+                <span className="text-sm text-body/40">Empty, click to write</span>
+              )}
+            </div>
+          )}
         </div>
       ))}
       <button
