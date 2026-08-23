@@ -13685,6 +13685,40 @@ function AddContactModal({
   const [notes, setNotes] = useState("");
   const [projectId, setProjectId] = useState(defaultProjectId);
   const [error, setError] = useState("");
+  // Autofill: with a name typed, Scout searches the public web and fills
+  // whatever the user left blank — role, org, profile, site, location.
+  const [enriching, setEnriching] = useState(false);
+  const [enrichNote, setEnrichNote] = useState("");
+  async function autofill() {
+    if (!name.trim() || enriching) return;
+    setEnriching(true);
+    setEnrichNote("");
+    try {
+      const r = await fetch("/api/enrich-contact", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, email, outlet }),
+      });
+      const jj = await r.json();
+      if (!r.ok) throw new Error(jj.error || "Autofill failed.");
+      const f = jj.fields || {};
+      let filled = 0;
+      if (f.outlet && !outlet.trim()) (setOutlet(f.outlet), filled++);
+      if (f.handle && !handle.trim()) (setHandle(f.handle), filled++);
+      if (f.website && !url.trim()) (setUrl(f.website), filled++);
+      if (f.location && !location.trim()) (setLocation(f.location), filled++);
+      if (f.note && !notes.trim()) (setNotes(f.note), filled++);
+      setEnrichNote(
+        filled
+          ? `Filled ${filled} field${filled === 1 ? "" : "s"} from the public web; check them before saving.`
+          : "Couldn't confirm more about them from the public web."
+      );
+    } catch (e: any) {
+      setEnrichNote(e?.message || "Autofill failed.");
+    } finally {
+      setEnriching(false);
+    }
+  }
   const inp =
     "w-full rounded-xl border border-warm-border bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral";
   const submit = () => {
@@ -13720,7 +13754,21 @@ function AddContactModal({
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label>Name (required)</Label>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maren Doyle" className={inp} autoFocus />
+            <div className="flex gap-2">
+              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Maren Doyle" className={inp} autoFocus />
+              <button
+                type="button"
+                onClick={autofill}
+                disabled={!name.trim() || enriching}
+                title="Scout searches the public web and fills whatever you leave blank — role, company, profile, site, location. Nothing is overwritten."
+                className="shrink-0 rounded-xl border border-sage/50 px-3.5 py-2 text-xs font-bold text-sage transition hover:bg-sage/10 disabled:opacity-50"
+              >
+                {enriching ? "Looking them up…" : "Autofill the rest"}
+              </button>
+            </div>
+            {enrichNote && (
+              <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">{enrichNote}</p>
+            )}
           </div>
           <div>
             <Label>Email</Label>
