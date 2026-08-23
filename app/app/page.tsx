@@ -13828,18 +13828,16 @@ function AddContactModal({
           </div>
           <div className="sm:col-span-2">
             <Label>Project</Label>
-            <select
+            <PrettySelect
+              ariaLabel="Project"
               value={projectId}
-              onChange={(e) => setProjectId(e.target.value)}
-              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-coral"
-            >
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-              {onCreateProject && <option value="__new__">+ New project…</option>}
-            </select>
+              onChange={setProjectId}
+              className="w-full"
+              options={[
+                ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ...(onCreateProject ? [{ value: "__new__", label: "+ New project…" }] : []),
+              ]}
+            />
             {projectId === "__new__" && (
               <input
                 value={newProjName}
