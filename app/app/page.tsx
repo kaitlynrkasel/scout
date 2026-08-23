@@ -3378,9 +3378,9 @@ function ScoutTool({
     resetResults();
   }
 
-  function addProject(name: string) {
+  function addProject(name: string): string {
     const nm = name.trim();
-    if (!nm) return;
+    if (!nm) return "";
     const activeProj = projects.find((p) => p.id === activeId);
     const useCase = activeProj ? activeProj.useCase : profile.useCase;
     const proj: Project = {
@@ -3403,6 +3403,7 @@ function ScoutTool({
     // what this project's NAME says it's for ("Grad School" should not open
     // with Sync & Licensing). Async and best-effort.
     void retuneProject(proj.id, nm, "");
+    return proj.id;
   }
 
   function renameProject(id: string, name: string) {
@@ -13635,6 +13636,7 @@ function ManualTab({
       {addOpen && (
         <AddContactModal
           projects={projects}
+          onCreateProject={addProject}
           defaultProjectId={activeProjectId}
           onClose={() => setAddOpen(false)}
           onAdd={(input) => {
@@ -13655,11 +13657,13 @@ function ManualTab({
 // route). Saves straight into the pipeline as a normal find, so drafting uses
 // your templates and voice like any Scout-found contact.
 function AddContactModal({
+  onCreateProject,
   projects,
   defaultProjectId,
   onClose,
   onAdd,
 }: {
+  onCreateProject?: (name: string) => string;
   projects: Project[];
   defaultProjectId: string;
   onClose: () => void;
@@ -13684,6 +13688,7 @@ function AddContactModal({
   const [location, setLocation] = useState("");
   const [notes, setNotes] = useState("");
   const [projectId, setProjectId] = useState(defaultProjectId);
+  const [newProjName, setNewProjName] = useState("");
   const [error, setError] = useState("");
   // Autofill: with a name typed, Scout searches the public web and fills
   // whatever the user left blank — role, org, profile, site, location.
@@ -13722,7 +13727,21 @@ function AddContactModal({
   const inp =
     "w-full rounded-xl border border-warm-border bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral";
   const submit = () => {
-    const err = onAdd({ name, outlet, email, phone, handle, url, location, notes, projectId });
+    // "+ New project…" resolves here: create it first, then file the contact
+    // under the fresh id.
+    let pid = projectId;
+    if (pid === "__new__") {
+      if (!newProjName.trim()) {
+        setError("Name the new project first.");
+        return;
+      }
+      pid = onCreateProject ? onCreateProject(newProjName) : "";
+      if (!pid) {
+        setError("Couldn't create that project.");
+        return;
+      }
+    }
+    const err = onAdd({ name, outlet, email, phone, handle, url, location, notes, projectId: pid });
     if (err) setError(err);
   };
   return (
@@ -13816,7 +13835,17 @@ function AddContactModal({
                   {p.name}
                 </option>
               ))}
+              {onCreateProject && <option value="__new__">+ New project…</option>}
             </select>
+            {projectId === "__new__" && (
+              <input
+                value={newProjName}
+                onChange={(e) => setNewProjName(e.target.value)}
+                placeholder="Name the new project (e.g. Anna Belt tour)"
+                autoFocus
+                className={`${inp} mt-2`}
+              />
+            )}
           </div>
         </div>
 
