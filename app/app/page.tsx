@@ -23249,8 +23249,8 @@ function TemplatesTab({
               <CoverLetterWriter onSave={onAddCoverLetter} />
               {coverLetters.length === 0 ? (
                 <p className="mt-2 text-xs leading-relaxed text-body/70">
-                  Nothing saved yet. Write one above, upload a file, or paste
-                  your usual letter, then tailor it per job on the right.
+                  Nothing saved yet. Write one above or upload a file; every
+                  application kit tailors it to that posting automatically.
                 </p>
               ) : (
                 <div className="mt-3 space-y-3">
@@ -23276,16 +23276,6 @@ function TemplatesTab({
               )}
             </div>
           </div>
-          <CoverLetterTailor
-            seedLetter={coverLetters[0]?.text || ""}
-            about={about}
-            onLoadIntoBuilder={(finalText) => {
-              setChannel("Cover letter");
-              setText(finalText);
-              setTView("outreach");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-          />
         </div>
       </section>
 
