@@ -18,6 +18,23 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: "Service role not configured." }, { status: 500 });
   }
   try {
+    // ?export=1: the whole table as JSON, for backups. Owner-only like the
+    // rest of this route; pages through in 1000-row batches.
+    if (new URL(req.url).searchParams.get("export") === "1") {
+      const all: any[] = [];
+      for (let fromRow = 0; ; fromRow += 1000) {
+        const { data: page, error } = await supabaseAdmin
+          .from("people_index")
+          .select("key, opp, sources, seen_count, first_seen_at, last_seen_at")
+          .order("first_seen_at", { ascending: true })
+          .range(fromRow, fromRow + 999);
+        if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+        all.push(...(page || []));
+        if (!page || page.length < 1000) break;
+      }
+      return NextResponse.json({ exportedAt: new Date().toISOString(), count: all.length, rows: all });
+    }
+
     const { count: total } = await supabaseAdmin
       .from("people_index")
       .select("id", { count: "exact", head: true });

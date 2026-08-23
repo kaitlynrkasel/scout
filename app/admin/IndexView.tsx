@@ -81,6 +81,27 @@ export default function IndexView({
 
   const pct = (n: number) => (data.total ? Math.round((n / Math.min(data.sampled, data.total)) * 100) : 0);
   const maxDay = Math.max(1, ...data.days.map((d) => d.n));
+  // One-click backup: the whole table as a dated JSON file on your machine.
+  async function downloadBackup() {
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch("/api/admin/index?export=1", {
+        headers: { authorization: `Bearer ${token}` },
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body?.error || "Export failed.");
+      const blob = new Blob([JSON.stringify(body, null, 2)], { type: "application/json" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = `people-index-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch (e: any) {
+      setErr(e?.message || "Export failed.");
+    }
+  }
+
   const tile = (label: string, value: string, sub?: string) => (
     <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-soft">
       <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">{label}</div>
@@ -91,6 +112,15 @@ export default function IndexView({
 
   return (
     <div className="space-y-6">
+      <div className="flex justify-end">
+        <button
+          onClick={downloadBackup}
+          title="Download the whole index as a dated JSON file"
+          className="rounded-xl border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+        >
+          Download a backup
+        </button>
+      </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {tile("People in the index", String(data.total))}
         {tile("Added this week", String(data.added7), `${data.added30} in the last 30 days`)}

@@ -1940,7 +1940,11 @@ function ScoutTool({
   const [appBuilding, setAppBuilding] = useState(false);
   // Paste a whole posting anywhere (Applications or Manual): Scout parses it,
   // researches the org, and the prospect lands in Finds + Applications.
-  async function buildApplicationFromPosting(jobText: string): Promise<string> {
+  async function buildApplicationFromPosting(
+    jobText: string,
+    projectId?: string,
+    categoryId?: string
+  ): Promise<string> {
     setAppBuilding(true);
     try {
       const r = await fetch("/api/application-kit", {
@@ -1960,6 +1964,8 @@ function ScoutTool({
         location: p.location || "",
         requirements: jobText.slice(0, 4000),
         isApplication: true,
+        projectId,
+        categoryId,
       });
       return err || "";
     } finally {
@@ -3920,14 +3926,15 @@ function ScoutTool({
   // may be editing a project that isn't the active one). An optional goal lets
   // the caller pass a known search goal (from a suggestion or derived from the
   // name) so discovery understands what the category is looking for.
-  function addCategoryToProject(projectId: string, name: string, goal = "") {
+  function addCategoryToProject(projectId: string, name: string, goal = ""): string {
     const nm = name.trim();
-    if (!nm) return;
-    // Don't add a category this project already has (same name, case-insensitive).
-    const exists = categories.some(
+    if (!nm) return "";
+    // A category this project already has (same name, case-insensitive) is
+    // handed back rather than duplicated, so callers can select it.
+    const existing = categories.find(
       (c) => c.projectId === projectId && c.name.trim().toLowerCase() === nm.toLowerCase()
     );
-    if (exists) return;
+    if (existing) return existing.id;
     const c: Category = {
       id: `cat-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       name: nm,
@@ -3941,6 +3948,7 @@ function ScoutTool({
       (x) => !(x.projectId === projectId && x.id.startsWith("sug-"))
     );
     saveCats([...withoutExamples, c]);
+    return c.id;
   }
 
   // Reorder a project's categories to match the given id order (drag and drop).
@@ -5618,6 +5626,7 @@ function ScoutTool({
     location?: string;
     notes?: string;
     projectId?: string;
+    categoryId?: string;
     requirements?: string;
     isApplication?: boolean;
   }): string | null {
@@ -5661,6 +5670,7 @@ function ScoutTool({
       {
         id,
         projectId,
+        categoryId: input.categoryId || undefined,
         status: "new" as FindStatus,
         opp,
         addedAt: Date.now(),
@@ -8759,6 +8769,7 @@ function ScoutTool({
           accountEmail={accountEmail || ""}
           onCopyTeamTemplate={copyTeamTemplate}
           onDeleteTeamTemplate={deleteTeamTemplate}
+          onCreateCategory={(pid, name) => addCategoryToProject(pid, name)}
           getToken={getToken}
         />
       )}
@@ -9581,8 +9592,9 @@ function appAccentStyle(key: string): React.CSSProperties | undefined {
     // Text drawn on top of the accent fill. White on the dark accents, navy on
     // the pale ones — without this, "Light sky" gets white-on-#B7D4E6 buttons.
     ["--accent-on" as any]: a.on,
-    ["--su-rail-active-bg" as any]: a.color,
-    ["--su-rail-active-fg" as any]: a.on,
+    // Deliberately NOT overriding --su-rail-active-bg/fg: the selected nav
+    // pill stays navy under every accent so "where am I" reads the same on
+    // every company lens.
   } as React.CSSProperties;
 }
 
@@ -9758,7 +9770,7 @@ function SideNav({
   const BOTTOM_TABS = ["outreach", "finds", "dashboard", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "applications", "spreadsheet"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "applications"] },
     { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
@@ -11163,7 +11175,7 @@ function ApplicationsTab({
   onOpenKit: (f: Find) => void;
   onToggleApplication: (id: string, v: boolean) => void;
   onSetRank: (id: string, rank: number | undefined) => void;
-  onBuildFromPosting: (jobText: string) => Promise<string>;
+  onBuildFromPosting: (jobText: string, projectId?: string, categoryId?: string) => Promise<string>;
   building: boolean;
   goFinds: () => void;
 }) {
@@ -11172,6 +11184,9 @@ function ApplicationsTab({
   const [err, setErr] = useState("");
   const [projFilter, setProjFilter] = useState<string>("");
   const [catFilter, setCatFilter] = useState<string>("");
+  // Where a pasted posting files.
+  const [pasteProj, setPasteProj] = useState(projects[0]?.id || "");
+  const [pasteCat, setPasteCat] = useState("");
   const [view, setView] = useState<"list" | "compare">("list");
   const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
   // Grouped by PROJECT, then by category inside it — the structure the user
@@ -11248,11 +11263,35 @@ function ApplicationsTab({
             placeholder="Paste the job description or program details; Scout reads it, researches the organization, and sets the application up"
             className="mt-2 w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
           />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <PrettySelect
+              ariaLabel="Project it belongs to"
+              value={pasteProj}
+              onChange={(v) => {
+                setPasteProj(v);
+                setPasteCat("");
+              }}
+              className="w-full"
+              options={projects.map((pr) => ({ value: pr.id, label: pr.name }))}
+            />
+            <PrettySelect
+              ariaLabel="Category it belongs to"
+              value={pasteCat}
+              onChange={setPasteCat}
+              className="w-full"
+              options={[
+                { value: "", label: "No category (solo)" },
+                ...categories
+                  .filter((c) => c.projectId === pasteProj)
+                  .map((c) => ({ value: c.id, label: c.name })),
+              ]}
+            />
+          </div>
           <button
             onClick={async () => {
               setErr("");
               try {
-                const msg = await onBuildFromPosting(paste);
+                const msg = await onBuildFromPosting(paste, pasteProj || undefined, pasteCat || undefined);
                 if (msg) setErr(msg);
                 else {
                   setPaste("");
@@ -13631,13 +13670,24 @@ function SpreadsheetTab({
 function ManualPostingBox({
   onBuild,
   building,
+  projects = [],
+  categories = [],
+  defaultProjectId = "",
 }: {
-  onBuild: (jobText: string) => Promise<string>;
+  onBuild: (jobText: string, projectId?: string, categoryId?: string) => Promise<string>;
   building: boolean;
+  projects?: Project[];
+  categories?: Category[];
+  defaultProjectId?: string;
 }) {
   const [text, setText] = useState("");
   const [err, setErr] = useState("");
   const [okMsg, setOkMsg] = useState("");
+  // Where the built prospect files: pick the project and category up front
+  // instead of landing in whatever happens to be active.
+  const [pbProj, setPbProj] = useState(defaultProjectId);
+  const pbCats = categories.filter((c) => c.projectId === pbProj);
+  const [pbCat, setPbCat] = useState("");
   return (
     <div className="mt-4">
       <textarea
@@ -13647,12 +13697,36 @@ function ManualPostingBox({
         placeholder="Paste the full job description or program details"
         className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
       />
+      {projects.length > 0 && (
+        <div className="mt-3 grid gap-3 sm:max-w-xl sm:grid-cols-2">
+          <PrettySelect
+            ariaLabel="Project it belongs to"
+            value={pbProj}
+            onChange={(v) => {
+              setPbProj(v);
+              setPbCat("");
+            }}
+            className="w-full"
+            options={projects.map((pr) => ({ value: pr.id, label: pr.name }))}
+          />
+          <PrettySelect
+            ariaLabel="Category it belongs to"
+            value={pbCat}
+            onChange={setPbCat}
+            className="w-full"
+            options={[
+              { value: "", label: "No category (solo)" },
+              ...pbCats.map((c) => ({ value: c.id, label: c.name })),
+            ]}
+          />
+        </div>
+      )}
       <button
         onClick={async () => {
           setErr("");
           setOkMsg("");
           try {
-            const msg = await onBuild(text);
+            const msg = await onBuild(text, pbProj || undefined, pbCat || undefined);
             if (msg) setErr(msg);
             else {
               setText("");
@@ -13678,6 +13752,7 @@ function ManualTab({
   onBuildFromPosting,
   buildingApplication = false,
   projects,
+  categories = [],
   activeProjectId,
   onAddManual,
   onImportFile,
@@ -13690,7 +13765,8 @@ function ManualTab({
   goFinds,
 }: {
   onCreateProject?: (name: string) => string;
-  onBuildFromPosting: (jobText: string) => Promise<string>;
+  categories?: Category[];
+  onBuildFromPosting: (jobText: string, projectId?: string, categoryId?: string) => Promise<string>;
   buildingApplication?: boolean;
   projects: Project[];
   activeProjectId: string;
@@ -13764,7 +13840,13 @@ function ManualTab({
           researches the organization, and the prospect lands in Finds and
           Applications with its kit ready.
         </p>
-        <ManualPostingBox onBuild={onBuildFromPosting} building={buildingApplication} />
+        <ManualPostingBox
+          onBuild={onBuildFromPosting}
+          building={buildingApplication}
+          projects={projects}
+          categories={categories}
+          defaultProjectId={activeProjectId}
+        />
       </section>
 
       <section data-guide="import" className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
@@ -14458,6 +14540,28 @@ function TrashSection({
   );
 }
 
+/* The whole reason the Spreadsheet tab existed, without the tab: export the
+ * visible finds as .xlsx straight from Finds. */
+async function exportFindsXlsx(list: Find[], projName: (id: string) => string) {
+  const XLSX = await import("xlsx");
+  const rows = list.map((f) => ({
+    Name: f.opp.name || "",
+    "Company / Outlet": f.opp.outlet || "",
+    Email: f.opp.contactEmail || "",
+    Phone: f.opp.contactPhone || "",
+    "LinkedIn / Handle": f.opp.contactHandle || "",
+    Website: f.opp.url || "",
+    Location: f.opp.location || "",
+    Status: f.status,
+    Project: projName(f.projectId),
+    "Fit %": f.opp.fitScore != null ? Math.round((f.opp.fitScore as number) * 100) : "",
+    "Why it fits": f.opp.whyItFits || "",
+  }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), "Finds");
+  XLSX.writeFile(wb, `scout-finds-${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 function FindsTab({
   onToggleApplication,
   onOpenApplicationKit,
@@ -14852,6 +14956,15 @@ function FindsTab({
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() =>
+              exportFindsXlsx(shown, (id) => projects.find((p) => p.id === id)?.name || "")
+            }
+            title="Download the visible finds as an Excel sheet"
+            className="rounded-xl border border-warm-border bg-surface px-4 py-2.5 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Export to Excel
+          </button>
           {gmail.connected && trackable && (
             <button
               onClick={onCheckReplies}
@@ -22616,6 +22729,7 @@ function TemplatesTab({
   onCopyTeamTemplate,
   onDeleteTeamTemplate,
   onCreateProject,
+  onCreateCategory,
   getToken,
 }: {
   kinds: string[];
@@ -22653,6 +22767,7 @@ function TemplatesTab({
   accountEmail?: string;
   onCopyTeamTemplate?: (row: any) => void;
   onDeleteTeamTemplate?: (row: any) => void;
+  onCreateCategory?: (projectId: string, name: string) => string;
   onCreateProject?: (name: string) => string;
   // Session token supplier for the AI-backed clean-into-a-template call
   // (the endpoint requires sign-in so strangers can't burn API credits).
@@ -22662,6 +22777,8 @@ function TemplatesTab({
   // instead of detouring through the Projects tab.
   const [tplProjOpen, setTplProjOpen] = useState(false);
   const [newTplProj, setNewTplProj] = useState("");
+  const [tplCatOpen, setTplCatOpen] = useState(false);
+  const [newTplCat, setNewTplCat] = useState("");
   // Three pages behind one top toggle: outreach templates, application
   // materials (resume + cover letters + tailoring), and email signatures.
   const [tView, setTView] = useState<"outreach" | "materials" | "signatures">("outreach");
@@ -22949,8 +23066,15 @@ function TemplatesTab({
             <div className={scopeProjectId ? "" : "pointer-events-none opacity-50"}>
               <PrettySelect
                 ariaLabel="Which category this template applies to"
-                value={scopeCategoryId}
-                onChange={setScopeCategoryId}
+                value={tplCatOpen ? "__newcat__" : scopeCategoryId}
+                onChange={(v) => {
+                  if (v === "__newcat__") {
+                    setTplCatOpen(true);
+                    return;
+                  }
+                  setTplCatOpen(false);
+                  setScopeCategoryId(v);
+                }}
                 className="w-full"
                 options={[
                   {
@@ -22958,10 +23082,57 @@ function TemplatesTab({
                     label: scopeProjectId ? "All categories in this project" : "Pick a project first",
                   },
                   ...scopeCats.map((c) => ({ value: c.id, label: c.name })),
+                  ...(onCreateCategory && scopeProjectId
+                    ? [{ value: "__newcat__", label: "+ New category…" }]
+                    : []),
                 ]}
               />
             </div>
           </div>
+          {tplCatOpen && onCreateCategory && scopeProjectId && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                value={newTplCat}
+                onChange={(e) => setNewTplCat(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newTplCat.trim()) {
+                    const id = onCreateCategory(scopeProjectId, newTplCat.trim());
+                    if (id) {
+                      setScopeCategoryId(id);
+                      setTplCatOpen(false);
+                      setNewTplCat("");
+                    }
+                  }
+                }}
+                placeholder="Name the new category"
+                autoFocus
+                className="w-full max-w-xs rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-coral"
+              />
+              <button
+                onClick={() => {
+                  const id = onCreateCategory(scopeProjectId, newTplCat.trim());
+                  if (id) {
+                    setScopeCategoryId(id);
+                    setTplCatOpen(false);
+                    setNewTplCat("");
+                  }
+                }}
+                disabled={!newTplCat.trim()}
+                className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => {
+                  setTplCatOpen(false);
+                  setNewTplCat("");
+                }}
+                className="shrink-0 text-sm font-semibold text-body/60 transition hover:text-accent"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
           {tplProjOpen && onCreateProject && (
             <div className="mt-2 flex items-center gap-2">
               <input
@@ -25134,30 +25305,8 @@ function ProfileTab({
         </>
         )}
 
-        <hr className="my-7 border-warm-border" />
-
-        {/* Import moved to its own Manual tab (Profile was getting busy). Just a
-            pointer here so people still find it. */}
-        <button
-          onClick={onGoManual}
-          className="flex w-full flex-wrap items-center gap-3 rounded-2xl border border-warm-border bg-surface p-4 text-left shadow-card transition hover:border-brown/40 hover:bg-warm-bg/40"
-        >
-          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-brown-tint text-brown-deep">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" /></svg>
-          </span>
-          {/* basis-48 so the "Manual tab" cue wraps to its own line on a phone
-              instead of squeezing this copy into a two-word column. */}
-          <div className="min-w-0 flex-1 basis-48">
-            <div className="text-sm font-extrabold text-ink">
-              Already reaching out somewhere else?
-            </div>
-            <p className="mt-0.5 text-xs leading-relaxed text-body/80">
-              Import a tracking sheet or hand-add contacts you already know in the
-              Manual tab.
-            </p>
-          </div>
-          <span className="shrink-0 text-sm font-bold text-accent">Manual tab →</span>
-        </button>
+        {/* The import pointer card is gone: importing lives in Manual (and the
+            sheet export in Finds); Profile stays about you. */}
 
         {/* Projects & categories moved wholly to the Projects tab. */}
 

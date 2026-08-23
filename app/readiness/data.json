@@ -1030,6 +1030,21 @@
               "key": "importing::manual-research",
               "title": "A hand-added contact researches itself",
               "good": "Right after adding a contact by hand, Scout quietly runs the same public-web enrichment as Autofill: blank fields (role, outlet, link, location) fill in and the 'Added by you' placeholder becomes one real factual line when the web has one. Nothing invented; blanks stay blank when nothing is found."
+            },
+            {
+              "key": "importing::imported-fields-survive",
+              "title": "A sheet's data actually lands on the finds",
+              "good": "After importing a real tracking sheet, the rows carry the sheet's company, email, phone, and links, not blanks with placeholder text. Kaitlyn's current pipeline shows imported rows with empty contact fields, so this is under investigation.",
+              "steps": [
+                "Re-import the sheet from Manual and watch the column-mapping step: does each column map to the right field?",
+                "Open a few imported finds and compare against the original sheet row by row.",
+                "If the mapping looks right but fields are still blank, mark Broken with the sheet's column names in the note."
+              ]
+            },
+            {
+              "key": "importing::posting-destination",
+              "title": "A pasted posting files where you choose",
+              "good": "Both Paste-a-posting boxes (Manual and Applications) offer project and category pickers; the built prospect lands exactly there, not in whatever project was active."
             }
           ]
         },
@@ -2278,6 +2293,11 @@
               ],
               "tech": "supabase/teams.sql gained an open_to_workspace column on shared_projects, a location column on workspaces, and a redefined is_project_member() that lets an open project be read by any member of its workspace. Every statement is idempotent, so re-running the whole file is safe. Until it is run, team find sharing silently does nothing and saving a company location fails on the missing column.",
               "key": "database::re-run-the-teams-setup-script-after-the-sharing-and-location"
+            },
+            {
+              "key": "database::index-backup-button",
+              "title": "The people index backs up in one click",
+              "good": "Admin > Index has Download a backup: the whole table lands as a dated JSON file. Open it and spot-check a few records against the Index view."
             }
           ]
         },
