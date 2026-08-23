@@ -8452,6 +8452,7 @@ function ScoutTool({
         <ManualTab
           onBuildFromPosting={buildApplicationFromPosting}
           buildingApplication={appBuilding}
+          onCreateProject={addProject}
           projects={visibleProjects}
           activeProjectId={activeId}
           onAddManual={addManualFind}
@@ -13488,6 +13489,7 @@ function ManualPostingBox({
 }
 
 function ManualTab({
+  onCreateProject,
   onBuildFromPosting,
   buildingApplication = false,
   projects,
@@ -13502,6 +13504,7 @@ function ManualTab({
   onRemoveSync,
   goFinds,
 }: {
+  onCreateProject?: (name: string) => string;
   onBuildFromPosting: (jobText: string) => Promise<string>;
   buildingApplication?: boolean;
   projects: Project[];
@@ -13636,7 +13639,7 @@ function ManualTab({
       {addOpen && (
         <AddContactModal
           projects={projects}
-          onCreateProject={addProject}
+          onCreateProject={onCreateProject}
           defaultProjectId={activeProjectId}
           onClose={() => setAddOpen(false)}
           onAdd={(input) => {
