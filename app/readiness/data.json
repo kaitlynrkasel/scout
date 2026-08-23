@@ -87,6 +87,11 @@
                 "Confirm you see the sign-in screen, not a stale copy of the app."
               ],
               "key": "getting-in::signing-out-really-signs-you-out"
+            },
+            {
+              "key": "getting-in::continue-as-survives-admin-days",
+              "title": "One-click Continue as keeps working day after day",
+              "good": "Sign in, spend time in the app AND the admin pages, come back the next day signed out: 'Continue as' signs you straight in, no 'saved session expired' loop. If it does fail once, the error names the reason and your email is prefilled so recovery is one password."
             }
           ]
         },
@@ -263,6 +268,11 @@
               "key": "setup::template-scope-new-project",
               "title": "Templates can mint a project on the spot",
               "good": "In Templates' Where-it-applies picker (a house-styled dropdown, not the OS menu), '+ New project…' opens an inline name field; Create makes the project and scopes the template to it in one motion, same as Add-a-contact."
+            },
+            {
+              "key": "setup::profile-pages-toggle",
+              "title": "Profile splits into About you / Your company",
+              "good": "On a company account, Profile is two pages behind a top toggle: your role and experience on one, the company details and color on the other. No scrolling through the company card to reach your own fields."
             }
           ]
         },
@@ -461,9 +471,10 @@
               "title": "The shared index helps without making everyone's results the same",
               "good": "Searches quietly reuse people Scout has already verified, but two accounts running the same goal still get clearly different result sets, and fresh-from-the-web people always make up the majority.",
               "steps": [
-                "On two different accounts, run the same goal and compare the result lists side by side.",
-                "Mostly different people with some overlap is correct. Near-identical lists is a broken.",
-                "Results reused from the index still need a true, checkable reason for fitting THIS goal."
+                "Open two browsers (or one normal + one private window): your account in one, a second account (Suri's, or a fresh signup) in the other.",
+                "Run the SAME goal text on both within a few minutes, e.g. 'indie playlist curators who take bedroom pop submissions'.",
+                "Put the two Finds lists side by side and compare names: mostly different people with some overlap is correct; near-identical lists is Broken.",
+                "Spot-check both lists: most finds should cite a live page (source link opens and mentions them), which is what fresh-from-the-web looks like. Every reused one still needs a true, checkable reason it fits THIS goal."
               ],
               "tech": "Index candidates are capped at a small minority per search, sampled differently per user, expire from rotation after 90 days, and pass the same fit scoring and exposure caps as fresh candidates.",
               "key": "finding::the-shared-index-helps-without-making-everyone-s-results-the"
@@ -1138,6 +1149,11 @@
               "key": "writing::no-double-email",
               "title": "One email link, not two",
               "good": "The find detail shows the address itself as the contact link; there is no separate Email chip repeating it (Call chip gone the same way)."
+            },
+            {
+              "key": "writing::delete-shared-template",
+              "title": "Team templates can be deleted",
+              "good": "A shared template row has Delete: your own delete removes it from the library (and your local copy so sync can't resurrect it); an admin can delete anyone's. A non-admin deleting someone else's gets a plain refusal, not a broken row."
             }
           ]
         },
@@ -1850,6 +1866,21 @@
               "key": "trial-admin::show-me-where",
               "title": "Checklist items point into the app",
               "good": "Expanding a checklist item shows 'Show me where in Scout'; clicking it makes the live pane jump to the right tab, scroll to the control the step means, and pulse a ring around it. On a phone it opens the app in a new tab instead."
+            },
+            {
+              "key": "trial-admin::algorithm-health-panel",
+              "title": "Algorithm health reads at a glance",
+              "good": "Admin Insights shows the finding engine's vitals in plain words: finds discovered, keep rate, arrive-reachable rate, average fit, reply and bounce rates, finds per run and the 5-find-floor hit rate. Numbers match what you can hand-count for a small account."
+            },
+            {
+              "key": "trial-admin::search-categories-panel",
+              "title": "What people use Scout for, from real searches",
+              "good": "Admin Insights categorizes the goals of real searches (internships, music promotion, press, investors...) with counts, distinct users, and example goals. Matches your gut read of the example goals; the old profile question is gone from Profile."
+            },
+            {
+              "key": "trial-admin::time-on-scout-windows",
+              "title": "Time on Scout bends to any window",
+              "good": "The Time on Scout card toggles between totals and a per-day line graph, with presets (2 weeks, month, 3 months) and custom from/to dates. Windowed totals shrink sensibly and the lines match the bars."
             }
           ]
         },

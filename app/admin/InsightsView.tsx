@@ -35,6 +35,19 @@ interface AdminInsights {
     sent: number;
     replied: number;
   };
+  algo?: {
+    searchFinds: number;
+    contactRate: number;
+    avgFit: number;
+    highFitShare: number;
+    keepRate: number;
+    replyRate: number;
+    bounceRate: number;
+    runs: number;
+    avgFindsPerRun: number;
+    floorRate: number;
+  };
+  searchCategories?: { name: string; count: number; users: number; examples: string[] }[];
   denyReasons: { reason: string; count: number; examples: string[] }[];
   denyByHost: { host: string; count: number }[];
   denyRateByUseCase: { useCase: string; total: number; denied: number; rate: number }[];
@@ -146,30 +159,7 @@ export default function InsightsView({
       {/* -------- Time on Scout: the build itself, from git history --------
           Regenerate with `node scripts/work-history.mjs` and commit the JSON
           (Vercel's shallow clone can't compute this at build time). */}
-      <section className="mb-8 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
-        <div className="flex flex-wrap items-baseline gap-3">
-          <h2 className="text-lg font-bold tracking-tight text-ink">Time on Scout</h2>
-          <span className="text-xs text-body/60">
-            {workHistory.firstCommit} to {workHistory.lastCommit} · {workHistory.totalCommits}{" "}
-            commits · {workHistory.claudeAssistedCommits} with Claude · estimated from commit
-            sessions, updated {String(workHistory.generatedAt).slice(0, 10)}
-          </span>
-        </div>
-        <div className="mt-2 font-display text-4xl font-bold tabular-nums text-ink">
-          {workHistory.totalHours} hours
-        </div>
-        <div className="mt-4 space-y-2">
-          {workHistory.people.map((p: any) => (
-            <div key={p.who} className="flex items-center gap-3">
-              <span className="w-28 shrink-0 text-sm font-semibold text-ink">{p.who}</span>
-              <span className="h-2 rounded-full bg-brown/70" style={{ width: `${Math.max(2, (p.hours / workHistory.totalHours) * 100)}%` }} />
-              <span className="shrink-0 text-xs tabular-nums text-body/70">
-                {p.hours}h · {p.commits} commits · {p.sessions} sittings
-              </span>
-            </div>
-          ))}
-        </div>
-      </section>
+      <TimeOnScoutCard />
         <div className="flex items-center gap-2">
           <button
             onClick={load}
@@ -567,6 +557,79 @@ export default function InsightsView({
               </ul>
             </section>
           </div>
+
+          {/* Algorithm health: the finding engine's vitals in plain numbers,
+              readable by the whole team. */}
+          {data.algo && (
+            <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                Algorithm health
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-body/60">
+                How well the finding engine is doing, across every account. Keep rate
+                is the share of decided finds people kept rather than denied; the
+                floor is the five-finds-per-run promise.
+              </p>
+              <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+                {(
+                  [
+                    [String(data.algo.searchFinds), "Finds discovered", "by search, all time"],
+                    [`${Math.round(data.algo.keepRate * 100)}%`, "Keep rate", "kept vs denied, of decided"],
+                    [`${Math.round(data.algo.contactRate * 100)}%`, "Arrive reachable", "found with an email or handle"],
+                    [`${Math.round(data.algo.avgFit * 100)}%`, "Average fit", `${Math.round(data.algo.highFitShare * 100)}% score 80+`],
+                    [`${Math.round(data.algo.replyRate * 100)}%`, "Reply rate", "replied, of sent"],
+                    [String(data.algo.runs), "Search runs", "reconstructed from add times"],
+                    [data.algo.avgFindsPerRun.toFixed(1), "Finds per run", "average"],
+                    [`${Math.round(data.algo.floorRate * 100)}%`, "Hit the 5-find floor", "runs delivering 5 or more"],
+                    [`${Math.round(data.algo.bounceRate * 100)}%`, "Bounce rate", "of messages sent"],
+                  ] as const
+                ).map(([v, label, sub]) => (
+                  <div key={label} className="rounded-xl border border-warm-border bg-warm-bg/40 p-3">
+                    <div className="text-xl font-extrabold tabular-nums text-ink">{v}</div>
+                    <div className="mt-0.5 text-xs font-bold text-body">{label}</div>
+                    <div className="text-[11px] text-body/60">{sub}</div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* What people actually use Scout for, read off real searches. */}
+          {(data.searchCategories || []).length > 0 && (
+            <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                What people use Scout for
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-body/60">
+                Categorized from the goals of real searches (last 5000), not from a
+                profile question.
+              </p>
+              <div className="mt-3 overflow-x-auto">
+                <table className="w-full min-w-[360px] text-sm">
+                  <thead>
+                    <tr className="text-left text-[11px] font-bold uppercase tracking-wide text-body/50">
+                      <th className="py-1.5">Category</th>
+                      <th className="py-1.5 text-right">Searches</th>
+                      <th className="py-1.5 text-right">People</th>
+                      <th className="py-1.5 pl-4">Example goals</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(data.searchCategories || []).map((c) => (
+                      <tr key={c.name} className="border-t border-warm-border align-top">
+                        <td className="py-2 font-semibold text-ink">{c.name}</td>
+                        <td className="py-2 text-right tabular-nums text-body">{c.count}</td>
+                        <td className="py-2 text-right tabular-nums text-body">{c.users}</td>
+                        <td className="py-2 pl-4 text-xs leading-relaxed text-body/70">
+                          {c.examples.join(" · ") || "…"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          )}
 
           {/* Deny rate per use case */}
           <section className="mt-6 rounded-2xl border border-warm-border bg-surface p-5">
@@ -1175,5 +1238,212 @@ function ManualAdd({ onAdd }: { onAdd: (o: ConciergeOpp) => void }) {
         </button>
       </div>
     </div>
+  );
+}
+
+/* Time on Scout, with a view toggle (per-person bars, or a per-day line graph)
+ * and a pickable time window (presets or any custom from/to). Data comes from
+ * workHistory.json's per-day series. */
+const TW_COLORS = ["#19455e", "#4e9c9c", "#aa2377", "#7a5aa8", "#c07a3c", "#5460ac"];
+function TimeOnScoutCard() {
+  const days: { date: string; byWho: Record<string, number> }[] =
+    (workHistory as any).days || [];
+  const [view, setView] = useState<"bars" | "line">("bars");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const preset = (daysBack: number | null) => {
+    if (daysBack === null) {
+      setFrom("");
+      setTo("");
+      return;
+    }
+    const end = new Date();
+    const start = new Date(Date.now() - daysBack * 86400000);
+    setFrom(start.toISOString().slice(0, 10));
+    setTo(end.toISOString().slice(0, 10));
+  };
+  const inWindow = days.filter(
+    (d) => (!from || d.date >= from) && (!to || d.date <= to)
+  );
+  const whoTotals = new Map<string, number>();
+  for (const d of inWindow)
+    for (const [w, h] of Object.entries(d.byWho))
+      whoTotals.set(w, (whoTotals.get(w) || 0) + h);
+  const people = [...whoTotals.entries()]
+    .map(([who, hours]) => ({ who, hours: Math.round(hours * 10) / 10 }))
+    .sort((a, b) => b.hours - a.hours);
+  const windowTotal = Math.round(people.reduce((a, p) => a + p.hours, 0) * 10) / 10;
+  const windowed = !!(from || to);
+
+  // Line graph geometry: a continuous calendar axis (zero-hour days included),
+  // one line per person.
+  const first = inWindow[0]?.date || "";
+  const last = inWindow[inWindow.length - 1]?.date || "";
+  const axis: string[] = [];
+  if (first && last) {
+    const t0 = new Date(`${first}T00:00:00Z`).getTime();
+    const t1 = new Date(`${last}T00:00:00Z`).getTime();
+    for (let t = t0; t <= t1; t += 86400000) axis.push(new Date(t).toISOString().slice(0, 10));
+  }
+  const byDate = new Map(inWindow.map((d) => [d.date, d.byWho]));
+  const maxH = Math.max(0.5, ...inWindow.flatMap((d) => Object.values(d.byWho)));
+  const W = 640, H = 170, PADL = 30, PADB = 18;
+  const x = (i: number) =>
+    PADL + (axis.length < 2 ? 0 : (i * (W - PADL - 6)) / (axis.length - 1));
+  const y = (h: number) => 8 + (H - PADB - 8) * (1 - h / maxH);
+
+  return (
+    <section className="mb-8 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+      <div className="flex flex-wrap items-baseline gap-3">
+        <h2 className="text-lg font-bold tracking-tight text-ink">Time on Scout</h2>
+        <span className="text-xs text-body/60">
+          {workHistory.firstCommit} to {workHistory.lastCommit} · {workHistory.totalCommits}{" "}
+          commits · {workHistory.claudeAssistedCommits} with Claude · estimated from commit
+          sessions, updated {String(workHistory.generatedAt).slice(0, 10)}
+        </span>
+        <div className="ml-auto inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(
+            [
+              ["bars", "Totals"],
+              ["line", "Line graph"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setView(v)}
+              className={`rounded-lg px-3 py-1 text-xs font-bold transition ${
+                view === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Any window you like: presets, or exact dates. */}
+      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
+        {(
+          [
+            ["All time", null],
+            ["Last 2 weeks", 14],
+            ["Last month", 30],
+            ["Last 3 months", 90],
+          ] as const
+        ).map(([label, back]) => {
+          const active =
+            back === null
+              ? !windowed
+              : from === new Date(Date.now() - back * 86400000).toISOString().slice(0, 10);
+          return (
+            <button
+              key={label}
+              onClick={() => preset(back)}
+              className={`rounded-full border px-2.5 py-1 font-semibold transition ${
+                active
+                  ? "border-brown bg-brown text-white"
+                  : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+              }`}
+            >
+              {label}
+            </button>
+          );
+        })}
+        <label className="ml-1 flex items-center gap-1 text-body/70">
+          from
+          <input
+            type="date"
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="rounded-lg border border-warm-border bg-surface px-2 py-1 text-xs text-ink outline-none"
+          />
+        </label>
+        <label className="flex items-center gap-1 text-body/70">
+          to
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
+            className="rounded-lg border border-warm-border bg-surface px-2 py-1 text-xs text-ink outline-none"
+          />
+        </label>
+      </div>
+
+      <div className="mt-2 font-display text-4xl font-bold tabular-nums text-ink">
+        {windowed ? windowTotal : workHistory.totalHours} hours
+        {windowed && (
+          <span className="ml-2 text-sm font-semibold text-body/60">
+            in this window ({workHistory.totalHours}h all time)
+          </span>
+        )}
+      </div>
+
+      {view === "bars" ? (
+        <div className="mt-4 space-y-2">
+          {(windowed ? people : (workHistory.people as any[]).map((p: any) => p)).map(
+            (p: any, i: number) => (
+              <div key={p.who} className="flex items-center gap-3">
+                <span className="w-28 shrink-0 truncate text-sm font-semibold text-ink">{p.who}</span>
+                <span
+                  className="h-2 rounded-full"
+                  style={{
+                    background: TW_COLORS[i % TW_COLORS.length],
+                    width: `${Math.max(2, (p.hours / Math.max(1, windowed ? windowTotal : workHistory.totalHours)) * 100)}%`,
+                  }}
+                />
+                <span className="shrink-0 text-xs tabular-nums text-body/70">
+                  {p.hours}h
+                  {p.commits ? ` · ${p.commits} commits · ${p.sessions} sittings` : ""}
+                </span>
+              </div>
+            )
+          )}
+          {windowed && people.length === 0 && (
+            <p className="text-sm text-body/60">No work landed in this window.</p>
+          )}
+        </div>
+      ) : axis.length < 2 ? (
+        <p className="mt-4 text-sm text-body/60">Not enough days in this window for a line.</p>
+      ) : (
+        <div className="mt-4">
+          <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Hours per day">
+            {[0.25, 0.5, 0.75, 1].map((f) => (
+              <g key={f}>
+                <line x1={PADL} x2={W - 6} y1={y(maxH * f)} y2={y(maxH * f)} stroke="rgb(var(--c-warm-border))" strokeWidth="1" />
+                <text x={PADL - 4} y={y(maxH * f) + 3} textAnchor="end" fontSize="8" fill="rgb(var(--c-body))" opacity="0.55">
+                  {Math.round(maxH * f * 10) / 10}h
+                </text>
+              </g>
+            ))}
+            {people.map((p, pi) => (
+              <polyline
+                key={p.who}
+                fill="none"
+                stroke={TW_COLORS[pi % TW_COLORS.length]}
+                strokeWidth="1.8"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={axis
+                  .map((d, i) => `${x(i)},${y((byDate.get(d) || {})[p.who] || 0)}`)
+                  .join(" ")}
+              />
+            ))}
+            {[0, Math.floor((axis.length - 1) / 2), axis.length - 1].map((i) => (
+              <text key={i} x={x(i)} y={H - 4} textAnchor="middle" fontSize="8" fill="rgb(var(--c-body))" opacity="0.55">
+                {axis[i]?.slice(5)}
+              </text>
+            ))}
+          </svg>
+          <div className="mt-2 flex flex-wrap gap-3">
+            {people.map((p, pi) => (
+              <span key={p.who} className="flex items-center gap-1.5 text-xs font-semibold text-body">
+                <span className="h-2 w-2 rounded-full" style={{ background: TW_COLORS[pi % TW_COLORS.length] }} />
+                {p.who} · {p.hours}h
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

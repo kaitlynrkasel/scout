@@ -77,6 +77,8 @@ export default function AuthScreen({
       setSwitching("");
       setSavedAccts(listSavedAccounts().map((a) => ({ email: a.email, name: a.name })));
       setError(err);
+      // Make the "sign in once" recovery one field instead of two.
+      setEmail(email);
     }
     // On success the parent's auth listener signs us straight in.
   }

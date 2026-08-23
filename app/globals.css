@@ -1205,3 +1205,14 @@ select.scout-kind-picker option {
       0 0 0 12px rgba(25, 69, 94, 0.12);
   }
 }
+
+/* The PrettySelect option panel must stay a solid sheet even inside the
+   flattened Outreach templates page: the transparency remaps above strip
+   bg-surface and borders from plain divs, and a floating option list with no
+   ground is unreadable over the content behind it. */
+.tpl-open div[role="listbox"] {
+  background: rgb(var(--c-surface)) !important;
+  border: 1px solid rgb(var(--c-warm-border)) !important;
+  border-radius: 1rem !important;
+  box-shadow: 0 18px 40px rgba(20, 30, 40, 0.16) !important;
+}

@@ -238,7 +238,7 @@ export async function switchAccount(email: string): Promise<string | null> {
   });
   if (error) {
     forgetAccount(email); // stale, make them sign in once to re-link
-    return "That saved session expired. Sign in once and it'll be one click from then on.";
+    return `That saved session expired (${error.message}). Sign in once below and it'll be one click from then on.`;
   }
   // Supabase ROTATES the refresh token on use: the token we just spent is now
   // dead, and the replacement lives in the returned session. Persist it here,
@@ -257,4 +257,23 @@ export async function switchAccount(email: string): Promise<string | null> {
     );
   }
   return null;
+}
+
+// Keep the multi-account registry current from EVERY page, not only the app
+// shell. Admin and readiness pages run the same auto-refreshing client, and
+// before this listener lived here, a day spent in those pages rotated the
+// active session's refresh token WITHOUT updating the saved entry - so the
+// next "Continue as ..." spent an already-used token and failed every time
+// ("That saved session expired" on every login).
+if (supabase && typeof window !== "undefined") {
+  supabase.auth.onAuthStateChange((_event, s) => {
+    if (s?.user?.email && s.refresh_token) {
+      rememberAccount(
+        s.user.email,
+        s.access_token || "",
+        s.refresh_token,
+        (s.user.user_metadata as any)?.full_name || ""
+      );
+    }
+  });
 }

@@ -1,22 +1,22 @@
 {
-  "generatedAt": "2026-08-21T20:32:08.102Z",
+  "generatedAt": "2026-08-23T16:14:14.302Z",
   "firstCommit": "2026-06-30",
-  "lastCommit": "2026-08-21",
-  "totalCommits": 661,
-  "claudeAssistedCommits": 544,
-  "totalHours": 129.6,
+  "lastCommit": "2026-08-23",
+  "totalCommits": 725,
+  "claudeAssistedCommits": 602,
+  "totalHours": 137.7,
   "people": [
     {
       "who": "Kaitlyn",
-      "commits": 481,
-      "sessions": 85,
-      "hours": 92.3
+      "commits": 534,
+      "sessions": 89,
+      "hours": 98.3
     },
     {
       "who": "Claude (cloud)",
-      "commits": 93,
-      "sessions": 29,
-      "hours": 18
+      "commits": 99,
+      "sessions": 30,
+      "hours": 19
     },
     {
       "who": "Mera",
@@ -26,9 +26,254 @@
     },
     {
       "who": "Suri",
-      "commits": 37,
+      "commits": 42,
       "sessions": 14,
-      "hours": 7.4
+      "hours": 8.5
+    }
+  ],
+  "days": [
+    {
+      "date": "2026-06-30",
+      "byWho": {
+        "Kaitlyn": 3.8
+      }
+    },
+    {
+      "date": "2026-07-01",
+      "byWho": {
+        "Kaitlyn": 2
+      }
+    },
+    {
+      "date": "2026-07-02",
+      "byWho": {
+        "Kaitlyn": 2.3,
+        "Claude (cloud)": 1,
+        "Mera": 0.3
+      }
+    },
+    {
+      "date": "2026-07-03",
+      "byWho": {
+        "Kaitlyn": 11.6,
+        "Claude (cloud)": 6.2,
+        "Mera": 5.2
+      }
+    },
+    {
+      "date": "2026-07-04",
+      "byWho": {
+        "Kaitlyn": 8.3,
+        "Claude (cloud)": 1.8,
+        "Mera": 1.3
+      }
+    },
+    {
+      "date": "2026-07-05",
+      "byWho": {
+        "Kaitlyn": 8,
+        "Claude (cloud)": 2,
+        "Mera": 1.6
+      }
+    },
+    {
+      "date": "2026-07-06",
+      "byWho": {
+        "Kaitlyn": 6.2,
+        "Claude (cloud)": 0.4
+      }
+    },
+    {
+      "date": "2026-07-07",
+      "byWho": {
+        "Kaitlyn": 5.5
+      }
+    },
+    {
+      "date": "2026-07-08",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-09",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-10",
+      "byWho": {
+        "Kaitlyn": 2.2,
+        "Claude (cloud)": 1.2,
+        "Mera": 0.3
+      }
+    },
+    {
+      "date": "2026-07-11",
+      "byWho": {
+        "Kaitlyn": 1.5
+      }
+    },
+    {
+      "date": "2026-07-12",
+      "byWho": {
+        "Kaitlyn": 6.5
+      }
+    },
+    {
+      "date": "2026-07-13",
+      "byWho": {
+        "Kaitlyn": 3.1,
+        "Claude (cloud)": 1.9
+      }
+    },
+    {
+      "date": "2026-07-14",
+      "byWho": {
+        "Kaitlyn": 1.8
+      }
+    },
+    {
+      "date": "2026-07-15",
+      "byWho": {
+        "Kaitlyn": 0.8,
+        "Claude (cloud)": 0.8
+      }
+    },
+    {
+      "date": "2026-07-16",
+      "byWho": {
+        "Kaitlyn": 1.9
+      }
+    },
+    {
+      "date": "2026-07-17",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-18",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-19",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-20",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-21",
+      "byWho": {
+        "Kaitlyn": 1.7
+      }
+    },
+    {
+      "date": "2026-07-22",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-07-23",
+      "byWho": {
+        "Kaitlyn": 1.8
+      }
+    },
+    {
+      "date": "2026-07-28",
+      "byWho": {
+        "Kaitlyn": 0.6
+      }
+    },
+    {
+      "date": "2026-08-04",
+      "byWho": {
+        "Kaitlyn": 1.2
+      }
+    },
+    {
+      "date": "2026-08-05",
+      "byWho": {
+        "Kaitlyn": 0.7,
+        "Mera": 1
+      }
+    },
+    {
+      "date": "2026-08-06",
+      "byWho": {
+        "Kaitlyn": 2.5,
+        "Mera": 1
+      }
+    },
+    {
+      "date": "2026-08-08",
+      "byWho": {
+        "Mera": 1.2
+      }
+    },
+    {
+      "date": "2026-08-09",
+      "byWho": {
+        "Kaitlyn": 0.4
+      }
+    },
+    {
+      "date": "2026-08-12",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-08-18",
+      "byWho": {
+        "Kaitlyn": 0.3
+      }
+    },
+    {
+      "date": "2026-08-19",
+      "byWho": {
+        "Kaitlyn": 3.4,
+        "Claude (cloud)": 1.2,
+        "Suri": 1.6
+      }
+    },
+    {
+      "date": "2026-08-20",
+      "byWho": {
+        "Kaitlyn": 2.9,
+        "Claude (cloud)": 1,
+        "Suri": 2.6
+      }
+    },
+    {
+      "date": "2026-08-21",
+      "byWho": {
+        "Kaitlyn": 10.8,
+        "Claude (cloud)": 1.5,
+        "Suri": 4.3
+      }
+    },
+    {
+      "date": "2026-08-22",
+      "byWho": {
+        "Kaitlyn": 2.1
+      }
+    },
+    {
+      "date": "2026-08-23",
+      "byWho": {
+        "Kaitlyn": 1.7
+      }
     }
   ]
 }

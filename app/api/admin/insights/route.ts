@@ -25,10 +25,15 @@ export async function GET(req: Request) {
 
   // Three sources, in parallel: state blobs, profile use_case/name per user,
   // and the auth directory (for email + who to actually recognize a top user by).
-  const [statesRes, profilesRes, authRes] = await Promise.all([
+  const [statesRes, profilesRes, authRes, histRes] = await Promise.all([
     supabaseAdmin.from("user_state").select("user_id, data, updated_at"),
     supabaseAdmin.from("profiles").select("id, use_case, name"),
     supabaseAdmin.auth.admin.listUsers({ perPage: 1000 }),
+    supabaseAdmin
+      .from("search_history")
+      .select("user_id, goal, created_at")
+      .order("created_at", { ascending: false })
+      .limit(5000),
   ]);
 
   if (statesRes.error) {
@@ -97,6 +102,21 @@ export async function GET(req: Request) {
     addedAt: number;
   }> = [];
 
+  // Algorithm health, in plain numbers a non-engineer can read. Collected
+  // during the same walk over every find.
+  const algo = {
+    searchFinds: 0, // finds Scout discovered itself (not manual/import)
+    withContact: 0, // of those, arrived with a real way to reach them
+    fitSum: 0,
+    fitCount: 0,
+    fitHigh: 0, // fit >= 80%
+    bounced: 0,
+    runs: 0, // search runs, reconstructed from add-time clusters
+    runsAtFloor: 0, // runs that met the 5-find floor
+    runFindSum: 0,
+  };
+  const runBuckets = new Map<string, number>();
+
   for (const row of statesRes.data || []) {
     const uid = (row as any).user_id as string;
     const data = ((row as any).data || {}) as any;
@@ -154,6 +174,29 @@ export async function GET(req: Request) {
         totals.replied++;
         totals.approved++;
       } else totals.new++;
+
+      {
+        const via = String(f?.foundVia || "search");
+        if (via === "search" || via === "auto-search") {
+          algo.searchFinds++;
+          const o = f?.opp || {};
+          if (String(o.contactEmail || "").includes("@") || String(o.contactHandle || "").trim())
+            algo.withContact++;
+          const fit = Number(o.fitScore);
+          if (Number.isFinite(fit) && fit > 0) {
+            algo.fitSum += fit;
+            algo.fitCount++;
+            if (fit >= 0.8) algo.fitHigh++;
+          }
+          const added = Number(f?.addedAt || 0);
+          if (added > 0) {
+            // Finds added by one user within the same 10 minutes = one run.
+            const key = `${uid}:${Math.floor(added / 600000)}`;
+            runBuckets.set(key, (runBuckets.get(key) || 0) + 1);
+          }
+        }
+        if (f?.bounced) algo.bounced++;
+      }
 
       const bucket = byUseCase.get(uc) || { total: 0, denied: 0 };
       bucket.total++;
@@ -304,7 +347,60 @@ export async function GET(req: Request) {
     funnelUsers,
   };
 
+  // What people actually use Scout for, read off their REAL searches instead
+  // of the old profile question. Deterministic keyword buckets over the goal
+  // text; each bucket keeps a couple of example goals so the label can be
+  // sanity-checked against reality.
+  const classifyGoal = (g: string): string => {
+    const t = g.toLowerCase();
+    if (/\bintern(ship)?s?\b/.test(t)) return "Internships";
+    if (/\b(job|jobs|hiring|position|opening|full[- ]time|part[- ]time|career|employer)\b/.test(t)) return "Job hunt";
+    if (/playlist|curator|spotify|\bdj\b|radio|sync|a&r|\blabel\b|music blog|submithub/.test(t)) return "Music promotion";
+    if (/\b(press|journalist|blog(ger)?|magazine|media outlet|review(er)?|coverage|publicist)\b/.test(t)) return "Press & media";
+    if (/invest(or|ment)|\bvc\b|venture|angel|fund(ing)?/.test(t)) return "Investors";
+    if (/school|college|university|masters?|degree|scholarship|admission|program director/.test(t)) return "Schools & programs";
+    if (/brand deal|sponsor|partnership|collab/.test(t)) return "Partnerships";
+    if (/client|lead(s| gen)|customer|sales|sell\b/.test(t)) return "Sales & clients";
+    if (/mentor|coffee chat|network|connect with|advice/.test(t)) return "Networking";
+    return "Other";
+  };
+  const catAgg = new Map<string, { count: number; users: Set<string>; examples: string[] }>();
+  for (const h of histRes?.data || []) {
+    const goal = String((h as any).goal || "").trim();
+    if (!goal) continue;
+    const cat = classifyGoal(goal);
+    const b = catAgg.get(cat) || { count: 0, users: new Set<string>(), examples: [] };
+    b.count += 1;
+    b.users.add(String((h as any).user_id || ""));
+    if (b.examples.length < 2 && goal.length > 12) b.examples.push(goal.slice(0, 110));
+    catAgg.set(cat, b);
+  }
+  const searchCategories = Array.from(catAgg.entries())
+    .map(([name, b]) => ({ name, count: b.count, users: b.users.size, examples: b.examples }))
+    .sort((a, b) => b.count - a.count);
+
+  for (const n of runBuckets.values()) {
+    algo.runs++;
+    algo.runFindSum += n;
+    if (n >= 5) algo.runsAtFloor++;
+  }
+
   return NextResponse.json({
+    algo: {
+      searchFinds: algo.searchFinds,
+      contactRate: algo.searchFinds ? algo.withContact / algo.searchFinds : 0,
+      avgFit: algo.fitCount ? algo.fitSum / algo.fitCount : 0,
+      highFitShare: algo.fitCount ? algo.fitHigh / algo.fitCount : 0,
+      keepRate: totals.denied + totals.approved
+        ? totals.approved / (totals.denied + totals.approved)
+        : 0,
+      replyRate: totals.sent + totals.replied ? totals.replied / (totals.sent + totals.replied) : 0,
+      bounceRate: totals.sent + totals.replied ? algo.bounced / (totals.sent + totals.replied) : 0,
+      runs: algo.runs,
+      avgFindsPerRun: algo.runs ? algo.runFindSum / algo.runs : 0,
+      floorRate: algo.runs ? algo.runsAtFloor / algo.runs : 0,
+    },
+    searchCategories,
     health,
     totals,
     averages,

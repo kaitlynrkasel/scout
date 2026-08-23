@@ -4197,6 +4197,34 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teamLens, visibleTemplates]);
 
+  // Delete a shared template from the team library (yours, or any if admin;
+  // the server enforces that). If it mirrors one of your own local templates,
+  // the local copy goes too, or the next library sync would republish it.
+  async function deleteTeamTemplate(row: any) {
+    if (!teamLens || !getToken) return;
+    try {
+      const token = await getToken();
+      if (!token) return;
+      const res = await fetch("/api/team/templates", {
+        method: "POST",
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+        body: JSON.stringify({ removeId: String(row.id) }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (!res.ok || j?.error) {
+        setError(j?.error || "Could not delete that template.");
+        return;
+      }
+      setTeamTemplates((prev: any[]) => prev.filter((r: any) => r.id !== row.id));
+      const t = row.template || {};
+      if (row.added_email === accountEmail && t.text) {
+        saveTpls(myTemplates.filter((m) => !(m.channel === t.channel && m.text === t.text)));
+      }
+    } catch {
+      setError("Could not delete that template.");
+    }
+  }
+
   // Copy a teammate's shared template into my own set (unscoped, so it applies
   // everywhere until I narrow it).
   function copyTeamTemplate(row: any) {
@@ -8730,6 +8758,7 @@ function ScoutTool({
           teamTemplates={teamTemplates}
           accountEmail={accountEmail || ""}
           onCopyTeamTemplate={copyTeamTemplate}
+          onDeleteTeamTemplate={deleteTeamTemplate}
           getToken={getToken}
         />
       )}
@@ -22585,6 +22614,7 @@ function TemplatesTab({
   teamTemplates,
   accountEmail,
   onCopyTeamTemplate,
+  onDeleteTeamTemplate,
   onCreateProject,
   getToken,
 }: {
@@ -22622,6 +22652,7 @@ function TemplatesTab({
   teamTemplates?: any[];
   accountEmail?: string;
   onCopyTeamTemplate?: (row: any) => void;
+  onDeleteTeamTemplate?: (row: any) => void;
   onCreateProject?: (name: string) => string;
   // Session token supplier for the AI-backed clean-into-a-template call
   // (the endpoint requires sign-in so strangers can't burn API credits).
@@ -23320,6 +23351,19 @@ function TemplatesTab({
                         className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
                       >
                         Add to my templates
+                      </button>
+                    )}
+                    {onDeleteTeamTemplate && (
+                      <button
+                        onClick={() => onDeleteTeamTemplate(r)}
+                        title={
+                          r.added_email === accountEmail
+                            ? "Delete this template from the team library"
+                            : "Delete from the team library (admins, or its owner)"
+                        }
+                        className="rounded-lg px-2 py-1.5 text-xs font-semibold text-body/50 transition hover:text-danger"
+                      >
+                        Delete
                       </button>
                     )}
                   </div>
@@ -24546,6 +24590,10 @@ function ProfileTab({
     }
   }
 
+  // Company profiles split into two pages behind a top toggle, same pattern
+  // as Templates: what's about YOU, and what's about the company.
+  const [pView, setPView] = useState<"you" | "company">("you");
+
   return (
     <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
       <div className="kicker mb-2">About you</div>
@@ -24577,11 +24625,33 @@ function ProfileTab({
         </div>
       )}
 
+      {kind === "company" && (
+        <div className="mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+          {(
+            [
+              ["you", "About you"],
+              ["company", "Your company"],
+            ] as const
+          ).map(([v, label]) => (
+            <button
+              key={v}
+              onClick={() => setPView(v)}
+              className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+                pView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Accent color. Picking one makes it Scout's accent everywhere (buttons,
           links, the active nav item). On a company account it's per-lens, so
           you can tell at a glance which company you're working in; a solo
           account gets the same picker for its own profile. */}
       {onSetAccent &&
+        (kind !== "company" || pView === "company") &&
         (kind === "company"
           ? !!activeCompanyId && activeCompanyId !== "personal"
           : true) && (
@@ -24636,18 +24706,21 @@ function ProfileTab({
         <>
           {/* The company's onboarding answers, editable from Profile. Admin edits
               the shared record; members see it read-only. */}
-          <CompanyDetailsEditor
-            getToken={getToken}
-            workspaceId={companyWorkspaceId}
-            companies={companies}
-            activeCompanyId={activeCompanyId}
-            companyName={companyName}
-            onCompanyName={onCompanyName}
-          />
+          {pView === "company" && (
+            <CompanyDetailsEditor
+              getToken={getToken}
+              workspaceId={companyWorkspaceId}
+              companies={companies}
+              activeCompanyId={activeCompanyId}
+              companyName={companyName}
+              onCompanyName={onCompanyName}
+            />
+          )}
 
           {/* This person's role + specialization on the company. This IS a company
               member's whole profile — no personal fields, everything is company
               context that grounds how Scout searches and writes for the team. */}
+          {pView === "you" && (
           <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
             {!companyRole.trim() && (
               <div className="mb-4 rounded-2xl border border-blue-deep/25 bg-blue-tint/40 p-3 text-sm text-blue-deep">
@@ -24741,6 +24814,7 @@ function ProfileTab({
               />
             </div>
           </FadeIn>
+          )}
         </>
       )}
 
@@ -24831,15 +24905,10 @@ function ProfileTab({
           </div>
         )}
 
-        <hr className="my-7 border-warm-border" />
-
-        <Label>What are you using Scout for?</Label>
-        <UseCaseCombo value={useCase} onChange={onUseCase} />
-        <p className="mt-2 text-xs leading-relaxed text-body/70">
-          Type anything: a job hunt, press for a product, investors, mentors, partners.
-          Pick a suggestion if one fits, or just describe it in your own words and Scout
-          will figure out who to look for. Manage your categories in the editor below.
-        </p>
+        {/* "What are you using Scout for?" is gone as a question: the goals a
+            person actually searches carry that signal, and the admin Insights
+            page now categorizes real searches instead of asking. The stored
+            use_case keeps flowing to the engine silently. */}
 
         {/* Individuals name themselves here; a company's name lives in the company
             card above, so this field is redundant (and confusing) for company. */}
