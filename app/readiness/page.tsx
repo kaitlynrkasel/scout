@@ -69,6 +69,29 @@ const SECTION_GUIDE: Record<string, string> = {
   settings: "settings",
 };
 const ITEM_GUIDE: Record<string, string> = {
+  // setup items that are not about the profile
+  "setup::templates-is-three-pages-behind-one-toggle": "templates.tpl-pages",
+  "setup::your-links-prefill-from-the-profile": "templates.tpl-pages",
+  "setup::naming-a-project-retunes-its-starter-categories": "projects",
+  "setup::you-can-delete-the-last-project": "projects",
+  "setup::the-suggested-starting-projects-are-actually-relevant": "projects",
+  "setup::a-search-only-auto-creates-a-category-when-it-adds-something": "outreach.start",
+  "setup::solo-search-is-not-mistaken-for-the-run-button": "outreach.start",
+  "setup::dictation-shows-your-words-as-you-speak": "outreach.goal",
+  "setup::voice-dictation-works-where-it-is-offered": "outreach.goal",
+  // tracking items that live in Finds or the spreadsheet, not the dashboard
+  "tracking::statuses-stick": "finds.status-tabs",
+  "tracking::list-and-grid-views-of-finds": "finds.status-tabs",
+  "tracking::deep-links-land-on-the-right-row": "finds",
+  "tracking::finds-can-be-filtered-by-where-they-came-from": "finds.filters",
+  "tracking::your-own-pass-reasons-become-one-tap-options": "finds",
+  "tracking::saved-lists-survive-a-reload": "finds",
+  "tracking::lists-give-an-outsider-a-clear-status-board": "finds",
+  "tracking::writing-results-out-to-google-sheets": "spreadsheet",
+  // mailbox connection happens on the profile
+  "sending::connect-a-gmail-account": "profile",
+  "sending::connect-an-outlook-account": "profile",
+  "sending::disconnecting-a-mailbox-stops-everything-queued-for-it": "profile",
   "finding::trash-restore": "finds.deleted",
   "finding::tile-pastel": "finds.status-tabs",
   "writing::template-choice": "finds.draft-btn",
