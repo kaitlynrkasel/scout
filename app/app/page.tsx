@@ -365,6 +365,7 @@ const PROJECTS_KEY = "scout_projects";
 const ACTIVE_KEY = "scout_active_project";
 const ACT_KEY = "scout_activity";
 const FINDS_KEY = "scout_finds";
+const TRASH_KEY = "scout_trash"; // recently deleted finds, this device only
 const KIND_KEY = "scout_kind";
 const COACH_KEY = "scout_coaching"; // approved dashboard tips applied to every draft
 // Advice the user marked "Not helpful", the negative mirror of COACH_KEY.
@@ -2185,6 +2186,11 @@ function ScoutTool({
       const arr = raw ? JSON.parse(raw) : [];
       setDismissedAdvice(Array.isArray(arr) ? arr.map((s: unknown) => String(s)) : []);
     } catch {}
+    try {
+      const raw = localStorage.getItem(TRASH_KEY);
+      const arr = raw ? JSON.parse(raw) : [];
+      if (Array.isArray(arr)) setTrash(arr.filter((r: any) => r && r.find && r.find.id));
+    } catch {}
 
     // A delete has to survive a reload too: the server's copy of this user's
     // state can still hold the project if the debounced save hadn't landed when
@@ -2515,6 +2521,15 @@ function ScoutTool({
     setFinds(n);
     try {
       localStorage.setItem(FINDS_KEY, JSON.stringify(n));
+    } catch {}
+  };
+  // Deleted finds land in a local recycle bin instead of vanishing, so a
+  // mis-click is recoverable. This device only, newest first, capped.
+  const [trash, setTrash] = useState<{ find: Find; deletedAt: number }[]>([]);
+  const saveTrash = (n: { find: Find; deletedAt: number }[]) => {
+    setTrash(n);
+    try {
+      localStorage.setItem(TRASH_KEY, JSON.stringify(n));
     } catch {}
   };
   // Always-current copies of the lists that async work writes back wholesale.
@@ -5452,7 +5467,20 @@ function ScoutTool({
     saveFinds(finds.map((f) => (f.id === id ? { ...f, denyReason: reason.trim() } : f)));
   }
   function removeFind(id: string) {
+    const gone = finds.find((f) => f.id === id);
     saveFinds(finds.filter((f) => f.id !== id));
+    if (gone) saveTrash([{ find: gone, deletedAt: Date.now() }, ...trash].slice(0, 100));
+  }
+  // Bring a deleted find back exactly as it was (draft, status, notes intact).
+  function restoreFind(id: string) {
+    const row = trash.find((r) => r.find.id === id);
+    if (!row) return;
+    saveTrash(trash.filter((r) => r.find.id !== id));
+    if (findsRef.current.some((f) => f.id === id)) return;
+    saveFinds([row.find, ...findsRef.current]);
+  }
+  function purgeTrash(id: string) {
+    saveTrash(trash.filter((r) => r.find.id !== id));
   }
 
   // Edit a find's contact fields from the spreadsheet view. Patches the opp.
@@ -5531,6 +5559,38 @@ function ScoutTool({
       },
       ...finds,
     ]);
+    // Research the new contact in the background: the same public-web
+    // enrichment as the modal's Autofill, so a hand-added contact never
+    // sits in the pipeline knowing nothing. Fills only blank fields and
+    // swaps the placeholder "Added by you" for a real, factual line.
+    (async () => {
+      try {
+        const r = await fetch("/api/enrich-contact", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ name, email, outlet: opp.outlet }),
+        });
+        const j = await r.json().catch(() => null);
+        const fld = j?.fields || {};
+        const mine = findsRef.current.find((x) => x.id === id);
+        if (!mine) return;
+        const op = { ...mine.opp };
+        let touched = false;
+        if (fld.outlet && !op.outlet) { op.outlet = fld.outlet; touched = true; }
+        if (fld.role && !op.contactRole) { op.contactRole = fld.role; touched = true; }
+        if (fld.handle && !op.contactHandle) { op.contactHandle = fld.handle; touched = true; }
+        if (fld.website && !op.url) { op.url = fld.website; touched = true; }
+        if (fld.location && !op.location) { op.location = fld.location; touched = true; }
+        if (fld.note && (!op.whyItFits || op.whyItFits === "Added by you")) {
+          op.whyItFits = fld.note;
+          touched = true;
+        }
+        if (touched)
+          saveFinds(findsRef.current.map((x) => (x.id === id ? { ...x, opp: op } : x)));
+      } catch {
+        /* the add stands; research is a bonus */
+      }
+    })();
     // On a team lens, mirror the manual add into the shared pipeline so
     // teammates see it too (the pipeline otherwise only fills at project
     // creation + auto-search runs). Matched by project name; best-effort.
@@ -5860,7 +5920,7 @@ function ScoutTool({
   }
 
   // Draft a message for a single find and store it on that find.
-  async function draftFind(find: Find, opts?: { force?: boolean; kind?: string }) {
+  async function draftFind(find: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) {
     setError("");
     setFindDraftingId(find.id);
     try {
@@ -5881,7 +5941,15 @@ function ScoutTool({
           about: aboutForProjectId(f.projectId),
           useCase: activeUseCase,
           goal: categories.find((c) => c.id === f.categoryId)?.goal || goal,
-          templates: templatesFor(f.projectId, f.categoryId),
+          templates: (() => {
+            // A hand-picked template drafts from THAT voice alone; otherwise
+            // the whole scoped set goes along and the drafter matches by kind.
+            const pool = templatesFor(f.projectId, f.categoryId);
+            const chosen = opts?.templateId
+              ? pool.filter((t) => t.id === opts.templateId)
+              : [];
+            return chosen.length ? chosen : pool;
+          })(),
           coaching,
           dismissedAdvice,
           editPairs,
@@ -8361,6 +8429,10 @@ function ScoutTool({
           onMarkSent={(f) => markContacted(f.id)}
           onStatus={(f, s) => setFindStatus(f.id, s)}
           onRemove={(f) => removeFind(f.id)}
+          trash={trash}
+          onRestore={restoreFind}
+          onPurgeTrash={purgeTrash}
+          templatesForFind={(f) => templatesFor(f.projectId, f.categoryId)}
           onSendGmail={sendFindViaGmail}
           onSchedule={scheduleFindSend}
           onMeetingPrep={generateMeetingPrep}
@@ -8519,6 +8591,7 @@ function ScoutTool({
 
       {tab === "templates" && (
         <TemplatesTab
+          onCreateProject={addProject}
           kinds={OUTREACH_KINDS}
           about={aboutText}
           linkSeed={{
@@ -11725,6 +11798,7 @@ function ApplicationKitModal({
 
 function FindDetailModal({
   find,
+  templates = [],
   onClose,
   onToggleApplication,
   onOpenApplicationKit,
@@ -11772,6 +11846,7 @@ function FindDetailModal({
   onToggleApplication?: (v: boolean) => void;
   onOpenApplicationKit?: () => void;
   find: Find;
+  templates?: OutreachTemplate[];
   onClose: () => void;
   position: number;
   total: number;
@@ -11783,7 +11858,7 @@ function FindDetailModal({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
+  onDraft: (opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
   onReopen: () => void;
@@ -12363,22 +12438,6 @@ function FindDetailModal({
                   {isApplication ? "Open application ↗" : "Open site ↗"}
                 </a>
               )}
-              {o.contactEmail && mailHref(o.contactEmail) && (
-                <a
-                  href={`mailto:${o.contactEmail}`}
-                  className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-                >
-                  Email
-                </a>
-              )}
-              {o.contactPhone && (
-                <a
-                  href={`tel:${o.contactPhone.replace(/[^\d+]/g, "")}`}
-                  className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-                >
-                  Call
-                </a>
-              )}
             </div>
 
             {/* The user's own criteria, answered for THIS find: remote or in
@@ -12510,6 +12569,7 @@ function FindDetailModal({
               </div>
               <FindWorkflow
                 find={find}
+                templates={templates}
                 gmail={gmail}
                 drafting={drafting}
                 gmailBusy={gmailBusy}
@@ -13937,7 +13997,6 @@ function SiteTile({
   label?: string;
 }) {
   const [color, setColor] = useState("");
-  const [onColor, setOnColor] = useState("#ffffff");
   const [hasLogo, setHasLogo] = useState(false);
   useEffect(() => {
     setHasLogo(false);
@@ -13949,7 +14008,6 @@ function SiteTile({
         const j = await r.json();
         if (!alive) return;
         if (j?.color) setColor(String(j.color));
-        if (j?.on) setOnColor(String(j.on));
         // The server checks this: the favicon service answers a logo-less site
         // with a generic globe on a 404, which the browser reports as a
         // perfectly good image, so onError here would never fire.
@@ -13966,6 +14024,17 @@ function SiteTile({
   const key = host || name || "";
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
+
+  // The site's brand color arrives at full strength, and a full-bleed slab of
+  // someone else's brand fights the page (and a find with no color sat on a
+  // dead grey with a white ghost of the dog). The ground is a PASTEL of the
+  // brand color; the mark, dog, and chip carry the color itself, deepened
+  // toward ink so they read on the pastel. No color at all: deal a pastel
+  // from the same deck as the dashboard field, by the tile's own hash.
+  const DECK = ["186 205 172", "147 174 203", "217 161 180", "224 180 138", "169 156 196", "176 209 201"];
+  const brand = color || `rgb(${DECK[h % DECK.length]})`;
+  const ground = `color-mix(in srgb, ${brand} 30%, #ffffff)`;
+  const mark = `color-mix(in srgb, ${brand} 72%, #22303f)`;
 
   // What goes on the tile, in descending order of "this is actually them":
   // the platform mark for a profile page, then the company's own logo, then
@@ -14004,7 +14073,7 @@ function SiteTile({
   return (
     <div
       className="relative h-44 w-full overflow-hidden border-b border-warm-border transition-colors duration-500"
-      style={{ backgroundColor: color || "rgb(var(--c-brown-tint))" }}
+      style={{ backgroundColor: ground }}
     >
       {platform ? (
         // A profile page. LinkedIn and the rest hotlink-protect their avatars,
@@ -14015,7 +14084,7 @@ function SiteTile({
             aria-hidden
             viewBox="0 0 24 24"
             className="h-16 w-16 opacity-85 transition group-hover:opacity-100"
-            fill={onColor}
+            fill={mark}
           >
             {platform === "LinkedIn" ? (
               <path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm7 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.76-1.95C21.4 8.75 22 11.1 22 14.16V21h-4v-6.06c0-1.45-.03-3.31-2.02-3.31-2.02 0-2.33 1.58-2.33 3.21V21h-4V9Z" />
@@ -14032,7 +14101,7 @@ function SiteTile({
         <div className="absolute inset-0 grid place-items-center">
           <span
             aria-hidden
-            style={{ ...maskStyle(favicon), backgroundColor: onColor }}
+            style={{ ...maskStyle(favicon), backgroundColor: mark }}
             className="h-16 w-16 opacity-90 transition group-hover:opacity-100"
           />
         </div>
@@ -14050,7 +14119,7 @@ function SiteTile({
           strokeLinecap="round"
           className="pointer-events-none absolute w-auto opacity-75 transition-all duration-500 group-hover:opacity-100"
           style={{
-            color: onColor,
+            color: mark,
             height: `${dogHeight}%`,
             left: `${dogLeft}%`,
             bottom: `${dogBottom}%`,
@@ -14061,7 +14130,10 @@ function SiteTile({
         </svg>
       )}
       {(label || host) && (
-        <span className="pointer-events-none absolute left-3 top-3 max-w-[80%] truncate rounded-full bg-black/25 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur-sm">
+        <span
+          style={{ backgroundColor: mark }}
+          className="pointer-events-none absolute left-3 top-3 max-w-[80%] truncate rounded-full px-2.5 py-1 text-[10px] font-bold text-white"
+        >
           {label || host}
         </span>
       )}
@@ -14199,6 +14271,64 @@ function FindGridCard({
   );
 }
 
+/* Recently deleted finds: a delete is recoverable, not final. Collapsed to a
+ * single quiet line until opened. */
+function TrashSection({
+  trash,
+  onRestore,
+  onPurge,
+}: {
+  trash: { find: Find; deletedAt: number }[];
+  onRestore?: (id: string) => void;
+  onPurge?: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-10">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="text-xs font-semibold text-body/50 transition hover:text-body"
+      >
+        {open ? "Hide" : "Show"} recently deleted ({trash.length})
+      </button>
+      {open && (
+        <div className="mt-2 space-y-1.5">
+          {trash.map((r) => (
+            <div
+              key={r.find.id}
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-warm-border bg-surface px-3.5 py-2.5"
+            >
+              <span className="min-w-0 flex-1 truncate text-sm font-semibold text-ink">
+                {r.find.opp.name}
+                {r.find.opp.outlet ? (
+                  <span className="font-normal text-muted"> · {r.find.opp.outlet}</span>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-[11px] text-body/50">deleted {timeAgo(r.deletedAt)}</span>
+              {onRestore && (
+                <button
+                  onClick={() => onRestore(r.find.id)}
+                  className="shrink-0 rounded-lg border border-warm-border px-2.5 py-1 text-xs font-bold text-brown-deep transition hover:bg-warm-bg"
+                >
+                  Bring it back
+                </button>
+              )}
+              {onPurge && (
+                <button
+                  onClick={() => onPurge(r.find.id)}
+                  className="shrink-0 text-xs font-semibold text-body/50 transition hover:text-red-500"
+                >
+                  Delete forever
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindsTab({
   onToggleApplication,
   onOpenApplicationKit,
@@ -14217,6 +14347,10 @@ function FindsTab({
   draftingId,
   gmailBusyId,
   onDraft,
+  trash = [],
+  onRestore,
+  onPurgeTrash,
+  templatesForFind,
   onDeny,
   onSetReason,
   onReopen,
@@ -14275,7 +14409,11 @@ function FindsTab({
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   draftingId: string;
   gmailBusyId: string;
-  onDraft: (f: Find, opts?: { force?: boolean; kind?: string }) => void;
+  onDraft: (f: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
+  trash?: { find: Find; deletedAt: number }[];
+  onRestore?: (id: string) => void;
+  onPurgeTrash?: (id: string) => void;
+  templatesForFind?: (f: Find) => OutreachTemplate[];
   onDeny: (f: Find, reason?: string) => void;
   onSetReason: (f: Find, reason: string) => void;
   onReopen: (f: Find) => void;
@@ -15112,6 +15250,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
             <FindCard
               key={f.id}
               find={f}
+              templates={templatesForFind ? templatesForFind(f) : []}
               gmail={gmail}
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
@@ -15265,9 +15404,14 @@ shared={shown.some((x) => !!x.foundByEmail)}
         </div>
       )}
 
+      {trash.length > 0 && (
+        <TrashSection trash={trash} onRestore={onRestore} onPurge={onPurgeTrash} />
+      )}
+
       {detailFind && (
         <FindDetailModal
           find={detailFind}
+          templates={templatesForFind ? templatesForFind(detailFind) : []}
           onClose={() => setDetailId("")}
           onToggleApplication={(v) => onToggleApplication(detailFind.id, v)}
           onOpenApplicationKit={() => onOpenApplicationKit(detailFind.id)}
@@ -15493,6 +15637,7 @@ function findCardTone(find: Find): string {
 
 function FindCard({
   find,
+  templates = [],
   gmail,
   drafting,
   gmailBusy,
@@ -15531,10 +15676,11 @@ function FindCard({
   signatureOptions,
 }: {
   find: Find;
+  templates?: OutreachTemplate[];
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
+  onDraft: (opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
   onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
@@ -15842,6 +15988,7 @@ function FindCard({
 
       <FindWorkflow
         find={find}
+        templates={templates}
         gmail={gmail}
         drafting={drafting}
         gmailBusy={gmailBusy}
@@ -15885,6 +16032,7 @@ function FindCard({
  * follow up) without leaving the popup. */
 function FindWorkflow({
   find,
+  templates = [],
   gmail,
   drafting,
   gmailBusy,
@@ -15919,10 +16067,11 @@ function FindWorkflow({
   signatureOptions,
 }: {
   find: Find;
+  templates?: OutreachTemplate[];
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
-  onDraft: (opts?: { force?: boolean; kind?: string }) => void;
+  onDraft: (opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
   onRegenerate: () => void;
   onDeny: (reason?: string) => void;
   onSetReason: (reason: string) => void;
@@ -16003,6 +16152,8 @@ function FindWorkflow({
       ? "Instagram DM"
       : "Email";
   const [draftKind, setDraftKind] = useState(smartKind);
+  // Which template to draft from; "" lets the drafter pick the best match.
+  const [tplId, setTplId] = useState("");
   // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
   // give the editor the big pane and tuck the website preview away.
   useEffect(() => {
@@ -16266,7 +16417,12 @@ function FindWorkflow({
         {find.status === "new" && (
           <span className="inline-flex items-center overflow-hidden rounded-lg shadow-card">
             <button
-              onClick={() => onDraft({ kind: draftKind })}
+              onClick={() =>
+                onDraft({
+                  kind: draftKind,
+                  templateId: templates.some((t) => t.id === tplId) ? tplId : undefined,
+                })
+              }
               disabled={drafting}
               className="bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-50"
             >
@@ -16289,6 +16445,39 @@ function FindWorkflow({
             </select>
           </span>
         )}
+
+        {/* More than one template could carry this draft: let the user pick
+            which voice it starts from instead of always taking Scout's match. */}
+        {find.status === "new" &&
+          (() => {
+            const pool = templates.filter(
+              (t) => !t.channel || t.channel.toLowerCase() === draftKind.toLowerCase()
+            );
+            const choices = pool.length ? pool : templates;
+            if (choices.length < 2) return null;
+            const valid = choices.some((t) => t.id === tplId) ? tplId : "";
+            return (
+              <select
+                value={valid}
+                onChange={(e) => setTplId(e.target.value)}
+                disabled={drafting}
+                title="Draft from a specific template"
+                aria-label="Template to draft from"
+                className="scout-select max-w-[220px] rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-body outline-none transition hover:bg-warm-bg disabled:opacity-50"
+              >
+                <option value="">Best template (auto)</option>
+                {choices.map((t) => {
+                  const w = t.text.trim().replace(/\s+/g, " ");
+                  return (
+                    <option key={t.id} value={t.id}>
+                      {t.channel}: {w.slice(0, 30)}
+                      {w.length > 30 ? "…" : ""}
+                    </option>
+                  );
+                })}
+              </select>
+            );
+          })()}
 
         {/* Move to a different project, a find isn't stuck wherever it was
             first surfaced. Resets after firing since the find leaves this list. */}
@@ -22294,6 +22483,7 @@ function TemplatesTab({
   teamTemplates,
   accountEmail,
   onCopyTeamTemplate,
+  onCreateProject,
   getToken,
 }: {
   kinds: string[];
@@ -22330,10 +22520,15 @@ function TemplatesTab({
   teamTemplates?: any[];
   accountEmail?: string;
   onCopyTeamTemplate?: (row: any) => void;
+  onCreateProject?: (name: string) => string;
   // Session token supplier for the AI-backed clean-into-a-template call
   // (the endpoint requires sign-in so strangers can't burn API credits).
   getToken?: (() => Promise<string | null>) | null;
 }) {
+  // "+ New project..." in the scope picker: mint the project right here
+  // instead of detouring through the Projects tab.
+  const [tplProjOpen, setTplProjOpen] = useState(false);
+  const [newTplProj, setNewTplProj] = useState("");
   // Three pages behind one top toggle: outreach templates, application
   // materials (resume + cover letters + tailoring), and email signatures.
   const [tView, setTView] = useState<"outreach" | "materials" | "signatures">("outreach");
@@ -22599,34 +22794,84 @@ function TemplatesTab({
         <div className="mt-6 border-t border-warm-border pt-5">
           <Label>Where it applies</Label>
           <div className="mt-1 grid gap-3 sm:grid-cols-2">
-            <select
-              value={scopeProjectId}
-              onChange={(e) => setScopeProjectId(e.target.value)}
-              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            >
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name}
-                </option>
-              ))}
-            </select>
-            <select
-              value={scopeCategoryId}
-              onChange={(e) => setScopeCategoryId(e.target.value)}
-              disabled={!scopeProjectId}
-              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15 disabled:opacity-50"
-            >
-              <option value="">
-                {scopeProjectId ? "All categories in this project" : "Pick a project first"}
-              </option>
-              {scopeCats.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
+            <PrettySelect
+              ariaLabel="Which project this template applies to"
+              value={tplProjOpen ? "__new__" : scopeProjectId}
+              onChange={(v) => {
+                if (v === "__new__") {
+                  setTplProjOpen(true);
+                  return;
+                }
+                setTplProjOpen(false);
+                setScopeProjectId(v);
+              }}
+              className="w-full"
+              options={[
+                { value: "", label: "All projects" },
+                ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ...(onCreateProject ? [{ value: "__new__", label: "+ New project…" }] : []),
+              ]}
+            />
+            <div className={scopeProjectId ? "" : "pointer-events-none opacity-50"}>
+              <PrettySelect
+                ariaLabel="Which category this template applies to"
+                value={scopeCategoryId}
+                onChange={setScopeCategoryId}
+                className="w-full"
+                options={[
+                  {
+                    value: "",
+                    label: scopeProjectId ? "All categories in this project" : "Pick a project first",
+                  },
+                  ...scopeCats.map((c) => ({ value: c.id, label: c.name })),
+                ]}
+              />
+            </div>
           </div>
+          {tplProjOpen && onCreateProject && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                value={newTplProj}
+                onChange={(e) => setNewTplProj(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && newTplProj.trim()) {
+                    const id = onCreateProject(newTplProj.trim());
+                    if (id) {
+                      setScopeProjectId(id);
+                      setTplProjOpen(false);
+                      setNewTplProj("");
+                    }
+                  }
+                }}
+                placeholder="Name the new project"
+                autoFocus
+                className="w-full max-w-xs rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm font-semibold text-ink outline-none transition focus:border-coral"
+              />
+              <button
+                onClick={() => {
+                  const id = onCreateProject(newTplProj.trim());
+                  if (id) {
+                    setScopeProjectId(id);
+                    setTplProjOpen(false);
+                    setNewTplProj("");
+                  }
+                }}
+                disabled={!newTplProj.trim()}
+                className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+              >
+                Create
+              </button>
+              <button
+                onClick={() => {
+                  setTplProjOpen(false);
+                  setNewTplProj("");
+                }}
+                className="shrink-0 text-sm font-semibold text-body/60 transition hover:text-accent"
+              >
+                Cancel
+              </button>
+            </div>
+          )}
         </div>
         <div className="mt-5 flex items-center gap-3">
           <button
