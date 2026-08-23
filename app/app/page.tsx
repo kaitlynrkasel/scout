@@ -7733,7 +7733,11 @@ function ScoutTool({
                         selectCategory("");
                       }}
                       title="Search without a saved category; running it saves a new one"
-                      className="rounded-full border border-dashed border-white/30 px-4 py-2.5 text-base font-semibold text-white/60 transition hover:border-white/55 hover:text-white"
+                      // Same sizing as the two choosers beside it. They were
+                      // trimmed for phones and this wasn't, which left the
+                      // optional escape hatch looking bigger than the controls
+                      // it sits next to.
+                      className="rounded-full border border-dashed border-white/30 px-4 py-2 text-sm font-semibold text-white/60 transition hover:border-white/55 hover:text-white sm:px-5 sm:py-2.5 sm:text-base"
                     >
                       Solo Search
                     </button>
