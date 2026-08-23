@@ -759,6 +759,11 @@
               "key": "finding::tile-pastel",
               "title": "Find tiles read as Scout, not as brand slabs",
               "good": "Grid tiles paint a soft pastel of the site's brand color with the logo or dog in the deepened color itself. No full-strength color blocks, and a find with no known color gets a pastel from the field deck, never a dead grey tile."
+            },
+            {
+              "key": "finding::junk-import-sweep",
+              "title": "Spreadsheet junk can't haunt the grid",
+              "good": "Old imports that let FALSE/TRUE cells or bare ids through as names get scrubbed on load; anything left nameless moves to recently deleted (recoverable), so no more FALSE cards or id-titled tiles."
             }
           ]
         },
@@ -894,6 +899,11 @@
                 "Open a kit with saved links and check the labeling."
               ],
               "key": "applications::your-links-read-as-links-not-stray-files"
+            },
+            {
+              "key": "applications::kit-voice-brevity",
+              "title": "Kit research talks to you, briefly",
+              "good": "Know-them research says 'you' and 'your', never your name in the third person, and stays short: a couple of company facts, 2-3 before-you-apply points, 3-4 prep questions, one scannable line each."
             }
           ]
         },
@@ -1835,6 +1845,11 @@
                 "Share the URL with the hash: it opens on that tab."
               ],
               "key": "trial-admin::admin-remembers-which-tab-you-were-on"
+            },
+            {
+              "key": "trial-admin::show-me-where",
+              "title": "Checklist items point into the app",
+              "good": "Expanding a checklist item shows 'Show me where in Scout'; clicking it makes the live pane jump to the right tab, scroll to the control the step means, and pulse a ring around it. On a phone it opens the app in a new tab instead."
             }
           ]
         },
