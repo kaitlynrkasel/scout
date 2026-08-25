@@ -16782,6 +16782,32 @@ function FindWorkflow({
             );
           })()}
 
+        {/* Picking a template shows its text right away, before Draft runs,
+            so you see what the message starts from instead of committing
+            blind. */}
+        {find.status === "new" &&
+          tplId &&
+          tplId !== "__own__" &&
+          (() => {
+            const t = templates.find((x) => x.id === tplId);
+            if (!t) return null;
+            return (
+              <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
+                <div className="mb-1.5 flex items-baseline justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                    Starting from this template
+                  </span>
+                  <span className="text-[11px] text-body/50">
+                    Draft personalizes it for {find.opp.name}
+                  </span>
+                </div>
+                <pre className="max-h-44 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
+                  {t.text}
+                </pre>
+              </div>
+            );
+          })()}
+
         {find.status === "new" &&
           tplId === "__own__" &&
           onWriteOwn &&
