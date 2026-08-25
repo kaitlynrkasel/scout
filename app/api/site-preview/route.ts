@@ -399,6 +399,36 @@ function bioLinks(html: string): { title: string; url: string }[] {
 function bioLinkPage(html: string, u: URL): string | null {
   const links = bioLinks(html);
   if (links.length < 2) return null;
+  // Keep the page's own background color (Linktree ships it in NEXT_DATA /
+  // inline styles), so the clean version still reads as THEIR page. Dark
+  // grounds flip the text light; no color found keeps Scout's pastel field.
+  const bgMatch =
+    html.match(/"backgroundColor"\s*:\s*"(#[0-9a-fA-F]{3,8})"/) ||
+    html.match(/"background(?:Color)?"\s*:\s*"(rgb[^"]+)"/) ||
+    html.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{3,8})/);
+  const themeBg = bgMatch?.[1] || "";
+  let darkBg = false;
+  {
+    const hex = /^#([0-9a-fA-F]{6})/.exec(themeBg)?.[1];
+    if (hex) {
+      const r = parseInt(hex.slice(0, 2), 16),
+        g = parseInt(hex.slice(2, 4), 16),
+        b = parseInt(hex.slice(4, 6), 16);
+      darkBg = 0.299 * r + 0.587 * g + 0.114 * b < 140;
+    } else if (/^rgb/.test(themeBg)) {
+      const n = themeBg.match(/\d+/g)?.map(Number) || [];
+      if (n.length >= 3) darkBg = 0.299 * n[0] + 0.587 * n[1] + 0.114 * n[2] < 140;
+    }
+  }
+  const ink = themeBg ? (darkBg ? "#f4f6f9" : "#1f2530") : "#1f2530";
+  const sub = themeBg ? (darkBg ? "rgba(244,246,249,.72)" : "#5a6372") : "#5a6372";
+  const foot = themeBg ? (darkBg ? "rgba(244,246,249,.55)" : "#8b93a0") : "#8b93a0";
+  const footLink = themeBg && darkBg ? "#cfe0ee" : "#19455e";
+  const ground = themeBg
+    ? `background:${themeBg}`
+    : `background:#fbfaf8;background-image:radial-gradient(520px 340px at 12% 8%,rgba(147,174,203,.35),transparent 70%),` +
+      `radial-gradient(560px 380px at 88% 20%,rgba(217,161,180,.3),transparent 70%),` +
+      `radial-gradient(620px 420px at 50% 96%,rgba(186,205,172,.32),transparent 72%)`;
   const rawTitle = metaContent(html, "og:title") || u.pathname.replace(/^\//, "");
   const name = rawTitle.split(/\s*[|:\u00b7]\s*/)[0].trim() || u.pathname.replace(/^\//, "");
   const desc = metaContent(html, "og:description") || metaContent(html, "description");
@@ -424,11 +454,8 @@ function bioLinkPage(html: string, u: URL): string | null {
     `<meta name="referrer" content="no-referrer">` +
     `<title>${escHtml(name)}</title><style>` +
     `*{box-sizing:border-box;margin:0}` +
-    `body{min-height:100vh;font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:#1f2530;` +
-    `background:#fbfaf8;background-image:radial-gradient(520px 340px at 12% 8%,rgba(147,174,203,.35),transparent 70%),` +
-    `radial-gradient(560px 380px at 88% 20%,rgba(217,161,180,.3),transparent 70%),` +
-    `radial-gradient(620px 420px at 50% 96%,rgba(186,205,172,.32),transparent 72%);` +
-    `display:flex;justify-content:center;padding:36px 18px}` +
+    `body{min-height:100vh;font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:${ink};` +
+    `${ground};display:flex;justify-content:center;padding:36px 18px}` +
     `.card{width:100%;max-width:560px}` +
     `.head{text-align:center;margin-bottom:22px}` +
     `.av{width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid #fff;` +
@@ -436,15 +463,15 @@ function bioLinkPage(html: string, u: URL): string | null {
     `.avf{width:88px;height:88px;border-radius:50%;background:#19455e;color:#fff;display:inline-flex;` +
     `align-items:center;justify-content:center;font-size:34px;font-weight:800;margin-bottom:12px}` +
     `h1{font-size:24px;letter-spacing:-.01em}` +
-    `.d{margin-top:6px;font-size:14px;color:#5a6372;line-height:1.5}` +
+    `.d{margin-top:6px;font-size:14px;color:${sub};line-height:1.5}` +
     `.lk{display:flex;align-items:baseline;gap:12px;background:#fff;border:1px solid #e7e3dc;` +
     `border-radius:16px;padding:15px 18px;margin-bottom:10px;text-decoration:none;color:#1f2530;` +
     `box-shadow:0 2px 10px rgba(30,40,50,.05);transition:transform .12s,box-shadow .12s}` +
     `.lk:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(25,69,94,.14);border-color:#c9d6e0}` +
     `.t{flex:1;font-weight:700;font-size:15px;min-width:0}` +
     `.h{font-size:11px;color:#98a0ac;white-space:nowrap}` +
-    `.foot{margin-top:18px;text-align:center;font-size:12px;color:#8b93a0}` +
-    `.foot a{color:#19455e;font-weight:600}` +
+    `.foot{margin-top:18px;text-align:center;font-size:12px;color:${foot}}` +
+    `.foot a{color:${footLink};font-weight:600}` +
     `</style></head><body><div class="card"><div class="head">` +
     (avatar
       ? `<img class="av" src="${escHtml(avatar)}" alt="">`
