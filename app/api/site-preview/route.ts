@@ -67,7 +67,10 @@ export async function GET(req: NextRequest) {
   // back to the normal proxy when parsing finds too little.
   if (/(^|\.)(linktr\.ee|lnk\.bio|beacons\.ai|bio\.link|hoo\.be|komi\.io|solo\.to|linkin\.bio|campsite\.bio|tap\.bio)$/i.test(u.hostname)) {
     const rendered = bioLinkPage(html, u);
-    if (rendered) return htmlResponse(rendered, true);
+    // Bridge script rides along: the client treats a preview whose bridge
+    // never phones home as blocked and covers it with the failure card.
+    if (rendered)
+      return htmlResponse(rendered.replace("</body>", `${AUTOFILL_SCRIPT}</body>`), true);
   }
 
   // Neutralize any framing directives the page sets itself via <meta> tags
