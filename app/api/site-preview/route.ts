@@ -86,11 +86,24 @@ export async function GET(req: NextRequest) {
     ? html.replace(/<head[^>]*>/i, (m) => `${m}${base}`)
     : `${base}${html}`;
 
+  // JS-app pages (Linktree and friends) build image URLs off
+  // window.location, which inside the proxy is OUR origin — so their icons
+  // and avatars 404 as /_next/image on scout-source. The <base> tag can't
+  // reach URLs built in JS. This rescue catches any image that errors on a
+  // same-(proxy)-origin URL and repoints it at the page's real origin.
+  const IMG_RESCUE =
+    `<script>(function(){var REAL=${JSON.stringify(u.origin)};` +
+    `document.addEventListener("error",function(e){var t=e.target;` +
+    `if(!t||t.tagName!=="IMG"||t.__rescued)return;` +
+    `try{var abs=new URL(t.src,location.href);` +
+    `if(abs.origin===location.origin){t.__rescued=1;t.src=REAL+abs.pathname+abs.search;}}catch(_){}},true);` +
+    `})()</script>`;
+
   // Inject the autofill bridge (see AUTOFILL_SCRIPT). It lets the Scout panel
   // pre-fill a contact form the user is looking at, it never submits.
   html = /<\/body>/i.test(html)
-    ? html.replace(/<\/body>/i, `${AUTOFILL_SCRIPT}</body>`)
-    : `${html}${AUTOFILL_SCRIPT}`;
+    ? html.replace(/<\/body>/i, `${IMG_RESCUE}${AUTOFILL_SCRIPT}</body>`)
+    : `${html}${IMG_RESCUE}${AUTOFILL_SCRIPT}`;
 
   // Cache the assembled preview: the output is deterministic per URL, so
   // reopening the same find (or the same site on another find) serves instantly
