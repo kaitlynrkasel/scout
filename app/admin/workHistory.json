@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-08-25T22:06:59.121Z",
+  "generatedAt": "2026-08-25T22:08:41.557Z",
   "firstCommit": "2026-06-30",
   "lastCommit": "2026-08-25",
-  "totalCommits": 748,
-  "claudeAssistedCommits": 624,
-  "totalHours": 141.3,
+  "totalCommits": 749,
+  "claudeAssistedCommits": 625,
+  "totalHours": 141.4,
   "people": [
     {
       "who": "Kaitlyn",
-      "commits": 556,
+      "commits": 557,
       "sessions": 95,
-      "hours": 101.5
+      "hours": 101.6
     },
     {
       "who": "Claude (cloud)",
@@ -279,7 +279,7 @@
     {
       "date": "2026-08-25",
       "byWho": {
-        "Kaitlyn": 2.2
+        "Kaitlyn": 2.3
       }
     }
   ]

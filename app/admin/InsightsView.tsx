@@ -1400,11 +1400,18 @@ function TimeOnScoutCard() {
             )
           )}
           {windowed && people.length === 0 && (
-            <p className="text-sm text-body/60">No work landed in this window.</p>
+            <p className="text-sm text-body/60">
+              No work landed in this window. Hours come from git history and run
+              through {workHistory.lastCommit}; regenerate with{" "}
+              <code className="text-xs">node scripts/work-history.mjs</code> for newer days.
+            </p>
           )}
         </div>
       ) : axis.length < 2 ? (
-        <p className="mt-4 text-sm text-body/60">Not enough days in this window for a line.</p>
+        <p className="mt-4 text-sm text-body/60">
+          Not enough days in this window for a line. Hours run through {workHistory.lastCommit};
+          regenerate with <code className="text-xs">node scripts/work-history.mjs</code> for newer days.
+        </p>
       ) : (
         <div className="mt-4">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Hours per day">
