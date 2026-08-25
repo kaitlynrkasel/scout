@@ -146,6 +146,11 @@ function ReadinessInner() {
     else if (typeof window !== "undefined") window.open(url, "_blank");
   }
   const [openKey, setOpenKey] = useState("");
+  // Text filter over all ~276 items: title, description, and section name.
+  const [q, setQ] = useState("");
+  const ql = q.trim().toLowerCase();
+  const itemMatches = (it: Item, sTitle: string) =>
+    !ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql);
   // Split position as a percentage of the window width (checklist column).
   // Dragged with a real divider and remembered per device, because how much
   // room each side deserves depends on what you are doing.
@@ -319,6 +324,13 @@ function ReadinessInner() {
           placeholder="Your name"
           className="w-40 rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brown"
         />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search the checklist"
+          type="search"
+          className="w-52 rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brown"
+        />
         <span className="rounded-full border border-warm-border bg-surface px-3 py-1.5 text-xs font-bold tabular-nums text-ink">
           {done} of {allItems.length} tested
         </span>
@@ -337,23 +349,35 @@ function ReadinessInner() {
           <span className="rounded border border-warm-border bg-surface px-1 font-bold uppercase tracking-wide">auto</span>{" "}
           tag and the evidence that decided them, from{" "}
           <code className="text-[11px]">npm run readiness</code> at commit {String((AUTO as any).commit || "?")} on{" "}
-          {autoAt.slice(0, 10)}. Nobody needs to re-test those by hand — but marking one yourself overrides the machine.
+          {autoAt.slice(0, 10)}. Nobody needs to re-test those by hand, but marking one yourself overrides the machine.
         </p>
       )}
 
-      {parts.map((p) => (
+      {ql &&
+        parts.every((p) =>
+          p.sections.every((s) => s.items.every((it) => !itemMatches(it, s.title)))
+        ) && (
+          <p className="mt-8 text-sm text-body/60">Nothing on the checklist matches that.</p>
+        )}
+      {parts.map((p) => {
+        const partShown = p.sections.some((s) => s.items.some((it) => itemMatches(it, s.title)));
+        if (!partShown) return null;
+        return (
         <div key={p.part} className="mt-10">
           <div className="border-t-2 border-ink pt-4">
             <div className="kicker">{p.part}</div>
             <h2 className="mt-1 text-xl font-extrabold tracking-tight text-ink">{p.title}</h2>
             <p className="mt-1 max-w-[62ch] text-sm text-body/70">{p.intro}</p>
           </div>
-          {p.sections.map((s) => (
+          {p.sections.map((s) => {
+            const shownItems = s.items.filter((it) => itemMatches(it, s.title));
+            if (!shownItems.length) return null;
+            return (
             <section key={s.id} className="mt-7">
               <h3 className="text-base font-extrabold text-ink">{s.title}</h3>
               <p className="mt-0.5 max-w-[62ch] text-[13px] text-body/60">{s.blurb}</p>
               <div className="mt-3 space-y-2">
-                {s.items.map((it) => {
+                {shownItems.map((it) => {
                   const c = merged[it.key];
                   const machine = isAuto(it.key);
                   const open = openKey === it.key;
@@ -534,9 +558,11 @@ function ReadinessInner() {
                 })}
               </div>
             </section>
-          ))}
+            );
+          })}
         </div>
-      ))}
+        );
+      })}
       </main>
       {/* Drag to rebalance the two panes. */}
       <div
