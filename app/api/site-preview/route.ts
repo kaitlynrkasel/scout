@@ -76,6 +76,10 @@ export async function GET(req: NextRequest) {
   // the page's own CSS/images (e.g. a big hero photo) start downloading.
   const base =
     `<base href="${u.origin}${u.pathname.replace(/[^/]*$/, "")}">` +
+    // No referrer on subresource requests: image CDNs that hotlink-check the
+    // referrer (Linktree icons, some avatars) serve a no-referrer request fine
+    // but 403 one carrying our proxy origin.
+    `<meta name="referrer" content="no-referrer">` +
     `<link rel="preconnect" href="${u.origin}" crossorigin>` +
     `<link rel="dns-prefetch" href="${u.origin}">`;
   html = /<head[^>]*>/i.test(html)

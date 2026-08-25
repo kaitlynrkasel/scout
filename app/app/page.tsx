@@ -5491,6 +5491,27 @@ function ScoutTool({
   }
 
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
+  // Save a message the user wrote THEMSELVES as this find's draft: no model in
+  // the loop, their words verbatim, straight to drafted status.
+  function writeOwnDraft(find: Find, kind: string, subject: string, body: string) {
+    const o = find.opp;
+    const email = /email/i.test(kind);
+    const draft: Draft = {
+      opportunityId: o.id,
+      to: email ? o.contactEmail || "" : o.contactHandle || o.contactEmail || "",
+      channelType: email ? "email" : "message",
+      subject: email ? subject.trim() : "",
+      body,
+      whyItFits: o.whyItFits || "",
+    };
+    saveFinds(
+      finds.map((f) =>
+        f.id === find.id ? { ...f, draft, status: "drafted" as FindStatus, draftedAt: Date.now() } : f
+      )
+    );
+    bumpActivity({ drafts: 1 });
+  }
+
   function editFindDraft(find: Find, subject: string, body: string) {
     const prevBody = find.draft?.body || "";
     recordEdit(prevBody, body, find.id);
@@ -8562,6 +8583,7 @@ function ScoutTool({
           draftingId={findDraftingId}
           gmailBusyId={gmailBusyId}
           onDraft={draftFind}
+          onWriteOwn={writeOwnDraft}
           onDeny={(f, reason) => denyFindWithReason(f.id, reason || "")}
           onSetReason={(f, reason) => setFindReason(f.id, reason)}
           onReopen={(f) => setFindStatus(f.id, "new")}
@@ -11956,6 +11978,7 @@ function ApplicationKitModal({
 function FindDetailModal({
   find,
   templates = [],
+  onWriteOwn,
   onClose,
   onToggleApplication,
   onOpenApplicationKit,
@@ -12004,6 +12027,7 @@ function FindDetailModal({
   onOpenApplicationKit?: () => void;
   find: Find;
   templates?: OutreachTemplate[];
+  onWriteOwn?: (kind: string, subject: string, body: string) => void;
   onClose: () => void;
   position: number;
   total: number;
@@ -12727,6 +12751,7 @@ function FindDetailModal({
               <FindWorkflow
                 find={find}
                 templates={templates}
+                onWriteOwn={onWriteOwn}
                 gmail={gmail}
                 drafting={drafting}
                 gmailBusy={gmailBusy}
@@ -12755,7 +12780,7 @@ function FindDetailModal({
                 applying={applying}
                 hasResume={hasResume}
                 onToggleAttach={onToggleAttach}
-                otherProjects={otherProjects}
+                otherProjects={[]}
                 onMoveProject={onMoveProject}
                 currentSignature={currentSignature}
                 onEditSignature={onEditSignature}
@@ -14573,6 +14598,7 @@ function FindsTab({
   draftingId,
   gmailBusyId,
   onDraft,
+  onWriteOwn,
   trash = [],
   onRestore,
   onPurgeTrash,
@@ -14636,6 +14662,7 @@ function FindsTab({
   draftingId: string;
   gmailBusyId: string;
   onDraft: (f: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
+  onWriteOwn?: (f: Find, kind: string, subject: string, body: string) => void;
   trash?: { find: Find; deletedAt: number }[];
   onRestore?: (id: string) => void;
   onPurgeTrash?: (id: string) => void;
@@ -15496,6 +15523,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
               onDraft={(o) => onDraft(f, o)}
+              onWriteOwn={onWriteOwn ? (k, su, b) => onWriteOwn(f, k, su, b) : undefined}
               onRegenerate={() => onDraft(f, { force: true })}
               onDeny={(reason) => onDeny(f, reason)}
               onSetReason={(reason) => onSetReason(f, reason)}
@@ -15663,6 +15691,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
           drafting={draftingId === detailFind.id}
           gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
           onDraft={(o) => onDraft(detailFind, o)}
+          onWriteOwn={onWriteOwn ? (k, su, b) => onWriteOwn(detailFind, k, su, b) : undefined}
           onRegenerate={() => onDraft(detailFind, { force: true })}
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
@@ -15879,6 +15908,7 @@ function findCardTone(find: Find): string {
 function FindCard({
   find,
   templates = [],
+  onWriteOwn,
   gmail,
   drafting,
   gmailBusy,
@@ -15918,6 +15948,7 @@ function FindCard({
 }: {
   find: Find;
   templates?: OutreachTemplate[];
+  onWriteOwn?: (kind: string, subject: string, body: string) => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
@@ -16230,6 +16261,7 @@ function FindCard({
       <FindWorkflow
         find={find}
         templates={templates}
+        onWriteOwn={onWriteOwn}
         gmail={gmail}
         drafting={drafting}
         gmailBusy={gmailBusy}
@@ -16274,6 +16306,7 @@ function FindCard({
 function FindWorkflow({
   find,
   templates = [],
+  onWriteOwn,
   gmail,
   drafting,
   gmailBusy,
@@ -16309,6 +16342,7 @@ function FindWorkflow({
 }: {
   find: Find;
   templates?: OutreachTemplate[];
+  onWriteOwn?: (kind: string, subject: string, body: string) => void;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
@@ -16393,8 +16427,11 @@ function FindWorkflow({
       ? "Instagram DM"
       : "Email";
   const [draftKind, setDraftKind] = useState(smartKind);
-  // Which template to draft from; "" lets the drafter pick the best match.
+  // Which template to draft from; "" lets the drafter pick the best match and
+  // "__own__" opens the write-it-yourself composer.
   const [tplId, setTplId] = useState("");
+  const [ownSubject, setOwnSubject] = useState("");
+  const [ownBody, setOwnBody] = useState("");
   // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
   // give the editor the big pane and tuck the website preview away.
   useEffect(() => {
@@ -16687,16 +16724,16 @@ function FindWorkflow({
           </span>
         )}
 
-        {/* More than one template could carry this draft: let the user pick
-            which voice it starts from instead of always taking Scout's match. */}
+        {/* Where the words come from: Scout's best template match, a specific
+            template, or a message you write yourself. Always offered. */}
         {find.status === "new" &&
           (() => {
             const pool = templates.filter(
               (t) => !t.channel || t.channel.toLowerCase() === draftKind.toLowerCase()
             );
             const choices = pool.length ? pool : templates;
-            if (choices.length < 2) return null;
-            const valid = choices.some((t) => t.id === tplId) ? tplId : "";
+            const valid =
+              tplId === "__own__" ? "__own__" : choices.some((t) => t.id === tplId) ? tplId : "";
             return (
               <select
                 value={valid}
@@ -16716,9 +16753,47 @@ function FindWorkflow({
                     </option>
                   );
                 })}
+                {onWriteOwn && <option value="__own__">Write my own message</option>}
               </select>
             );
           })()}
+
+        {find.status === "new" && tplId === "__own__" && onWriteOwn && (
+          <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
+            {/(email|cover letter)/i.test(draftKind) && (
+              <input
+                value={ownSubject}
+                onChange={(e) => setOwnSubject(e.target.value)}
+                placeholder="Subject"
+                className="mb-2 w-full rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+              />
+            )}
+            <textarea
+              value={ownBody}
+              onChange={(e) => setOwnBody(e.target.value)}
+              rows={6}
+              placeholder="Write the message exactly as you want it sent. Your words, no rewriting."
+              className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+            />
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => {
+                  onWriteOwn(draftKind, ownSubject, ownBody);
+                  setTplId("");
+                  setOwnSubject("");
+                  setOwnBody("");
+                }}
+                disabled={!ownBody.trim()}
+                className="rounded-lg bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+              >
+                Use this message
+              </button>
+              <span className="text-[11px] text-body/60">
+                Saved as this find&apos;s draft, verbatim. Edit or send it below like any draft.
+              </span>
+            </div>
+          </div>
+        )}
 
         {/* Move to a different project, a find isn't stuck wherever it was
             first surfaced. Resets after firing since the find leaves this list. */}
