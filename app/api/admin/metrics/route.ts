@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 // raw counters the insights walk exposes (algoCatalog). Definitions live in
 // admin_config under one key; the Metrics tab is the editor.
 
-export interface MetricDef {
+interface MetricDef {
   id: string;
   name: string;
   description: string;
@@ -20,7 +20,7 @@ export interface MetricDef {
 const KEY = "algo_metrics";
 
 // The starting set mirrors the Algorithm health tiles; owners edit from here.
-export const DEFAULT_METRICS: MetricDef[] = [
+const DEFAULT_METRICS: MetricDef[] = [
   { id: "keep", name: "Keep rate", description: "Kept vs denied, of decided finds", num: "approved", den: "decided", format: "percent" },
   { id: "reach", name: "Arrive reachable", description: "Search finds with an email or handle", num: "withContact", den: "searchFinds", format: "percent" },
   { id: "highfit", name: "High-fit share", description: "Scored finds at 80%+ fit", num: "fitHigh", den: "fitCount", format: "percent" },
