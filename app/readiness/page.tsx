@@ -148,9 +148,12 @@ function ReadinessInner() {
   const [openKey, setOpenKey] = useState("");
   // Text filter over all ~276 items: title, description, and section name.
   const [q, setQ] = useState("");
+  // Show only items nobody (human or machine) has marked yet.
+  const [onlyUntested, setOnlyUntested] = useState(false);
   const ql = q.trim().toLowerCase();
   const itemMatches = (it: Item, sTitle: string) =>
-    !ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql);
+    (!ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql)) &&
+    (!onlyUntested || !merged[it.key]?.verdict);
   // Split position as a percentage of the window width (checklist column).
   // Dragged with a real divider and remembered per device, because how much
   // room each side deserves depends on what you are doing.
@@ -331,6 +334,17 @@ function ReadinessInner() {
           type="search"
           className="w-52 rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm text-ink outline-none focus:border-brown"
         />
+        <button
+          onClick={() => setOnlyUntested((v) => !v)}
+          title="Show only the items nobody has marked yet"
+          className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+            onlyUntested
+              ? "border-brown bg-brown text-white"
+              : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+          }`}
+        >
+          Untested only · {allItems.length - done}
+        </button>
         <span className="rounded-full border border-warm-border bg-surface px-3 py-1.5 text-xs font-bold tabular-nums text-ink">
           {done} of {allItems.length} tested
         </span>
@@ -353,7 +367,7 @@ function ReadinessInner() {
         </p>
       )}
 
-      {ql &&
+      {(ql || onlyUntested) &&
         parts.every((p) =>
           p.sections.every((s) => s.items.every((it) => !itemMatches(it, s.title)))
         ) && (
