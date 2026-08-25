@@ -398,7 +398,7 @@ function previewSrc(url: string): string {
   // v busts the CDN cache when the preview ASSEMBLY changes: stale-while-
   // revalidate otherwise keeps serving an old build of the page for up to a
   // day. Bump it whenever the proxy's injected scripts change.
-  return `/api/site-preview?v=3&url=${encodeURIComponent(url)}${
+  return `/api/site-preview?v=4&url=${encodeURIComponent(url)}${
     PREVIEW_TOKEN ? `&pt=${encodeURIComponent(PREVIEW_TOKEN)}` : ""
   }`;
 }

@@ -60,6 +60,16 @@ export async function GET(req: NextRequest) {
   // Cap payload size, this is a visual preview, not a full mirror.
   if (html.length > 2_000_000) html = html.slice(0, 2_000_000);
 
+  // Link-in-bio pages (Linktree and friends) are JS apps that preview badly
+  // in a frame: broken icon boxes, raw blue anchors, half-hydrated layout.
+  // Scout renders its OWN clean version instead: the page's avatar, name,
+  // bio line, and buttons, restyled, with the original a click away. Falls
+  // back to the normal proxy when parsing finds too little.
+  if (/(^|\.)(linktr\.ee|lnk\.bio|beacons\.ai|bio\.link|hoo\.be|komi\.io|solo\.to|linkin\.bio|campsite\.bio|tap\.bio)$/i.test(u.hostname)) {
+    const rendered = bioLinkPage(html, u);
+    if (rendered) return htmlResponse(rendered, true);
+  }
+
   // Neutralize any framing directives the page sets itself via <meta> tags
   // (belt-and-suspenders; the real blockers are the HTTP response headers,
   // which we never forward since our own response sets none of them).
@@ -317,4 +327,130 @@ function escapeHost(u: string): string {
   } catch {
     return "the site";
   }
+}
+
+/* ---------------- Link-in-bio re-render ---------------- */
+function escHtml(v: string): string {
+  return v
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+function metaContent(html: string, name: string): string {
+  const re = new RegExp(
+    `<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)["']`,
+    "i"
+  );
+  const alt = new RegExp(
+    `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`,
+    "i"
+  );
+  return (html.match(re) || html.match(alt))?.[1] || "";
+}
+function bioLinks(html: string): { title: string; url: string }[] {
+  // Preferred source: the embedded NEXT_DATA JSON (Linktree ships every link
+  // in it). Any object subtree with a links: [{title,url}] array counts.
+  const m = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/);
+  if (m) {
+    try {
+      const found: { title: string; url: string }[] = [];
+      const walk = (o: any) => {
+        if (!o || typeof o !== "object") return;
+        if (Array.isArray(o)) {
+          o.forEach(walk);
+          return;
+        }
+        if (Array.isArray((o as any).links) && (o as any).links[0] && typeof (o as any).links[0] === "object") {
+          for (const l of (o as any).links) {
+            const url = String(l?.url || "");
+            const title = String(l?.title || "").trim();
+            if (/^https?:/i.test(url) && title) found.push({ title, url });
+          }
+        }
+        Object.values(o).forEach(walk);
+      };
+      walk(JSON.parse(m[1]));
+      if (found.length >= 2) return found.slice(0, 30);
+    } catch {
+      /* fall through to anchors */
+    }
+  }
+  // Fallback: server-rendered anchors, minus the host's own chrome links.
+  const out: { title: string; url: string }[] = [];
+  const seen = new Set<string>();
+  const re = /<a\b[^>]*href="(https?:\/\/[^"]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+  let mm: RegExpExecArray | null;
+  while ((mm = re.exec(html)) && out.length < 30) {
+    const url = mm[1];
+    const title = mm[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (!title || title.length > 90) continue;
+    if (/linktr\.ee|beacons\.ai|bio\.link|cookie|privacy|terms|log ?in|sign ?up|report/i.test(url + " " + title))
+      continue;
+    if (seen.has(url)) continue;
+    seen.add(url);
+    out.push({ title, url });
+  }
+  return out;
+}
+function bioLinkPage(html: string, u: URL): string | null {
+  const links = bioLinks(html);
+  if (links.length < 2) return null;
+  const rawTitle = metaContent(html, "og:title") || u.pathname.replace(/^\//, "");
+  const name = rawTitle.split(/\s*[|:\u00b7]\s*/)[0].trim() || u.pathname.replace(/^\//, "");
+  const desc = metaContent(html, "og:description") || metaContent(html, "description");
+  const avatar = metaContent(html, "og:image");
+  const host = u.hostname.replace(/^www\./, "");
+  const rows = links
+    .map((l) => {
+      let linkHost = "";
+      try {
+        linkHost = new URL(l.url).hostname.replace(/^www\./, "");
+      } catch {}
+      return (
+        `<a class="lk" href="${escHtml(l.url)}" target="_blank" rel="noopener noreferrer">` +
+        `<span class="t">${escHtml(l.title)}</span>` +
+        (linkHost ? `<span class="h">${escHtml(linkHost)}</span>` : "") +
+        `</a>`
+      );
+    })
+    .join("");
+  return (
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<meta name="referrer" content="no-referrer">` +
+    `<title>${escHtml(name)}</title><style>` +
+    `*{box-sizing:border-box;margin:0}` +
+    `body{min-height:100vh;font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:#1f2530;` +
+    `background:#fbfaf8;background-image:radial-gradient(520px 340px at 12% 8%,rgba(147,174,203,.35),transparent 70%),` +
+    `radial-gradient(560px 380px at 88% 20%,rgba(217,161,180,.3),transparent 70%),` +
+    `radial-gradient(620px 420px at 50% 96%,rgba(186,205,172,.32),transparent 72%);` +
+    `display:flex;justify-content:center;padding:36px 18px}` +
+    `.card{width:100%;max-width:560px}` +
+    `.head{text-align:center;margin-bottom:22px}` +
+    `.av{width:88px;height:88px;border-radius:50%;object-fit:cover;border:3px solid #fff;` +
+    `box-shadow:0 10px 28px rgba(25,69,94,.18);margin-bottom:12px}` +
+    `.avf{width:88px;height:88px;border-radius:50%;background:#19455e;color:#fff;display:inline-flex;` +
+    `align-items:center;justify-content:center;font-size:34px;font-weight:800;margin-bottom:12px}` +
+    `h1{font-size:24px;letter-spacing:-.01em}` +
+    `.d{margin-top:6px;font-size:14px;color:#5a6372;line-height:1.5}` +
+    `.lk{display:flex;align-items:baseline;gap:12px;background:#fff;border:1px solid #e7e3dc;` +
+    `border-radius:16px;padding:15px 18px;margin-bottom:10px;text-decoration:none;color:#1f2530;` +
+    `box-shadow:0 2px 10px rgba(30,40,50,.05);transition:transform .12s,box-shadow .12s}` +
+    `.lk:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(25,69,94,.14);border-color:#c9d6e0}` +
+    `.t{flex:1;font-weight:700;font-size:15px;min-width:0}` +
+    `.h{font-size:11px;color:#98a0ac;white-space:nowrap}` +
+    `.foot{margin-top:18px;text-align:center;font-size:12px;color:#8b93a0}` +
+    `.foot a{color:#19455e;font-weight:600}` +
+    `</style></head><body><div class="card"><div class="head">` +
+    (avatar
+      ? `<img class="av" src="${escHtml(avatar)}" alt="">`
+      : `<span class="avf">${escHtml((name[0] || "?").toUpperCase())}</span>`) +
+    `<h1>${escHtml(name)}</h1>` +
+    (desc ? `<p class="d">${escHtml(desc)}</p>` : "") +
+    `</div>${rows}` +
+    `<p class="foot">Cleaned up by Scout from ${escHtml(host)} · ` +
+    `<a href="${escHtml(u.toString())}" target="_blank" rel="noopener noreferrer">View the original</a></p>` +
+    `</div></body></html>`
+  );
 }
