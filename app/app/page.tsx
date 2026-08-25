@@ -10205,44 +10205,25 @@ function SideNav({
       </nav>
 
       <div className="su-foot mt-auto pt-5">
-        {/* Company lens. "All companies" only appears when there's more than one
-            to switch between; a single-company account just shows that company. */}
-        {companies.length > 0 && (
+        {/* Company lens, and ONLY when there is actually something to switch
+            between (several companies, or a company plus personal). The rail
+            carries no Active-project picker any more: every screen that cares
+            about the project has its own picker (the Scout stage, Finds,
+            paste-a-posting), so the rail copy was a duplicate control. */}
+        {(companies.length > 1 || (companies.length > 0 && hasPersonal)) && (
           <div className="mb-2.5">
             <div className="kicker px-2 pb-1.5">Company</div>
             <PrettySelect
               ariaLabel="Company lens"
-              value={
-                companies.length === 1 && !hasPersonal && !activeCompanyId
-                  ? companies[0].id
-                  : activeCompanyId
-              }
+              value={activeCompanyId}
               onChange={onSelectCompany}
               options={[
-                ...(companies.length > 1 ? [{ value: "", label: "All companies" }] : []),
+                { value: "", label: "All companies" },
                 ...(hasPersonal ? [{ value: "personal", label: "Personal" }] : []),
                 ...companies.map((c) => ({ value: c.id, label: c.name })),
               ]}
             />
           </div>
-        )}
-        <div className="kicker px-2 pb-1.5">Active project</div>
-        {projects.length > 0 ? (
-          <PrettySelect
-            ariaLabel="Active project"
-            value={activeId}
-            onChange={onSelectProject}
-            options={[
-              ...(projects.length > 1
-                ? [{ value: "__all__", label: "All projects" }]
-                : []),
-              ...projects.map((p) => ({ value: p.id, label: p.name })),
-            ]}
-          />
-        ) : (
-          <p className="px-2 text-[11px] leading-relaxed text-[color:var(--su-rail-muted)]">
-            No projects in this company yet. Start a search in Outreach to create one.
-          </p>
         )}
         <div className="mt-2.5 flex flex-col gap-0.5">
           {hasAccount &&
@@ -15142,7 +15123,12 @@ function FindsTab({
             chip on a second line with the side controls stranded beside the
             first, which is what made this toolbar look thrown together. */}
         <div data-guide="status-tabs" className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [mask-image:linear-gradient(to_right,#000_calc(100%-26px),transparent)] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-          {FIND_STATUSES.map((s) => {
+          {FIND_STATUSES.filter(
+            // Empty buckets stay off the strip: a row of "0" chips is clutter.
+            // "All" always shows, and so does the active filter even at zero,
+            // so you can never be stuck on a filter whose chip vanished.
+            (s) => s.key === "all" || filter === s.key || (counts[s.key] || 0) > 0
+          ).map((s) => {
             const on = filter === s.key;
             return (
               <button
