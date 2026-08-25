@@ -398,7 +398,7 @@ function previewSrc(url: string): string {
   // v busts the CDN cache when the preview ASSEMBLY changes: stale-while-
   // revalidate otherwise keeps serving an old build of the page for up to a
   // day. Bump it whenever the proxy's injected scripts change.
-  return `/api/site-preview?v=6&url=${encodeURIComponent(url)}${
+  return `/api/site-preview?v=7&url=${encodeURIComponent(url)}${
     PREVIEW_TOKEN ? `&pt=${encodeURIComponent(PREVIEW_TOKEN)}` : ""
   }`;
 }
@@ -12100,6 +12100,21 @@ function FindDetailModal({
   const dragRef = useRef<{ startY: number; startH: number } | null>(null);
   const [frameLoaded, setFrameLoaded] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false); // site blocked the embed
+  // First failure swaps to the server's simplified rendering (mode=clean)
+  // before giving up to the info card; second failure means even that page
+  // could not be assembled (fetch blocked outright).
+  const [cleanMode, setCleanMode] = useState(false);
+  const triedCleanRef = useRef(false);
+  const failOver = () => {
+    if (!triedCleanRef.current) {
+      triedCleanRef.current = true;
+      bridgeAliveRef.current = false;
+      setFrameLoaded(false);
+      setCleanMode(true);
+    } else {
+      setPreviewFailed(true);
+    }
+  };
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
   // Deny reason popover in the header (Deny asks why, like the card does).
   const [denyingModal, setDenyingModal] = useState(false);
@@ -12233,6 +12248,8 @@ function FindDetailModal({
     setFillNote("");
     setPreviewFailed(false);
     setFrameLoaded(false);
+    setCleanMode(false);
+    triedCleanRef.current = false;
     bridgeAliveRef.current = false;
   }, [o.url]);
   // Heavy application portals (Workday and friends) are full apps that can
@@ -12245,16 +12262,19 @@ function FindDetailModal({
   );
   useEffect(() => {
     if (!o.url) return;
-    if (heavyPortal) {
-      setPreviewFailed(true);
+    if (heavyPortal && !cleanMode) {
+      // Straight to the simplified rendering; these apps spin for a minute
+      // through the proxy and usually paint blank anyway.
+      triedCleanRef.current = true;
+      setCleanMode(true);
       return;
     }
     const t = window.setTimeout(() => {
-      if (!bridgeAliveRef.current) setPreviewFailed(true);
+      if (!bridgeAliveRef.current) failOver();
     }, 10000);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o.url]);
+  }, [o.url, cleanMode]);
   // Pre-fill the previewed contact/application form with everything Scout knows
   // about the sender + the drafted message. Never submits, only populates.
   function fillForm() {
@@ -12949,15 +12969,16 @@ function FindDetailModal({
                   // X-Frame-Options / CSP frame-ancestors on the target site
                   // can't refuse the embed, those headers apply to a direct
                   // cross-origin request, not to our own proxied response.
-                  src={previewSrc(o.url)}
+                  src={previewSrc(o.url) + (cleanMode ? "&mode=clean" : "")}
                   title={`Preview of ${host || o.name}`}
                   onLoad={() => {
                     setFrameLoaded(true);
                     // If our injected bridge doesn't phone home shortly, the page
                     // busted out of the frame / redirected to itself (native
-                    // "refused to connect"). Show a clean card instead.
+                    // "refused to connect"). Fail over to the simplified
+                    // rendering first, the info card only after that.
                     window.setTimeout(() => {
-                      if (!bridgeAliveRef.current) setPreviewFailed(true);
+                      if (!bridgeAliveRef.current) failOver();
                     }, 4500);
                   }}
                   referrerPolicy="no-referrer"
@@ -16434,6 +16455,7 @@ function FindWorkflow({
   const [tplId, setTplId] = useState("");
   const [ownSubject, setOwnSubject] = useState("");
   const [ownBody, setOwnBody] = useState("");
+  const [ownExpanded, setOwnExpanded] = useState(false);
   // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
   // give the editor the big pane and tuck the website preview away.
   useEffect(() => {
@@ -16760,42 +16782,87 @@ function FindWorkflow({
             );
           })()}
 
-        {find.status === "new" && tplId === "__own__" && onWriteOwn && (
-          <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
-            {/(email|cover letter)/i.test(draftKind) && (
-              <input
-                value={ownSubject}
-                onChange={(e) => setOwnSubject(e.target.value)}
-                placeholder="Subject"
-                className="mb-2 w-full rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
-              />
-            )}
-            <textarea
-              value={ownBody}
-              onChange={(e) => setOwnBody(e.target.value)}
-              rows={6}
-              placeholder="Write the message exactly as you want it sent. Your words, no rewriting."
-              className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
-            />
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                onClick={() => {
-                  onWriteOwn(draftKind, ownSubject, ownBody);
-                  setTplId("");
-                  setOwnSubject("");
-                  setOwnBody("");
-                }}
-                disabled={!ownBody.trim()}
-                className="rounded-lg bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
-              >
-                Use this message
-              </button>
-              <span className="text-[11px] text-body/60">
-                Saved as this find&apos;s draft, verbatim. Edit or send it below like any draft.
-              </span>
-            </div>
-          </div>
-        )}
+        {find.status === "new" &&
+          tplId === "__own__" &&
+          onWriteOwn &&
+          (() => {
+            const composer = (big: boolean) => (
+              <>
+                {/(email|cover letter)/i.test(draftKind) && (
+                  <input
+                    value={ownSubject}
+                    onChange={(e) => setOwnSubject(e.target.value)}
+                    placeholder="Subject"
+                    className="mb-2 w-full rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                  />
+                )}
+                <textarea
+                  value={ownBody}
+                  onChange={(e) => setOwnBody(e.target.value)}
+                  rows={big ? 14 : 6}
+                  autoFocus={big}
+                  placeholder="Write the message exactly as you want it sent. Your words, no rewriting."
+                  className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                />
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => {
+                      onWriteOwn(draftKind, ownSubject, ownBody);
+                      setTplId("");
+                      setOwnSubject("");
+                      setOwnBody("");
+                      setOwnExpanded(false);
+                    }}
+                    disabled={!ownBody.trim()}
+                    className="rounded-lg bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
+                  >
+                    Use this message
+                  </button>
+                  <span className="text-[11px] text-body/60">
+                    Saved as this find&apos;s draft, verbatim. Edit or send it below like any draft.
+                  </span>
+                </div>
+              </>
+            );
+            if (ownExpanded)
+              return (
+                <div
+                  className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4"
+                  onClick={() => setOwnExpanded(false)}
+                >
+                  <div
+                    className="w-full max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <span className="text-sm font-bold text-ink">
+                        Your message to {find.opp.name}
+                      </span>
+                      <button
+                        onClick={() => setOwnExpanded(false)}
+                        className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+                      >
+                        Close
+                      </button>
+                    </div>
+                    {composer(true)}
+                  </div>
+                </div>
+              );
+            return (
+              <div className="relative mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
+                <button
+                  onClick={() => setOwnExpanded(true)}
+                  title="Pop the composer out into a bigger window"
+                  aria-label="Expand the composer"
+                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
+                >
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></svg>
+                </button>
+                {composer(false)}
+              </div>
+            );
+          })()}
 
         {/* Move to a different project, a find isn't stuck wherever it was
             first surfaced. Resets after firing since the find leaves this list. */}

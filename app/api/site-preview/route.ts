@@ -73,6 +73,16 @@ export async function GET(req: NextRequest) {
       return htmlResponse(rendered.replace("</body>", `${AUTOFILL_SCRIPT}</body>`), true);
   }
 
+  // mode=clean: the client asked for the simplified rendering outright — it
+  // tried the real page and the frame never came alive (JS app, permission
+  // wall inside the page, endless spinner). Works for ANY site whose HTML we
+  // could fetch: title, description, art, links, and readable paragraphs on
+  // the page's own ground.
+  if (req.nextUrl.searchParams.get("mode") === "clean") {
+    const rendered = cleanSitePage(html, u);
+    return htmlResponse(rendered.replace("</body>", `${AUTOFILL_SCRIPT}</body>`), true);
+  }
+
   // Neutralize any framing directives the page sets itself via <meta> tags
   // (belt-and-suspenders; the real blockers are the HTTP response headers,
   // which we never forward since our own response sets none of them).
@@ -481,6 +491,118 @@ function bioLinkPage(html: string, u: URL): string | null {
     `</div>${rows}` +
     `<p class="foot">Cleaned up by Scout from ${escHtml(host)} · ` +
     `<a href="${escHtml(u.toString())}" target="_blank" rel="noopener noreferrer">View the original</a></p>` +
+    `</div></body></html>`
+  );
+}
+
+// The simplified rendering for any site: what the page says about itself
+// (title, description, art), its readable paragraphs, and its useful links,
+// on the page's own background. Always returns a page; sparse input just
+// yields a sparse card with the Open link.
+function cleanSitePage(html: string, u: URL): string {
+  const host = u.hostname.replace(/^www\./, "");
+  const title = (
+    metaContent(html, "og:title") ||
+    html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] ||
+    host
+  ).trim();
+  const desc = metaContent(html, "og:description") || metaContent(html, "description");
+  const art = metaContent(html, "og:image");
+  let links = bioLinks(html);
+  if (links.length < 2) {
+    const out: { title: string; url: string }[] = [];
+    const seen = new Set<string>();
+    const re = /<a\b[^>]*href="(https?:\/\/[^"#]+)"[^>]*>([\s\S]*?)<\/a>/gi;
+    let mm: RegExpExecArray | null;
+    while ((mm = re.exec(html)) && out.length < 12) {
+      const url = mm[1];
+      const t = mm[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      if (t.length < 3 || t.length > 80) continue;
+      if (/log ?in|sign ?up|cookie|privacy|terms|subscribe|accept|consent/i.test(t)) continue;
+      if (seen.has(url)) continue;
+      seen.add(url);
+      out.push({ title: t, url });
+    }
+    links = out;
+  }
+  const bodyHtml = html
+    .replace(/<script[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style[\s\S]*?<\/style>/gi, " ");
+  const paras: string[] = [];
+  const pre = /<p\b[^>]*>([\s\S]*?)<\/p>/gi;
+  let pm: RegExpExecArray | null;
+  while ((pm = pre.exec(bodyHtml)) && paras.length < 3) {
+    const t = pm[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    if (t.length > 80) paras.push(t.slice(0, 420));
+  }
+  const bgMatch =
+    html.match(/"backgroundColor"\s*:\s*"(#[0-9a-fA-F]{3,8})"/) ||
+    html.match(/background(?:-color)?:\s*(#[0-9a-fA-F]{6})/);
+  const themeBg = bgMatch?.[1] || "";
+  let darkBg = false;
+  {
+    const hex = /^#([0-9a-fA-F]{6})/.exec(themeBg)?.[1];
+    if (hex) {
+      const r = parseInt(hex.slice(0, 2), 16),
+        g = parseInt(hex.slice(2, 4), 16),
+        b = parseInt(hex.slice(4, 6), 16);
+      darkBg = 0.299 * r + 0.587 * g + 0.114 * b < 140;
+    }
+  }
+  const ink = themeBg && darkBg ? "#f4f6f9" : "#1f2530";
+  const sub = themeBg && darkBg ? "rgba(244,246,249,.72)" : "#5a6372";
+  const foot = themeBg && darkBg ? "rgba(244,246,249,.55)" : "#8b93a0";
+  const footLink = themeBg && darkBg ? "#cfe0ee" : "#19455e";
+  const ground = themeBg
+    ? `background:${themeBg}`
+    : `background:#fbfaf8;background-image:radial-gradient(520px 340px at 12% 8%,rgba(147,174,203,.3),transparent 70%),` +
+      `radial-gradient(560px 380px at 88% 24%,rgba(217,161,180,.26),transparent 70%),` +
+      `radial-gradient(620px 420px at 50% 96%,rgba(186,205,172,.28),transparent 72%)`;
+  const rows = links
+    .map((l) => {
+      let linkHost = "";
+      try {
+        linkHost = new URL(l.url).hostname.replace(/^www\./, "");
+      } catch {}
+      return (
+        `<a class="lk" href="${escHtml(l.url)}" target="_blank" rel="noopener noreferrer">` +
+        `<span class="t">${escHtml(l.title)}</span>` +
+        (linkHost && linkHost !== host ? `<span class="h">${escHtml(linkHost)}</span>` : "") +
+        `</a>`
+      );
+    })
+    .join("");
+  return (
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<meta name="referrer" content="no-referrer">` +
+    `<title>${escHtml(title)}</title><style>` +
+    `*{box-sizing:border-box;margin:0}` +
+    `body{min-height:100vh;font-family:-apple-system,system-ui,'Segoe UI',sans-serif;color:${ink};` +
+    `${ground};display:flex;justify-content:center;padding:32px 18px}` +
+    `.card{width:100%;max-width:640px}` +
+    `.art{width:100%;max-height:240px;object-fit:cover;border-radius:16px;` +
+    `box-shadow:0 10px 28px rgba(25,69,94,.16);margin-bottom:16px}` +
+    `h1{font-size:23px;letter-spacing:-.01em;line-height:1.25}` +
+    `.d{margin-top:8px;font-size:14px;color:${sub};line-height:1.55}` +
+    `.p{margin-top:12px;font-size:14px;color:${sub};line-height:1.6}` +
+    `.links{margin-top:20px}` +
+    `.lk{display:flex;align-items:baseline;gap:12px;background:#fff;border:1px solid #e7e3dc;` +
+    `border-radius:14px;padding:13px 16px;margin-bottom:9px;text-decoration:none;color:#1f2530;` +
+    `box-shadow:0 2px 10px rgba(30,40,50,.05);transition:transform .12s,box-shadow .12s}` +
+    `.lk:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(25,69,94,.14);border-color:#c9d6e0}` +
+    `.t{flex:1;font-weight:700;font-size:14px;min-width:0}` +
+    `.h{font-size:11px;color:#98a0ac;white-space:nowrap}` +
+    `.foot{margin-top:18px;text-align:center;font-size:12px;color:${foot}}` +
+    `.foot a{color:${footLink};font-weight:600}` +
+    `</style></head><body><div class="card">` +
+    (art ? `<img class="art" src="${escHtml(art)}" alt="">` : "") +
+    `<h1>${escHtml(title)}</h1>` +
+    (desc ? `<p class="d">${escHtml(desc)}</p>` : "") +
+    paras.map((t) => `<p class="p">${escHtml(t)}</p>`).join("") +
+    (rows ? `<div class="links">${rows}</div>` : "") +
+    `<p class="foot">Simplified by Scout from ${escHtml(host)} · ` +
+    `<a href="${escHtml(u.toString())}" target="_blank" rel="noopener noreferrer">Open the real page</a></p>` +
     `</div></body></html>`
   );
 }
