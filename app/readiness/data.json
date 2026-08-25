@@ -92,6 +92,12 @@
               "key": "getting-in::continue-as-survives-admin-days",
               "title": "One-click Continue as keeps working day after day",
               "good": "Sign in, spend time in the app AND the admin pages, come back the next day signed out: 'Continue as' signs you straight in, no 'saved session expired' loop. If it does fail once, the error names the reason and your email is prefilled so recovery is one password."
+            },
+            {
+              "key": "getting-in::empty-boot-cannot-wipe",
+              "title": "A bad boot can't wipe your profile",
+              "good": "If the profile/state load times out or fails, Scout lets you in but HOLDS all server writes for that session, an all-blank profile can never overwrite a filled row (server-side guard too), and blank server fields never shadow real local ones on merge. Kaitlyn's profile was wiped this way on 2026-08-24 and restored.",
+              "must": true
             }
           ]
         },

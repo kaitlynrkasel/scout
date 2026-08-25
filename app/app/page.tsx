@@ -1240,6 +1240,10 @@ function AuthedShell() {
   }, []);
 
   const uid = session?.user?.id;
+  // True when the app entered WITHOUT a successful server profile/state load
+  // (watchdog timeout or load error). While true, server writes are held:
+  // an empty boot once autosaved over a filled account, wiping the profile.
+  const degradedBoot = useRef(false);
   useEffect(() => {
     if (!uid) return;
     // Cross-account guard: localStorage is per-BROWSER, not per-account. When
@@ -1267,6 +1271,7 @@ function AuthedShell() {
     let cancelled = false;
     let done = false;
     setProfileLoaded(false);
+    degradedBoot.current = false;
     // Watchdog: if the profile/state load hasn't resolved in 8s (network stall,
     // Supabase unreachable), stop spinning and let the user into the app with
     // whatever localStorage has. Without this a hung request bricks sign-in on
@@ -1275,6 +1280,7 @@ function AuthedShell() {
       if (cancelled || done) return;
       done = true;
       console.warn("[Scout] profile/state load timed out; entering with local data.");
+      degradedBoot.current = true;
       const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
       const metaName = (
         meta.full_name || [meta.first_name, meta.last_name].filter(Boolean).join(" ")
@@ -1293,10 +1299,14 @@ function AuthedShell() {
       // source of truth).
       const remoteExtras = s?.profileExtras || {};
       let localExtras: NonNullable<AppState["profileExtras"]> = {};
+      let localName = "";
+      let localBio = "";
       try {
         const raw = localStorage.getItem(PROFILE_KEY);
         if (raw) {
           const parsed = JSON.parse(raw);
+          if (typeof parsed.name === "string") localName = parsed.name;
+          if (typeof parsed.bio === "string") localBio = parsed.bio;
           if (typeof parsed.accountType === "string") localExtras.accountType = parsed.accountType;
           if (typeof parsed.companyName === "string") localExtras.companyName = parsed.companyName;
           if (typeof parsed.companyRole === "string") localExtras.companyRole = parsed.companyRole;
@@ -1332,7 +1342,13 @@ function AuthedShell() {
       } catch {
         /* localStorage unavailable, nothing to migrate */
       }
-      const raw = { ...localExtras, ...remoteExtras };
+      // Server wins FIELD BY FIELD, but a blank server value never shadows a
+      // real local one: a bad boot once saved empty extras over the account,
+      // and wholesale remote-wins made the wipe stick on every device.
+      const raw: any = { ...localExtras };
+      for (const [k, v] of Object.entries(remoteExtras)) {
+        if (v !== "" && v !== undefined && v !== null) raw[k] = v;
+      }
       // AppState stores companySize/competitiveness as string; narrow to the
       // Profile enums here so we don't leak an unexpected value into state.
       const allowedSize = new Set<CompanySize>(["any", "small", "big"]);
@@ -1387,8 +1403,8 @@ function AuthedShell() {
       setInitial(
         p
           ? {
-              name: p.name || metaName,
-              bio: p.bio,
+              name: p.name || localName || metaName,
+              bio: p.bio || localBio,
               useCase: p.useCase || "Networking",
               linkedin: p.linkedin || "",
               ...mergedExtras,
@@ -1406,6 +1422,7 @@ function AuthedShell() {
       done = true;
       clearTimeout(watchdog);
       console.error("[Scout] profile/state load failed, entering with defaults:", err);
+      degradedBoot.current = true;
       const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
       const metaName = (
         meta.full_name || [meta.first_name, meta.last_name].filter(Boolean).join(" ")
@@ -1471,6 +1488,10 @@ function AuthedShell() {
           pendingProfile.current = null;
           saveTimer.current = null;
           if (!payload) return;
+          if (degradedBoot.current) {
+            console.warn("[Scout] degraded boot; holding the server profile write.");
+            return;
+          }
           dbSaveProfile(session.user.id, {
             name: payload.name,
             bio: payload.bio,
@@ -1498,6 +1519,10 @@ function AuthedShell() {
           pendingState.current = null;
           stateTimer.current = null;
           if (!payload) return;
+          if (degradedBoot.current) {
+            console.warn("[Scout] degraded boot; holding the server state write.");
+            return;
+          }
           dbSaveState(session.user.id, payload);
         }, 250);
       }}

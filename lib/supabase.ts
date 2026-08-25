@@ -104,6 +104,20 @@ export async function saveProfile(
   p: DbProfile
 ): Promise<string | null> {
   if (!supabase) return null;
+  // Last line of defense against the empty-boot wipe: an all-blank profile
+  // never overwrites a row that has content. Clearing ONE field still saves
+  // (the other keeps the row non-blank); only the both-empty case is held.
+  if (!p.name.trim() && !p.bio.trim()) {
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("name, bio")
+      .eq("id", userId)
+      .maybeSingle();
+    if (existing && ((existing.name || "").trim() || (existing.bio || "").trim())) {
+      console.warn("saveProfile held: refusing to blank a filled profile row.");
+      return null;
+    }
+  }
   const { error } = await supabase.from("profiles").upsert({
     id: userId,
     name: p.name,
