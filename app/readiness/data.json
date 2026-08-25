@@ -97,7 +97,14 @@
               "key": "getting-in::empty-boot-cannot-wipe",
               "title": "A bad boot can't wipe your profile",
               "good": "If the profile/state load times out or fails, Scout lets you in but HOLDS all server writes for that session, an all-blank profile can never overwrite a filled row (server-side guard too), and blank server fields never shadow real local ones on merge. Kaitlyn's profile was wiped this way on 2026-08-24 and restored.",
-              "must": true
+              "must": true,
+              "steps": [
+                "Use a TEST account (not your real one). Fill its profile in (name, role, some experience), reload once, and confirm it all comes back. That filled state is your baseline.",
+                "Simulate the bad boot: open DevTools (Cmd+Option+I) > Network tab > set throttling to Offline, then reload /app. After ~8 seconds Scout should let you in anyway instead of hanging.",
+                "While still in that session, open Profile and poke around; then set throttling back to No throttling and reload normally.",
+                "The profile must show EVERYTHING from the baseline. Any field missing = Broken (this is the 2026-08-24 wipe).",
+                "The nastier variant: DevTools > Application > Storage > Clear site data, THEN go Offline and reload, so the session boots truly blank. Go back online, sign in, reload: the server copy must still be the full baseline. A blank session must never have pushed its blanks up."
+              ]
             }
           ]
         },
