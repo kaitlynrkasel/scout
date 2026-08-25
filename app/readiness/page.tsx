@@ -147,9 +147,27 @@ function ReadinessInner() {
   }
   const [openKey, setOpenKey] = useState("");
   // Text filter over all ~276 items: title, description, and section name.
+  // Filters survive a refresh, same per-device memory as the name and the
+  // split position.
   const [q, setQ] = useState("");
+  useEffect(() => {
+    try {
+      setQ(localStorage.getItem("scout_readiness_q") || "");
+      setOnlyUntested(localStorage.getItem("scout_readiness_untested") === "1");
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("scout_readiness_q", q);
+    } catch {}
+  }, [q]);
   // Show only items nobody (human or machine) has marked yet.
   const [onlyUntested, setOnlyUntested] = useState(false);
+  useEffect(() => {
+    try {
+      localStorage.setItem("scout_readiness_untested", onlyUntested ? "1" : "0");
+    } catch {}
+  }, [onlyUntested]);
   const ql = q.trim().toLowerCase();
   const itemMatches = (it: Item, sTitle: string) =>
     (!ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql)) &&
