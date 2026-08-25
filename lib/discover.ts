@@ -1709,6 +1709,9 @@ export async function discover(
     // same extraction, fit scoring, and exposure caps as fresh candidates.
     // Kept as an injected function so the engine stays storage-agnostic.
     indexLookup?: (goal: string) => Promise<{ title: string; url: string; content: string }[]>;
+    // Company-index lookup (see lib/companyIndex): known employers matching
+    // this goal, so job hunts hit careers pages, not gated boards.
+    companiesLookup?: (goal: string) => Promise<{ name: string; host: string }[]>;
   }
 ): Promise<DiscoverResult> {
   const aborted = () => !!opts?.signal?.aborted;
@@ -1776,6 +1779,36 @@ export async function discover(
   if (plan?.target_type)
     emit(`Read the goal: looking for ${plan.target_type.toLowerCase()}${plan.goal ? ` — ${plan.goal}` : ""}`);
   emit(`Planned ${queries.length} search${queries.length === 1 ? "" : "es"} across the web`);
+
+  // Careers-page strategy: gated boards (LinkedIn, Handshake, Indeed) hide
+  // postings behind logins, but employers' OWN sites are open. For job-ish
+  // goals, add direct careers-page queries for a salted handful of companies
+  // the index already knows fit goals like this one. The list grows itself:
+  // every organization any search finds joins it.
+  if (opts?.companiesLookup && isJobSearch(useCase, goal) && !aborted()) {
+    try {
+      const known = await opts.companiesLookup(goal);
+      const roleWords = goal
+        .toLowerCase()
+        .match(/\b(intern(ship)?s?|marketing|publishing|a&r|engineer(ing)?|design(er)?|analyst|assistant|coordinator|producer|social media|sales)\b/g);
+      const hint = Array.from(new Set(roleWords || [])).slice(0, 3).join(" ");
+      const careersQueries = known.slice(0, 4).map((c) =>
+        c.host
+          ? `site:${c.host} careers OR jobs ${hint}`.trim()
+          : `"${c.name}" careers current openings ${hint}`.trim()
+      );
+      if (careersQueries.length) {
+        emit(
+          `Adding the careers pages of ${careersQueries.length} employer${
+            careersQueries.length === 1 ? "" : "s"
+          } Scout already knows fit goals like this`
+        );
+        queries.push(...careersQueries);
+      }
+    } catch {
+      /* the index is an accelerant, never a blocker */
+    }
+  }
   const networking = isNetworkingUseCase(useCase);
   // Skip anyone the user denied by name, never resurface a rejected find,
   // EXCEPT timing-only denies ("no open positions"): those stay watchable so

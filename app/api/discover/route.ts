@@ -6,6 +6,7 @@ import { getEntitlement, consumeSearch } from "@/lib/billing";
 import { clientIp, guestSearchAllowed, recordGuestSearch } from "@/lib/guest";
 import { computeTuningSignal, buildPersonalOverride, buildTeamOverride } from "@/lib/autotune";
 import { searchPeopleIndex, upsertPeopleIndex } from "@/lib/peopleIndex";
+import { searchCompanyIndex, upsertCompanyIndex } from "@/lib/companyIndex";
 
 export const maxDuration = 300; // Pro plan max; discover chains multiple Tavily + Claude passes
 
@@ -230,6 +231,7 @@ export async function POST(req: NextRequest) {
               // verified people joins the candidate pool (per-user salt keeps
               // slices different across users, see lib/peopleIndex guards).
               indexLookup: (g) => searchPeopleIndex(g, 6, `${uid || ip}:${salt || ""}`),
+              companiesLookup: (g) => searchCompanyIndex(g, 4, `${uid || ip}:${salt || ""}`),
               onOpp: (o) => {
                 try {
                   send(controller, { type: "opp", opp: o });
@@ -251,6 +253,7 @@ export async function POST(req: NextRequest) {
           // Feed the flywheel: engine-found people persist in the shared index
           // (public-web results only; fire-and-forget, never blocks the reply).
           void upsertPeopleIndex(result.opportunities || []);
+          void upsertCompanyIndex(result.opportunities || [], goal);
           if (metered && uid) {
             try {
               await consumeSearch(uid);
