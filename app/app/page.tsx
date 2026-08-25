@@ -16850,15 +16850,22 @@ function FindWorkflow({
                 </div>
               );
             return (
-              <div className="relative mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
-                <button
-                  onClick={() => setOwnExpanded(true)}
-                  title="Pop the composer out into a bigger window"
-                  aria-label="Expand the composer"
-                  className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
-                >
-                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></svg>
-                </button>
+              <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
+                {/* Own header row, not a floating corner button: absolute
+                    positioning clipped into the Subject field's corner. */}
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                    Your message
+                  </span>
+                  <button
+                    onClick={() => setOwnExpanded(true)}
+                    title="Pop the composer out into a bigger window"
+                    aria-label="Expand the composer"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
+                  >
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></svg>
+                  </button>
+                </div>
                 {composer(false)}
               </div>
             );
