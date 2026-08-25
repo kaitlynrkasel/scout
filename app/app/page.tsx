@@ -16562,9 +16562,12 @@ function FindWorkflow({
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
             {headerLabel}
           </div>
-          {find.status === "new" && tplId === "__own__" && onWriteOwn && (
+          {find.status === "new" && onWriteOwn && (
             <button
-              onClick={() => setOwnExpanded(true)}
+              onClick={() => {
+                setTplId("__own__");
+                setOwnExpanded(true);
+              }}
               title="Pop the composer out into a bigger window"
               aria-label="Expand the composer"
               className="grid h-6 w-6 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
