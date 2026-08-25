@@ -145,11 +145,13 @@ function buildRaw(
   body: string,
   attachment?: MailAttachment,
   listUnsubscribe?: string,
-  html?: string // when set (and no attachment), send text/html instead of plain
+  html?: string, // when set (and no attachment), send text/html instead of plain
+  cc?: string
 ): string {
   const baseHeaders = [
     `From: ${from}`,
     `To: ${to}`,
+    ...(cc ? [`Cc: ${cc}`] : []),
     `Subject: ${encodeHeader(subject)}`,
     "MIME-Version: 1.0",
   ];
@@ -213,6 +215,7 @@ export async function gmailSendOrDraft(opts: {
   attachment?: MailAttachment; // optional file (e.g. the user's resume)
   listUnsubscribe?: string; // RFC 2369 List-Unsubscribe value for cold outreach
   html?: string; // rendered HTML body (notifications); body stays the text fallback
+  cc?: string; // optional CC list, comma-separated addresses
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   const raw = buildRaw(
@@ -222,7 +225,8 @@ export async function gmailSendOrDraft(opts: {
     opts.body,
     opts.attachment,
     opts.listUnsubscribe,
-    opts.html
+    opts.html,
+    opts.cc
   );
   const url =
     opts.mode === "send"

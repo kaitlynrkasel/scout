@@ -136,13 +136,21 @@ export function emailFromIdToken(idToken: string): string {
   }
 }
 
-function buildMessage(to: string, subject: string, body: string, html?: string) {
+function buildMessage(to: string, subject: string, body: string, html?: string, cc?: string) {
   return {
     subject,
     body: html
       ? { contentType: "HTML", content: html }
       : { contentType: "Text", content: body },
     toRecipients: [{ emailAddress: { address: to } }],
+    ...(cc
+      ? {
+          ccRecipients: cc
+            .split(/[,;\s]+/)
+            .filter(Boolean)
+            .map((address) => ({ emailAddress: { address } })),
+        }
+      : {}),
   };
 }
 
@@ -155,6 +163,7 @@ export async function outlookSendOrDraft(opts: {
   body: string;
   mode: "send" | "draft";
   html?: string; // rendered HTML body (notifications); body stays the text fallback
+  cc?: string; // optional CC list, comma/space separated
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   // Always create the draft first (gives us id + conversationId), then send it
@@ -162,7 +171,7 @@ export async function outlookSendOrDraft(opts: {
   const create = await fetch(`${GRAPH}/me/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html)),
+    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html, opts.cc)),
   });
   if (!create.ok) throw new Error("graph draft failed: " + (await create.text()));
   const msg = await create.json();

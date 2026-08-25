@@ -3220,6 +3220,7 @@ function ScoutTool({
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({
           to: d.to,
+          cc: d.cc || undefined,
           subject: d.subject,
           body: d.body,
           threadId: threadId || undefined,
@@ -3308,7 +3309,8 @@ function ScoutTool({
       const r = await fetch("/api/outlook/send", {
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-        body: JSON.stringify({ to: d.to, subject: d.subject, body: d.body }),
+        body: JSON.stringify({ to: d.to,
+          cc: d.cc || undefined, subject: d.subject, body: d.body }),
       });
       const j = await parseApiResponse(r);
       if (r.ok && !j?.error) {
@@ -5495,12 +5497,22 @@ function ScoutTool({
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
   // Save a message the user wrote THEMSELVES as this find's draft: no model in
   // the loop, their words verbatim, straight to drafted status.
-  function writeOwnDraft(find: Find, kind: string, subject: string, body: string) {
+  function writeOwnDraft(
+    find: Find,
+    kind: string,
+    subject: string,
+    body: string,
+    to?: string,
+    cc?: string
+  ) {
     const o = find.opp;
     const email = /email/i.test(kind);
     const draft: Draft = {
       opportunityId: o.id,
-      to: email ? o.contactEmail || "" : o.contactHandle || o.contactEmail || "",
+      to:
+        (to || "").trim() ||
+        (email ? o.contactEmail || "" : o.contactHandle || o.contactEmail || ""),
+      cc: (cc || "").trim() || undefined,
       channelType: email ? "email" : "message",
       subject: email ? subject.trim() : "",
       body,
@@ -12029,7 +12041,7 @@ function FindDetailModal({
   onOpenApplicationKit?: () => void;
   find: Find;
   templates?: OutreachTemplate[];
-  onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   headerLabel?: string;
   onClose: () => void;
   position: number;
@@ -14684,7 +14696,7 @@ function FindsTab({
   draftingId: string;
   gmailBusyId: string;
   onDraft: (f: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
-  onWriteOwn?: (f: Find, kind: string, subject: string, body: string) => void;
+  onWriteOwn?: (f: Find, kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   trash?: { find: Find; deletedAt: number }[];
   onRestore?: (id: string) => void;
   onPurgeTrash?: (id: string) => void;
@@ -15545,7 +15557,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
               drafting={draftingId === f.id}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
               onDraft={(o) => onDraft(f, o)}
-              onWriteOwn={onWriteOwn ? (k, su, b) => onWriteOwn(f, k, su, b) : undefined}
+              onWriteOwn={onWriteOwn ? (k, su, b, t, c) => onWriteOwn(f, k, su, b, t, c) : undefined}
               onRegenerate={() => onDraft(f, { force: true })}
               onDeny={(reason) => onDeny(f, reason)}
               onSetReason={(reason) => onSetReason(f, reason)}
@@ -15713,7 +15725,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
           drafting={draftingId === detailFind.id}
           gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
           onDraft={(o) => onDraft(detailFind, o)}
-          onWriteOwn={onWriteOwn ? (k, su, b) => onWriteOwn(detailFind, k, su, b) : undefined}
+          onWriteOwn={onWriteOwn ? (k, su, b, t, c) => onWriteOwn(detailFind, k, su, b, t, c) : undefined}
           onRegenerate={() => onDraft(detailFind, { force: true })}
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
@@ -15970,7 +15982,7 @@ function FindCard({
 }: {
   find: Find;
   templates?: OutreachTemplate[];
-  onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -16366,7 +16378,7 @@ function FindWorkflow({
 }: {
   find: Find;
   templates?: OutreachTemplate[];
-  onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -16457,7 +16469,23 @@ function FindWorkflow({
   const [tplId, setTplId] = useState("");
   const [ownSubject, setOwnSubject] = useState("");
   const [ownBody, setOwnBody] = useState("");
+  const [ownTo, setOwnTo] = useState("");
+  const [ownCc, setOwnCc] = useState("");
   const [ownExpanded, setOwnExpanded] = useState(false);
+  // Opening the composer seeds To with the find's contact for the chosen
+  // format; the field stays editable after.
+  useEffect(() => {
+    if (tplId !== "__own__") return;
+    const email = /email/i.test(draftKind);
+    setOwnTo(
+      (v) =>
+        v ||
+        (email
+          ? find.opp.contactEmail || ""
+          : find.opp.contactHandle || find.opp.contactEmail || "")
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tplId, draftKind]);
   // Tell the parent (the detail modal) when we enter/leave edit mode, so it can
   // give the editor the big pane and tuck the website preview away.
   useEffect(() => {
@@ -16833,6 +16861,43 @@ function FindWorkflow({
           (() => {
             const composer = (big: boolean) => (
               <>
+                {/* Real mail-client header rows: who it's from, to, and CC. */}
+                <div className="mb-2 space-y-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                      From
+                    </span>
+                    <span className="min-w-0 flex-1 truncate rounded-lg bg-warm-bg/60 px-3 py-2 text-sm text-body/70">
+                      {gmail.connected
+                        ? gmail.email || "your connected mailbox"
+                        : "no mailbox connected yet (connect one in Profile to send)"}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                      To
+                    </span>
+                    <input
+                      value={ownTo}
+                      onChange={(e) => setOwnTo(e.target.value)}
+                      placeholder={/email/i.test(draftKind) ? "their@email.com" : "@their-handle"}
+                      className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                    />
+                  </div>
+                  {/(email|cover letter)/i.test(draftKind) && (
+                    <div className="flex items-center gap-2">
+                      <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
+                        CC
+                      </span>
+                      <input
+                        value={ownCc}
+                        onChange={(e) => setOwnCc(e.target.value)}
+                        placeholder="optional, comma-separated"
+                        className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                      />
+                    </div>
+                  )}
+                </div>
                 {/(email|cover letter)/i.test(draftKind) && (
                   <input
                     value={ownSubject}
@@ -16852,10 +16917,12 @@ function FindWorkflow({
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
-                      onWriteOwn(draftKind, ownSubject, ownBody);
+                      onWriteOwn(draftKind, ownSubject, ownBody, ownTo, ownCc);
                       setTplId("");
                       setOwnSubject("");
                       setOwnBody("");
+                      setOwnTo("");
+                      setOwnCc("");
                       setOwnExpanded(false);
                     }}
                     disabled={!ownBody.trim()}

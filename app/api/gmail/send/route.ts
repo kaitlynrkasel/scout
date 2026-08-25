@@ -14,7 +14,16 @@ export async function POST(req: NextRequest) {
   if (!uid || !supabaseAdmin) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
-  const { to, subject, body, mode: modeOverride, threadId, attachment } = await req.json();
+  const { to, subject, body, cc, mode: modeOverride, threadId, attachment } = await req.json();
+  // CC is optional; when present every address must parse, or the whole send
+  // aborts (a silently dropped CC would lie about who saw the message).
+  const ccStr = String(cc || "")
+    .split(/[,;\s]+/)
+    .filter(Boolean)
+    .join(", ");
+  if (ccStr && !ccStr.split(", ").every((a) => EMAIL_RE.test(a))) {
+    return NextResponse.json({ error: "One of the CC addresses doesn't look like an email." }, { status: 400 });
+  }
   if (!to || !EMAIL_RE.test(String(to))) {
     return NextResponse.json(
       { error: "This draft has no email address to send to." },
@@ -96,6 +105,7 @@ export async function POST(req: NextRequest) {
       refreshToken: data.refresh_token,
       from: fromAddr,
       to: String(to),
+      cc: ccStr || undefined,
       subject: String(subject || ""),
       body: outBody,
       mode,

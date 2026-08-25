@@ -95,6 +95,7 @@ export interface Opportunity {
 export interface Draft {
   opportunityId: string;
   to: string; // email or handle
+  cc?: string; // optional CC list (comma-separated), email drafts only
   channelType: "email" | "message" | "form";
   subject: string;
   body: string;
