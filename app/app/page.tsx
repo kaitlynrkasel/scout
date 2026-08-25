@@ -7784,27 +7784,14 @@ function ScoutTool({
                         onChange={selectCategory}
                         options={[
                           ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                          { value: "", label: "Solo Search" },
+                          { value: "", label: "New search" },
                         ]}
                       />
                     </div>
                   </div>
-                  {catId && (
-                    <button
-                      onClick={() => {
-                        projectGoalRef.current = ""; // an explicit custom search saves normally
-                        selectCategory("");
-                      }}
-                      title="Search without a saved category; running it saves a new one"
-                      // Same sizing as the two choosers beside it. They were
-                      // trimmed for phones and this wasn't, which left the
-                      // optional escape hatch looking bigger than the controls
-                      // it sits next to.
-                      className="rounded-full border border-dashed border-white/30 px-4 py-2 text-sm font-semibold text-white/60 transition hover:border-white/55 hover:text-white sm:px-5 sm:py-2.5 sm:text-base"
-                    >
-                      Solo Search
-                    </button>
-                  )}
+                  {/* The separate "Solo Search" pill is gone: the category
+                      picker's "New search" entry is the same action, and two
+                      doors to one room read as two different features. */}
                   <button
                     onClick={() => setTab("projects")}
                     className="ml-auto text-[11px] font-semibold text-white/50 transition hover:text-white"
@@ -11240,7 +11227,7 @@ function ApplicationsTab({
       byCat.set(k, arr);
     }
   const catName = (id: string) =>
-    categories.find((c) => c.id === id)?.name || "Solo searches";
+    categories.find((c) => c.id === id)?.name || "No category";
   const shown = catFilter ? inProject.filter((f) => (f.categoryId || "") === catFilter) : inProject;
   // Comparison columns: the union of the group's criteria asks, most common
   // first — for schools that's Tuition?/Deadline?, for jobs Paid?/Remote?.
@@ -22012,18 +21999,18 @@ function SettingsTab({
         <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
           <div className="max-w-md">
             <div className="text-sm font-bold text-ink">
-              Save Solo Searches as categories
+              Save new searches as categories
             </div>
             <p className="mt-1 text-sm leading-relaxed text-body">
-              When on, running a Solo Search saves it to the project as a
+              When on, running a search without a category saves it to the project as a
               category so you can run it again with one click. Turn it off to
-              keep Solo Searches one-off and your projects tidy.
+              keep them one-off and your projects tidy.
             </p>
           </div>
           <button
             role="switch"
             aria-checked={autoCats}
-            aria-label="Save Solo Searches as categories automatically"
+            aria-label="Save new searches as categories automatically"
             onClick={() => setAutoCatsPref(!autoCats)}
             className={`relative mt-1 inline-flex h-7 w-12 shrink-0 items-center rounded-full transition ${
               autoCats ? "bg-brown" : "bg-warm-border"

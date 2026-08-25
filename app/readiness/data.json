@@ -223,8 +223,8 @@
             },
             {
               "sev": "should",
-              "title": "Solo Search is not mistaken for the run button",
-              "good": "The Scout button is much bigger than the Solo Search pill; nobody taps Solo Search expecting to start a search.",
+              "title": "New search (no category) is a picker choice, not a button",
+              "good": "The category picker ends with 'New search' for a one-off goal; there is no separate Solo Search pill any more, and nothing near the picker can be mistaken for the run button.",
               "steps": [
                 "Show the Scout tab to someone new and ask them to start a search.",
                 "They should press the big cream Scout button on the first try."
