@@ -1326,6 +1326,7 @@ function TimeOnScoutCard() {
         {(
           [
             ["All time", null],
+            ["Today", 0],
             ["Last 2 weeks", 14],
             ["Last month", 30],
             ["Last 3 months", 90],

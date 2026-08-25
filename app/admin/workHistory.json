@@ -1,22 +1,22 @@
 {
-  "generatedAt": "2026-08-23T16:14:14.302Z",
+  "generatedAt": "2026-08-25T22:06:59.121Z",
   "firstCommit": "2026-06-30",
-  "lastCommit": "2026-08-23",
-  "totalCommits": 725,
-  "claudeAssistedCommits": 602,
-  "totalHours": 137.7,
+  "lastCommit": "2026-08-25",
+  "totalCommits": 748,
+  "claudeAssistedCommits": 624,
+  "totalHours": 141.3,
   "people": [
     {
       "who": "Kaitlyn",
-      "commits": 534,
-      "sessions": 89,
-      "hours": 98.3
+      "commits": 556,
+      "sessions": 95,
+      "hours": 101.5
     },
     {
       "who": "Claude (cloud)",
-      "commits": 99,
-      "sessions": 30,
-      "hours": 19
+      "commits": 100,
+      "sessions": 31,
+      "hours": 19.4
     },
     {
       "who": "Mera",
@@ -272,7 +272,14 @@
     {
       "date": "2026-08-23",
       "byWho": {
-        "Kaitlyn": 1.7
+        "Kaitlyn": 2.7,
+        "Claude (cloud)": 0.3
+      }
+    },
+    {
+      "date": "2026-08-25",
+      "byWho": {
+        "Kaitlyn": 2.2
       }
     }
   ]
