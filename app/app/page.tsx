@@ -12030,6 +12030,7 @@ function FindDetailModal({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  headerLabel?: string;
   onClose: () => void;
   position: number;
   total: number;
@@ -12767,10 +12768,8 @@ function FindDetailModal({
               </div>
             )}
             <div className="mt-auto pt-2">
-              <div className="mb-2 text-[11px] font-bold uppercase tracking-wider text-body/50">
-                Outreach
-              </div>
               <FindWorkflow
+                headerLabel="Outreach"
                 find={find}
                 templates={templates}
                 onWriteOwn={onWriteOwn}
@@ -15972,6 +15971,7 @@ function FindCard({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
@@ -16327,6 +16327,7 @@ function FindCard({
  * popup goes through the entire workflow (draft, edit, send, schedule, deny,
  * follow up) without leaving the popup. */
 function FindWorkflow({
+  headerLabel,
   find,
   templates = [],
   onWriteOwn,
@@ -16366,6 +16367,7 @@ function FindWorkflow({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string) => void;
+  headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
   gmailBusy: boolean;
@@ -16527,6 +16529,23 @@ function FindWorkflow({
 
   return (
     <>
+      {headerLabel && (
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+            {headerLabel}
+          </div>
+          {find.status === "new" && tplId === "__own__" && onWriteOwn && (
+            <button
+              onClick={() => setOwnExpanded(true)}
+              title="Pop the composer out into a bigger window"
+              aria-label="Expand the composer"
+              className="grid h-6 w-6 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></svg>
+            </button>
+          )}
+        </div>
+      )}
       {/* Meeting / interview prep, factual highlights about the contact.
           Unlocked once status ≥ sent, so keeping statuses current pays out
           with real prep. Prep persists on the find once generated. */}
@@ -16877,21 +16896,6 @@ function FindWorkflow({
               );
             return (
               <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
-                {/* Own header row, not a floating corner button: absolute
-                    positioning clipped into the Subject field's corner. */}
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-                    Your message
-                  </span>
-                  <button
-                    onClick={() => setOwnExpanded(true)}
-                    title="Pop the composer out into a bigger window"
-                    aria-label="Expand the composer"
-                    className="grid h-7 w-7 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
-                  >
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M15 3h6v6" /><path d="M10 14 21 3" /><path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5" /></svg>
-                  </button>
-                </div>
                 {composer(false)}
               </div>
             );
