@@ -12,6 +12,7 @@ import { supabase } from "@/lib/supabase";
 import Link from "next/link";
 import InsightsView, { ConciergePanel } from "./InsightsView";
 import IndexView from "./IndexView";
+import MetricsView from "./MetricsView";
 import PricingView from "./PricingView";
 import DesignView from "./DesignView";
 // Puck's stylesheet is imported here, statically with the page, because a
@@ -25,8 +26,8 @@ export default function AdminPage() {
   const [isOwner, setIsOwner] = useState<boolean | null>(null); // null = still probing
   // The tab lives in the URL hash so a refresh (or a shared link) lands on
   // the same tab instead of snapping back to Insights.
-  type AdminTab = "insights" | "concierge" | "index" | "pricing" | "design" | "readiness";
-  const ADMIN_TABS: AdminTab[] = ["insights", "concierge", "index", "pricing", "design", "readiness"];
+  type AdminTab = "insights" | "metrics" | "concierge" | "index" | "pricing" | "design" | "readiness";
+  const ADMIN_TABS: AdminTab[] = ["insights", "metrics", "concierge", "index", "pricing", "design", "readiness"];
   const [adminTab, setAdminTabState] = useState<AdminTab>(() => {
     if (typeof window !== "undefined") {
       const h = window.location.hash.replace("#", "") as AdminTab;
@@ -143,7 +144,7 @@ export default function AdminPage() {
           {/* Full-bleed on mobile so the strip scrolls edge to edge instead of
               looking clipped inside the page padding. */}
           <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
-            {(["insights", "concierge", "index", "pricing", "design", "readiness"] as const).map((t) => (
+            {(["insights", "metrics", "concierge", "index", "pricing", "design", "readiness"] as const).map((t) => (
               <button
                 key={t}
                 onClick={() => setAdminTab(t)}
@@ -161,6 +162,8 @@ export default function AdminPage() {
       </header>
       {adminTab === "insights" ? (
         <InsightsView getToken={getToken} />
+      ) : adminTab === "metrics" ? (
+        <MetricsView getToken={getToken} />
       ) : adminTab === "readiness" ? (
         <main className="mx-auto w-full max-w-none px-0">
           {readinessPath ? (

@@ -386,6 +386,28 @@ export async function GET(req: Request) {
   }
 
   return NextResponse.json({
+    // Raw counters the editable Metrics tab builds formulas from. "decided"
+    // and "outbound" are the two common denominators, precomputed.
+    algoCatalog: {
+      searchFinds: algo.searchFinds,
+      withContact: algo.withContact,
+      fitCount: algo.fitCount,
+      fitHigh: algo.fitHigh,
+      bounced: algo.bounced,
+      runs: algo.runs,
+      runsAtFloor: algo.runsAtFloor,
+      runFindSum: algo.runFindSum,
+      finds: totals.finds,
+      denied: totals.denied,
+      approved: totals.approved,
+      drafted: totals.drafted,
+      sent: totals.sent,
+      replied: totals.replied,
+      users: totals.users,
+      searches: (histRes?.data || []).length,
+      decided: totals.denied + totals.approved,
+      outbound: totals.sent + totals.replied,
+    },
     algo: {
       searchFinds: algo.searchFinds,
       contactRate: algo.searchFinds ? algo.withContact / algo.searchFinds : 0,
