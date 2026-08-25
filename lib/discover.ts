@@ -2413,37 +2413,64 @@ export async function discover(
   // the missing finds in OTHER industries instead of coming back short —
   // fresh queries that deliberately span several fields, and an extraction
   // override that accepts honest moderate fits.
-  if (opps.length < MIN_FINDS && queries.length && !creatorSearch && !aborted()) {
+  // Not one shot: up to three rounds, each with a fresh salt so the planner
+  // takes genuinely new angles instead of re-running the same widening.
+  const SCARCITY_PLAN =
+    `SCARCITY: the specific pass found under ${MIN_FINDS} results. Write queries that deliberately span SEVERAL ` +
+    `DIFFERENT industries and target types the GOAL allows (when the goal welcomes other industries, USE that ` +
+    `permission now), favouring small reachable employers and live postings. Do not repeat earlier angles.`;
+  for (
+    let round = 1;
+    round <= 3 && opps.length < MIN_FINDS && queries.length && !creatorSearch && !aborted();
+    round++
+  ) {
     emit(
-      `Only ${opps.length} so far; widening into other industries to reach ${MIN_FINDS}`
+      round === 1
+        ? `Only ${opps.length} so far; widening into other industries to reach ${MIN_FINDS}`
+        : `Still ${opps.length} of ${MIN_FINDS}; taking another set of industries`
     );
     const already = candidates.length;
-    const SCARCITY_PLAN =
-      `SCARCITY: the specific pass found under ${MIN_FINDS} results. Write queries that deliberately span SEVERAL ` +
-      `DIFFERENT industries and target types the GOAL allows (when the goal welcomes other industries, USE that ` +
-      `permission now), favouring small reachable employers and live postings. Do not repeat earlier angles.`;
     const rescueQueries = await planQueries(
       goal,
       about,
       useCase,
       feedback,
-      salt + ":rescue",
+      `${salt}:rescue${round}`,
       cohortHint,
       [personalOverride, SCARCITY_PLAN].filter(Boolean).join("\n\n"),
       true,
       plan
     ).catch(() => [] as string[]);
-    if (rescueQueries.length) {
-      extractOverride =
-        (personalOverride || "") +
-        `\n\nSCARCITY MODE: earlier passes rejected nearly everything and the user is owed at least ${MIN_FINDS} real ` +
-        `results. Unless a result is a private individual, a dead link, or advice content, lean toward is_relevant true ` +
-        `with an HONEST moderate fit_score (0.35-0.6) and a why_it_fits framed as a proactive outreach target. When the ` +
-        `GOAL welcomes other industries, industry is not a reason to reject anything.`;
-      await gather(rescueQueries.slice(0, 6));
-      await extractFrom(already);
-      extractOverride = personalOverride;
-    }
+    if (!rescueQueries.length) break;
+    extractOverride =
+      (personalOverride || "") +
+      `\n\nSCARCITY MODE: earlier passes rejected nearly everything and the user is owed at least ${MIN_FINDS} real ` +
+      `results. Unless a result is a private individual, a dead link, or advice content, lean toward is_relevant true ` +
+      `with an HONEST moderate fit_score (0.35-0.6) and a why_it_fits framed as a proactive outreach target. When the ` +
+      `GOAL welcomes other industries, industry is not a reason to reject anything.`;
+    await gather(rescueQueries.slice(0, 6));
+    await extractFrom(already);
+    extractOverride = personalOverride;
+  }
+
+  // Final salvage: every rescue round still left us under the floor. The pages
+  // already read are the material we have, and dozens were rejected against
+  // the strict bar — re-read them ONCE under a junk-only bar. Name/host dedup
+  // keeps the accepted ones from double-counting, so the only cost is one more
+  // extraction pass, no new searches.
+  if (opps.length < MIN_FINDS && candidates.length && !creatorSearch && !aborted()) {
+    emit(
+      `Re-reading ${candidates.length} pages with a wider lens for the last ${MIN_FINDS - opps.length}`
+    );
+    extractOverride =
+      (personalOverride || "") +
+      `\n\nFINAL SALVAGE: the user is owed ${MIN_FINDS - opps.length} more result(s) and these already-read pages ` +
+      `are the only material left. Any organization or opportunity here that could PLAUSIBLY be approached for the ` +
+      `goal comes back is_relevant true with an HONEST fit_score (as low as 0.3 is fine) and a why_it_fits framed as ` +
+      `proactive cold outreach. Reject ONLY private individuals, dead or empty pages, and pure advice content with no ` +
+      `approachable subject. Never invent facts; a modest fit honestly labelled beats an empty screen.`;
+    await extractFrom(0);
+    extractOverride = personalOverride;
   }
 
   // The same company can slip past name/host dedup by appearing both as a generic
