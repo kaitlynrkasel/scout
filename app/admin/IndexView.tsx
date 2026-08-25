@@ -131,25 +131,65 @@ export default function IndexView({
       <div className="grid gap-4 lg:grid-cols-2">
         {/* Growth, last 14 days */}
         <div className="rounded-2xl border border-warm-border bg-surface p-5 shadow-soft">
-          <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-            New people per day, last 14 days
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+              New people per day, last 14 days
+            </div>
+            <div className="text-xs font-bold tabular-nums text-body/70">
+              {data.days.reduce((a, d) => a + d.n, 0)} total
+            </div>
           </div>
-          <div className="mt-4 flex h-24 items-end gap-1.5">
-            {data.days.map((d) => (
-              <div key={d.day} className="flex-1" title={`${d.day}: ${d.n}`}>
-                <div
-                  className="w-full rounded-t bg-brown/70"
-                  style={{ height: `${Math.max(4, (d.n / maxDay) * 100)}%` }}
-                />
+          {data.days.every((d) => d.n === 0) ? (
+            <div className="mt-4 grid h-24 place-items-center rounded-xl bg-warm-bg/40 text-xs text-body/50">
+              No new people in the last 14 days
+            </div>
+          ) : (
+            <>
+              <div className="mt-4 flex h-28 items-end gap-1.5 border-b border-warm-border pb-px">
+                {data.days.map((d) => (
+                  <div
+                    key={d.day}
+                    title={`${d.day}: ${d.n} new`}
+                    className="flex h-full flex-1 flex-col items-center justify-end gap-0.5"
+                  >
+                    {d.n > 0 && (
+                      <span className="text-[9px] font-bold tabular-nums leading-none text-body/60">
+                        {d.n}
+                      </span>
+                    )}
+                    {d.n > 0 ? (
+                      <div
+                        className="w-full rounded-t bg-brown/75"
+                        style={{ height: `${Math.max(6, (d.n / maxDay) * 82)}%` }}
+                      />
+                    ) : (
+                      <div className="h-[3px] w-full rounded-t bg-warm-border" />
+                    )}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-1 flex justify-between text-[9px] text-body/40">
+                <span>{data.days[0]?.day.slice(5)}</span>
+                <span>{data.days[Math.floor(data.days.length / 2)]?.day.slice(5)}</span>
+                <span>{data.days[data.days.length - 1]?.day.slice(5)}</span>
+              </div>
+            </>
+          )}
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            {(
+              [
+                [data.seenOnce, "Seen once"],
+                [data.seenFew, "Seen 2 to 4 times"],
+                [data.seenMany, "Seen 5+ times"],
+              ] as const
+            ).map(([n, label]) => (
+              <div key={label} className="rounded-xl bg-warm-bg/50 px-3 py-2.5 text-center">
+                <div className="text-lg font-extrabold tabular-nums text-ink">{n}</div>
+                <div className="text-[10px] font-semibold text-body/60">{label}</div>
               </div>
             ))}
           </div>
-          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-body/70">
-            <span>Seen once: <b className="text-ink">{data.seenOnce}</b></span>
-            <span>Seen 2 to 4 times: <b className="text-ink">{data.seenFew}</b></span>
-            <span>Seen 5+ times: <b className="text-ink">{data.seenMany}</b></span>
-          </div>
-          <p className="mt-2 text-[11px] leading-relaxed text-body/50">
+          <p className="mt-3 text-[11px] leading-relaxed text-body/50">
             Repeat sightings raise confidence in a record&apos;s details. They never make
             someone rank higher in users&apos; searches, that&apos;s the diversity guard.
           </p>
