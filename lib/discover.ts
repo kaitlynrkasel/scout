@@ -1847,6 +1847,9 @@ export async function discover(
   // Late passes (the scarcity rescue) relax the extraction bar by appending
   // to this override; the main pass runs with the plain personal override.
   let extractOverride = personalOverride;
+  // Which pass is currently extracting; stamped onto every accepted opp so
+  // the admin can measure each pass's keep rate against real user decisions.
+  let currentPass: "specific" | "broadened" | "rescue" = "specific";
 
   // 1+2: gather + dedupe candidate pages. Wrapped so a broadening retry can
   // append a fresh batch of candidates from wider queries when the first pass
@@ -2309,6 +2312,8 @@ export async function discover(
       );
       opps.push({
         id: `${Date.now()}-${opps.length}`,
+        foundPass: currentPass,
+        fromIndex: !!(cand as any).__fromIndex,
         // noDash on every LLM-written text field so em/en dashes never show in a
         // find's title, outlet, role, location, or description.
         name: noDash(String(r.name).trim()),
@@ -2395,7 +2400,12 @@ export async function discover(
       const fromIndex = await opts.indexLookup(goal);
       for (const r of fromIndex.slice(0, idxCap)) {
         if (r?.url && candidates.some((c) => c.url === r.url)) continue;
-        candidates.push({ title: r.title || "", url: r.url || "", content: r.content || "" });
+        candidates.push({
+          title: r.title || "",
+          url: r.url || "",
+          content: r.content || "",
+          __fromIndex: true,
+        } as any);
       }
       if (fromIndex.length) emit("Checking people Scout has verified before");
     } catch {
@@ -2437,8 +2447,10 @@ export async function discover(
       plan
     );
     broadenedQueries = broadened.length;
+    currentPass = "broadened";
     await gather(broadened);
     await extractFrom(alreadyProcessed);
+    currentPass = "specific";
   }
 
   // Scarcity rescue: still under the floor after widening. When the goal
@@ -2481,8 +2493,10 @@ export async function discover(
       `results. Unless a result is a private individual, a dead link, or advice content, lean toward is_relevant true ` +
       `with an HONEST moderate fit_score (0.35-0.6) and a why_it_fits framed as a proactive outreach target. When the ` +
       `GOAL welcomes other industries, industry is not a reason to reject anything.`;
+    currentPass = "rescue";
     await gather(rescueQueries.slice(0, 6));
     await extractFrom(already);
+    currentPass = "specific";
     extractOverride = personalOverride;
   }
 

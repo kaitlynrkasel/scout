@@ -8,6 +8,15 @@
 
 import { useEffect, useState } from "react";
 
+interface Decisions {
+  fitCalibration: { bucket: string; decided: number; kept: number; keepRate: number | null }[];
+  unscored: { decided: number; kept: number; keepRate: number | null };
+  denials: { avoidable: number; taste: number; unclassified: number };
+  passes: { pass: string; decided: number; kept: number }[];
+  sources: { index: { decided: number; kept: number }; fresh: { decided: number; kept: number } };
+  reruns: { total: number; within15m: number };
+}
+
 interface MetricDef {
   id: string;
   name: string;
@@ -54,6 +63,7 @@ export default function MetricsView({
   getToken: () => Promise<string | null>;
 }) {
   const [metrics, setMetrics] = useState<MetricDef[]>([]);
+  const [decisions, setDecisions] = useState<Decisions | null>(null);
   const [catalog, setCatalog] = useState<Record<string, number> | null>(null);
   const [editable, setEditable] = useState(true);
   const [notReady, setNotReady] = useState(false);
@@ -77,6 +87,7 @@ export default function MetricsView({
         setEditable(mr?.editable !== false);
         setNotReady(!!mr?.notReady);
         setCatalog(ir?.algoCatalog || null);
+        setDecisions(ir?.decisions || null);
       } catch {
         if (!cancelled) setNote("Couldn't load the metrics.");
       }
@@ -123,10 +134,12 @@ export default function MetricsView({
           <h1 className="text-3xl font-extrabold tracking-tight text-ink">
             <span className="brand-text">Metrics</span>
           </h1>
-          <p className="mt-1 max-w-[70ch] text-sm text-body">
-            The algorithm's numbers, as metrics the team defines: each one is a
-            counter (or a ratio of two) computed across every account. Edit
-            them here; the whole team reads the same set.
+          <p className="mt-1 max-w-[72ch] text-sm text-body">
+            Not how MUCH the algorithm produced, but whether its CHOICES were
+            good for users: every find carries the inputs of the decision that
+            surfaced it (fit score, which pass, index vs fresh web), and each
+            panel joins those choices against what people actually kept,
+            denied, and why.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -177,6 +190,135 @@ export default function MetricsView({
         </div>
       </div>
 
+      {decisions && (
+        <div className="mb-8 space-y-4">
+          {/* 1. Fit calibration: does the fit score MEAN anything? */}
+          <section className="rounded-2xl border border-warm-border bg-surface p-5">
+            <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+              Does the fit score tell the truth?
+            </h2>
+            <p className="mt-1 max-w-[70ch] text-xs leading-relaxed text-body/60">
+              The choice measured: the score Scout assigns each find. If the
+              score is honest, high-scored finds get kept far more often than
+              low-scored ones; flat rates across rows mean the score is
+              decoration and the choice isn't helping anyone.
+            </p>
+            <div className="mt-3 space-y-1.5">
+              {[...decisions.fitCalibration, { bucket: "no score", ...decisions.unscored }].map(
+                (b: any) => (
+                  <div key={b.bucket} className="flex items-center gap-3">
+                    <span className="w-24 shrink-0 text-xs font-bold text-body">
+                      Fit {b.bucket}
+                    </span>
+                    <div className="h-3 min-w-0 flex-1 overflow-hidden rounded-full bg-warm-bg">
+                      <div
+                        className="h-full rounded-full bg-brown/80"
+                        style={{ width: `${Math.round((b.keepRate ?? 0) * 100)}%` }}
+                      />
+                    </div>
+                    <span className="w-40 shrink-0 text-right text-xs tabular-nums text-body/70">
+                      {b.keepRate == null
+                        ? "no decided finds yet"
+                        : `${Math.round(b.keepRate * 100)}% kept of ${b.decided}`}
+                    </span>
+                  </div>
+                )
+              )}
+            </div>
+          </section>
+
+          {/* 2. Avoidable denials: the improvement headroom. */}
+          <div className="grid gap-4 lg:grid-cols-3">
+            <section className="rounded-2xl border border-warm-border bg-surface p-5">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                Could Scout have known better?
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-body/60">
+                The choice measured: accepting a find the user then denied.
+                Deny reasons split into ones the algorithm could have caught
+                from the goal and the page (wrong industry, role, timing,
+                unreachable, already contacted) versus personal taste. The
+                avoidable share is the tuning headroom.
+              </p>
+              {(() => {
+                const d = decisions.denials;
+                const total = d.avoidable + d.taste + d.unclassified;
+                return (
+                  <div className="mt-3 space-y-1 text-sm tabular-nums text-body">
+                    <div>
+                      <b className="text-ink">{total ? Math.round((d.avoidable / total) * 100) : 0}%</b>{" "}
+                      avoidable ({d.avoidable})
+                    </div>
+                    <div>{d.taste} personal taste · {d.unclassified} no reason given</div>
+                  </div>
+                );
+              })()}
+            </section>
+
+            {/* 3. Re-runs: dissatisfaction. */}
+            <section className="rounded-2xl border border-warm-border bg-surface p-5">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                Did the run satisfy, or get re-run?
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-body/60">
+                The choice measured: the whole run's output. The same person
+                re-running the same goal within 15 minutes means the first
+                answer failed them; falling is good.
+              </p>
+              <div className="mt-3 text-sm tabular-nums text-body">
+                <b className="text-ink">
+                  {decisions.reruns.total
+                    ? Math.round((decisions.reruns.within15m / decisions.reruns.total) * 100)
+                    : 0}
+                  %
+                </b>{" "}
+                of {decisions.reruns.total} searches re-run within 15 minutes
+              </div>
+            </section>
+
+            {/* 4. Pass + source value. */}
+            <section className="rounded-2xl border border-warm-border bg-surface p-5">
+              <h2 className="text-sm font-extrabold uppercase tracking-wide text-ink">
+                Do widening and reuse earn their keep?
+              </h2>
+              <p className="mt-1 text-xs leading-relaxed text-body/60">
+                The choices measured: relaxing the bar to hit the five-find
+                floor (broadened, rescue passes) and reusing index people over
+                fresh web. Each shows its keep rate; a rescue pass whose finds
+                get denied wholesale is hurting, not helping. Stamped on finds
+                from today forward, so these fill in as new searches run.
+              </p>
+              <div className="mt-3 space-y-1 text-sm tabular-nums text-body">
+                {decisions.passes.length === 0 && (
+                  <div className="text-body/60">No stamped finds decided yet.</div>
+                )}
+                {decisions.passes.map((p) => (
+                  <div key={p.pass}>
+                    <span className="font-semibold capitalize text-ink">{p.pass}</span>:{" "}
+                    {p.decided ? `${Math.round((p.kept / p.decided) * 100)}% kept of ${p.decided}` : "none decided"}
+                  </div>
+                ))}
+                {(decisions.sources.index.decided > 0 || decisions.sources.fresh.decided > 0) && (
+                  <div className="pt-1 text-xs text-body/70">
+                    Index reuse:{" "}
+                    {decisions.sources.index.decided
+                      ? `${Math.round((decisions.sources.index.kept / decisions.sources.index.decided) * 100)}% kept`
+                      : "none decided"}{" "}
+                    · Fresh web:{" "}
+                    {decisions.sources.fresh.decided
+                      ? `${Math.round((decisions.sources.fresh.kept / decisions.sources.fresh.decided) * 100)}% kept`
+                      : "none decided"}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
+        </div>
+      )}
+
+      <h2 className="mb-3 text-sm font-extrabold uppercase tracking-wide text-body/60">
+        Your own counters
+      </h2>
       {notReady && (
         <p className="mb-5 rounded-xl border border-dashed border-warm-border bg-surface px-4 py-3 text-sm text-body">
           Showing the default set. To edit and save custom metrics, run{" "}

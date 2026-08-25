@@ -117,6 +117,38 @@ export async function GET(req: Request) {
   };
   const runBuckets = new Map<string, number>();
 
+  // Decision quality: how the algorithm's CHOICES line up with what users
+  // actually kept. Every find carries the inputs of the choice that surfaced
+  // it (fit score; which pass; index vs fresh); joining them against
+  // keep/deny answers "were those choices good for the user?".
+  const FIT_BUCKETS = [
+    { label: "80-100%", min: 0.8 },
+    { label: "60-79%", min: 0.6 },
+    { label: "35-59%", min: 0.35 },
+    { label: "under 35%", min: 0 },
+  ];
+  const dq = {
+    fit: FIT_BUCKETS.map((b) => ({ ...b, decided: 0, kept: 0 })),
+    unscoredDecided: 0,
+    unscoredKept: 0,
+    avoidable: 0,
+    taste: 0,
+    unclassified: 0,
+    passes: new Map<string, { decided: number; kept: number }>(),
+    index: { decided: 0, kept: 0 },
+    fresh: { decided: 0, kept: 0 },
+  };
+  const AVOIDABLE_BUCKETS = new Set([
+    "Wrong industry",
+    "Wrong role or level",
+    "Wrong timing",
+    "No way to contact",
+    "Not a real prospect",
+    "Genre / topic mismatch",
+    "Wrong location",
+    "Already reached out",
+  ]);
+
   for (const row of statesRes.data || []) {
     const uid = (row as any).user_id as string;
     const data = ((row as any).data || {}) as any;
@@ -196,6 +228,41 @@ export async function GET(req: Request) {
           }
         }
         if (f?.bounced) algo.bounced++;
+      }
+
+      {
+        const decided = status === "denied" || status === "drafted" || status === "sent" || status === "replied";
+        if (decided) {
+          const kept = status !== "denied";
+          const o = f?.opp || {};
+          const fit = Number(o.fitScore);
+          if (Number.isFinite(fit) && fit > 0) {
+            const b = dq.fit.find((x) => fit >= x.min);
+            if (b) {
+              b.decided++;
+              if (kept) b.kept++;
+            }
+          } else {
+            dq.unscoredDecided++;
+            if (kept) dq.unscoredKept++;
+          }
+          const pass = String(o.foundPass || "");
+          if (pass) {
+            const pb = dq.passes.get(pass) || { decided: 0, kept: 0 };
+            pb.decided++;
+            if (kept) pb.kept++;
+            dq.passes.set(pass, pb);
+          }
+          const side = o.fromIndex ? dq.index : dq.fresh;
+          side.decided++;
+          if (kept) side.kept++;
+          if (!kept) {
+            const bucket = bucketDenyReason(String(f?.denyReason || ""));
+            if (bucket === "(no reason given)") dq.unclassified++;
+            else if (AVOIDABLE_BUCKETS.has(bucket)) dq.avoidable++;
+            else dq.taste++;
+          }
+        }
       }
 
       const bucket = byUseCase.get(uc) || { total: 0, denied: 0 };
@@ -385,7 +452,51 @@ export async function GET(req: Request) {
     if (n >= 5) algo.runsAtFloor++;
   }
 
+  // Same goal re-run within 15 minutes by the same user = the first run's
+  // choices failed them. The strongest single dissatisfaction signal we have.
+  let rerunCount = 0;
+  {
+    const byUser = new Map<string, { goal: string; t: number }[]>();
+    for (const h of histRes?.data || []) {
+      const uid2 = String((h as any).user_id || "");
+      const arr = byUser.get(uid2) || [];
+      arr.push({
+        goal: String((h as any).goal || "").toLowerCase().replace(/[^a-z0-9]/g, ""),
+        t: new Date(String((h as any).created_at || 0)).getTime(),
+      });
+      byUser.set(uid2, arr);
+    }
+    for (const arr of byUser.values()) {
+      arr.sort((a, b) => a.t - b.t);
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i].goal && arr[i].goal === arr[i - 1].goal && arr[i].t - arr[i - 1].t < 15 * 60000)
+          rerunCount++;
+      }
+    }
+  }
+
   return NextResponse.json({
+    decisions: {
+      fitCalibration: dq.fit.map((b) => ({
+        bucket: b.label,
+        decided: b.decided,
+        kept: b.kept,
+        keepRate: b.decided ? b.kept / b.decided : null,
+      })),
+      unscored: {
+        decided: dq.unscoredDecided,
+        kept: dq.unscoredKept,
+        keepRate: dq.unscoredDecided ? dq.unscoredKept / dq.unscoredDecided : null,
+      },
+      denials: {
+        avoidable: dq.avoidable,
+        taste: dq.taste,
+        unclassified: dq.unclassified,
+      },
+      passes: Array.from(dq.passes.entries()).map(([pass, v]) => ({ pass, ...v })),
+      sources: { index: dq.index, fresh: dq.fresh },
+      reruns: { total: (histRes?.data || []).length, within15m: rerunCount },
+    },
     // Raw counters the editable Metrics tab builds formulas from. "decided"
     // and "outbound" are the two common denominators, precomputed.
     algoCatalog: {

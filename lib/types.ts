@@ -32,6 +32,12 @@ export interface SourceRef {
 }
 
 export interface Opportunity {
+  // Decision-trace stamps: which engine pass surfaced this (specific /
+  // broadened / rescue) and whether it came from the shared index rather
+  // than a fresh web search. Joined against keep/deny/reply later to
+  // measure whether those choices actually benefit users (Admin > Metrics).
+  foundPass?: string;
+  fromIndex?: boolean;
   id: string;
   name: string; // person/company/outlet + role
   outlet: string; // org / company / publication
