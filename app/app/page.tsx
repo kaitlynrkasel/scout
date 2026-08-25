@@ -1659,13 +1659,10 @@ function ScoutTool({
     }
   }, [tab]);
 
-  // "All projects" is a Finds/Spreadsheet lens. Outreach runs ONE project at a
-  // time, so opening it with the all-projects lens on used to show empty
-  // pickers; clear the lens instead so the form always has a project.
-  useEffect(() => {
-    if (tab === "outreach" && findsAllProjects) setFindsAllProjects(false);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  // Outreach used to force the all-projects lens OFF (its old pickers read the
+  // lens and came up empty). The stage's own pickers read activeId directly
+  // now, so the lens can stay put — clearing it here was what kept resetting
+  // Finds back to a single project every session.
 
   // Small GSAP fade-and-lift on the main content whenever the active tab
   // changes (dashboard, finds, manual, …). useGSAP reverts the previous tween
@@ -4757,11 +4754,13 @@ function ScoutTool({
 
   // Finds belonging to the active project (newest first), and the count still to work.
   // Finds tab can show one project or ALL projects (in the current company lens).
+  // Defaults ON: the pipeline view should open showing everything you have;
+  // narrowing to one project is the deliberate act, not the starting state.
   const [findsAllProjects, setFindsAllProjects] = useState(() => {
     try {
-      return typeof window !== "undefined" && localStorage.getItem("scout_all_projects") === "1";
+      return typeof window === "undefined" || localStorage.getItem("scout_all_projects") !== "0";
     } catch {
-      return false;
+      return true;
     }
   });
   useEffect(() => {
