@@ -395,7 +395,10 @@ const DELETED_CAP = 500;
 // direct link instead of a preview.
 let PREVIEW_TOKEN = "";
 function previewSrc(url: string): string {
-  return `/api/site-preview?url=${encodeURIComponent(url)}${
+  // v busts the CDN cache when the preview ASSEMBLY changes: stale-while-
+  // revalidate otherwise keeps serving an old build of the page for up to a
+  // day. Bump it whenever the proxy's injected scripts change.
+  return `/api/site-preview?v=3&url=${encodeURIComponent(url)}${
     PREVIEW_TOKEN ? `&pt=${encodeURIComponent(PREVIEW_TOKEN)}` : ""
   }`;
 }
