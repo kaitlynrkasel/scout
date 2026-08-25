@@ -4758,14 +4758,14 @@ function ScoutTool({
   // narrowing to one project is the deliberate act, not the starting state.
   const [findsAllProjects, setFindsAllProjects] = useState(() => {
     try {
-      return typeof window === "undefined" || localStorage.getItem("scout_all_projects") !== "0";
+      return typeof window === "undefined" || localStorage.getItem("scout_all_projects_v2") !== "0";
     } catch {
       return true;
     }
   });
   useEffect(() => {
     try {
-      localStorage.setItem("scout_all_projects", findsAllProjects ? "1" : "0");
+      localStorage.setItem("scout_all_projects_v2", findsAllProjects ? "1" : "0");
     } catch {
       /* ignore */
     }
