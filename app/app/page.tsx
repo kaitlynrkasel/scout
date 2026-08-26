@@ -16517,6 +16517,85 @@ function FindCard({
  * FindCard so it can also run inside FindDetailModal, the fullscreen "Details"
  * popup goes through the entire workflow (draft, edit, send, schedule, deny,
  * follow up) without leaving the popup. */
+/* A tiny per-device address book: every email the user actually uses in
+ * To/CC is remembered and offered as a suggestion next time. */
+const ADDR_KEY = "scout_addr_book";
+function knownAddresses(): string[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(ADDR_KEY) || "[]");
+    return Array.isArray(a) ? a.filter((x) => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function rememberAddresses(...emails: string[]) {
+  try {
+    const add = emails
+      .map((e) => String(e || "").trim().toLowerCase())
+      .filter((e) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e));
+    if (!add.length) return;
+    const cur = knownAddresses();
+    localStorage.setItem(
+      ADDR_KEY,
+      JSON.stringify([...add, ...cur.filter((c) => !add.includes(c))].slice(0, 200))
+    );
+  } catch {}
+}
+
+/* An email field with house-styled suggestions from the address book.
+ * Comma-separated values supported: suggestions complete the segment being
+ * typed. */
+function AddressInput({
+  value,
+  onChange,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [focused, setFocused] = useState(false);
+  const parts = value.split(",");
+  const last = (parts[parts.length - 1] || "").trim().toLowerCase();
+  const already = parts.slice(0, -1).map((p) => p.trim().toLowerCase());
+  const matches = focused
+    ? knownAddresses()
+        .filter((a) => !already.includes(a) && a !== last && (!last || a.includes(last)))
+        .slice(0, 6)
+    : [];
+  return (
+    <div className="relative min-w-0 flex-1">
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setFocused(true)}
+        onBlur={() => window.setTimeout(() => setFocused(false), 150)}
+        placeholder={placeholder}
+        className={className}
+      />
+      {matches.length > 0 && (
+        <div className="absolute left-0 right-0 z-30 mt-1 overflow-hidden rounded-xl border border-warm-border bg-surface p-1 shadow-xl">
+          {matches.map((a) => (
+            <button
+              key={a}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                const kept = parts.slice(0, -1).map((p) => p.trim()).filter(Boolean);
+                onChange([...kept, a].join(", "));
+              }}
+              className="block w-full rounded-lg px-2.5 py-1.5 text-left text-sm text-body transition hover:bg-warm-bg"
+            >
+              {a}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FindWorkflow({
   headerLabel,
   find,
@@ -17095,11 +17174,11 @@ function FindWorkflow({
                     <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
                       To
                     </span>
-                    <input
+                    <AddressInput
                       value={ownTo}
-                      onChange={(e) => setOwnTo(e.target.value)}
+                      onChange={setOwnTo}
                       placeholder={/email/i.test(draftKind) ? "their@email.com" : "@their-handle"}
-                      className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                      className="w-full rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
                     />
                   </div>
                   {/(email|cover letter)/i.test(draftKind) && (
@@ -17107,11 +17186,11 @@ function FindWorkflow({
                       <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
                         CC
                       </span>
-                      <input
+                      <AddressInput
                         value={ownCc}
-                        onChange={(e) => setOwnCc(e.target.value)}
+                        onChange={setOwnCc}
                         placeholder="optional, comma-separated"
-                        className="min-w-0 flex-1 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                        className="w-full rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
                       />
                     </div>
                   )}
@@ -17129,7 +17208,7 @@ function FindWorkflow({
                   onChange={(e) => setOwnBody(e.target.value)}
                   rows={big ? 14 : 6}
                   autoFocus={big}
-                  placeholder="Write the message exactly as you want it sent. Your words, no rewriting."
+                  placeholder="Write the message exactly as you want it sent."
                   className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
                 />
                 {/* Your saved signatures, one tap to append. Several saved
@@ -17199,6 +17278,7 @@ function FindWorkflow({
                   <button
                     onClick={() => {
                       onWriteOwn(draftKind, ownSubject, ownBody, ownTo, ownCc);
+                      rememberAddresses(ownTo, ...ownCc.split(/[,;\s]+/));
                       try {
                         sessionStorage.removeItem(`scout_compose_${find.id}`);
                       } catch {}
