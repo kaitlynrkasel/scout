@@ -14944,7 +14944,26 @@ function FindsTab({
 
   // Which find's detail modal is open. Looked up from `finds` (not a snapshot)
   // so it reflects live updates while open.
-  const [detailId, setDetailId] = useState("");
+  // A refresh mid-preview reopens the same find: the open id rides in
+  // sessionStorage (per tab, gone when the tab closes), restored once the
+  // finds have actually loaded.
+  const [detailId, setDetailIdRaw] = useState("");
+  const setDetailId = (id: string) => {
+    setDetailIdRaw(id);
+    try {
+      if (id) sessionStorage.setItem("scout_open_find", id);
+      else sessionStorage.removeItem("scout_open_find");
+    } catch {}
+  };
+  const detailRestoredRef = useRef(false);
+  useEffect(() => {
+    if (detailRestoredRef.current || !finds.length) return;
+    detailRestoredRef.current = true;
+    try {
+      const id = sessionStorage.getItem("scout_open_find") || "";
+      if (id && finds.some((f) => f.id === id)) setDetailIdRaw(id);
+    } catch {}
+  }, [finds.length]);
   const detailFind = detailId ? finds.find((f) => f.id === detailId) || null : null;
 
   // Bulk selection: pick several finds at once and act on all of them.
