@@ -11993,6 +11993,7 @@ function FindDetailModal({
   find,
   templates = [],
   onWriteOwn,
+  onSaveAsTemplate,
   onClose,
   onToggleApplication,
   onOpenApplicationKit,
@@ -12042,6 +12043,7 @@ function FindDetailModal({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
+  onSaveAsTemplate?: () => void;
   headerLabel?: string;
   onClose: () => void;
   position: number;
@@ -12785,6 +12787,7 @@ function FindDetailModal({
                 find={find}
                 templates={templates}
                 onWriteOwn={onWriteOwn}
+                onSaveAsTemplate={onSaveAsTemplate}
                 gmail={gmail}
                 drafting={drafting}
                 gmailBusy={gmailBusy}
@@ -14534,6 +14537,141 @@ function FindGridCard({
   );
 }
 
+/* Save any message as a template: Scout cleans the one-off details out
+ * (recipient name, company, dates) via /api/templatize, the user reviews the
+ * cleaned text and picks where it applies, and it joins their template set. */
+function SaveTemplateModal({
+  find,
+  projects,
+  categories,
+  onClose,
+  onSave,
+}: {
+  find: Find;
+  projects: Project[];
+  categories: Category[];
+  onClose: () => void;
+  onSave: (channel: string, text: string, projectId?: string, categoryId?: string) => void;
+}) {
+  const d = find.draft!;
+  const [kind, setKind] = useState(d.channelType === "email" ? "Email" : OUTREACH_KINDS[1] || "Email");
+  const [text, setText] = useState("");
+  const [cleaning, setCleaning] = useState(true);
+  const [note, setNote] = useState("");
+  const [pid, setPid] = useState("");
+  const [cid, setCid] = useState("");
+  const cats = categories.filter((c) => c.projectId === pid);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const raw = (d.subject ? `Subject: ${d.subject}\n\n` : "") + d.body;
+        const r = await fetch("/api/templatize", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ text: raw, channel: kind }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (!alive) return;
+        if (r.ok && j.template) {
+          setText(String(j.template));
+          setNote("Cleaned: names, company, and one-off details became placeholders. Adjust anything before saving.");
+        } else {
+          setText(d.body);
+          setNote("Couldn't auto-clean it just now; edit out the one-off details yourself.");
+        }
+      } catch {
+        if (alive) {
+          setText(d.body);
+          setNote("Couldn't auto-clean it just now; edit out the one-off details yourself.");
+        }
+      } finally {
+        if (alive) setCleaning(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4" onClick={onClose}>
+      <div
+        className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-warm-border bg-surface p-5 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <span className="text-sm font-bold text-ink">Save this message as a template</span>
+          <button onClick={onClose} className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink">
+            Close
+          </button>
+        </div>
+        {cleaning ? (
+          <p className="py-8 text-center text-sm text-body/60">
+            Cleaning the one-off details into placeholders…
+          </p>
+        ) : (
+          <>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              rows={10}
+              className="w-full resize-y rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+            />
+            {note && <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">{note}</p>}
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              <PrettySelect
+                ariaLabel="Kind of outreach"
+                value={kind}
+                onChange={setKind}
+                className="w-full"
+                options={OUTREACH_KINDS.map((k) => ({ value: k, label: k }))}
+              />
+              <PrettySelect
+                ariaLabel="Project it applies to"
+                value={pid}
+                onChange={(v) => {
+                  setPid(v);
+                  setCid("");
+                }}
+                className="w-full"
+                options={[
+                  { value: "", label: "All projects" },
+                  ...projects.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+              />
+              <div className={pid ? "" : "pointer-events-none opacity-50"}>
+                <PrettySelect
+                  ariaLabel="Category it applies to"
+                  value={cid}
+                  onChange={setCid}
+                  className="w-full"
+                  options={[
+                    { value: "", label: pid ? "All categories" : "Pick a project first" },
+                    ...cats.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              </div>
+            </div>
+            <div className="mt-4 flex items-center gap-3">
+              <button
+                onClick={() => onSave(kind, text, pid || undefined, cid || undefined)}
+                disabled={!text.trim()}
+                className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+              >
+                Save template
+              </button>
+              <span className="text-[11px] text-body/60">
+                Every future draft of this kind can start from it.
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Recently deleted finds: a delete is recoverable, not final. Collapsed to a
  * single quiet line until opened. */
 function TrashSection({
@@ -14633,6 +14771,7 @@ function FindsTab({
   gmailBusyId,
   onDraft,
   onWriteOwn,
+  onSaveTemplate,
   trash = [],
   onRestore,
   onPurgeTrash,
@@ -14697,6 +14836,7 @@ function FindsTab({
   gmailBusyId: string;
   onDraft: (f: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
   onWriteOwn?: (f: Find, kind: string, subject: string, body: string, to?: string, cc?: string) => void;
+  onSaveTemplate?: (channel: string, text: string, projectId?: string, categoryId?: string) => void;
   trash?: { find: Find; deletedAt: number }[];
   onRestore?: (id: string) => void;
   onPurgeTrash?: (id: string) => void;
@@ -14955,6 +15095,8 @@ function FindsTab({
       else sessionStorage.removeItem("scout_open_find");
     } catch {}
   };
+  // Which find's message is being saved as a template (opens the modal).
+  const [saveTplFor, setSaveTplFor] = useState<Find | null>(null);
   const detailRestoredRef = useRef(false);
   useEffect(() => {
     if (detailRestoredRef.current || !finds.length) return;
@@ -15577,6 +15719,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
               gmailBusy={!!f.draft && gmailBusyId === f.draft.opportunityId}
               onDraft={(o) => onDraft(f, o)}
               onWriteOwn={onWriteOwn ? (k, su, b, t, c) => onWriteOwn(f, k, su, b, t, c) : undefined}
+              onSaveAsTemplate={onSaveTemplate ? () => setSaveTplFor(f) : undefined}
               onRegenerate={() => onDraft(f, { force: true })}
               onDeny={(reason) => onDeny(f, reason)}
               onSetReason={(reason) => onSetReason(f, reason)}
@@ -15726,6 +15869,19 @@ shared={shown.some((x) => !!x.foundByEmail)}
         </div>
       )}
 
+      {saveTplFor && saveTplFor.draft && onSaveTemplate && (
+        <SaveTemplateModal
+          find={saveTplFor}
+          projects={projects}
+          categories={categories}
+          onClose={() => setSaveTplFor(null)}
+          onSave={(channel, text, pid, cid) => {
+            onSaveTemplate(channel, text, pid, cid);
+            setSaveTplFor(null);
+          }}
+        />
+      )}
+
       {trash.length > 0 && (
         <TrashSection trash={trash} onRestore={onRestore} onPurge={onPurgeTrash} />
       )}
@@ -15745,6 +15901,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
           gmailBusy={!!detailFind.draft && gmailBusyId === detailFind.draft.opportunityId}
           onDraft={(o) => onDraft(detailFind, o)}
           onWriteOwn={onWriteOwn ? (k, su, b, t, c) => onWriteOwn(detailFind, k, su, b, t, c) : undefined}
+          onSaveAsTemplate={onSaveTemplate ? () => setSaveTplFor(detailFind) : undefined}
           onRegenerate={() => onDraft(detailFind, { force: true })}
           onDeny={(reason) => onDeny(detailFind, reason)}
           onSetReason={(reason) => onSetReason(detailFind, reason)}
@@ -15962,6 +16119,7 @@ function FindCard({
   find,
   templates = [],
   onWriteOwn,
+  onSaveAsTemplate,
   gmail,
   drafting,
   gmailBusy,
@@ -16002,6 +16160,7 @@ function FindCard({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
+  onSaveAsTemplate?: () => void;
   headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -16316,6 +16475,7 @@ function FindCard({
         find={find}
         templates={templates}
         onWriteOwn={onWriteOwn}
+        onSaveAsTemplate={onSaveAsTemplate}
         gmail={gmail}
         drafting={drafting}
         gmailBusy={gmailBusy}
@@ -16362,6 +16522,7 @@ function FindWorkflow({
   find,
   templates = [],
   onWriteOwn,
+  onSaveAsTemplate,
   gmail,
   drafting,
   gmailBusy,
@@ -16398,6 +16559,7 @@ function FindWorkflow({
   find: Find;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
+  onSaveAsTemplate?: () => void;
   headerLabel?: string;
   gmail: { connected: boolean; email?: string; sendMode?: "draft" | "send"; label?: string };
   drafting: boolean;
@@ -16989,6 +17151,16 @@ function FindWorkflow({
               </div>
             );
           })()}
+
+        {d && !denied && onSaveAsTemplate && (
+          <button
+            onClick={onSaveAsTemplate}
+            title="Scout cleans the one-off details out and saves it as a reusable template"
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Save as a template
+          </button>
+        )}
 
         {/* Move to a different project, a find isn't stuck wherever it was
             first surfaced. Resets after firing since the find leaves this list. */}
