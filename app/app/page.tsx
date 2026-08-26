@@ -17020,26 +17020,30 @@ function FindWorkflow({
             const valid =
               tplId === "__own__" ? "__own__" : choices.some((t) => t.id === tplId) ? tplId : "";
             return (
-              <select
-                value={valid}
-                onChange={(e) => setTplId(e.target.value)}
-                disabled={drafting}
-                title="Draft from a specific template"
-                aria-label="Template to draft from"
-                className="scout-select max-w-[220px] rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-body outline-none transition hover:bg-warm-bg disabled:opacity-50"
+              <div
+                className={`w-full max-w-[280px] ${drafting ? "pointer-events-none opacity-50" : ""}`}
+                title="Where the words come from when you hit Draft"
               >
-                <option value="">Best template (auto)</option>
-                {choices.map((t) => {
-                  const w = t.text.trim().replace(/\s+/g, " ");
-                  return (
-                    <option key={t.id} value={t.id}>
-                      {t.channel}: {w.slice(0, 30)}
-                      {w.length > 30 ? "…" : ""}
-                    </option>
-                  );
-                })}
-                {onWriteOwn && <option value="__own__">Write my own message</option>}
-              </select>
+                <PrettySelect
+                  ariaLabel="Where the draft's words come from"
+                  value={valid}
+                  onChange={setTplId}
+                  className="w-full"
+                  options={[
+                    // "Scout picks" = the drafter matches your templates to
+                    // this find's format and project on its own.
+                    { value: "", label: "Scout picks the best template" },
+                    ...choices.map((t) => {
+                      const w = t.text.trim().replace(/\s+/g, " ");
+                      return {
+                        value: t.id,
+                        label: `${t.channel}: ${w.slice(0, 30)}${w.length > 30 ? "…" : ""}`,
+                      };
+                    }),
+                    ...(onWriteOwn ? [{ value: "__own__", label: "Write my own message" }] : []),
+                  ]}
+                />
+              </div>
             );
           })()}
 
