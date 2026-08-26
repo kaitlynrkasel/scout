@@ -17217,9 +17217,10 @@ function FindWorkflow({
                   placeholder="Write the message exactly as you want it sent."
                   className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
                 />
-                {/* Your saved signatures, one tap to append. Several saved
-                    signatures each get their own chip, labeled by first line. */}
-                {(currentSignature || (signatureOptions || []).length > 0) && (
+                {/* Your saved signatures, one tap to append; the row shows
+                    even with none saved, because + New signature is how you
+                    get your first one. */}
+                {(
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
                       Signature
