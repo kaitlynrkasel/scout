@@ -9656,6 +9656,7 @@ function PrettySelect({
   className = "",
   ariaLabel,
   bare = false,
+  small = false,
 }: {
   value: string;
   options: { value: string; label: string }[];
@@ -9665,6 +9666,8 @@ function PrettySelect({
   // Draw no box of its own: the trigger inherits its parent's pill (the Scout
   // stage toggles), while the dropdown list stays the standard light panel.
   bare?: boolean;
+  // Compact trigger for pickers that sit inline with small action buttons.
+  small?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -9695,7 +9698,9 @@ function PrettySelect({
         className={
           bare
             ? "pretty-select flex w-full items-center justify-between gap-2 rounded-full px-4 py-2 text-left text-sm font-semibold text-inherit outline-none transition sm:px-5 sm:py-2.5 sm:text-base focus-visible:ring-2 focus-visible:ring-white/40"
-            : "pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
+            : small
+              ? "pretty-select flex w-full items-center justify-between gap-2 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-left text-xs font-semibold text-body outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
+              : "pretty-select flex w-full items-center justify-between gap-2 rounded-xl border border-warm-border bg-surface px-3 py-2 text-left text-sm font-semibold text-ink outline-none transition hover:bg-warm-bg focus-visible:ring-2 focus-visible:ring-brown/30"
         }
       >
         <span className="min-w-0 truncate">{current?.label || "Select…"}</span>
@@ -17105,6 +17110,7 @@ function FindWorkflow({
               >
                 <PrettySelect
                   ariaLabel="Where the draft's words come from"
+                  small
                   value={valid}
                   onChange={setTplId}
                   className="w-full"
