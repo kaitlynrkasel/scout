@@ -13,7 +13,7 @@ import AUTO from "./auto.json";
 
 export const dynamic = "force-dynamic";
 
-type Verdict = "" | "ok" | "warn" | "bad";
+type Verdict = "" | "ok" | "warn" | "bad" | "later";
 interface CheckRow {
   key: string;
   verdict: Verdict;
@@ -170,8 +170,17 @@ function ReadinessInner() {
   }, [onlyUntested]);
   const ql = q.trim().toLowerCase();
   const itemMatches = (it: Item, sTitle: string) =>
+    checks[it.key]?.verdict !== "later" &&
     (!ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql)) &&
     (!onlyUntested || !merged[it.key]?.verdict);
+  // Items the team pushed off; they live in their own section at the bottom.
+  const laterItems = parts.flatMap((p) =>
+    p.sections.flatMap((sec) =>
+      sec.items
+        .filter((it) => checks[it.key]?.verdict === "later")
+        .map((it) => ({ it, sTitle: sec.title }))
+    )
+  );
   // Split position as a percentage of the window width (checklist column).
   // Dragged with a real divider and remembered per device, because how much
   // room each side deserves depends on what you are doing.
@@ -272,7 +281,10 @@ function ReadinessInner() {
     }
   }
 
-  const done = allItems.filter((i) => merged[i.key]?.verdict).length;
+  const done = allItems.filter((i) => {
+    const v = merged[i.key]?.verdict;
+    return v && v !== "later";
+  }).length;
   const counts = {
     ok: allItems.filter((i) => merged[i.key]?.verdict === "ok").length,
     warn: allItems.filter((i) => merged[i.key]?.verdict === "warn").length,
@@ -533,7 +545,19 @@ function ReadinessInner() {
                               </button>
                             ))}
                           </div>
-                          {c?.verdict && (
+                          <button
+                            onClick={() =>
+                              save(it.key, {
+                                verdict: checks[it.key]?.verdict === "later" ? "" : "later",
+                                owner_name: meRef.current,
+                              })
+                            }
+                            title="Park this in the Do later section at the bottom"
+                            className="rounded-lg border border-dashed border-warm-border px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
+                          >
+                            Do later
+                          </button>
+                          {c?.verdict && c.verdict !== "later" && (
                             <span className="text-[11px] text-body/50">
                               {c.owner_name || "someone"} · {String(c.updated_at).slice(5, 10)}
                             </span>
@@ -595,6 +619,49 @@ function ReadinessInner() {
         </div>
         );
       })}
+      {laterItems.length > 0 && (
+        <div className="mt-10">
+          <div className="border-t-2 border-ink pt-4">
+            <div className="kicker">Parked</div>
+            <h2 className="mt-1 text-xl font-extrabold tracking-tight text-ink">Do later</h2>
+            <p className="mt-1 max-w-[62ch] text-sm text-body/70">
+              Items the team pushed off. Mark one here and it files back into
+              its section; Put it back returns it untested.
+            </p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {laterItems.map(({ it, sTitle }) => (
+              <div key={it.key} className="rounded-xl border border-warm-border bg-surface px-4 py-3">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="min-w-0 flex-1 text-sm font-bold text-ink">{it.title}</span>
+                  <span className="shrink-0 text-[11px] text-body/50">{sTitle}</span>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {VERDICTS.map(({ v, label }) => (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        save(it.key, { verdict: v, owner_name: meRef.current });
+                        if (v === "ok") setOpenKey("");
+                        else setOpenKey(it.key);
+                      }}
+                      className="rounded-lg border border-warm-border px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => save(it.key, { verdict: "", owner_name: meRef.current })}
+                    className="rounded-lg px-2.5 py-1 text-xs font-semibold text-body/50 transition hover:text-ink"
+                  >
+                    Put it back
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       </main>
       {/* Drag to rebalance the two panes. */}
       <div

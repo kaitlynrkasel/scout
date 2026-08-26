@@ -35,7 +35,7 @@ export async function POST(req: NextRequest) {
   }
   const body = await req.json().catch(() => ({}));
   const key = String(body.key || "").slice(0, 160);
-  const verdict = ["", "ok", "warn", "bad"].includes(body.verdict) ? body.verdict : "";
+  const verdict = ["", "ok", "warn", "bad", "later"].includes(body.verdict) ? body.verdict : "";
   const owner = String(body.owner || "").slice(0, 60);
   const note = String(body.note || "").slice(0, 1000);
   if (!key) return NextResponse.json({ error: "Missing item key." }, { status: 400 });
