@@ -8598,6 +8598,7 @@ function ScoutTool({
           gmailBusyId={gmailBusyId}
           onDraft={draftFind}
           onWriteOwn={writeOwnDraft}
+          goTemplates={() => setTab("templates")}
           onDeny={(f, reason) => denyFindWithReason(f.id, reason || "")}
           onSetReason={(f, reason) => setFindReason(f.id, reason)}
           onReopen={(f) => setFindStatus(f.id, "new")}
@@ -14551,14 +14552,17 @@ function SaveTemplateModal({
   categories,
   onClose,
   onSave,
+  onGoTemplates,
 }: {
   find: Find;
   projects: Project[];
   categories: Category[];
   onClose: () => void;
   onSave: (channel: string, text: string, projectId?: string, categoryId?: string) => void;
+  onGoTemplates?: () => void;
 }) {
   const d = find.draft!;
+  const [saved, setSaved] = useState(false);
   const [kind, setKind] = useState(d.channelType === "email" ? "Email" : OUTREACH_KINDS[1] || "Email");
   const [text, setText] = useState("");
   const [cleaning, setCleaning] = useState(true);
@@ -14658,18 +14662,51 @@ function SaveTemplateModal({
                 />
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-3">
-              <button
-                onClick={() => onSave(kind, text, pid || undefined, cid || undefined)}
-                disabled={!text.trim()}
-                className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-              >
-                Save template
-              </button>
-              <span className="text-[11px] text-body/60">
-                Every future draft of this kind can start from it.
-              </span>
-            </div>
+            {saved ? (
+              <div className="mt-4 rounded-xl border border-sage/40 bg-sage/10 p-4">
+                <p className="text-sm font-bold text-ink">Saved to your templates.</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-body/70">
+                  It lives in the Templates tab now, and every new draft of this
+                  kind can start from it (pick it in the draft-source dropdown, or
+                  let Scout match it automatically).
+                </p>
+                <div className="mt-3 flex items-center gap-3">
+                  {onGoTemplates && (
+                    <button
+                      onClick={() => {
+                        onGoTemplates();
+                        onClose();
+                      }}
+                      className="rounded-xl bg-brand-gradient px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+                    >
+                      View it in Templates
+                    </button>
+                  )}
+                  <button
+                    onClick={onClose}
+                    className="text-sm font-semibold text-body/60 transition hover:text-ink"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    onSave(kind, text, pid || undefined, cid || undefined);
+                    setSaved(true);
+                  }}
+                  disabled={!text.trim()}
+                  className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                >
+                  Save template
+                </button>
+                <span className="text-[11px] text-body/60">
+                  Every future draft of this kind can start from it.
+                </span>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -14777,6 +14814,7 @@ function FindsTab({
   onDraft,
   onWriteOwn,
   onSaveTemplate,
+  goTemplates,
   trash = [],
   onRestore,
   onPurgeTrash,
@@ -14842,6 +14880,7 @@ function FindsTab({
   onDraft: (f: Find, opts?: { force?: boolean; kind?: string; templateId?: string }) => void;
   onWriteOwn?: (f: Find, kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   onSaveTemplate?: (channel: string, text: string, projectId?: string, categoryId?: string) => void;
+  goTemplates?: () => void;
   trash?: { find: Find; deletedAt: number }[];
   onRestore?: (id: string) => void;
   onPurgeTrash?: (id: string) => void;
@@ -15880,10 +15919,8 @@ shared={shown.some((x) => !!x.foundByEmail)}
           projects={projects}
           categories={categories}
           onClose={() => setSaveTplFor(null)}
-          onSave={(channel, text, pid, cid) => {
-            onSaveTemplate(channel, text, pid, cid);
-            setSaveTplFor(null);
-          }}
+          onSave={(channel, text, pid, cid) => onSaveTemplate(channel, text, pid, cid)}
+          onGoTemplates={goTemplates}
         />
       )}
 
