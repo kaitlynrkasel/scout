@@ -16653,6 +16653,36 @@ function FindWorkflow({
   const [ownTo, setOwnTo] = useState("");
   const [ownCc, setOwnCc] = useState("");
   const [ownExpanded, setOwnExpanded] = useState(false);
+  const [sigOpen, setSigOpen] = useState(false);
+  const [newSig, setNewSig] = useState("");
+  // What you typed survives a refresh: the composer rides in sessionStorage
+  // per find until Use this message. Restored (and the composer reopened)
+  // whenever this find comes back up.
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(`scout_compose_${find.id}`);
+      if (raw) {
+        const c = JSON.parse(raw);
+        setOwnSubject(c.subject || "");
+        setOwnBody(c.body || "");
+        setOwnTo(c.to || "");
+        setOwnCc(c.cc || "");
+        if (c.body || c.subject) setTplId("__own__");
+        if (c.expanded) setOwnExpanded(true);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [find.id]);
+  useEffect(() => {
+    try {
+      if (tplId === "__own__" && (ownBody || ownSubject || ownCc)) {
+        sessionStorage.setItem(
+          `scout_compose_${find.id}`,
+          JSON.stringify({ subject: ownSubject, body: ownBody, to: ownTo, cc: ownCc, expanded: ownExpanded })
+        );
+      }
+    } catch {}
+  }, [ownSubject, ownBody, ownTo, ownCc, ownExpanded, tplId, find.id]);
   // Opening the composer seeds To with the find's contact for the chosen
   // format; the field stays editable after.
   useEffect(() => {
@@ -17122,12 +17152,52 @@ function FindWorkflow({
                           {sig.split("\n").find((l) => l.trim())?.slice(0, 26) || "Add signature"}
                         </button>
                       ))}
+                    <button
+                      onClick={() => setSigOpen((v) => !v)}
+                      className="rounded-full border border-dashed border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
+                    >
+                      + New signature
+                    </button>
+                  </div>
+                )}
+                {sigOpen && (
+                  <div className="mt-2 rounded-xl border border-warm-border bg-warm-bg/30 p-3">
+                    <textarea
+                      value={newSig}
+                      onChange={(e) => setNewSig(e.target.value)}
+                      rows={3}
+                      autoFocus
+                      placeholder={"Kaitlyn Kasel\nFounder and Director, Cue Creative\ncuecreative.media"}
+                      className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                    />
+                    <div className="mt-2 flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const sig = newSig.trim();
+                          if (!sig) return;
+                          onEditSignature(sig);
+                          setOwnBody((b) => `${b.replace(/\s+$/, "")}\n\n${sig}`);
+                          setSigOpen(false);
+                          setNewSig("");
+                        }}
+                        disabled={!newSig.trim()}
+                        className="rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+                      >
+                        Save and add it
+                      </button>
+                      <span className="text-[11px] text-body/60">
+                        Saved as this project&apos;s signature for future drafts too.
+                      </span>
+                    </div>
                   </div>
                 )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
                       onWriteOwn(draftKind, ownSubject, ownBody, ownTo, ownCc);
+                      try {
+                        sessionStorage.removeItem(`scout_compose_${find.id}`);
+                      } catch {}
                       setTplId("");
                       setOwnSubject("");
                       setOwnBody("");
