@@ -17098,6 +17098,32 @@ function FindWorkflow({
                   placeholder="Write the message exactly as you want it sent. Your words, no rewriting."
                   className="w-full resize-y rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
                 />
+                {/* Your saved signatures, one tap to append. Several saved
+                    signatures each get their own chip, labeled by first line. */}
+                {(currentSignature || (signatureOptions || []).length > 0) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                      Signature
+                    </span>
+                    {((signatureOptions || []).length > 0
+                      ? (signatureOptions as string[])
+                      : [currentSignature]
+                    )
+                      .filter(Boolean)
+                      .map((sig, i) => (
+                        <button
+                          key={i}
+                          title={sig}
+                          onClick={() =>
+                            setOwnBody((b) => `${b.replace(/\s+$/, "")}\n\n${sig}`)
+                          }
+                          className="rounded-full border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body transition hover:bg-warm-bg"
+                        >
+                          {sig.split("\n").find((l) => l.trim())?.slice(0, 26) || "Add signature"}
+                        </button>
+                      ))}
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
