@@ -601,6 +601,14 @@ function ReadinessInner() {
                                   <li key={i}>{st}</li>
                                 ))}
                               </ol>
+                              {open && (
+                                <button
+                                  onClick={() => setOpenKey("")}
+                                  className="mt-2 text-xs font-semibold text-body/50 transition hover:text-ink"
+                                >
+                                  Hide the steps
+                                </button>
+                              )}
                               </>
                             )}
                             {it.tech && (

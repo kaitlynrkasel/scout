@@ -145,9 +145,16 @@ export default function AdminPage() {
               looking clipped inside the page padding. */}
           <nav className="-mx-4 flex w-full items-center gap-1 overflow-x-auto px-4 py-1 [scrollbar-width:none] sm:mx-0 sm:ml-4 sm:w-auto sm:overflow-visible sm:px-0">
             {(["insights", "metrics", "concierge", "index", "pricing", "design", "readiness"] as const).map((t) => (
-              <button
+              // Real links, not buttons: right-click / cmd-click open the tab
+              // in a new browser tab. A plain click still switches in place.
+              <a
                 key={t}
-                onClick={() => setAdminTab(t)}
+                href={`#${t}`}
+                onClick={(e) => {
+                  if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  setAdminTab(t);
+                }}
                 className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-xs font-bold capitalize transition ${
                   adminTab === t
                     ? "bg-brown-tint text-brown-deep"
@@ -155,7 +162,7 @@ export default function AdminPage() {
                 }`}
               >
                 {t}
-              </button>
+              </a>
             ))}
           </nav>
         </div>
