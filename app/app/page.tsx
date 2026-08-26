@@ -16547,6 +16547,51 @@ function rememberAddresses(...emails: string[]) {
   } catch {}
 }
 
+/* The content shelf: links to work examples (a TikTok, a reel, a press
+ * page) that keep coming up in outreach. Any link used in a sent-off
+ * composer message is remembered automatically; the composer offers the
+ * shelf back as one-tap chips. Per device, like the address book. */
+const CONTENT_KEY = "scout_content_links";
+function knownContent(): { url: string; label: string }[] {
+  try {
+    const a = JSON.parse(localStorage.getItem(CONTENT_KEY) || "[]");
+    return Array.isArray(a) ? a.filter((x) => x && typeof x.url === "string") : [];
+  } catch {
+    return [];
+  }
+}
+function contentLabel(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, "");
+  } catch {
+    return url.slice(0, 24);
+  }
+}
+function rememberContent(urls: string[], label?: string) {
+  try {
+    const add = urls
+      .map((u) => String(u || "").trim())
+      .filter((u) => /^https?:\/\//i.test(u))
+      .map((url) => ({ url, label: label || contentLabel(url) }));
+    if (!add.length) return;
+    const cur = knownContent();
+    const urlsAdded = new Set(add.map((a) => a.url));
+    localStorage.setItem(
+      CONTENT_KEY,
+      JSON.stringify([...add, ...cur.filter((c) => !urlsAdded.has(c.url))].slice(0, 100))
+    );
+  } catch {}
+}
+function forgetContent(url: string) {
+  try {
+    localStorage.setItem(
+      CONTENT_KEY,
+      JSON.stringify(knownContent().filter((c) => c.url !== url))
+    );
+  } catch {}
+}
+
 /* An email field with house-styled suggestions from the address book.
  * Comma-separated values supported: suggestions complete the segment being
  * typed. */
@@ -16739,6 +16784,9 @@ function FindWorkflow({
   const [ownExpanded, setOwnExpanded] = useState(false);
   const [sigOpen, setSigOpen] = useState(false);
   const [newSig, setNewSig] = useState("");
+  const [contentOpen, setContentOpen] = useState(false);
+  const [newContentUrl, setNewContentUrl] = useState("");
+  const [newContentLabel, setNewContentLabel] = useState("");
   // What you typed survives a refresh: the composer rides in sessionStorage
   // per find until Use this message. Restored (and the composer reopened)
   // whenever this find comes back up.
@@ -17281,11 +17329,90 @@ function FindWorkflow({
                     </div>
                   </div>
                 )}
+                {/* The content shelf: saved work-example links, one tap to
+                    drop into the message. Links you actually use are learned
+                    automatically. */}
+                {(() => {
+                  const shelf = knownContent().slice(0, 6);
+                  return (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                        Content
+                      </span>
+                      {shelf.map((c) => (
+                        <span
+                          key={c.url}
+                          className="inline-flex items-center gap-1 rounded-full border border-warm-border pl-2.5 pr-1 text-[11px] font-semibold text-body"
+                        >
+                          <button
+                            title={c.url}
+                            onClick={() =>
+                              setOwnBody((b) => `${b.replace(/\s+$/, "")}\n${c.url}`)
+                            }
+                            className="py-1 transition hover:text-ink"
+                          >
+                            {c.label}
+                          </button>
+                          <button
+                            title="Remove from your content list"
+                            aria-label={`Remove ${c.label} from your content list`}
+                            onClick={() => {
+                              forgetContent(c.url);
+                              setOwnBody((b) => b); // re-render
+                            }}
+                            className="px-1 py-1 text-body/40 transition hover:text-danger"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                      <button
+                        onClick={() => setContentOpen((v) => !v)}
+                        className="rounded-full border border-dashed border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
+                      >
+                        + Add a link
+                      </button>
+                    </div>
+                  );
+                })()}
+                {contentOpen && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-warm-border bg-warm-bg/30 p-3">
+                    <input
+                      value={newContentUrl}
+                      onChange={(e) => setNewContentUrl(e.target.value)}
+                      placeholder="https://…"
+                      autoFocus
+                      className="min-w-[200px] flex-1 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                    />
+                    <input
+                      value={newContentLabel}
+                      onChange={(e) => setNewContentLabel(e.target.value)}
+                      placeholder="Label (optional)"
+                      className="w-40 rounded-lg border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+                    />
+                    <button
+                      onClick={() => {
+                        const u = newContentUrl.trim();
+                        if (!/^https?:\/\//i.test(u)) return;
+                        rememberContent([u], newContentLabel.trim() || undefined);
+                        setOwnBody((b) => `${b.replace(/\s+$/, "")}\n${u}`);
+                        setContentOpen(false);
+                        setNewContentUrl("");
+                        setNewContentLabel("");
+                      }}
+                      disabled={!/^https?:\/\//i.test(newContentUrl.trim())}
+                      className="rounded-lg bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+                    >
+                      Save and add it
+                    </button>
+                  </div>
+                )}
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <button
                     onClick={() => {
                       onWriteOwn(draftKind, ownSubject, ownBody, ownTo, ownCc);
                       rememberAddresses(ownTo, ...ownCc.split(/[,;\s]+/));
+                      rememberContent(ownBody.match(/https?:\/\/[^\s)>"']+/g) || []);
                       try {
                         sessionStorage.removeItem(`scout_compose_${find.id}`);
                       } catch {}
