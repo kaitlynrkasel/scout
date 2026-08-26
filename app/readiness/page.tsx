@@ -500,6 +500,14 @@ function ReadinessInner() {
                             Show me where in Scout →
                           </button>
                         )}
+                        {!folded && !open && (it.steps || []).length > 0 && (
+                          <button
+                            onClick={() => setOpenKey(it.key)}
+                            className="ml-3 mt-1.5 text-xs font-bold text-body/60 hover:text-ink hover:underline"
+                          >
+                            How to test it
+                          </button>
+                        )}
                         <div className={`ml-5 mt-2.5 flex flex-wrap items-center gap-2 ${folded ? "hidden" : ""}`}>
                           <span
                             className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
@@ -584,11 +592,16 @@ function ReadinessInner() {
                               </div>
                             )}
                             {it.steps && it.steps.length > 0 && (
+                              <>
+                                <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                                  How to test it
+                                </div>
                               <ol className="list-decimal space-y-1 pl-5 text-[13px] leading-relaxed text-body/80">
                                 {it.steps.map((st, i) => (
                                   <li key={i}>{st}</li>
                                 ))}
                               </ol>
+                              </>
                             )}
                             {it.tech && (
                               <p className="mt-2 rounded-lg bg-warm-bg/60 px-3 py-2 text-xs leading-relaxed text-body/70">
