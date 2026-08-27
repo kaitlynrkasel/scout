@@ -1553,6 +1553,7 @@ interface BillingStatus {
 const TABS = [
   "outreach",
   "finds",
+  "drafts",
   "dashboard",
   "team",
   "projects",
@@ -4781,6 +4782,7 @@ function ScoutTool({
       ? finds.filter((f) => f.projectId === activeProject.id)
       : [];
   const newFindCount = myFinds.filter((f) => f.status === "new").length;
+  const draftedCount = myFinds.filter((f) => f.status === "drafted").length;
 
   // ---- Finds pipeline ----
   // Add newly discovered people to the active project's finds (deduped, keeping
@@ -7508,6 +7510,7 @@ function ScoutTool({
         setTab={setTab}
         tourTarget={tourTarget}
         newFindCount={newFindCount}
+        draftedCount={draftedCount}
         templatesCount={visibleTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
@@ -8566,7 +8569,7 @@ function ScoutTool({
           </main>
       )}
 
-      {tab === "finds" && (
+      {(tab === "finds" || tab === "drafts") && (
         <FindsTab
           finds={myFinds}
           onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
@@ -8591,8 +8594,14 @@ function ScoutTool({
           voiceRefreshAvailable={voiceRefreshAvailable}
           refreshingVoice={refreshingVoice}
           onRefreshDrafts={refreshDraftsWithVoice}
-          filter={findFilter}
-          setFilter={setFindFilter}
+          filter={tab === "drafts" ? "drafted" : findFilter}
+          setFilter={(f) => {
+            // Picking another status from the Drafts tab is a jump back to
+            // the full Finds view with that filter on.
+            setFindFilter(f);
+            if (tab === "drafts" && f !== "drafted") setTab("finds");
+          }}
+          headingWord={tab === "drafts" ? "drafts" : "finds"}
           gmail={activeMailbox}
           draftingId={findDraftingId}
           gmailBusyId={gmailBusyId}
@@ -9753,6 +9762,7 @@ function SideNav({
   setTab,
   hasNews,
   newFindCount,
+  draftedCount = 0,
   templatesCount,
   profileHasBio,
   hasAccount,
@@ -9777,6 +9787,7 @@ function SideNav({
   setTab: (t: any) => void;
   hasNews?: boolean;
   newFindCount: number;
+  draftedCount?: number;
   templatesCount: number;
   profileHasBio: boolean;
   hasAccount: boolean;
@@ -9824,7 +9835,7 @@ function SideNav({
   const BOTTOM_TABS = ["outreach", "finds", "dashboard", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "applications"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "drafts", "applications"] },
     { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
@@ -9901,6 +9912,18 @@ function SideNav({
       label: "Finds",
       badge: newFindCount,
       icon: <path d="M20 7 9 18l-5-5" />,
+    },
+    {
+      key: "drafts",
+      label: "Drafts",
+      badge: draftedCount,
+      // A page with writing lines: messages waiting to go out.
+      icon: (
+        <>
+          <path d="M6 3h9l4 4v14H6z" />
+          <path d="M9 11h7M9 15h7" />
+        </>
+      ),
     },
     {
       key: "manual",
@@ -14815,6 +14838,7 @@ function FindsTab({
   onWriteOwn,
   onSaveTemplate,
   goTemplates,
+  headingWord = "finds",
   trash = [],
   onRestore,
   onPurgeTrash,
@@ -14881,6 +14905,7 @@ function FindsTab({
   onWriteOwn?: (f: Find, kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   onSaveTemplate?: (channel: string, text: string, projectId?: string, categoryId?: string) => void;
   goTemplates?: () => void;
+  headingWord?: string;
   trash?: { find: Find; deletedAt: number }[];
   onRestore?: (id: string) => void;
   onPurgeTrash?: (id: string) => void;
@@ -15196,7 +15221,7 @@ function FindsTab({
         <div>
           <div className="kicker mb-2">Your pipeline</div>
           <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
-            Your <span className="text-brown">finds</span>
+            Your <span className="text-brown">{headingWord}</span>
           </h1>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <Label className="mb-0">Project</Label>
