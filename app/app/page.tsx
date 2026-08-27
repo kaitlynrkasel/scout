@@ -15007,6 +15007,11 @@ function FindsTab({
   // Source: Scout-found vs hand-added/imported. Defaults to Scout-found so the
   // pipeline reads as "what Scout brought back"; flip to Manual or Both anytime.
   const [srcFilter, setSrcFilter] = useState<"scout" | "manual" | "both">("scout");
+  // The Drafts tab always opens on Both: a draft matters the same whether the
+  // find was Scout-found or hand-added, and hiding half of them read as bugs.
+  useEffect(() => {
+    if (headingWord === "drafts") setSrcFilter("both");
+  }, [headingWord]);
   const srcCounts = {
     scout: finds.filter((f) => f.foundVia !== "manual").length,
     manual: finds.filter((f) => f.foundVia === "manual").length,
