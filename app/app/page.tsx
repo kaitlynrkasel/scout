@@ -3203,7 +3203,8 @@ function ScoutTool({
   // so replies in that thread can be tracked later.
   const sendViaGmail = async (
     d: Draft,
-    threadId?: string
+    threadId?: string,
+    mode?: "send" | "draft"
   ): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
@@ -3224,6 +3225,7 @@ function ScoutTool({
           cc: d.cc || undefined,
           subject: d.subject,
           body: d.body,
+          mode: mode || undefined,
           threadId: threadId || undefined,
           attachment,
         }),
@@ -3300,7 +3302,7 @@ function ScoutTool({
 
   // Create a draft in / send from the user's Outlook for one message. Shares the
   // mailbox busy/sent state so the send buttons work for whichever provider is on.
-  const sendViaOutlook = async (d: Draft): Promise<"draft" | "send" | null> => {
+  const sendViaOutlook = async (d: Draft, mode?: "send" | "draft"): Promise<"draft" | "send" | null> => {
     if (!getToken) return null;
     const token = await getToken();
     if (!token) return null;
@@ -3311,6 +3313,7 @@ function ScoutTool({
         method: "POST",
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
         body: JSON.stringify({ to: d.to,
+          mode: mode || undefined,
           cc: d.cc || undefined, subject: d.subject, body: d.body }),
       });
       const j = await parseApiResponse(r);
@@ -3385,9 +3388,11 @@ function ScoutTool({
   }
   const sendViaMailbox = (
     d: Draft,
-    threadId?: string
+    threadId?: string,
+    mode?: "send" | "draft"
   ): Promise<"draft" | "send" | null> => {
-    if (activeMailbox.sendMode === "send" && sentToday() >= SEND_CAP_PER_DAY) {
+    const effective = mode || activeMailbox.sendMode;
+    if (effective === "send" && sentToday() >= SEND_CAP_PER_DAY) {
       setError(
         `Daily send limit reached (${SEND_CAP_PER_DAY} from this inbox today). Sending more in one day hurts ` +
           `deliverability and risks spam filtering. Switch "Send from your email" to Create-draft mode to keep ` +
@@ -3395,7 +3400,7 @@ function ScoutTool({
       );
       return Promise.resolve(null);
     }
-    return activeMailbox.provider === "outlook" ? sendViaOutlook(d) : sendViaGmail(d, threadId);
+    return activeMailbox.provider === "outlook" ? sendViaOutlook(d, mode) : sendViaGmail(d, threadId, mode);
   };
 
   const saveProjectsRaw = (n: Project[]) => {
@@ -6166,7 +6171,7 @@ function ScoutTool({
 
   // Send/draft a find's message via Gmail. sendViaGmail patches the find itself
   // (thread id + sent status), so nothing more to do here.
-  async function sendFindViaGmail(find: Find, override?: DraftOverride) {
+  async function sendFindViaGmail(find: Find, override?: DraftOverride, mode?: "send" | "draft") {
     if (!find.draft) return;
     // If this find already has a thread (e.g. a follow-up on an earlier send),
     // thread the new message into it instead of starting a new one. An override
@@ -6174,7 +6179,7 @@ function ScoutTool({
     const d = override
       ? { ...find.draft, subject: override.subject, body: override.body }
       : find.draft;
-    await sendViaMailbox(d, find.gmailThreadId);
+    await sendViaMailbox(d, find.gmailThreadId, mode);
   }
 
   // Queue this find's draft for future sending via the active mailbox. The
@@ -12091,7 +12096,7 @@ function FindDetailModal({
   onReopen: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: (override?: DraftOverride) => void;
+  onSendGmail: (override?: DraftOverride, mode?: "send" | "draft") => void;
   onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
@@ -14916,7 +14921,7 @@ function FindsTab({
   onMarkSent: (f: Find) => void;
   onStatus: (f: Find, s: FindStatus) => void;
   onRemove: (f: Find) => void;
-  onSendGmail: (f: Find, override?: DraftOverride) => void;
+  onSendGmail: (f: Find, override?: DraftOverride, mode?: "send" | "draft") => void;
   onSchedule: (f: Find, sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: (f: Find) => void;
   meetingPrepId: string;
@@ -15801,7 +15806,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
               onMarkSent={() => onMarkSent(f)}
               onStatus={(s) => onStatus(f, s)}
               onRemove={() => onRemove(f)}
-              onSendGmail={(ov) => onSendGmail(f, ov)}
+              onSendGmail={(ov, m) => onSendGmail(f, ov, m)}
               onSchedule={(date, ov) => onSchedule(f, date, ov)}
               onMeetingPrep={() => onMeetingPrep(f)}
               meetingPrepBusy={meetingPrepId === f.id}
@@ -15980,7 +15985,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
           onReopen={() => onReopen(detailFind)}
           onStatus={(s) => onStatus(detailFind, s)}
           onRemove={() => onRemove(detailFind)}
-          onSendGmail={(ov) => onSendGmail(detailFind, ov)}
+          onSendGmail={(ov, m) => onSendGmail(detailFind, ov, m)}
           onSchedule={(date, ov) => onSchedule(detailFind, date, ov)}
           onMeetingPrep={() => onMeetingPrep(detailFind)}
           meetingPrepBusy={meetingPrepId === detailFind.id}
@@ -16245,7 +16250,7 @@ function FindCard({
   onMarkSent: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: (override?: DraftOverride) => void;
+  onSendGmail: (override?: DraftOverride, mode?: "send" | "draft") => void;
   onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
@@ -16767,7 +16772,7 @@ function FindWorkflow({
   onReopen: () => void;
   onStatus: (s: FindStatus) => void;
   onRemove: () => void;
-  onSendGmail: (override?: DraftOverride) => void;
+  onSendGmail: (override?: DraftOverride, mode?: "send" | "draft") => void;
   onSchedule: (sendAt: Date, override?: DraftOverride) => void;
   onMeetingPrep: () => void;
   meetingPrepBusy: boolean;
@@ -16944,7 +16949,7 @@ function FindWorkflow({
   const doSend = () => {
     const ov = sendGuard?.override;
     setSendGuard(null);
-    onSendGmail(ov);
+    onSendGmail(ov, "send");
   };
   const attemptSend = () => {
     const ov = commitEditsIfAny();
@@ -16961,7 +16966,7 @@ function FindWorkflow({
         override: ov,
       });
     } else {
-      onSendGmail(ov);
+      onSendGmail(ov, "send");
     }
   };
 
@@ -17606,24 +17611,29 @@ function FindWorkflow({
             )}
             {gmail.connected && emailDraft && !done ? (
               <>
+                {/* Both doors, always: review it in your inbox, or send it
+                    outright. The account's draft/send default no longer hides
+                    one of them. */}
                 <button
                   onClick={attemptSend}
                   disabled={gmailBusy}
                   className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"
                 >
-                  {gmailBusy
-                    ? "Working…"
-                    : gmail.sendMode === "send"
-                      ? `Send from ${gmail.label || "Gmail"}`
-                      : `Create ${gmail.label || "Gmail"} draft`}
+                  {gmailBusy ? "Working…" : `Send from ${gmail.label || "Gmail"}`}
                 </button>
-                {gmail.sendMode === "send" && (
-                  <SchedulePicker
-                    timezone={find.opp.timezone}
-                    scheduledFor={find.scheduledSendAt}
-                    onSchedule={(date) => onSchedule(date, commitEditsIfAny())}
-                  />
-                )}
+                <button
+                  onClick={() => onSendGmail(commitEditsIfAny(), "draft")}
+                  disabled={gmailBusy}
+                  title={`Puts this in your ${gmail.label || "Gmail"} drafts so you can see and send it from your inbox`}
+                  className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
+                >
+                  See it in {gmail.label || "Gmail"}
+                </button>
+                <SchedulePicker
+                  timezone={find.opp.timezone}
+                  scheduledFor={find.scheduledSendAt}
+                  onSchedule={(date) => onSchedule(date, commitEditsIfAny())}
+                />
               </>
             ) : (
               !done && <SendAction draft={d} onUse={onCopy} />
