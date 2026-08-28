@@ -15438,6 +15438,7 @@ function FindsTab({
   // Source: Scout-found vs hand-added/imported. Defaults to Scout-found so the
   // pipeline reads as "what Scout brought back"; flip to Manual or Both anytime.
   const [srcFilter, setSrcFilter] = useState<"scout" | "manual" | "both">("scout");
+  const [findQ, setFindQ] = useState("");
   // The Drafts tab always opens on Both: a draft matters the same whether the
   // find was Scout-found or hand-added, and hiding half of them read as bugs.
   useEffect(() => {
@@ -15577,6 +15578,22 @@ function FindsTab({
               (f.status === "replied" || scheduledPending(f)))
     )
     .filter(matchesFilters)
+    // Search across everything a person would remember a find by: the name,
+    // the outlet, the contact address, and the draft itself.
+    .filter((f) => {
+      const t = findQ.trim().toLowerCase();
+      if (!t) return true;
+      return [
+        f.opp?.name,
+        f.opp?.outlet,
+        f.opp?.contactEmail,
+        f.opp?.url,
+        f.draft?.subject,
+        f.draft?.body,
+      ]
+        .filter(Boolean)
+        .some((x) => String(x).toLowerCase().includes(t));
+    })
     // Who found it. Teammates' finds are adopted into this same list and carry
     // foundByEmail; anything without one is your own.
     .filter((f) => {
@@ -15858,6 +15875,33 @@ function FindsTab({
           ))}
         </div>
       )}
+
+      <div className="mt-5 flex items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-body/40"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input
+            data-guide="finds-search"
+            value={findQ}
+            onChange={(e) => setFindQ(e.target.value)}
+            placeholder={`Search ${headingWord}: name, company, email, draft…`}
+            className="w-full rounded-xl border border-warm-border bg-surface py-2 pl-9 pr-8 text-sm text-ink shadow-card outline-none transition focus:border-coral"
+          />
+          {findQ && (
+            <button
+              onClick={() => setFindQ("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-body/50 hover:text-ink"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {findQ.trim() && (
+          <span className="shrink-0 text-xs font-semibold text-body/60">
+            {shown.length} match{shown.length === 1 ? "" : "es"}
+          </span>
+        )}
+      </div>
 
       {/* Status filter (the main control) + a quiet side group of view toggle,
           Filters, and Export — sub-options, pushed to the edge. */}
