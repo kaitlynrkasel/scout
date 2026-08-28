@@ -10605,18 +10605,32 @@ function SideNav({
           <div className="mb-2.5">
             <div className="kicker px-2 pb-1.5">Company</div>
             <div className="rounded-xl border border-black/10 bg-white/40 p-2 dark:border-white/10 dark:bg-white/5">
-              <PrettySelect
-                ariaLabel="Company lens"
-                value={activeCompanyId}
-                onChange={onSelectCompany}
-                options={[
-                  { value: "", label: "All companies" },
-                  ...(hasPersonal || personalAllowed ? [{ value: "personal", label: "Personal" }] : []),
-                  ...companies.map((c) => ({ value: c.id, label: c.name })),
-                ]}
-              />
+              {/* Personal isn't a company: while the checkbox is on, the
+                  company picker steps aside entirely and comes back on
+                  uncheck. The picker only lists Personal itself when there's
+                  no checkbox to do the job (legacy personal projects). */}
+              {activeCompanyId !== "personal" && (
+                <PrettySelect
+                  ariaLabel="Company lens"
+                  value={activeCompanyId}
+                  onChange={onSelectCompany}
+                  options={[
+                    { value: "", label: "All companies" },
+                    ...(hasPersonal && !personalAllowed
+                      ? [{ value: "personal", label: "Personal" }]
+                      : []),
+                    ...companies.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                />
+              )}
               {personalAllowed && (
-                <label className="mt-2 flex cursor-pointer items-start gap-2.5 border-t border-black/10 px-1 pt-2.5 pb-0.5 dark:border-white/10">
+                <label
+                  className={`flex cursor-pointer items-start gap-2.5 px-1 pb-0.5 ${
+                    activeCompanyId !== "personal"
+                      ? "mt-2 border-t border-black/10 pt-2.5 dark:border-white/10"
+                      : "pt-1"
+                  }`}
+                >
                   <input
                     type="checkbox"
                     checked={activeCompanyId === "personal"}
