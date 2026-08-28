@@ -531,32 +531,43 @@ function ReadinessInner() {
                         {/* Description lives behind the expander now: an
                             unexpanded row is one line + buttons, so 278 items
                             scan instead of scroll. */}
-                        {!folded && (ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id]) && (
-                          <button
-                            onClick={() => goLive(ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id])}
-                            className="ml-5 mt-1.5 text-xs font-bold text-accent hover:underline"
-                          >
-                            Show me where in Scout →
-                          </button>
-                        )}
-                        {!folded && (it.steps || []).length > 0 && (
-                          <button
-                            onClick={() =>
-                              goTour(it, ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id] || "")
-                            }
-                            className="ml-3 mt-1.5 text-xs font-bold text-accent hover:underline"
-                          >
-                            Walk me through it →
-                          </button>
-                        )}
-                        {!folded && !open && (it.steps || []).length > 0 && (
-                          <button
-                            onClick={() => setOpenKey(it.key)}
-                            className="ml-3 mt-1.5 text-xs font-bold text-body/60 hover:text-ink hover:underline"
-                          >
-                            How to test it
-                          </button>
-                        )}
+                        {/* One tidy action row. A walkthrough supersedes the
+                            bare jump (it lands AND reads the steps), so items
+                            with steps show it as the lead action. */}
+                        {!folded &&
+                          ((it.steps || []).length > 0 ||
+                            ITEM_GUIDE[it.key] ||
+                            SECTION_GUIDE[s.id]) && (
+                            <div className="ml-5 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+                              {(it.steps || []).length > 0 ? (
+                                <>
+                                  <button
+                                    onClick={() =>
+                                      goTour(it, ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id] || "")
+                                    }
+                                    className="text-xs font-bold text-accent hover:underline"
+                                  >
+                                    Walk me through it →
+                                  </button>
+                                  {!open && (
+                                    <button
+                                      onClick={() => setOpenKey(it.key)}
+                                      className="text-xs font-semibold text-body/50 hover:text-ink hover:underline"
+                                    >
+                                      Read the steps
+                                    </button>
+                                  )}
+                                </>
+                              ) : (
+                                <button
+                                  onClick={() => goLive(ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id])}
+                                  className="text-xs font-bold text-accent hover:underline"
+                                >
+                                  Show me where in Scout →
+                                </button>
+                              )}
+                            </div>
+                          )}
                         <div className={`ml-5 mt-2.5 flex flex-wrap items-center gap-2 ${folded ? "hidden" : ""}`}>
                           <span
                             className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
