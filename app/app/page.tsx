@@ -15145,8 +15145,19 @@ function FindsTab({
       f.status !== "replied" &&
       f.status !== "denied"
   );
+  const scheduledPending = (f: Find) =>
+    !!f.scheduledSendAt && new Date(f.scheduledSendAt).getTime() > Date.now();
   const shown = finds
-    .filter((f) => (filter === "pinned" ? f.pinned : filter === "all" ? true : f.status === filter))
+    .filter((f) =>
+      filter === "pinned"
+        ? f.pinned
+        : filter === "all"
+          ? true
+          : // The Drafts view also carries queued sends: written, not yet out
+            // the door, regardless of which status the queue left them in.
+            f.status === filter ||
+            (headingWord === "drafts" && filter === "drafted" && scheduledPending(f))
+    )
     .filter(matchesFilters)
     // Who found it. Teammates' finds are adopted into this same list and carry
     // foundByEmail; anything without one is your own.
@@ -16358,6 +16369,14 @@ function FindCard({
             className="rounded-full border border-red-300 bg-red-50 px-2 py-0.5 text-[10px] font-bold text-danger"
           >
             Bounced
+          </span>
+        )}
+        {find.scheduledSendAt && new Date(find.scheduledSendAt).getTime() > Date.now() && (
+          <span
+            title="Queued; the cron sends it at this time"
+            className="rounded-full border border-sage/50 bg-sage/10 px-2 py-0.5 text-[10px] font-bold text-sage-deep"
+          >
+            Scheduled {new Date(find.scheduledSendAt).toLocaleString([], { month: "numeric", day: "numeric", hour: "numeric", minute: "2-digit" })}
           </span>
         )}
         {o.fitScore != null && <FitPill fitScore={o.fitScore} />}
