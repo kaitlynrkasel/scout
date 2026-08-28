@@ -799,9 +799,9 @@ export default function ImportOutreach({
                             };
                           });
                         return (
-                          <div key={i}>
-                            <div className="text-sm font-semibold text-ink">{q.question}</div>
-                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          <div key={i} className="rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
+                            <div className="text-sm font-semibold leading-snug text-ink">{q.question}</div>
+                            <div className="mt-2 flex flex-wrap gap-1.5">
                               {q.options.map((opt) => (
                                 <button
                                   key={opt}

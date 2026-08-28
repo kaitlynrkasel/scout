@@ -16,16 +16,19 @@ const SYSTEM =
   "they've been reaching out to, what the status/outcome values signify, and what has been done " +
   "vs. what is pending. Reply with ONLY a JSON object, no prose:\n" +
   '{"summary":"", "understanding":0, "questions":[{"question":"","options":[]}]}\n' +
-  "summary = 1-2 sentences on what this sheet is and what it tracks.\n" +
+  "summary = ONE short sentence (under 140 characters) on what this sheet is. No column lists.\n" +
   "understanding = an HONEST integer 0-100 for how completely you understand this sheet well " +
   "enough to import it and learn from it. Base it on real evidence: clear headers + readable " +
   "values + an obvious outcome/status column = HIGH (85-100). Ambiguous columns, cryptic status " +
   "codes, or unclear what success means = LOWER. Do NOT inflate it.\n" +
   "questions = ONLY genuinely ambiguous, decision-CHANGING things: what a cryptic column or " +
   "status value means, which outcomes count as a success/reply, what the goal of this outreach " +
-  "was, or whether a column is the person vs. the company. At most 3, each DISTINCT. Each has 2-5 " +
-  "short concrete `options` the user can pick from (plus they can type their own). If the sheet " +
-  "is already clear, return an empty questions array and a HIGH understanding.";
+  "was, or whether a column is the person vs. the company. At most 3, each DISTINCT.\n" +
+  "Write for a phone screen: each question is ONE short plain sentence (under 12 words, no " +
+  "parentheticals, no column dumps). Each has 2-3 `options`, each option a phrase of AT MOST 8 " +
+  "words. Never include an Other/I'll-explain option: the UI adds its own. Never use em dashes " +
+  "anywhere. If the sheet is already clear, return an empty questions array and a HIGH " +
+  "understanding.";
 
 export async function POST(req: NextRequest) {
   if (supabaseAdmin) {
@@ -67,7 +70,14 @@ export async function POST(req: NextRequest) {
           .map((q: any) => ({
             question: String(q?.question || "").trim(),
             options: Array.isArray(q?.options)
-              ? q.options.map((o: any) => String(o || "").trim()).filter(Boolean).slice(0, 5)
+              ? q.options
+                  .map((o: any) => String(o || "").trim().replace(/\u2014/g, ","))
+                  .filter(Boolean)
+                  // The UI renders its own Other chip; model-made ones double up.
+                  .filter((o: string) => !/^other\b/i.test(o))
+                  // A chip is a phrase, not a paragraph.
+                  .filter((o: string) => o.length <= 70)
+                  .slice(0, 3)
               : [],
           }))
           .filter((q: any) => q.question)
@@ -75,7 +85,7 @@ export async function POST(req: NextRequest) {
       : [];
     return NextResponse.json({
       understanding,
-      summary: String(parsed.summary || "").trim(),
+      summary: String(parsed.summary || "").trim().replace(/\u2014/g, ",").slice(0, 200),
       questions,
     });
   } catch (e: any) {
