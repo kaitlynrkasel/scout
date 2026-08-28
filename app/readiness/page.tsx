@@ -550,12 +550,24 @@ function ReadinessInner() {
                 <p className="mt-1 text-[13px] leading-relaxed text-body/75">
                   <b className="text-ink/80">Good looks like:</b> {it.good}
                 </p>
-                {checks[it.key]?.owner_name && (
-                  <p className="mt-1 text-[11px] text-body/50">
-                    picked up by {checks[it.key].owner_name}
-                    {checks[it.key].updated_at ? ` · ${String(checks[it.key].updated_at).slice(5, 10)}` : ""}
-                  </p>
-                )}
+                <p className="mt-1.5 text-[11px] font-semibold text-body/60">
+                  {checks[it.key]?.owner_name ? (
+                    <>
+                      <span className="text-ink">{checks[it.key].owner_name}</span> is on it
+                      {checks[it.key].updated_at
+                        ? ` · since ${String(checks[it.key].updated_at).slice(5, 10)}`
+                        : ""}
+                    </>
+                  ) : (
+                    // Nobody typed a name before clicking, so the board can't
+                    // say who owns this one. Name the gap rather than showing
+                    // an anonymous row.
+                    <span className="text-attention">
+                      nobody&apos;s name on this one — put yours in the box at the top before
+                      you claim an item
+                    </span>
+                  )}
+                </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   {VERDICTS.map(({ v, label }) => (
                     <button
@@ -769,7 +781,7 @@ function ReadinessInner() {
                               setOpenKey("");
                             }}
                             title="Someone is fixing this now — lift it onto the In works board at the top"
-                            className="rounded-lg border border-brown/40 bg-brown/5 px-2.5 py-1 text-xs font-semibold text-brown transition hover:bg-brown/10"
+                            className="rounded-lg border border-warm-border px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
                           >
                             In works
                           </button>
