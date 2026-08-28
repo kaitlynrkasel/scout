@@ -9226,8 +9226,8 @@ function ScoutTool({
 
       {tab === "applications" && (
         <ApplicationsTab
-          finds={finds}
-          projects={projects}
+          finds={visibleFinds}
+          projects={visibleProjects}
           categories={categories}
           onSetDeadline={(id, ts) => patchFind(id, { appDeadline: ts })}
           onSetRank={(id, rank) => patchFind(id, { appRank: rank })}
@@ -10616,14 +10616,11 @@ function SideNav({
                   onChange={onSelectCompany}
                   options={[
                     { value: "", label: "All companies" },
-                    ...(hasPersonal && !personalAllowed
-                      ? [{ value: "personal", label: "Personal" }]
-                      : []),
                     ...companies.map((c) => ({ value: c.id, label: c.name })),
                   ]}
                 />
               )}
-              {personalAllowed && (
+              {(personalAllowed || hasPersonal) && (
                 <label
                   className={`flex cursor-pointer items-start gap-2.5 px-1 pb-0.5 ${
                     activeCompanyId !== "personal"
