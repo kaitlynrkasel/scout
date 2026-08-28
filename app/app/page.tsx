@@ -1628,20 +1628,25 @@ function ScoutTool({
   const [testTour, setTestTour] = useState<{ title: string; steps: TourStep[]; i: number } | null>(
     null
   );
-  // Pulse a tagged control (shared by guide links and tour steps).
-  const pulseSpot = (spot: string) => {
+  // Pulse a tagged control (shared by guide links and tour steps). Sticky
+  // pulses stay lit until explicitly cleared, so a walkthrough's "click this
+  // next" ring never fades out mid-step.
+  const pulseSpot = (spot: string, sticky = false) => {
     const started = Date.now();
     const tick = () => {
       const el = document.querySelector(`[data-guide="${spot}"]`);
       if (el) {
         el.scrollIntoView({ block: "center", behavior: "smooth" });
         el.classList.add("guide-glow");
-        setTimeout(() => el.classList.remove("guide-glow"), 8000);
+        if (!sticky) setTimeout(() => el.classList.remove("guide-glow"), 8000);
         return;
       }
       if (Date.now() - started < 8000) setTimeout(tick, 300);
     };
     tick();
+  };
+  const clearGlow = () => {
+    document.querySelectorAll(".guide-glow").forEach((el) => el.classList.remove("guide-glow"));
   };
   // Every step performs itself: land on its tab, click its control for you,
   // pulse where your attention goes. Runs again on Back too.
@@ -1655,9 +1660,14 @@ function ScoutTool({
         const el = document.querySelector(`[data-guide="${st.click}"]`) as HTMLElement | null;
         el?.click();
       }
-      if (st.spot) pulseSpot(st.spot);
+      // The next thing to click stays highlighted for the WHOLE step; moving
+      // to another step (or closing the tour) clears it and lights the next.
+      if (st.spot) pulseSpot(st.spot, true);
     }, 300);
-    return () => window.clearTimeout(t);
+    return () => {
+      window.clearTimeout(t);
+      clearGlow();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testTour?.i, testTour?.title]);
 
@@ -8256,6 +8266,7 @@ function ScoutTool({
                 {skipped.length > 0 && (
                   <button
                     onClick={() => setShowSkipped((v) => !v)}
+                    data-guide="skipped-list"
                     className="ml-auto text-xs font-semibold text-white/55 underline-offset-2 transition hover:text-white hover:underline"
                   >
                     {showSkipped ? "Hide" : "See"} what was filtered ({skipped.length})
@@ -8709,7 +8720,7 @@ function ScoutTool({
                 {/* Refine box: type an instruction, it rewrites every draft
                     below. No back-and-forth, it just applies the change and
                     keeps a short log of what you've asked for. */}
-                <div className="mb-5 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-soft">
+                <div data-guide="refine" className="mb-5 overflow-hidden rounded-2xl border border-warm-border bg-surface shadow-soft">
                   <div className="border-b border-warm-border px-4 py-3">
                     <div className="text-sm font-bold text-ink">Refine your messages</div>
                     <div className="text-xs text-body/70">
@@ -10703,6 +10714,7 @@ function SideNav({
                 setSavedAccts(listSavedAccounts().map((a) => ({ email: a.email, name: a.name })));
                 setAcctOpen((v) => !v);
               }}
+              data-guide="account-switcher"
               className="su-logout w-full"
               title="Switch account"
             >
@@ -11664,6 +11676,7 @@ function ApplicationsTab({
         </h1>
         <button
           onClick={() => setShowPaste((v) => !v)}
+          data-guide="app-paste"
           className="ml-auto rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
         >
           {showPaste ? "Hide" : "Paste a posting"}
@@ -11871,6 +11884,7 @@ function ApplicationsTab({
                 </span>
                 <button
                   onClick={() => onOpenKit(f)}
+                  data-guide="open-kit"
                   className="shrink-0 rounded-xl bg-brand-gradient px-3.5 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
                 >
                   My application
@@ -12929,6 +12943,7 @@ function FindDetailModal({
           {onOpenApplicationKit && sensesApplication(find) && (
             <button
               onClick={onOpenApplicationKit}
+              data-guide="open-kit"
               className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
             >
               My application
@@ -12937,6 +12952,7 @@ function FindDetailModal({
           {onToggleApplication && (
             <button
               onClick={() => onToggleApplication(!sensesApplication(find))}
+              data-guide="track-application"
               title="Applications get a full kit: tailored cover letter, research, prep"
               className="shrink-0 rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg"
             >
@@ -13492,6 +13508,7 @@ function FindDetailModal({
                 over an iframe). */}
             {o.url && !socialProfile && !tall && (
               <div
+                data-guide="preview-drag"
                 role="separator"
                 aria-label="Drag to resize the preview"
                 title="Drag to resize the preview"
@@ -18007,6 +18024,7 @@ function FindWorkflow({
           <button
             onClick={onDeepScan}
             disabled={scanning}
+            data-guide="scan-contact"
             title="Read this page for a specific contact and any submission requirements"
             className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
           >
@@ -18166,6 +18184,7 @@ function FindWorkflow({
           </div>
         ) : (
           <button
+            data-guide="deny"
             onClick={() => setDenying(true)}
             className="ml-auto text-xs font-semibold text-body/50 transition hover:text-accent"
           >
@@ -20292,7 +20311,7 @@ function AutoSearchPanel({
 
   const activeCount = items.length;
   return (
-    <details className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
+    <details data-guide="auto-find" className="group mt-3 rounded-xl border border-warm-border bg-surface/50 px-3.5 py-2.5">
       <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-body">
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 transition group-open:rotate-90"><path d="m9 18 6-6-6-6" /></svg>
         <span className="shrink-0 whitespace-nowrap">Search preferences</span>
@@ -20690,7 +20709,7 @@ function OutreachAdvice({
         ) : (
           <>
             <div className="mt-2 flex flex-wrap items-center gap-3">
-              <button
+              <button data-guide="coach-review"
                 onClick={reviewDrafts}
                 disabled={coachBusy}
                 className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
@@ -22730,6 +22749,7 @@ function BillingTab({
             <button
               onClick={onManage}
               disabled={busy}
+              data-guide="manage-subscription"
               className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg disabled:opacity-50"
             >
               Manage subscription
@@ -25053,6 +25073,7 @@ function ConnectEmailCard({
         ) : (
           <button
             onClick={() => setChoosing(true)}
+            data-guide="connect-email"
             className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
           >
             Connect email
@@ -25130,7 +25151,7 @@ function MailboxCard({
       </div>
 
       {conn.connected && (
-        <div className="mt-5 border-t border-warm-border pt-5">
+        <div data-guide="send-mode" className="mt-5 border-t border-warm-border pt-5">
           <Label>When you use a draft</Label>
           <div className="mt-1 grid gap-2.5 sm:grid-cols-2">
             {(
@@ -26088,7 +26109,7 @@ function ProfileTab({
       )}
 
       {kind === "company" && (
-        <div className="mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+        <div data-guide="profile-pages" className="mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(
             [
               ["you", "About you"],
@@ -26287,6 +26308,7 @@ function ProfileTab({
         {kind !== "company" && (
           <>
             <Label>Start with your resume or LinkedIn</Label>
+            <div data-guide="resume-drop">
             <FileDrop
               label={
                 parsing
@@ -26298,6 +26320,7 @@ function ProfileTab({
               onText={(t) => readAndFill(t)}
               onFile={(f) => onResumeFile(f)}
             />
+            </div>
 
             {/* The dashboard's "Add your LinkedIn" step sent people here, but
                 the only thing to land on was a file drop — there was no field
