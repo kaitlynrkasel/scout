@@ -1262,7 +1262,7 @@ function AuthedShell() {
         for (const k of [
           PROJECTS_KEY, ACTIVE_KEY, CAT_KEY, FINDS_KEY, TPL_KEY, ACT_KEY,
           COACH_KEY, DISMISSED_ADVICE_KEY, EDITS_KEY, RESUME_KEY, SIG_KEY,
-          PROFILE_KEY, KIND_KEY, "scout_active_company", "scout_company_colors",
+          PROFILE_KEY, KIND_KEY, "scout_company_colors",
         ]) {
           localStorage.removeItem(k);
         }
@@ -2906,8 +2906,14 @@ function ScoutTool({
   // always-on company switcher. Restore the last-chosen lens from this device.
   useEffect(() => {
     try {
-      const saved = localStorage.getItem("scout_active_company");
-      if (saved) setActiveCompanyId(saved);
+      // Per-account first; the old browser-wide key is the migration fallback.
+      const saved =
+        (uid && localStorage.getItem(`scout_active_company_${uid}`)) ||
+        localStorage.getItem("scout_active_company");
+      if (saved) {
+        setActiveCompanyId(saved);
+        if (uid) localStorage.setItem(`scout_active_company_${uid}`, saved);
+      }
     } catch {
       /* ignore */
     }
@@ -2963,9 +2969,10 @@ function ScoutTool({
         // apply without the user having to pick.
         if (wss.length === 1) {
           try {
-            if (!localStorage.getItem("scout_active_company")) {
+            const key = uid ? `scout_active_company_${uid}` : "scout_active_company";
+            if (!localStorage.getItem(key)) {
               setActiveCompanyId(wss[0].id);
-              localStorage.setItem("scout_active_company", wss[0].id);
+              localStorage.setItem(key, wss[0].id);
             }
           } catch {
             setActiveCompanyId(wss[0].id);
@@ -2981,7 +2988,7 @@ function ScoutTool({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken]);
+  }, [getToken, uid]);
 
   // ---- Team shared pipeline, merged into the Finds tab on a company lens ----
   // When the lens is a real workspace, the Finds tab is that team's SHARED
@@ -3078,8 +3085,12 @@ function ScoutTool({
   function selectCompany(id: string) {
     setActiveCompanyId(id);
     try {
-      if (id) localStorage.setItem("scout_active_company", id);
-      else localStorage.removeItem("scout_active_company");
+      // Per-account key: the lens is an account preference, so it survives
+      // the cross-account cache wipe (which used to reset it on every
+      // account switch and read as "refresh loses my company").
+      const key = uid ? `scout_active_company_${uid}` : "scout_active_company";
+      if (id) localStorage.setItem(key, id);
+      else localStorage.removeItem(key);
     } catch {
       /* ignore */
     }
@@ -15173,8 +15184,10 @@ function FindsTab({
           ? true
           : // The Drafts view also carries queued sends: written, not yet out
             // the door, regardless of which status the queue left them in.
-            f.status === filter ||
-            (headingWord === "drafts" && filter === "drafted" && scheduledPending(f)) ||
+            (f.status === filter &&
+              // Queued sends live on the Sent tab, not Drafts: written AND
+              // committed to go out is no longer "waiting on you".
+              !(headingWord === "drafts" && scheduledPending(f))) ||
             // The Sent view keeps the whole conversation ledger: sent AND
             // replied (and bounces, which stay status sent with the flag).
             (headingWord === "sent" &&
