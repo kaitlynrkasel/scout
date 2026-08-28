@@ -112,7 +112,50 @@ const VERDICTS: { v: Verdict; label: string }[] = [
 
 function ReadinessInner() {
   const k = useSearchParams().get("k") || "";
-  const parts = (DATA as any).parts as Part[];
+  const rawParts = (DATA as any).parts as Part[];
+  // "In test order" re-sequences the feature part into the order a tester
+  // would actually hit things: get in, set up, search, write, send, then the
+  // layers on top. The setup part already reads first-to-last and keeps its
+  // order. "By area" is the original grouping.
+  const TEST_ORDER = [
+    "Getting into Scout",
+    "Setting up for the first time",
+    "Finding the right people",
+    "Writing the messages",
+    "Sending",
+    "Bringing in your own lists",
+    "The application desk",
+    "Keeping track of the pipeline",
+    "Running on autopilot",
+    "Getting smarter over time",
+    "Working as a team",
+    "Paying for it",
+    "Trials, and the tools only we can see",
+    "Does it feel good to use",
+  ];
+  const [inOrder, setInOrder] = useState(true);
+  useEffect(() => {
+    try {
+      setInOrder(localStorage.getItem("scout_readiness_order") !== "0");
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem("scout_readiness_order", inOrder ? "1" : "0");
+    } catch {}
+  }, [inOrder]);
+  const parts = useMemo(() => {
+    if (!inOrder) return rawParts;
+    return rawParts.map((p, pi) => {
+      if (pi !== 0) return p;
+      const rank = (t: string) => {
+        const i = TEST_ORDER.indexOf(t);
+        return i === -1 ? 99 : i;
+      };
+      return { ...p, sections: [...p.sections].sort((a, b) => rank(a.title) - rank(b.title)) };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [inOrder]);
   const allItems = useMemo(
     () => parts.flatMap((p) => p.sections.flatMap((s) => s.items)),
     [parts]
@@ -419,6 +462,17 @@ function ReadinessInner() {
         >
           Untested only · {allItems.length - done}
         </button>
+        <button
+          onClick={() => setInOrder((v) => !v)}
+          title="In test order runs first-thing-first: get in, set up, search, write, send, then the layers on top"
+          className={`rounded-full border px-3 py-1.5 text-xs font-bold transition ${
+            inOrder
+              ? "border-brown bg-brown text-white"
+              : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+          }`}
+        >
+          {inOrder ? "In test order" : "By area"}
+        </button>
         <span className="rounded-full border border-warm-border bg-surface px-3 py-1.5 text-xs font-bold tabular-nums text-ink">
           {done} of {allItems.length} tested
         </span>
@@ -462,7 +516,10 @@ function ReadinessInner() {
             if (!shownItems.length) return null;
             return (
             <section key={s.id} className="mt-7">
-              <h3 className="text-base font-extrabold text-ink">{s.title}</h3>
+              <h3 className="text-base font-extrabold text-ink">
+                {inOrder ? `${p.sections.indexOf(s) + 1}. ` : ""}
+                {s.title}
+              </h3>
               <p className="mt-0.5 max-w-[62ch] text-[13px] text-body/60">{s.blurb}</p>
               <div className="mt-3 space-y-2">
                 {shownItems.map((it) => {
