@@ -95,9 +95,11 @@ export async function POST(req: NextRequest) {
     const token = signUnsub(uid, recipient);
     const url = `${reqOrigin(req)}/api/unsubscribe?t=${encodeURIComponent(token)}`;
     listUnsubscribe = `<${url}>, <mailto:${fromAddr}?subject=unsubscribe>`;
-    outBody =
-      outBody.replace(/\s+$/, "") +
-      `\n\n—\nNot the right time? You can unsubscribe and I won't reach out again: ${url}`;
+    // No visible unsubscribe line in the body: a token URL under a personal
+    // note reads as bulk mail and kills the human register. The one-click
+    // opt-out lives in the List-Unsubscribe header instead, which Gmail and
+    // friends surface as their own Unsubscribe control; opt-outs still land
+    // in the suppression table and are honored before every send.
   }
 
   try {

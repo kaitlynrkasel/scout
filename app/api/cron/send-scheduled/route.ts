@@ -142,9 +142,8 @@ export async function GET(req: NextRequest) {
           signUnsub(String(row.user_id), recipient)
         )}`;
         listUnsubscribe = `<${url}>, <mailto:${fromAddr}?subject=unsubscribe>`;
-        outBody =
-          outBody.replace(/\s+$/, "") +
-          `\n\n—\nNot the right time? You can unsubscribe and I won't reach out again: ${url}`;
+        // No visible unsubscribe line in the body (see gmail/send): the
+        // List-Unsubscribe header carries the one-click opt-out invisibly.
       }
 
       const opts = {

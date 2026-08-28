@@ -1237,8 +1237,8 @@
             },
             {
               "sev": "must",
-              "title": "Every message has a working unsubscribe",
-              "good": "The link is in the received message, it works, and it says clearly what just happened.",
+              "title": "Opting out works through the mail client",
+              "good": "Cold sends carry a List-Unsubscribe header, so Gmail and other clients show their own Unsubscribe control on the message; using it lands the address in the suppression table and Scout never emails it again. The message BODY carries no unsubscribe line or token URL, it reads like a personal note.",
               "steps": [
                 "Open a received message and click the unsubscribe link.",
                 "Read the confirmation as a stranger would."
