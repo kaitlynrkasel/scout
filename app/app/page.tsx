@@ -1618,9 +1618,47 @@ function ScoutTool({
   // A readiness test walked through IN the app: a floating card reads out the
   // current step while the guide ring shows where to click. Driven by
   // scout-tour messages from the checklist's pane.
-  const [testTour, setTestTour] = useState<{ title: string; steps: string[]; i: number } | null>(
+  interface TourStep {
+    text: string;
+    spot?: string; // data-guide element to pulse for this step
+    click?: string; // data-guide element the step CLICKS for you on entry
+    tab?: string; // tab to land on for this step
+  }
+  const [testTour, setTestTour] = useState<{ title: string; steps: TourStep[]; i: number } | null>(
     null
   );
+  // Pulse a tagged control (shared by guide links and tour steps).
+  const pulseSpot = (spot: string) => {
+    const started = Date.now();
+    const tick = () => {
+      const el = document.querySelector(`[data-guide="${spot}"]`);
+      if (el) {
+        el.scrollIntoView({ block: "center", behavior: "smooth" });
+        el.classList.add("guide-glow");
+        setTimeout(() => el.classList.remove("guide-glow"), 8000);
+        return;
+      }
+      if (Date.now() - started < 8000) setTimeout(tick, 300);
+    };
+    tick();
+  };
+  // Every step performs itself: land on its tab, click its control for you,
+  // pulse where your attention goes. Runs again on Back too.
+  useEffect(() => {
+    if (!testTour) return;
+    const st = testTour.steps[testTour.i];
+    if (!st) return;
+    if (st.tab && (TABS as readonly string[]).includes(st.tab)) setTab(st.tab as TabId);
+    const t = window.setTimeout(() => {
+      if (st.click) {
+        const el = document.querySelector(`[data-guide="${st.click}"]`) as HTMLElement | null;
+        el?.click();
+      }
+      if (st.spot) pulseSpot(st.spot);
+    }, 300);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [testTour?.i, testTour?.title]);
 
   // Deep guidance: land on a tab and pulse a tutorial ring around the tagged
   // control. Reached two ways: /app?guide=tab.spot on load, and a
@@ -1659,7 +1697,19 @@ function ScoutTool({
         } catch {}
         setTestTour({
           title: String(d.title || "Test walkthrough"),
-          steps: d.steps.map((x: any) => String(x)).filter(Boolean).slice(0, 12),
+          steps: d.steps
+            .map((x: any) =>
+              typeof x === "string"
+                ? { text: x }
+                : {
+                    text: String(x?.text || ""),
+                    spot: x?.spot ? String(x.spot) : undefined,
+                    click: x?.click ? String(x.click) : undefined,
+                    tab: x?.tab ? String(x.tab) : undefined,
+                  }
+            )
+            .filter((x: any) => x.text)
+            .slice(0, 12),
           i: 0,
         });
         if (typeof d.guide === "string" && d.guide) runGuide(d.guide);
@@ -7634,7 +7684,7 @@ function ScoutTool({
             </button>
           </div>
           <p className="mt-2 text-[13px] leading-relaxed text-body">
-            {testTour.steps[testTour.i]}
+            {testTour.steps[testTour.i]?.text}
           </p>
           <div className="mt-3 flex items-center justify-between">
             <div className="flex gap-1">
@@ -14162,6 +14212,7 @@ function ManualTab({
         </p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
+            data-guide="import-file"
             onClick={onImportFile}
             className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
           >

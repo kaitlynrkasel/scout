@@ -265,7 +265,18 @@
                 "Flip through all three pages.",
                 "Write and upload a cover letter without leaving Application materials."
               ],
-              "key": "setup::templates-is-three-pages-behind-one-toggle"
+              "key": "setup::templates-is-three-pages-behind-one-toggle",
+              "tour": [
+                {
+                  "text": "This is the Templates page toggle: Outreach, Application materials, and Email signatures are three separate pages, no scrolling between worlds.",
+                  "tab": "templates",
+                  "spot": "tpl-pages"
+                },
+                {
+                  "text": "Click through all three pages. Each should swap in place, and cover letters live under Application materials, not the outreach builder.",
+                  "spot": "tpl-pages"
+                }
+              ]
             },
             {
               "sev": "should",
@@ -777,7 +788,25 @@
             {
               "key": "finding::trash-restore",
               "title": "Deleted finds come back",
-              "good": "Deleting a find drops it into 'Show recently deleted' at the foot of Finds (this device). Bring it back restores it exactly as it was, draft and status intact; Delete forever really removes it."
+              "good": "Deleting a find drops it into 'Show recently deleted' at the foot of Finds (this device). Bring it back restores it exactly as it was, draft and status intact; Delete forever really removes it.",
+              "tour": [
+                {
+                  "text": "Go to Finds and delete any find you don't mind moving (Delete on its row or detail).",
+                  "tab": "finds",
+                  "spot": "status-tabs"
+                },
+                {
+                  "text": "Scroll to the very bottom: Show recently deleted lists what you just removed.",
+                  "spot": "deleted"
+                },
+                {
+                  "text": "Press Bring it back. The find should return exactly as it was: same status, same draft.",
+                  "spot": "deleted"
+                },
+                {
+                  "text": "If it came back whole, mark the item Works. Delete forever is the only true delete."
+                }
+              ]
             },
             {
               "key": "finding::tile-pastel",
@@ -949,7 +978,26 @@
                 "Use an actual working file, not a clean sample.",
                 "Check the imported rows against the file for anything dropped or scrambled."
               ],
-              "key": "importing::import-a-real-messy-spreadsheet"
+              "key": "importing::import-a-real-messy-spreadsheet",
+              "tour": [
+                {
+                  "text": "Scout is opening the import window for you (Manual tab, Import your outreach).",
+                  "tab": "manual",
+                  "click": "import-file",
+                  "spot": "import"
+                },
+                {
+                  "text": "Press Choose a file and pick a REAL tracking sheet, the messier the better: merged cells, extra tabs, checkbox columns."
+                },
+                {
+                  "text": "Watch the column mapping Scout proposes. Every real column should map somewhere sensible; junk columns should map to nothing."
+                },
+                {
+                  "text": "Finish the import, then open Finds: rows should carry the sheet's names, emails, and companies, and no TRUE/FALSE junk.",
+                  "tab": "finds",
+                  "spot": "status-tabs"
+                }
+              ]
             },
             {
               "sev": "should",
@@ -969,7 +1017,29 @@
                 "Import a shared sheet.",
                 "Then try one that is private and read the error."
               ],
-              "key": "importing::import-from-a-google-sheets-link"
+              "key": "importing::import-from-a-google-sheets-link",
+              "tour": [
+                {
+                  "text": "Scout is opening the import window for you: it lives on the Manual tab under Import your outreach.",
+                  "tab": "manual",
+                  "click": "import-file",
+                  "spot": "import"
+                },
+                {
+                  "text": "In Google Sheets, open your sheet, press Share, set access to Anyone with the link as Viewer, and copy the link."
+                },
+                {
+                  "text": "Back here, paste that link into OR PASTE A LINK and press Read link. Scout reads every tab and shows you a column mapping."
+                },
+                {
+                  "text": "Check each column mapped to the right field (name, email, company). Fix any that missed, then finish the import."
+                },
+                {
+                  "text": "Open Finds and confirm the contacts landed with their real details. If they did, close this and mark the item Works.",
+                  "tab": "finds",
+                  "spot": "status-tabs"
+                }
+              ]
             },
             {
               "sev": "should",
@@ -1009,7 +1079,26 @@
               "steps": [
                 "Add one manually, then draft to them and confirm it works the same way."
               ],
-              "key": "importing::adding-a-contact-by-hand"
+              "key": "importing::adding-a-contact-by-hand",
+              "tour": [
+                {
+                  "text": "Scout is opening the Add-a-contact form for you (Manual tab).",
+                  "tab": "manual",
+                  "click": "add-contact",
+                  "spot": "add-contact"
+                },
+                {
+                  "text": "Type only a name you know is public (an artist, a manager) and press Autofill the rest. Fields should fill from the public web, never invented."
+                },
+                {
+                  "text": "Pick the project it belongs to (or mint one with + New project) and add them."
+                },
+                {
+                  "text": "Open Finds: they should be there like any find, and a moment later their empty fields quietly fill from Scout's own research.",
+                  "tab": "finds",
+                  "spot": "status-tabs"
+                }
+              ]
             },
             {
               "sev": "must",
@@ -1176,7 +1265,21 @@
             {
               "key": "writing::template-choice",
               "title": "Pick the template per draft",
-              "good": "On a find with two or more templates in scope, the Draft button grows a 'Best template (auto)' picker listing each template by kind and first words. Picking one drafts from that voice alone; auto still matches by format."
+              "good": "On a find with two or more templates in scope, the Draft button grows a 'Best template (auto)' picker listing each template by kind and first words. Picking one drafts from that voice alone; auto still matches by format.",
+              "tour": [
+                {
+                  "text": "Open any NEW find in Finds and look at its Outreach block: next to Draft sits the source picker.",
+                  "tab": "finds",
+                  "spot": "draft-btn"
+                },
+                {
+                  "text": "The picker offers Scout picks the best template, each saved template by name, and Write my own message. Picking a template previews its text before you draft.",
+                  "spot": "draft-btn"
+                },
+                {
+                  "text": "Draft with a specific template chosen: the draft should clearly start from that template's voice. Then mark the item."
+                }
+              ]
             },
             {
               "key": "writing::no-double-email",
