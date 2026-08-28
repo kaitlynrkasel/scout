@@ -1554,6 +1554,7 @@ const TABS = [
   "outreach",
   "finds",
   "drafts",
+  "sent",
   "dashboard",
   "team",
   "projects",
@@ -4788,6 +4789,7 @@ function ScoutTool({
       : [];
   const newFindCount = myFinds.filter((f) => f.status === "new").length;
   const draftedCount = myFinds.filter((f) => f.status === "drafted").length;
+  const repliedCount = myFinds.filter((f) => f.status === "replied").length;
 
   // ---- Finds pipeline ----
   // Add newly discovered people to the active project's finds (deduped, keeping
@@ -7523,6 +7525,7 @@ function ScoutTool({
         tourTarget={tourTarget}
         newFindCount={newFindCount}
         draftedCount={draftedCount}
+        repliedCount={repliedCount}
         templatesCount={visibleTemplates.length}
         profileHasBio={!!profile.bio.trim()}
         hasAccount={!!accountEmail}
@@ -8581,7 +8584,7 @@ function ScoutTool({
           </main>
       )}
 
-      {(tab === "finds" || tab === "drafts") && (
+      {(tab === "finds" || tab === "drafts" || tab === "sent") && (
         <FindsTab
           finds={myFinds}
           onToggleApplication={(id, v) => patchFind(id, { isApplication: v })}
@@ -8606,14 +8609,15 @@ function ScoutTool({
           voiceRefreshAvailable={voiceRefreshAvailable}
           refreshingVoice={refreshingVoice}
           onRefreshDrafts={refreshDraftsWithVoice}
-          filter={tab === "drafts" ? "drafted" : findFilter}
+          filter={tab === "drafts" ? "drafted" : tab === "sent" ? "sent" : findFilter}
           setFilter={(f) => {
             // Picking another status from the Drafts tab is a jump back to
             // the full Finds view with that filter on.
             setFindFilter(f);
-            if (tab === "drafts" && f !== "drafted") setTab("finds");
+            if ((tab === "drafts" && f !== "drafted") || (tab === "sent" && f !== "sent"))
+              setTab("finds");
           }}
-          headingWord={tab === "drafts" ? "drafts" : "finds"}
+          headingWord={tab === "drafts" ? "drafts" : tab === "sent" ? "sent" : "finds"}
           gmail={activeMailbox}
           draftingId={findDraftingId}
           gmailBusyId={gmailBusyId}
@@ -9775,6 +9779,7 @@ function SideNav({
   hasNews,
   newFindCount,
   draftedCount = 0,
+  repliedCount = 0,
   templatesCount,
   profileHasBio,
   hasAccount,
@@ -9800,6 +9805,7 @@ function SideNav({
   hasNews?: boolean;
   newFindCount: number;
   draftedCount?: number;
+  repliedCount?: number;
   templatesCount: number;
   profileHasBio: boolean;
   hasAccount: boolean;
@@ -9847,7 +9853,7 @@ function SideNav({
   const BOTTOM_TABS = ["outreach", "finds", "dashboard", "templates"];
 
   const NAV_GROUPS: { key: "pipeline" | "setup"; label: string; keys: string[] }[] = [
-    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "drafts", "applications"] },
+    { key: "pipeline", label: "Pipeline", keys: ["outreach", "manual", "finds", "drafts", "sent", "applications"] },
     { key: "setup", label: "Setup", keys: ["projects", "templates", "profile", "team"] },
   ];
 
@@ -9934,6 +9940,18 @@ function SideNav({
         <>
           <path d="M6 3h9l4 4v14H6z" />
           <path d="M9 11h7M9 15h7" />
+        </>
+      ),
+    },
+    {
+      key: "sent",
+      label: "Sent",
+      badge: repliedCount,
+      // Paper plane: out the door; the badge counts replies waiting on you.
+      icon: (
+        <>
+          <path d="m22 2-7 20-4-9-9-4Z" />
+          <path d="M22 2 11 13" />
         </>
       ),
     },
@@ -15032,7 +15050,7 @@ function FindsTab({
   // The Drafts tab always opens on Both: a draft matters the same whether the
   // find was Scout-found or hand-added, and hiding half of them read as bugs.
   useEffect(() => {
-    if (headingWord === "drafts") setSrcFilter("both");
+    if (headingWord === "drafts" || headingWord === "sent") setSrcFilter("both");
   }, [headingWord]);
   const srcCounts = {
     scout: finds.filter((f) => f.foundVia !== "manual").length,
@@ -15156,7 +15174,10 @@ function FindsTab({
           : // The Drafts view also carries queued sends: written, not yet out
             // the door, regardless of which status the queue left them in.
             f.status === filter ||
-            (headingWord === "drafts" && filter === "drafted" && scheduledPending(f))
+            (headingWord === "drafts" && filter === "drafted" && scheduledPending(f)) ||
+            // The Sent view keeps the whole conversation ledger: sent AND
+            // replied (and bounces, which stay status sent with the flag).
+            (headingWord === "sent" && filter === "sent" && f.status === "replied")
     )
     .filter(matchesFilters)
     // Who found it. Teammates' finds are adopted into this same list and carry
@@ -15995,7 +16016,10 @@ shared={shown.some((x) => !!x.foundByEmail)}
         <FindDetailModal
           draftFirst={headingWord === "drafts"}
           find={detailFind}
-          onMarkSent={() => onMarkSent(detailFind)}
+          onMarkSent={() => {
+            onMarkSent(detailFind);
+            setDetailId("");
+          }}
           templates={templatesForFind ? templatesForFind(detailFind) : []}
           onClose={() => setDetailId("")}
           onToggleApplication={(v) => onToggleApplication(detailFind.id, v)}
