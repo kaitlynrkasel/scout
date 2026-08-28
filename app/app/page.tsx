@@ -4660,7 +4660,13 @@ function ScoutTool({
     p?.context ? "This outreach is on behalf of / for: " + p.context : "";
   const joinBits = (bits: string[]) => bits.filter(Boolean).join(". ").trim();
   // Full identity for non-project-specific uses (parse, community, meeting prep).
-  const aboutText = joinBits([...personalBits, ...companyBits, contextLine(activeProject)]);
+  // On the Personal lens the company identity stays out entirely: Scout still
+  // knows YOU (name, bio, resume, education), just not who you work for.
+  const aboutText = joinBits([
+    ...personalBits,
+    ...(activeCompanyId === "personal" ? [] : companyBits),
+    contextLine(activeProject),
+  ]);
 
   // The right "about" for a project's searches + drafts. Personal and company are
   // now INDEPENDENT: a project can use your personal profile, your company, both,
@@ -4669,7 +4675,10 @@ function ScoutTool({
   function aboutForProject(p?: Project | null): string {
     const parts: string[] = [];
     if (p?.usesProfile !== false) parts.push(...personalBits);
-    if (isCompanyAcct && p?.usesCompany !== false) parts.push(...companyBits);
+    // A personal project never speaks for the company, whatever the account
+    // type: searches and drafts use your own details only.
+    const isPersonalProj = (p?.companyId || (activeCompanyId === "personal" ? "personal" : "")) === "personal";
+    if (isCompanyAcct && !isPersonalProj && p?.usesCompany !== false) parts.push(...companyBits);
     parts.push(contextLine(p));
     return joinBits(parts);
   }
