@@ -6332,12 +6332,13 @@ function ScoutTool({
           ? {
               replied: (j.replied || []) as string[],
               bounced: (j.bounced || []) as string[],
+              sent: (j.sent || []) as string[],
               checked: j.checked || threads.length,
               error: "",
             }
-          : { replied: [] as string[], bounced: [] as string[], checked: 0, error: j.error || "Couldn't check for replies." };
+          : { replied: [] as string[], bounced: [] as string[], sent: [] as string[], checked: 0, error: j.error || "Couldn't check for replies." };
       } catch (e: any) {
-        return { replied: [] as string[], bounced: [] as string[], checked: 0, error: e?.message || "Couldn't check for replies." };
+        return { replied: [] as string[], bounced: [] as string[], sent: [] as string[], checked: 0, error: e?.message || "Couldn't check for replies." };
       }
     };
     try {
@@ -6347,15 +6348,21 @@ function ScoutTool({
       ]);
       const repliedSet = new Set<string>([...g.replied, ...o.replied]);
       const bouncedSet = new Set<string>([...g.bounced, ...o.bounced]);
+      // Drafted finds whose thread carries a real sent message: the user sent
+      // it from their inbox (See it in Gmail, then Send there), so flip the
+      // find to Sent without being asked.
+      const sentSet = new Set<string>([...(g.sent || []), ...(o.sent || [])]);
       const err = g.error || o.error;
-      if (repliedSet.size || bouncedSet.size) {
+      if (repliedSet.size || bouncedSet.size || sentSet.size) {
         saveFinds(
           finds.map((f) =>
             repliedSet.has(f.id)
               ? { ...f, status: "replied" as FindStatus, bounced: false }
               : bouncedSet.has(f.id)
                 ? { ...f, bounced: true }
-                : f
+                : sentSet.has(f.id) && f.status === "drafted"
+                  ? { ...f, status: "sent" as FindStatus, sentAt: f.sentAt || Date.now() }
+                  : f
           )
         );
         if (!silent) {
@@ -12029,6 +12036,7 @@ function FindDetailModal({
   onWriteOwn,
   onSaveAsTemplate,
   draftFirst = false,
+  onMarkSent,
   onClose,
   onToggleApplication,
   onOpenApplicationKit,
@@ -12077,6 +12085,7 @@ function FindDetailModal({
   onOpenApplicationKit?: () => void;
   find: Find;
   draftFirst?: boolean;
+  onMarkSent?: () => void;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   onSaveAsTemplate?: () => void;
@@ -12829,6 +12838,7 @@ function FindDetailModal({
                 templates={templates}
                 onWriteOwn={onWriteOwn}
                 onSaveAsTemplate={onSaveAsTemplate}
+                onMarkSent={onMarkSent}
                 gmail={gmail}
                 drafting={drafting}
                 gmailBusy={gmailBusy}
@@ -15974,6 +15984,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
         <FindDetailModal
           draftFirst={headingWord === "drafts"}
           find={detailFind}
+          onMarkSent={() => onMarkSent(detailFind)}
           templates={templatesForFind ? templatesForFind(detailFind) : []}
           onClose={() => setDetailId("")}
           onToggleApplication={(v) => onToggleApplication(detailFind.id, v)}
@@ -16561,6 +16572,7 @@ function FindCard({
         templates={templates}
         onWriteOwn={onWriteOwn}
         onSaveAsTemplate={onSaveAsTemplate}
+        onMarkSent={onMarkSent}
         gmail={gmail}
         drafting={drafting}
         gmailBusy={gmailBusy}
@@ -16732,6 +16744,7 @@ function FindWorkflow({
   templates = [],
   onWriteOwn,
   onSaveAsTemplate,
+  onMarkSent,
   gmail,
   drafting,
   gmailBusy,
@@ -16766,6 +16779,7 @@ function FindWorkflow({
   signatureOptions,
 }: {
   find: Find;
+  onMarkSent?: () => void;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   onSaveAsTemplate?: () => void;
@@ -17546,6 +17560,15 @@ function FindWorkflow({
             );
           })()}
 
+        {d && !done && !denied && onMarkSent && (
+          <button
+            onClick={onMarkSent}
+            title="Already sent this yourself? Flip the find to Sent so tracking stays honest"
+            className="rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Mark as sent
+          </button>
+        )}
         {d && !denied && onSaveAsTemplate && (
           <button
             onClick={onSaveAsTemplate}

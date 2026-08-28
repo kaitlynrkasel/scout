@@ -205,11 +205,12 @@ export async function outlookConversationsWithReplies(
   refreshToken: string,
   userEmail: string,
   conversationIds: string[]
-): Promise<{ replied: Set<string>; bounced: Set<string> }> {
+): Promise<{ replied: Set<string>; bounced: Set<string>; sentByMe: Set<string> }> {
   const at = await accessTokenFromRefresh(refreshToken);
   const me = userEmail.toLowerCase();
   const replied = new Set<string>();
   const bounced = new Set<string>();
+  const sentByMe = new Set<string>();
   for (const cid of conversationIds.slice(0, 20)) {
     const params = new URLSearchParams({
       $filter: `conversationId eq '${cid.replace(/'/g, "''")}'`,
@@ -233,12 +234,16 @@ export async function outlookConversationsWithReplies(
     for (const m of msgs) {
       if (m.isDraft) continue;
       const addr = String(m.from?.emailAddress?.address || "").toLowerCase();
-      if (!addr || addr === me) continue;
+      if (!addr) continue;
+      if (addr === me) {
+        sentByMe.add(cid);
+        continue;
+      }
       if (outlookLooksLikeBounce(addr, String(m.subject || ""))) bounce = true;
       else realReply = true;
     }
     if (realReply) replied.add(cid);
     else if (bounce) bounced.add(cid);
   }
-  return { replied, bounced };
+  return { replied, bounced, sentByMe };
 }

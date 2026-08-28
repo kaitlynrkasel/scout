@@ -28,7 +28,7 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const { replied: repliedThreads, bounced: bouncedThreads } =
+    const { replied: repliedThreads, bounced: bouncedThreads, sentByMe } =
       await gmailThreadsWithReplies(
         data.refresh_token,
         data.email || "",
@@ -40,7 +40,10 @@ export async function POST(req: NextRequest) {
     const bounced = list
       .filter((t: any) => bouncedThreads.has(String(t.threadId)))
       .map((t: any) => String(t.id));
-    return NextResponse.json({ replied, bounced, checked: list.length });
+    const sent = list
+      .filter((t: any) => sentByMe.has(String(t.threadId)))
+      .map((t: any) => String(t.id));
+    return NextResponse.json({ replied, bounced, sent, checked: list.length });
   } catch (e: any) {
     if (e?.needsReconnect) {
       return NextResponse.json(

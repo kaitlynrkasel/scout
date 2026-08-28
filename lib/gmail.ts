@@ -273,11 +273,15 @@ export async function gmailThreadsWithReplies(
   refreshToken: string,
   userEmail: string,
   threadIds: string[]
-): Promise<{ replied: Set<string>; bounced: Set<string> }> {
+): Promise<{ replied: Set<string>; bounced: Set<string>; sentByMe: Set<string> }> {
   const at = await accessTokenFromRefresh(refreshToken);
   const me = userEmail.toLowerCase();
   const replied = new Set<string>();
   const bounced = new Set<string>();
+  // Threads holding a NON-draft message from the user: the note was actually
+  // sent (possibly from inside Gmail after "See it in Gmail"), so the find
+  // can flip to Sent automatically.
+  const sentByMe = new Set<string>();
   for (const tid of threadIds.slice(0, 20)) {
     const r = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/threads/${encodeURIComponent(
@@ -302,7 +306,11 @@ export async function gmailThreadsWithReplies(
       const hv = (name: string) =>
         String(headers.find((h: any) => (h.name || "").toLowerCase() === name)?.value || "");
       const from = hv("from");
-      if (!from || from.toLowerCase().includes(me)) continue; // our own message
+      if (!from) continue;
+      if (from.toLowerCase().includes(me)) {
+        sentByMe.add(tid); // a real (non-draft) message of ours went out
+        continue;
+      }
       if (looksLikeBounce(from, hv("subject"))) bounce = true;
       else realReply = true;
     }
@@ -310,5 +318,5 @@ export async function gmailThreadsWithReplies(
     if (realReply) replied.add(tid);
     else if (bounce) bounced.add(tid);
   }
-  return { replied, bounced };
+  return { replied, bounced, sentByMe };
 }
