@@ -25202,6 +25202,11 @@ function MailboxCard({
   );
 }
 
+// Mirrors ROLE_RANK in lib/teams.ts, which is server-only (it pulls in the
+// service-role client) and so can't be imported here. Kept in step with it by
+// hand; the point is that the form offers exactly what the server will accept.
+const COMPANY_ROLE_RANK: Record<string, number> = { viewer: 0, editor: 1, admin: 2, owner: 3 };
+
 // Edit the company's onboarding answers (name / what it does / industry /
 // website) from Profile. The company owner (admin) can edit them — they're the
 // shared company record on the workspace; other members see them read-only. When
@@ -25243,7 +25248,11 @@ function CompanyDetailsEditor({
   const [location, setLocation] = useState("");
   const [allowPersonal, setAllowPersonal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingPersonal, setSavingPersonal] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  // The personal-use switch reports next to itself, not down by the Save
+  // button — the whole point is that the click lands somewhere you can see.
+  const [personalNote, setPersonalNote] = useState<{ ok: boolean; text: string } | null>(null);
 
   useEffect(() => {
     let alive = true;
@@ -25285,10 +25294,47 @@ function CompanyDetailsEditor({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWsId]);
 
-  const isOwner = role === "owner";
+  // Who may edit these fields. The server's own rule is assertRole(…, "admin")
+  // — owner OR admin — so gating the form on `role === "owner"` disabled every
+  // control for an admin the server would have let through, and the checkbox
+  // just refused to take a click with nothing said about why.
+  const isOwner = (COMPANY_ROLE_RANK[role] ?? -1) >= COMPANY_ROLE_RANK.admin;
   const isPrimary = selectedWsId === workspaceId;
   const inputCls =
     "w-full rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15";
+
+  // The column behind this switch ships in its own migration. Until that file
+  // is run the update fails deep in PostgREST, and a bare "Couldn't save" sends
+  // whoever hit it looking for a bug in the checkbox instead of at the database.
+  function readableError(msg: string): string {
+    if (/allow_personal/i.test(msg) && /column|schema cache|does not exist/i.test(msg))
+      return "Personal use can't be saved yet — the database is missing its column. Run supabase/allow_personal.sql in Supabase, then try again.";
+    return msg || "Couldn't save.";
+  }
+
+  async function patch(
+    fields: Record<string, any>,
+    successText: string,
+    setTo: (n: { ok: boolean; text: string }) => void
+  ) {
+    if (!getToken) return false;
+    const token = await getToken();
+    const res = await fetch("/api/team/workspace", {
+      method: "PATCH",
+      headers: {
+        "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ workspaceId: selectedWsId, ...fields }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setTo({ ok: false, text: readableError(data?.error || "") });
+      return false;
+    }
+    setTo({ ok: true, text: successText });
+    return true;
+  }
 
   async function save() {
     if (saving || !getToken) return;
@@ -25299,37 +25345,45 @@ function CompanyDetailsEditor({
     setSaving(true);
     setNote(null);
     try {
-      const token = await getToken();
-      const res = await fetch("/api/team/workspace", {
-        method: "PATCH",
-        headers: {
-          "content-type": "application/json",
-          ...(token ? { authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({
-          workspaceId: selectedWsId,
-          name,
-          about,
-          website,
-          industry,
-          stage,
-          location,
-          allowPersonal,
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (res.ok) {
-        // Only mirror into the profile cache when editing the PRIMARY company —
-        // that's the one your searches are grounded in.
-        if (isPrimary) onCompanyName(name.trim());
-        setNote({ ok: true, text: "Saved. Your whole team sees these updates." });
-      } else {
-        setNote({ ok: false, text: data?.error || "Couldn't save." });
-      }
+      const okSaved = await patch(
+        { name, about, website, industry, stage, location, allowPersonal },
+        "Saved. Your whole team sees these updates.",
+        setNote
+      );
+      // Only mirror into the profile cache when editing the PRIMARY company —
+      // that's the one your searches are grounded in.
+      if (okSaved && isPrimary) onCompanyName(name.trim());
     } catch {
       setNote({ ok: false, text: "Couldn't save." });
     } finally {
       setSaving(false);
+    }
+  }
+
+  // The personal-use switch saves the moment it is clicked rather than waiting
+  // for "Save company details": it reads as a switch, not a form field, and a
+  // silent revert on the next load is exactly how a toggle looks broken. The
+  // box flips immediately and rolls back if the write is refused.
+  async function togglePersonal(next: boolean) {
+    if (!isOwner || savingPersonal) return;
+    const prev = allowPersonal;
+    setAllowPersonal(next);
+    setSavingPersonal(true);
+    setPersonalNote(null);
+    try {
+      const okSaved = await patch(
+        { allowPersonal: next },
+        next
+          ? "Personal use is on. Teammates get a Personal checkbox in the sidebar."
+          : "Personal use is off for this company.",
+        setPersonalNote
+      );
+      if (!okSaved) setAllowPersonal(prev);
+    } catch {
+      setAllowPersonal(prev);
+      setPersonalNote({ ok: false, text: "Couldn't save." });
+    } finally {
+      setSavingPersonal(false);
     }
   }
 
@@ -25432,12 +25486,15 @@ function CompanyDetailsEditor({
               <input
                 type="checkbox"
                 checked={allowPersonal}
-                onChange={(e) => isOwner && setAllowPersonal(e.target.checked)}
-                disabled={!isOwner}
+                onChange={(e) => togglePersonal(e.target.checked)}
+                disabled={!isOwner || savingPersonal}
                 className="mt-0.5 h-4 w-4 accent-[#19455e]"
               />
               <span>
-                <span className="block text-sm font-bold text-ink">Allow personal use</span>
+                <span className="block text-sm font-bold text-ink">
+                  Allow personal use
+                  {savingPersonal && <span className="ml-2 text-xs font-medium text-body/60">saving…</span>}
+                </span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-body/70">
                   Teammates get a Personal checkbox in the sidebar so they can run
                   searches and outreach for themselves, outside the company&apos;s
@@ -25446,11 +25503,24 @@ function CompanyDetailsEditor({
                 </span>
               </span>
             </label>
-            {!isOwner && (
+            {isOwner ? (
+              <>
+                {personalNote && (
+                  <p
+                    className={`mt-2 text-xs font-medium ${personalNote.ok ? "text-emerald-700" : "text-attention"}`}
+                  >
+                    {personalNote.text}
+                  </p>
+                )}
+                <p className="mt-2 text-xs text-body/55">
+                  This switch saves on its own — no need to press Save company details.
+                </p>
+              </>
+            ) : (
               <p className="mt-2 text-xs text-body/60">
                 {allowPersonal
                   ? "Your company allows personal use. Use the Personal checkbox in the sidebar."
-                  : "Your company hasn't turned on personal use. Ask your admin."}
+                  : "Only an owner or admin of this company can turn personal use on. Ask them."}
               </p>
             )}
           </div>

@@ -321,17 +321,23 @@ export async function getWorkspaceContext(uid: string, email: string) {
     // query and returns null. That silently emptied the user's company list,
     // which hides the company switcher entirely. Fall back to the columns that
     // have always existed rather than losing the workspaces.
-    const full = await db()
-      .from("workspaces")
-      .select("id, name, about, website, industry, stage, location, created_by, created_at, comped, allow_personal")
-      .in("id", wsIds);
-    let wsRows: any[] | null = full.data as any[] | null;
-    if (full.error) {
-      const minimal = await db()
-        .from("workspaces")
-        .select("id, name, created_by, created_at")
-        .in("id", wsIds);
-      wsRows = minimal.data as any[] | null;
+    // Step DOWN one migration at a time rather than straight to the floor: a
+    // schema missing only the newest column used to cost the company its
+    // about/website/industry/stage/location as well, which made the whole
+    // details form look blank instead of one switch looking stuck.
+    const SELECTS = [
+      "id, name, about, website, industry, stage, location, created_by, created_at, comped, allow_personal",
+      "id, name, about, website, industry, stage, location, created_by, created_at, comped",
+      "id, name, about, website, industry, stage, created_by, created_at",
+      "id, name, created_by, created_at",
+    ];
+    let wsRows: any[] | null = null;
+    for (const sel of SELECTS) {
+      const r = await db().from("workspaces").select(sel).in("id", wsIds);
+      if (!r.error) {
+        wsRows = r.data as any[] | null;
+        break;
+      }
     }
     const { data: memberRows } = await db()
       .from("workspace_members")

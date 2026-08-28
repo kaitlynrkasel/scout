@@ -13,7 +13,7 @@ import AUTO from "./auto.json";
 
 export const dynamic = "force-dynamic";
 
-type Verdict = "" | "ok" | "warn" | "bad" | "later";
+type Verdict = "" | "ok" | "warn" | "bad" | "later" | "wip";
 interface CheckRow {
   key: string;
   verdict: Verdict;
@@ -258,8 +258,19 @@ function ReadinessInner() {
   const ql = q.trim().toLowerCase();
   const itemMatches = (it: Item, sTitle: string) =>
     checks[it.key]?.verdict !== "later" &&
+    checks[it.key]?.verdict !== "wip" &&
     (!ql || `${it.title} ${it.good} ${sTitle}`.toLowerCase().includes(ql)) &&
     (!onlyUntested || !merged[it.key]?.verdict);
+  // Items somebody is fixing right now. They lift out of their section and onto
+  // a board at the top, so whoever is mid-fix can find the exact wording of the
+  // item they're working from without scrolling 276 of them.
+  const wipItems = parts.flatMap((p) =>
+    p.sections.flatMap((sec) =>
+      sec.items
+        .filter((it) => checks[it.key]?.verdict === "wip")
+        .map((it) => ({ it, sTitle: sec.title }))
+    )
+  );
   // Items the team pushed off; they live in their own section at the bottom.
   const laterItems = parts.flatMap((p) =>
     p.sections.flatMap((sec) =>
@@ -370,7 +381,8 @@ function ReadinessInner() {
 
   const done = allItems.filter((i) => {
     const v = merged[i.key]?.verdict;
-    return v && v !== "later";
+    // Parked and in-progress are states, not results: neither is a test.
+    return v && v !== "later" && v !== "wip";
   }).length;
   const counts = {
     ok: allItems.filter((i) => merged[i.key]?.verdict === "ok").length,
@@ -482,6 +494,14 @@ function ReadinessInner() {
         <span className={`text-xs font-bold ${mustLeft ? "text-danger" : "text-sage-deep"}`}>
           {mustLeft ? `${mustLeft} must-works left` : "every must-work passes"}
         </span>
+        {wipItems.length > 0 && (
+          <a
+            href="#in-works"
+            className="rounded-full border border-brown/40 bg-brown/5 px-3 py-1.5 text-xs font-bold text-brown transition hover:bg-brown/10"
+          >
+            {wipItems.length} in works
+          </a>
+        )}
         {status === "loading" && <span className="text-xs text-body/50">syncing…</span>}
       </div>
 
@@ -493,6 +513,73 @@ function ReadinessInner() {
           <code className="text-[11px]">npm run readiness</code> at commit {String((AUTO as any).commit || "?")} on{" "}
           {autoAt.slice(0, 10)}. Nobody needs to re-test those by hand, but marking one yourself overrides the machine.
         </p>
+      )}
+
+      {/* Whatever is being fixed right now, lifted to the top and carrying its
+          full wording, so nobody has to hunt through 276 items to find the one
+          a running change is aimed at. */}
+      {wipItems.length > 0 && (
+        <div className="mt-8" id="in-works">
+          <div className="border-t-2 border-brown pt-4">
+            <div className="kicker">Being fixed now</div>
+            <h2 className="mt-1 text-xl font-extrabold tracking-tight text-ink">In works</h2>
+            <p className="mt-1 max-w-[62ch] text-sm text-body/70">
+              Lifted out of their sections while someone works on them. Give one a
+              verdict when the fix lands and it files itself back where it came
+              from.
+            </p>
+          </div>
+          <div className="mt-4 space-y-2">
+            {wipItems.map(({ it, sTitle }) => (
+              <div key={it.key} className="rounded-xl border border-brown/40 bg-brown/[0.04] px-4 py-3">
+                <div className="flex flex-wrap items-baseline gap-2">
+                  <span className="min-w-0 flex-1 text-sm font-bold text-ink">{it.title}</span>
+                  <span
+                    className={`shrink-0 rounded-md px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${
+                      it.sev === "must"
+                        ? "bg-danger/10 text-danger"
+                        : it.sev === "should"
+                          ? "bg-attention/10 text-attention"
+                          : "bg-warm-bg text-body/60"
+                    }`}
+                  >
+                    {SEV_LABEL[it.sev]}
+                  </span>
+                  <span className="shrink-0 text-[11px] text-body/50">{sTitle}</span>
+                </div>
+                <p className="mt-1 text-[13px] leading-relaxed text-body/75">
+                  <b className="text-ink/80">Good looks like:</b> {it.good}
+                </p>
+                {checks[it.key]?.owner_name && (
+                  <p className="mt-1 text-[11px] text-body/50">
+                    picked up by {checks[it.key].owner_name}
+                    {checks[it.key].updated_at ? ` · ${String(checks[it.key].updated_at).slice(5, 10)}` : ""}
+                  </p>
+                )}
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  {VERDICTS.map(({ v, label }) => (
+                    <button
+                      key={v}
+                      onClick={() => {
+                        save(it.key, { verdict: v, owner_name: meRef.current });
+                        setOpenKey(v === "ok" ? "" : it.key);
+                      }}
+                      className="rounded-lg border border-warm-border bg-surface px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => save(it.key, { verdict: "", owner_name: meRef.current })}
+                    className="rounded-lg px-2.5 py-1 text-xs font-semibold text-body/50 transition hover:text-ink"
+                  >
+                    Put it back
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {(ql || onlyUntested) &&
@@ -673,6 +760,19 @@ function ReadinessInner() {
                               </button>
                             ))}
                           </div>
+                          <button
+                            onClick={() => {
+                              save(it.key, {
+                                verdict: checks[it.key]?.verdict === "wip" ? "" : "wip",
+                                owner_name: meRef.current,
+                              });
+                              setOpenKey("");
+                            }}
+                            title="Someone is fixing this now — lift it onto the In works board at the top"
+                            className="rounded-lg border border-brown/40 bg-brown/5 px-2.5 py-1 text-xs font-semibold text-brown transition hover:bg-brown/10"
+                          >
+                            In works
+                          </button>
                           <button
                             onClick={() =>
                               save(it.key, {
