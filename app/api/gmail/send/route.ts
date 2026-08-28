@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { humanHtml, needsHtml } from "@/lib/emailHtml";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, reqOrigin } from "@/lib/gmail";
 import { signUnsub } from "@/lib/unsubscribe";
@@ -114,6 +115,9 @@ export async function POST(req: NextRequest) {
       threadId: threadId ? String(threadId) : undefined,
       attachment: att,
       listUnsubscribe,
+      // Links in the note become real hyperlinks; attachments keep the plain
+      // part (the multipart builder has no HTML branch).
+      html: !att && needsHtml(outBody) ? humanHtml(outBody) : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {

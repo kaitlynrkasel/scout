@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { humanHtml, needsHtml } from "@/lib/emailHtml";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { outlookSendOrDraft } from "@/lib/outlook";
 
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       cc: String(cc || "") || undefined,
       subject: String(subject || ""),
       body: String(body || ""),
+      html: needsHtml(String(body || "")) ? humanHtml(String(body || "")) : undefined,
       mode,
     });
     return NextResponse.json({ ok: true, ...result });

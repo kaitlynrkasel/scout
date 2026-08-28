@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { humanHtml, needsHtml } from "@/lib/emailHtml";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, gmailThreadsWithReplies } from "@/lib/gmail";
 import { outlookSendOrDraft, outlookConversationsWithReplies } from "@/lib/outlook";
@@ -154,6 +155,7 @@ export async function GET(req: NextRequest) {
         body: outBody,
         mode: "send" as const,
         attachment: att,
+        html: !att && needsHtml(outBody) ? humanHtml(outBody) : undefined,
       };
       if (provider === "gmail") await gmailSendOrDraft({ ...opts, listUnsubscribe });
       else await outlookSendOrDraft(opts);
