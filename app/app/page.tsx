@@ -25502,8 +25502,12 @@ function CompanyDetailsEditor({
   // button — the whole point is that the click lands somewhere you can see.
   const [personalNote, setPersonalNote] = useState<{ ok: boolean; text: string } | null>(null);
 
+  // Autosave only after the loaded values have settled, so the load itself
+  // (setting every field) never fires a save of unchanged data.
+  const autosaveArmed = useRef(false);
   useEffect(() => {
     let alive = true;
+    autosaveArmed.current = false;
     setLoading(true);
     setFound(false);
     setNote(null);
@@ -25533,7 +25537,12 @@ function CompanyDetailsEditor({
       } catch {
         /* teams may not be set up; fall back to the profile name */
       } finally {
-        if (alive) setLoading(false);
+        if (alive) {
+          setLoading(false);
+          setTimeout(() => {
+            if (alive) autosaveArmed.current = true;
+          }, 0);
+        }
       }
     })();
     return () => {
@@ -25541,6 +25550,18 @@ function CompanyDetailsEditor({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedWsId]);
+
+  // Company details save themselves: a short debounce after the last keystroke,
+  // no Save button to remember. The empty-name guard in save() still applies.
+  useEffect(() => {
+    if (!autosaveArmed.current || loading || !found) return;
+    if (!name.trim()) return;
+    const t = setTimeout(() => {
+      void save();
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [name, about, website, industry, stage, location]);
 
   // Who may edit these fields. The server's own rule is assertRole(…, "admin")
   // — owner OR admin — so gating the form on `role === "owner"` disabled every
@@ -25556,7 +25577,7 @@ function CompanyDetailsEditor({
   // whoever hit it looking for a bug in the checkbox instead of at the database.
   function readableError(msg: string): string {
     if (/allow_personal/i.test(msg) && /column|schema cache|does not exist/i.test(msg))
-      return "Personal use can't be saved yet — the database is missing its column. Run supabase/allow_personal.sql in Supabase, then try again.";
+      return "Personal use can't be saved yet: the database is missing its column. Run supabase/allow_personal.sql in Supabase, then try again.";
     return msg || "Couldn't save.";
   }
 
@@ -25760,9 +25781,6 @@ function CompanyDetailsEditor({
                     {personalNote.text}
                   </p>
                 )}
-                <p className="mt-2 text-xs text-body/55">
-                  This switch saves on its own — no need to press Save company details.
-                </p>
               </>
             ) : (
               <p className="mt-2 text-xs text-body/60">
@@ -25774,17 +25792,15 @@ function CompanyDetailsEditor({
           </div>
           {isOwner && (
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <button
-                onClick={save}
-                disabled={saving}
-                className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save company details"}
-              </button>
-              {note && (
-                <span className={`text-xs font-medium ${note.ok ? "text-emerald-700" : "text-attention"}`}>
-                  {note.text}
-                </span>
+              <span className="text-xs text-body/55">Changes save automatically.</span>
+              {saving ? (
+                <span className="text-xs font-medium text-body/60">Saving…</span>
+              ) : (
+                note && (
+                  <span className={`text-xs font-medium ${note.ok ? "text-emerald-700" : "text-attention"}`}>
+                    {note.text}
+                  </span>
+                )
               )}
             </div>
           )}
