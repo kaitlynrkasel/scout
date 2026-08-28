@@ -4343,7 +4343,13 @@ function ScoutTool({
   // back to an empty "Select..." with no way to recover except guessing.
   useEffect(() => {
     if (!hydrated) return;
-    if (!visibleProjects.length) return;
+    if (!visibleProjects.length) {
+      // An empty lens (fresh Personal mode, brand-new company) must not keep
+      // showing the previous lens's categories and search goal: clear the
+      // stage so it reads empty until a project is created here.
+      if (catId) setCatId("");
+      return;
+    }
     if (visibleProjects.some((p) => p.id === activeId)) return;
     selectProject(visibleProjects[0].id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -4444,7 +4450,10 @@ function ScoutTool({
     ? finds.filter((f) => visibleProjectIdSet.has(f.projectId))
     : finds;
   const activeCompanyName = companies.find((c) => c.id === activeCompanyId)?.name || "";
-  const activeProject = projects.find((p) => p.id === activeId) || projects[0] || null;
+  // Resolved WITHIN the lens: on a lens with no projects this is null, so no
+  // other company's categories, goal, or context can bleed onto the stage.
+  const activeProject =
+    visibleProjects.find((p) => p.id === activeId) || visibleProjects[0] || null;
   const activeUseCase = activeProject ? activeProject.useCase : profile.useCase;
   const uc = ucInfo(activeUseCase);
   const myCats = activeProject
