@@ -14816,16 +14816,6 @@ function SiteTile({
     : "";
   const showLogo = !!favicon && !platform && hasLogo;
 
-  // Sized by HEIGHT and anchored well inside the tile, so the whole dog is
-  // always visible. Sizing by width cropped him: the artwork is wider than it
-  // is tall, so a width big enough to read overflowed a 176px-tall tile and
-  // left only a haunch on screen.
-  const dogHeight = 50 + (h % 4) * 5;
-  const dogLeft = 36 + ((h >> 3) % 4) * 10;
-  const dogBottom = 8 + ((h >> 6) % 3) * 5;
-  const flip = h % 2 ? -1 : 1;
-  const tilt = ((h >> 9) % 5) - 2;
-
   const maskStyle = (src: string): React.CSSProperties => ({
     WebkitMaskImage: `url("${src}")`,
     maskImage: `url("${src}")`,
@@ -14873,31 +14863,18 @@ function SiteTile({
           />
         </div>
       ) : (
-        // No logo to be had: the house mark. Traced from public/scout-dog.png
-        // and drawn as a white line, so re-trace that PNG if it ever changes.
-        <svg
-          aria-hidden
-          viewBox="-21 0 121 88.39"
-          preserveAspectRatio="xMidYMid meet"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinejoin="round"
-          strokeLinecap="round"
-          className="pointer-events-none absolute w-auto opacity-75 transition-all duration-500 group-hover:opacity-100"
-          style={{
-            color: mark,
-            height: `${dogHeight}%`,
-            left: `${dogLeft}%`,
-            bottom: `${dogBottom}%`,
-            transform: `translateX(-50%) scaleX(${flip}) rotate(${tilt}deg)`,
-          }}
-        >
-          <path d="M69.3 0C70.5 -0.2 70.5 -0.2 71.5 0C72.6 0.2 74.5 0.9 75.7 1.5C76.8 2.1 77.5 2.7 78.7 3.7C79.8 4.8 81.3 6.9 82.4 7.9C83.5 8.8 83.3 9.1 85 9.4C86.8 9.6 91.3 9.2 92.9 9.4C94.5 9.5 94.3 10.4 94.8 10.1C95.2 9.9 95.1 8.5 95.5 7.9C95.9 7.2 96.8 6.6 97.4 6.4C98 6.1 98.8 6.1 99.3 6.4C99.7 6.7 100 7.7 100 8.2C100 8.8 99.8 9.2 99.3 9.7C98.7 10.3 96.9 10.9 96.6 11.6C96.4 12.3 97.6 13.1 97.8 13.9C97.9 14.6 97.9 15.2 97.8 16.1C97.6 17 97.3 18 96.6 19.1C96 20.2 95.4 21.3 94 22.8C92.6 24.4 90.9 26.4 88 28.5C85.1 30.5 78.2 33.5 76.4 35.2C74.6 37 77 37.3 77.2 39C77.3 40.6 77.4 42.8 77.2 45.3C76.9 47.9 76.3 51.7 75.7 54.3C75 56.9 75.1 56.9 73 61C71 65.2 64.9 76.2 63.3 79.4C61.7 82.6 63 80 63.3 80.5C63.6 81 64.6 81.4 65.2 82.4C65.7 83.4 69.2 85.8 66.7 86.5C64.2 87.2 52.9 87.6 50.2 86.5C47.5 85.4 50.3 81.5 50.6 79.8C50.8 78.1 51.6 77.2 51.7 76.4C51.7 75.6 51.3 74.7 50.9 74.9C50.6 75.2 49.8 76.7 49.4 77.9C49.1 79.2 49.7 81.5 48.7 82.4C47.7 83.3 44.5 83.3 43.4 83.1C42.4 83 42.9 82.1 42.3 81.6C41.8 81.2 40.9 80.7 40.1 80.5C39.3 80.3 37.3 81.5 37.5 80.5C37.6 79.6 40.3 76.5 40.8 74.9C41.4 73.3 41.3 72.2 40.8 71.2C40.4 70.1 39.6 69 38.2 68.5C36.8 68.1 33.7 68.4 32.6 68.5C31.5 68.7 31 69.2 31.5 69.3C31.9 69.4 33.9 69 35.2 69.3C36.5 69.6 38.7 70.1 39.3 71.2C40 72.2 39.7 74 39 75.7C38.2 77.3 34.8 80.3 34.8 81.3C34.9 82.3 38.2 81.4 39.3 81.6C40.4 81.9 40.9 82.1 41.6 82.8C42.3 83.4 43.3 84.6 43.4 85.4C43.6 86.1 43.1 86.8 42.3 87.3C41.5 87.8 40.4 88.2 38.6 88.4C36.7 88.6 34.6 88.7 31.1 88.4C27.6 88.1 21.4 86.8 17.6 86.5C13.8 86.2 9.6 87.4 8.2 86.5C6.9 85.6 10.2 82.8 9.4 81.3C8.6 79.7 4.9 79 3.4 77.2C1.8 75.3 0.6 72.7 0 70.4C-0.6 68.1 -0.5 65.6 0 63.3C0.5 61 1.9 58.2 3 56.6C4.1 54.9 4.9 54.2 6.4 53.2C7.9 52.1 10.1 50.9 12 50.2C13.9 49.4 14.7 49.2 17.6 48.7C20.5 48.2 26.7 47.8 29.6 47.2C32.5 46.6 33.7 45.9 35.2 44.9C36.7 44 37.7 42 38.6 41.6C39.5 41.1 39.6 42.2 40.4 42.3C41.3 42.4 42.4 42.7 43.8 42.3C45.3 41.9 47.5 41.1 49.1 40.1C50.6 39 52.1 37.3 53.2 36C54.2 34.6 54.8 33.4 55.4 31.8C56.1 30.3 56.6 28.2 56.9 26.6C57.2 25 57.4 23.3 57.3 22.5C57.2 21.7 56.8 21.8 56.6 21.7C56.3 21.7 56 21.1 55.8 22.1C55.6 23.1 55.7 26.2 55.4 27.7C55.2 29.3 55 30 54.3 31.5C53.6 32.9 52.3 35.1 51.3 36.3C50.3 37.6 49.6 38.1 48.3 39C47 39.8 45.1 41 43.4 41.2C41.8 41.4 39.5 40.8 38.6 40.1C37.7 39.4 37.9 38.3 38.2 37.1C38.5 35.8 38.6 35.3 40.4 32.6C42.3 29.9 47.6 23.3 49.4 21C51.3 18.7 50.6 19.4 51.7 18.7C52.8 18 55.6 17.3 56.2 16.9C56.8 16.4 56.1 16.1 55.4 16.1C54.7 16.1 52.7 16.9 52.1 16.9C51.4 16.9 51.6 16.9 51.7 16.1C51.7 15.4 51.9 13.6 52.4 12.4C52.9 11.1 53.4 10.1 54.7 8.6C56 7.1 58.7 4.6 60.3 3.4C61.9 2.2 62.5 2.1 64 1.5C65.5 0.9 68 0.2 69.3 0Z" />
-          {/* The tail. It is a separate shape in scout-dog.png, so the body
-              trace never picked it up and the doodle dogs shipped tailless. */}
-          <path d="M-7.1 39.4C-13 43 -16.5 47.5 -17.1 52.5C-17.8 57 -18.6 60.5 -16.5 64.5C-14.8 67.3 -12.5 68.8 -11 68.2C-9 67.4 -4.5 65.6 -2.9 64.2C-6.5 62.2 -8.6 58 -9.4 52C-9.9 47.5 -8.9 42.6 -7.1 39.4Z" />
-        </svg>
+        // No logo to be had: a big monogram of the find's name in the
+        // site's own deepened color. Identifies the card without any house
+        // mascot on it.
+        <div className="absolute inset-0 grid place-items-center">
+          <span
+            aria-hidden
+            style={{ color: mark }}
+            className="font-display select-none text-6xl font-bold opacity-60 transition group-hover:opacity-80"
+          >
+            {(name || host || "?").trim().charAt(0).toUpperCase()}
+          </span>
+        </div>
       )}
       {(label || host) && (
         <span
@@ -25158,8 +25135,75 @@ function ConnectEmailCard({
   onConnectOutlook: () => void;
 }) {
   const [choosing, setChoosing] = useState(false);
+  // Informed consent BEFORE the provider screen: what connecting actually
+  // grants, in Scout's own words, then the exact steps the provider will ask
+  // for. Nothing starts until Continue.
+  const [consentFor, setConsentFor] = useState<"" | "gmail" | "outlook">("");
   return (
     <section className="mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+      {consentFor && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-ink/45 p-4" onClick={() => setConsentFor("")}>
+          <div
+            className="max-h-[85vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-warm-border bg-surface p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="kicker mb-2">Before you connect</div>
+            <h3 className="font-display text-xl font-bold tracking-tight text-ink">
+              What you&apos;re agreeing to
+            </h3>
+            <ul className="mt-3 space-y-2.5 text-sm leading-relaxed text-body">
+              <li className="flex gap-2.5">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brown" />
+                <span>
+                  <b className="text-ink">Scout writes and sends from your address.</b>{" "}
+                  It can place ready-to-review drafts in your mailbox and, when you
+                  press Send, send them as you.
+                </span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brown" />
+                <span>
+                  <b className="text-ink">Scout watches the threads it sends for replies and bounces.</b>{" "}
+                  {consentFor === "gmail"
+                    ? "On Gmail it can only read message headers (who a message is from and its subject), never message bodies, and it only ever looks at the threads Scout itself started, never the rest of your inbox."
+                    : "Microsoft doesn't offer a headers-only permission, so the Outlook grant technically covers your mail; Scout still only ever reads the conversations it sent (sender and subject), never the rest of your inbox."}
+                </span>
+              </li>
+              <li className="flex gap-2.5">
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brown" />
+                <span>
+                  <b className="text-ink">You can disconnect anytime</b> right here in
+                  your Profile, which cuts off all access.
+                </span>
+              </li>
+            </ul>
+            <div className="mt-4 rounded-xl border border-warm-border bg-warm-bg/50 p-3.5 text-xs leading-relaxed text-body/80">
+              <b className="text-ink/80">What happens next:</b>{" "}
+              {consentFor === "gmail"
+                ? "Google will open. Pick your account, review the permissions (send email, and view message metadata such as headers, but not the email body), and press Continue."
+                : "Microsoft will open. Pick your account, review the permissions (read and write access to your mail, send mail as you), and press Accept."}
+            </div>
+            <div className="mt-5 flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => {
+                  const go = consentFor === "gmail" ? onConnectGmail : onConnectOutlook;
+                  setConsentFor("");
+                  go();
+                }}
+                className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
+              >
+                I agree, continue to {consentFor === "gmail" ? "Google" : "Microsoft"}
+              </button>
+              <button
+                onClick={() => setConsentFor("")}
+                className="text-sm font-semibold text-body/60 transition hover:text-ink"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="flex flex-wrap items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-warm-bg">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" className="text-accent">
@@ -25171,19 +25215,21 @@ function ConnectEmailCard({
           <div className="text-[15px] font-bold text-ink">Send from your email</div>
           <p className="mt-0.5 text-sm leading-relaxed text-body">
             Connect your email so Scout can put a ready-to-go draft in your inbox, or
-            send it for you, straight from your own address.
+            send it for you, straight from your own address. Scout also checks the
+            threads it sends for replies and bounces: headers only, never bodies,
+            never the rest of your mail.
           </p>
         </div>
         {choosing ? (
           <div className="flex flex-wrap items-center gap-2">
             <button
-              onClick={onConnectGmail}
+              onClick={() => setConsentFor("gmail")}
               className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
             >
               Gmail
             </button>
             <button
-              onClick={onConnectOutlook}
+              onClick={() => setConsentFor("outlook")}
               className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
             >
               Outlook
