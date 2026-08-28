@@ -11659,7 +11659,24 @@ function ApplicationsTab({
   const [pasteProj, setPasteProj] = useState(projects[0]?.id || "");
   const [pasteCat, setPasteCat] = useState("");
   const [view, setView] = useState<"list" | "compare">("list");
-  const apps = finds.filter((f) => f.status !== "denied" && sensesApplication(f));
+  const [appQ, setAppQ] = useState("");
+  const apps = finds
+    .filter((f) => f.status !== "denied" && sensesApplication(f))
+    // Same search the Finds tab has: name, outlet, contact, URL, draft.
+    .filter((f) => {
+      const t = appQ.trim().toLowerCase();
+      if (!t) return true;
+      return [
+        f.opp?.name,
+        f.opp?.outlet,
+        f.opp?.contactEmail,
+        f.opp?.url,
+        f.draft?.subject,
+        f.draft?.body,
+      ]
+        .filter(Boolean)
+        .some((x) => String(x).toLowerCase().includes(t));
+    });
   // Grouped by PROJECT, then by category inside it — the structure the user
   // already built is the structure of their applications.
   // A find whose project no longer exists (deleted, or made before projects
@@ -11724,6 +11741,33 @@ function ApplicationsTab({
         categories. Open one and its kit is ready; Compare puts a group side
         by side so you can weigh and rank them yourself.
       </p>
+
+      <div className="mt-4 flex items-center gap-2">
+        <div className="relative w-full max-w-sm">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-body/40"><circle cx="11" cy="11" r="7" /><path d="m20 20-3.5-3.5" /></svg>
+          <input
+            data-guide="apps-search"
+            value={appQ}
+            onChange={(e) => setAppQ(e.target.value)}
+            placeholder="Search applications: name, company, email, draft…"
+            className="w-full rounded-xl border border-warm-border bg-surface py-2 pl-9 pr-8 text-sm text-ink shadow-card outline-none transition focus:border-coral"
+          />
+          {appQ && (
+            <button
+              onClick={() => setAppQ("")}
+              aria-label="Clear search"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-body/50 hover:text-ink"
+            >
+              ×
+            </button>
+          )}
+        </div>
+        {appQ.trim() && (
+          <span className="shrink-0 text-xs font-semibold text-body/60">
+            {apps.length} match{apps.length === 1 ? "" : "es"}
+          </span>
+        )}
+      </div>
 
       {showPaste && (
         <section className="mt-5 max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
