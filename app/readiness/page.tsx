@@ -27,6 +27,9 @@ interface Item {
   title: string;
   good: string;
   steps?: string[];
+  // Scripted walkthrough: steps that land on a tab, click controls for you,
+  // and pulse where to look. Falls back to plain `steps` text when absent.
+  tour?: { text: string; spot?: string; click?: string; tab?: string }[];
   tech?: string;
 }
 interface Section {
@@ -161,7 +164,7 @@ function ReadinessInner() {
     }
     const asked = Date.now();
     w.postMessage(
-      { type: "scout-tour", title: it.title, steps: it.steps || [], guide },
+      { type: "scout-tour", title: it.title, steps: it.tour || it.steps || [], guide },
       window.location.origin
     );
     window.setTimeout(() => {
@@ -535,11 +538,11 @@ function ReadinessInner() {
                             bare jump (it lands AND reads the steps), so items
                             with steps show it as the lead action. */}
                         {!folded &&
-                          ((it.steps || []).length > 0 ||
+                          ((it.tour || it.steps || []).length > 0 ||
                             ITEM_GUIDE[it.key] ||
                             SECTION_GUIDE[s.id]) && (
                             <div className="ml-5 mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-                              {(it.steps || []).length > 0 ? (
+                              {(it.tour || it.steps || []).length > 0 ? (
                                 <>
                                   <button
                                     onClick={() =>

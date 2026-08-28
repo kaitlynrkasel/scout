@@ -286,7 +286,23 @@
                 "On a fresh device, open Application materials and confirm the prefill.",
                 "Edit one, reload, confirm your edit stuck."
               ],
-              "key": "setup::your-links-prefill-from-the-profile"
+              "key": "setup::your-links-prefill-from-the-profile",
+              "tour": [
+                {
+                  "text": "Scout is taking you to Templates. Switch to the Application materials page with this toggle.",
+                  "tab": "templates",
+                  "spot": "tpl-pages"
+                },
+                {
+                  "text": "Find the Your links card: Website, LinkedIn, Contact email, Phone. The fields should ALREADY hold what Scout knows about you (your LinkedIn from Profile, your account email), without you typing them."
+                },
+                {
+                  "text": "Change one field (say the phone), reload the page, and check the change stuck. Nothing you typed should ever be overwritten by the prefill."
+                },
+                {
+                  "text": "Open any application kit: the same links should appear under Your links with copy buttons. If all that held, mark it Works."
+                }
+              ]
             },
             {
               "key": "setup::template-scope-new-project",
