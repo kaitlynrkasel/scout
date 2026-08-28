@@ -182,6 +182,21 @@ function ReadinessInner() {
     return m;
   }, [checks, auto, autoAt]);
   const isAuto = (key: string) => !!auto[key] && !checks[key]?.verdict;
+  // Items written since the checker last ran. Without this the page can't tell
+  // "no machine could settle this" from "nobody has run the checker since this
+  // item was added", and a growing checklist quietly outruns its own coverage.
+  const seenByChecker = useMemo(
+    () => new Set<string>(((AUTO as any).knownKeys as string[]) || []),
+    []
+  );
+  const unseenCount = seenByChecker.size
+    ? allItems.filter((i) => !seenByChecker.has(i.key)).length
+    : 0;
+  // Unchecked items whose own wording points at something in the repository —
+  // the checker's worklist, carried here so it's visible to whoever is testing.
+  const candidateCount = (((AUTO as any).candidates as any[]) || []).filter(
+    (c) => !checks[c.key]?.verdict
+  ).length;
   const [status, setStatus] = useState<"loading" | "live" | "denied" | "notReady">("loading");
   // What the live pane is showing. "Show me where" swaps in a guided URL; the
   // cache-buster lets the same spot be summoned twice in a row.
@@ -512,6 +527,24 @@ function ReadinessInner() {
           tag and the evidence that decided them, from{" "}
           <code className="text-[11px]">npm run readiness</code> at commit {String((AUTO as any).commit || "?")} on{" "}
           {autoAt.slice(0, 10)}. Nobody needs to re-test those by hand, but marking one yourself overrides the machine.
+          {unseenCount > 0 && (
+            <>
+              {" "}
+              <b className="text-ink/80">
+                {unseenCount} item{unseenCount === 1 ? " has" : "s have"} been added since that run
+              </b>{" "}
+              and {unseenCount === 1 ? "it hasn't" : "they haven't"} been through the checker yet — some
+              may settle themselves. Run <code className="text-[11px]">npm run readiness</code> again.
+            </>
+          )}
+          {candidateCount > 0 && (
+            <>
+              {" "}
+              {candidateCount} unchecked item{candidateCount === 1 ? "" : "s"} name something in the
+              repo, so {candidateCount === 1 ? "a check" : "checks"} could probably be written for{" "}
+              {candidateCount === 1 ? "it" : "them"}.
+            </>
+          )}
         </p>
       )}
 

@@ -12,6 +12,12 @@
 // this check fail. A grep that proves a file merely mentions the right words is
 // not a check. Where the shipping code exports the function, call the function.
 //
+// Two kinds live here. A CHECK is written for one named item. A FAMILY is
+// written for a shape of item — "an item about re-running a migration", "an
+// item asking whether a stranger can call a route" — and is matched against
+// every item on each run, so the checklist can grow into coverage that already
+// exists. Families are mostly fail-only; see the note above FAMILIES for why.
+//
 // Results land in app/readiness/auto.json, which the page reads as a base layer
 // under the shared table: a human verdict always wins, and clearing a human
 // verdict falls back to the machine's.
@@ -47,6 +53,35 @@ const bad = (note) => ({ verdict: "bad", note });
 
 const CHECKS = [];
 const check = (key, fn) => CHECKS.push({ key, fn });
+
+// A FAMILY check is keyed on what an item SAYS, not on which item it is, so a
+// checklist that grows keeps its coverage: write an item that names a migration
+// file or an API route and the next run screens it with no new code.
+//
+// Most families may FAIL an item but may not PASS one, and the asymmetry is the
+// whole reason they can be trusted. Failing needs one necessary condition to be
+// false: a setup script that errors on its second run cannot pass an item that
+// says "re-run it", whatever else is true. Passing needs the item's WHOLE
+// question answered — and "the file is safe to re-run" is not "it has been run
+// on the live database", which is what that item actually asks and what no
+// amount of reading this repository can tell you. A family that returns null
+// has decided nothing, and the item stays with the humans.
+//
+// Only a family whose question is exactly the item's question may pass it.
+//
+//   family(name, match, run)
+//     match(item, text) -> falsy to skip, or a value handed to run()
+//     run(item, matched) -> {verdict, note} | null
+const FAMILIES = [];
+const family = (name, match, run) => FAMILIES.push({ name, match, run });
+// Everything an item says about itself.
+const itemText = (it) => `${it.title}\n${it.good}\n${(it.steps || []).join("\n")}\n${it.tech || ""}`;
+// What the item is ASKING — title, the pass condition, and the authored
+// technical note. Deliberately WITHOUT `steps`: steps carry preconditions and
+// navigation ("supabase/company_index.sql has been run once", "open the
+// /api/billing/webhook endpoint") that name a thing the item does not judge.
+// Matching on those is how a family ends up answering a question nobody asked.
+const itemClaim = (it) => `${it.title}\n${it.good}\n${it.tech || ""}`;
 
 // The engine's own modules, imported through scripts/readiness-hook.mjs so the
 // behavioural checks below exercise the shipping functions, not restatements.
@@ -699,10 +734,192 @@ check("feel::animation-respects-the-reduce-motion-setting", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Families — these cover items that don't exist yet
+// ---------------------------------------------------------------------------
+
+// Any item about running a migration. FAIL-ONLY: whether the script has been
+// run against the live database is invisible from here, so a clean file proves
+// nothing. A file that is NOT safe to re-run does prove something — the item
+// cannot pass — because "re-run it" is the instruction every one of these
+// carries, and a bare CREATE blows up half way through and leaves the schema in
+// a state nobody can reason about.
+family(
+  "migration is re-runnable",
+  (it) => {
+    // The TITLE has to be about running the scripts. A pass condition that
+    // merely lists one as a precondition ("Needs supabase/x.sql run once")
+    // belongs to a different question, and this check would answer that one
+    // instead of the one being asked.
+    if (!/\b(re-?run|run|setup script|migration|schema)\b/i.test(it.title)) return null;
+    if (!/\b(script|migration|sql|schema|database)\b/i.test(it.title)) return null;
+    return itemClaim(it).match(/\bsupabase\/[\w-]+\.sql\b/i)?.[0] || null;
+  },
+  (it, file) => {
+    if (!exists(file)) return bad(`This item names ${file}, which is not in the repository.`);
+    if (!sh(`git ls-files ${file}`).trim()) return bad(`${file} exists but is untracked, so it isn't on the live site's copy.`);
+    const sql = read(file);
+    // Statement-ish split: good enough to spot the ones with no guard, and the
+    // guards are the whole point of "safe to re-run".
+    const statements = sql
+      .replace(/--[^\n]*/g, "")
+      .split(";")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const GUARDED = /\b(if not exists|if exists|or replace|on conflict)\b/i;
+    // Postgres has no CREATE POLICY IF NOT EXISTS, so the idempotent form is a
+    // paired "drop policy if exists" just above it. Reading statements one at a
+    // time misses the pair and calls a perfectly re-runnable file broken —
+    // which is what this check did on its first run against supabase/teams.sql.
+    const dropped = new Set(
+      [...sql.matchAll(/drop\s+(policy|trigger|index|view|function|table)\s+if\s+exists\s+([\w."]+)/gi)].map(
+        (m) => `${m[1].toLowerCase()}:${m[2].replace(/"/g, "").toLowerCase()}`
+      )
+    );
+    const preDropped = (st) => {
+      const m = st.match(/^create\s+(?:or\s+replace\s+)?(policy|trigger|index|view|function|table)\s+([\w."]+)/i);
+      return !!m && dropped.has(`${m[1].toLowerCase()}:${m[2].replace(/"/g, "").toLowerCase()}`);
+    };
+    const risky = statements.filter(
+      (s) =>
+        /^(create|alter\s+table\s+\S+\s+add|insert)/i.test(s) && !GUARDED.test(s) && !preDropped(s)
+    );
+    if (risky.length)
+      return warn(
+        `${file} has ${risky.length} statement(s) with no "if not exists" / "or replace" guard, so re-running it errors ` +
+          `part-way instead of being a no-op:\n` +
+          risky.slice(0, 4).map((s) => `  ${s.replace(/\s+/g, " ").slice(0, 110)}…`).join("\n")
+      );
+    // Safe to re-run, which is necessary and nowhere near sufficient: somebody
+    // still has to run it, and only they can say whether they did.
+    return null;
+  }
+);
+
+// Any item asking whether a stranger can call something. FAIL-ONLY: a wide-open
+// route settles it, but a guarded one does not — "only the right people can
+// reach the admin screens" still turns on whether the allowlist names the right
+// people, which is a question about people, not about code.
+family(
+  "named API routes are not open to the world",
+  (it) => {
+    const t = itemClaim(it);
+    // Only when the item is asking an ACCESS question. Plenty of items name a
+    // route as a destination ("add a monitor for /api/build-id") and are not
+    // asking whether anyone may call it.
+    // Narrow on purpose. This family answers exactly one question — can a
+    // stranger with no account call this — so it may only claim items asking
+    // that. "Signed in" and "permission" show up all over the checklist in
+    // sentences about something else entirely; matching them was how an uptime
+    // item ended up with an answer about authentication.
+    if (
+      !/(anyone (can|who|with)|unauthenticated|without (an account|signing in|a session)|with no account|no account (is )?(needed|required)|rate limit|metered|run up (a |the )?(large )?bill|spend our|open to the world|only the right people|locked down)/i.test(
+        t
+      )
+    )
+      return null;
+    // Intent comes from the claim; the route path itself is usually down in
+    // the steps ("open /api/admin/..."), so read paths from the whole item.
+    const paths = [...new Set([...itemText(it).matchAll(/\/api\/[a-z0-9/-]+/gi)].map((m) => m[0]))];
+    return paths.length ? paths : null;
+  },
+  (it, paths) => {
+    const rows = paths.map((p) => {
+      const f = `app${p.replace(/\/$/, "")}/route.ts`;
+      if (!exists(f)) return { p, gone: true };
+      const src = read(f);
+      return {
+        p,
+        auth: /getUser\(|userFromReq|requireUser|Authorization|bearer/i.test(src),
+        limited: /withinRateLimit/.test(src),
+        // A webhook is meant to be callable by the provider and nobody else:
+        // its signature check IS its authentication, and demanding a session
+        // on it would be wrong, not safer.
+        secret:
+          /CRON_SECRET|ACTION_SECRET|READINESS_KEY|verify[A-Za-z]*Token/.test(src) ||
+          /constructEvent\(|stripe-signature|createHmac/.test(src),
+      };
+    });
+    const real = rows.filter((r) => !r.gone);
+    if (!real.length) return null; // named something that isn't a route file
+    const open = real.filter((r) => !r.auth && !r.secret && !r.limited);
+    if (open.length)
+      return bad(
+        `${open.length} of the ${real.length} route(s) this item names take an unauthenticated request with no rate limit: ` +
+          open.map((r) => r.p).join(", ")
+      );
+    const thin = real.filter((r) => !r.auth && !r.secret);
+    if (thin.length)
+      return warn(`Rate-limited by IP only, with no sign-in or secret behind it: ${thin.map((r) => r.p).join(", ")}`);
+    return null; // guarded, which does not by itself pass the item
+
+  }
+);
+
+// Any item that names a response header by name.
+family(
+  "named security headers are actually sent",
+  (it) => {
+    const names = [...new Set(
+      [...itemText(it).matchAll(
+        /\b(Content-Security-Policy|Strict-Transport-Security|X-Content-Type-Options|X-Frame-Options|Referrer-Policy|Permissions-Policy)\b/gi
+      )].map((m) => m[0])
+    )];
+    return names.length ? names : null;
+  },
+  (it, names) => {
+    const cfg = read("next.config.js");
+    const missing = names.filter((n) => !new RegExp(`key:\\s*"${n}"`, "i").test(cfg));
+    if (missing.length) return bad(`next.config.js never sets: ${missing.join(", ")}`);
+    return ok(`next.config.js sets every header this item names: ${names.join(", ")}.`);
+  }
+);
+
+// ---------------------------------------------------------------------------
+
+const data = JSON.parse(read("app/readiness/data.json"));
+const ALL_ITEMS = data.parts.flatMap((p) =>
+  p.sections.flatMap((s) => s.items.map((i) => ({ ...i, section: s.title })))
+);
+const known = new Set(ALL_ITEMS.map((i) => i.key));
+const explicit = new Set(CHECKS.map((c) => c.key));
+
+// Run every family against every item that no hand-written check already owns.
+// This is what keeps coverage up as the checklist grows: an item written next
+// week that names a migration or a route is checked on the next run, with no
+// change to this file.
+for (const it of ALL_ITEMS) {
+  if (explicit.has(it.key)) continue;
+  for (const f of FAMILIES) {
+    const m = f.match(it);
+    if (!m) continue;
+    CHECKS.push({ key: it.key, viaFamily: f.name, fn: () => f.run(it, m) });
+    break; // first family to claim an item owns it
+  }
+}
+
+// Items nothing checks yet, but whose wording points straight at something in
+// the repository. Not verdicts — a worklist of checks worth writing.
+const CANDIDATE_SIGNALS = [
+  [/\bsupabase\/[\w-]+\.sql\b/i, "names a migration file"],
+  [/\/api\/[a-z0-9/-]+/i, "names an API route"],
+  [/\b(app|lib|scripts|public)\/[\w./-]+\.(ts|tsx|js|mjs|css|json|sql|png)\b/i, "names a file in the repo"],
+  [/\bprocess\.env\.[A-Z_]+|\b[A-Z][A-Z0-9_]{4,}\b(?=\s+(is|are|must|should))/, "names a setting"],
+  [/\b(header|robots|sitemap|manifest|service worker)\b/i, "names something served"],
+];
+const covered = new Set(CHECKS.map((c) => c.key));
+const candidates = ALL_ITEMS.filter((it) => !covered.has(it.key))
+  .map((it) => {
+    const hit = CANDIDATE_SIGNALS.find(([re]) => re.test(itemText(it)));
+    return hit ? { key: it.key, title: it.title, why: hit[1] } : null;
+  })
+  .filter(Boolean);
 
 const results = {};
-const skipped = [];
-for (const { key, fn } of CHECKS) {
+// Checks that ran and decided nothing: a --fast skip, or a family that matched
+// the item but could not honestly settle it.
+const undecided = [];
+const viaFamily = {};
+for (const { key, fn, viaFamily: fam } of CHECKS) {
   if (only && !key.includes(only)) continue;
   let r;
   try {
@@ -711,31 +928,50 @@ for (const { key, fn } of CHECKS) {
     r = bad(`The check itself failed to run: ${e.message}`);
   }
   if (!r) {
-    skipped.push(key);
+    undecided.push(fam ? `${key} (${fam} matched but couldn't settle it)` : key);
     continue;
   }
   results[key] = r;
+  if (fam) viaFamily[key] = fam;
 }
 
 // Cross-check the keys against the checklist so a renamed item can't leave a
 // verdict floating against nothing.
-const data = JSON.parse(read("app/readiness/data.json"));
-const known = new Set(data.parts.flatMap((p) => p.sections.flatMap((s) => s.items.map((i) => i.key))));
 const orphans = Object.keys(results).filter((k) => !known.has(k));
 if (orphans.length) {
   console.error(`\nThese checks name items that are not on the checklist:\n  ${orphans.join("\n  ")}\n`);
   process.exitCode = 1;
 }
 
+const dest = "app/readiness/auto.json";
+const prev = exists(dest) ? JSON.parse(read(dest)) : { checks: {} };
 const out = {
   generatedAt: new Date().toISOString(),
   commit: sh("git rev-parse --short HEAD").trim(),
   partial: FAST || !!only,
+  // Every item key that existed at this run. The page diffs the live checklist
+  // against this, so an item added after the run shows as "not looked at yet"
+  // rather than quietly reading as unchecked forever.
+  knownKeys: [...known],
+  // Which of these verdicts came from a family rule rather than a check written
+  // for that one item.
+  viaFamily,
+  // Items nothing covers yet whose wording points at something in the repo —
+  // the worklist for the next check to write.
+  candidates,
   checks: results,
 };
-const dest = "app/readiness/auto.json";
-const prev = exists(dest) ? JSON.parse(read(dest)) : { checks: {} };
-if (FAST || only) out.checks = { ...prev.checks, ...results }; // a partial run tops up, never truncates
+// A partial run tops up rather than truncating — but only for keys some check
+// still claims. Carrying everything forward blindly left verdicts behind from
+// rules that have since been narrowed or dropped, which is the one way this
+// file can start asserting something nothing in the codebase still believes.
+if (FAST || only) {
+  const claimed = new Set(CHECKS.map((c) => c.key));
+  const kept = Object.fromEntries(
+    Object.entries(prev.checks || {}).filter(([k]) => claimed.has(k) && !results[k])
+  );
+  out.checks = { ...kept, ...results };
+}
 fs.writeFileSync(path.join(ROOT, dest), JSON.stringify(out, null, 2) + "\n");
 
 const pad = (s, n) => s + " ".repeat(Math.max(0, n - s.length));
@@ -747,6 +983,29 @@ for (const [key, r] of Object.entries(results)) {
   console.log("");
 }
 const n = (v) => Object.values(results).filter((r) => r.verdict === v).length;
-console.log(`${Object.keys(results).length} items checked by code: ${n("ok")} pass, ${n("warn")} need work, ${n("bad")} broken.`);
-if (skipped.length) console.log(`Skipped in --fast: ${skipped.join(", ")}`);
-console.log(`Written to ${dest}\n`);
+console.log(`${Object.keys(results).length} of ${ALL_ITEMS.length} items checked by code: ${n("ok")} pass, ${n("warn")} need work, ${n("bad")} broken.`);
+const famCount = Object.keys(viaFamily).length;
+if (famCount)
+  console.log(
+    `${famCount} of those were claimed by a family rule, not by a check written for them:\n` +
+      Object.entries(viaFamily).map(([k, f]) => `  ${f} -> ${k}`).join("\n")
+  );
+// Anything added to the checklist since the previous run, so growth is visible
+// rather than silently uncovered.
+const before = new Set(prev.knownKeys || []);
+const added = before.size ? [...known].filter((k) => !before.has(k)) : [];
+if (added.length)
+  console.log(
+    `\n${added.length} item(s) are new since the last run. ` +
+      `${added.filter((k) => results[k]).length} of them a family rule could already decide:\n` +
+      added.map((k) => `  ${results[k] ? "[checked] " : "[human]   "}${k}`).join("\n")
+  );
+if (candidates.length)
+  console.log(
+    `\n${candidates.length} unchecked item(s) name something in the repo, so a check could probably be written:\n` +
+      candidates.slice(0, 15).map((c) => `  ${c.why} — ${c.title}`).join("\n") +
+      (candidates.length > 15 ? `\n  …and ${candidates.length - 15} more (see candidates in ${dest})` : "")
+  );
+if (undecided.length)
+  console.log(`\nRan but decided nothing, so these stay with the humans:\n  ${undecided.join("\n  ")}`);
+console.log(`\nWritten to ${dest}\n`);
