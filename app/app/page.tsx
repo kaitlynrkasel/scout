@@ -27223,6 +27223,12 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
           </span>
         )}
       </div>
+      {bullets.length === 0 && editing === null && (
+        <p className="mt-2 text-sm text-white/60">
+          Nothing here yet. Add a point or two describing who you&apos;re after,
+          e.g. brand managers at mid-size consumer goods companies.
+        </p>
+      )}
       <div className="mt-4 grid gap-x-16 gap-y-3.5 sm:grid-cols-2">
         {bullets.map((b, i) =>
           editing === i ? (
@@ -27292,12 +27298,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
           </button>
         )}
       </div>
-      {bullets.length === 0 && editing === null && (
-        <p className="mt-2 text-xs text-white/45">
-          Nothing here yet. Add a point or two describing who you&apos;re after,
-          e.g. brand managers at mid-size consumer goods companies.
-        </p>
-      )}
+
     </div>
   );
 }
