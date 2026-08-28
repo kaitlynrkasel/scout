@@ -14708,6 +14708,57 @@ function AddContactModal({
   );
 }
 
+/* ---------------- Your links ----------------
+ * The same links the Application materials page keeps (one storage key,
+ * scout_app_links), surfaced on the Profile too so a company account with
+ * personal use has somewhere to put LinkedIn, website, phone. */
+function YourLinksCard() {
+  const [links, setLinks] = useState<Record<string, string>>({});
+  useEffect(() => {
+    try {
+      setLinks(JSON.parse(localStorage.getItem("scout_app_links") || "{}"));
+    } catch {}
+  }, []);
+  const save = (k: string, v: string) => {
+    const next = { ...links, [k]: v };
+    setLinks(next);
+    try {
+      localStorage.setItem("scout_app_links", JSON.stringify(next));
+    } catch {}
+  };
+  return (
+    <FadeIn as="section" className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+      <h2 className="text-base font-extrabold tracking-tight text-ink">Your links</h2>
+      <p className="mt-1 text-sm leading-relaxed text-body">
+        Yours, not the company&apos;s. Used for personal outreach, signatures, and
+        every application form that asks. Also editable under Application
+        materials in Templates.
+      </p>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+        {(
+          [
+            ["website", "Website / portfolio", "https://…"],
+            ["linkedin", "LinkedIn", "linkedin.com/in/…"],
+            ["email", "Contact email", "you@example.com"],
+            ["phone", "Phone", "(615) …"],
+            ["other", "Anything else", "GitHub, Spotify, reel…"],
+          ] as const
+        ).map(([k, label, ph]) => (
+          <label key={k} className="block">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">{label}</span>
+            <input
+              value={links[k] || ""}
+              onChange={(e) => save(k, e.target.value)}
+              placeholder={ph}
+              className="mt-0.5 w-full rounded-lg border border-warm-border px-3 py-2 text-sm text-ink outline-none transition focus:border-coral"
+            />
+          </label>
+        ))}
+      </div>
+    </FadeIn>
+  );
+}
+
 /* ---------------- Scout confirm ----------------
  * The house replacement for window.confirm: same one-question contract,
  * returned as a promise, rendered as a Scout modal instead of the browser's
@@ -26628,6 +26679,9 @@ function ProfileTab({
             </div>
           </FadeIn>
           )}
+          {/* Personal links belong on the person, even on a company account:
+              the personal lens, signatures, and application kits read them. */}
+          {pView === "you" && <YourLinksCard />}
         </>
       )}
 
