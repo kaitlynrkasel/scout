@@ -3038,6 +3038,15 @@ function ScoutTool({
         setActiveCompanyId(saved);
         if (accountEmail) localStorage.setItem(`scout_active_company_${accountEmail}`, saved);
       }
+      // Paint the switcher instantly from the last-known company list; the
+      // fetch below refreshes it (and the cache) when it lands.
+      if (accountEmail) {
+        const cached = localStorage.getItem(`scout_companies_${accountEmail}`);
+        if (cached) {
+          const arr = JSON.parse(cached);
+          if (Array.isArray(arr) && arr.length) setCompanies(arr);
+        }
+      }
     } catch {
       /* ignore */
     }
@@ -3062,6 +3071,10 @@ function ScoutTool({
         if (!alive) return;
         const wss = (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role, allowPersonal: !!w.allow_personal }));
         setCompanies(wss);
+        try {
+          if (accountEmail)
+            localStorage.setItem(`scout_companies_${accountEmail}`, JSON.stringify(wss));
+        } catch {}
         // Belonging to a company makes this a COMPANY account — no personal
         // profile, just role + specialization (invited teammates auto-become this
         // on first load, so their profile is company-only, not individual).
@@ -10583,42 +10596,42 @@ function SideNav({
             carries no Active-project picker any more: every screen that cares
             about the project has its own picker (the Scout stage, Finds,
             paste-a-posting), so the rail copy was a duplicate control. */}
+        {/* Who you're working as: the company picker and the personal-use
+            checkbox live in ONE box so they read as a single control, not as
+            stray notes between Company and Account. Personal use appears when
+            a company on this account allows it (higher-tier setting) or the
+            user owns one. */}
         {(companies.length > 1 || (companies.length > 0 && (hasPersonal || personalAllowed))) && (
           <div className="mb-2.5">
             <div className="kicker px-2 pb-1.5">Company</div>
-            <PrettySelect
-              ariaLabel="Company lens"
-              value={activeCompanyId}
-              onChange={onSelectCompany}
-              options={[
-                { value: "", label: "All companies" },
-                ...(hasPersonal || personalAllowed ? [{ value: "personal", label: "Personal" }] : []),
-                ...companies.map((c) => ({ value: c.id, label: c.name })),
-              ]}
-            />
-          </div>
-        )}
-        {/* Personal use: run outside any company. Offered when a company on
-            this account allows it (a higher-tier company setting) or the
-            user owns one. Boxed with its own eyebrow so it reads as its own
-            thing, not a note on the Company picker or the Account link. */}
-        {personalAllowed && (
-          <div className="mb-2.5">
-            <div className="kicker px-2 pb-1.5">Just for you</div>
-            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-black/10 bg-white/40 px-3 py-2.5 transition hover:bg-white/60 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
-              <input
-                type="checkbox"
-                checked={activeCompanyId === "personal"}
-                onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
-                className="mt-0.5 h-3.5 w-3.5 accent-[#19455e]"
+            <div className="rounded-xl border border-black/10 bg-white/40 p-2 dark:border-white/10 dark:bg-white/5">
+              <PrettySelect
+                ariaLabel="Company lens"
+                value={activeCompanyId}
+                onChange={onSelectCompany}
+                options={[
+                  { value: "", label: "All companies" },
+                  ...(hasPersonal || personalAllowed ? [{ value: "personal", label: "Personal" }] : []),
+                  ...companies.map((c) => ({ value: c.id, label: c.name })),
+                ]}
               />
-              <span className="min-w-0">
-                <span className="block text-xs font-bold">Personal use</span>
-                <span className="block text-[11px] leading-snug text-[color:var(--su-rail-muted)]">
-                  Work for yourself, outside the company
-                </span>
-              </span>
-            </label>
+              {personalAllowed && (
+                <label className="mt-2 flex cursor-pointer items-start gap-2.5 border-t border-black/10 px-1 pt-2.5 pb-0.5 dark:border-white/10">
+                  <input
+                    type="checkbox"
+                    checked={activeCompanyId === "personal"}
+                    onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
+                    className="mt-0.5 h-3.5 w-3.5 accent-[#19455e]"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-bold">Personal use</span>
+                    <span className="block text-[11px] leading-snug text-[color:var(--su-rail-muted)]">
+                      Work for yourself, outside the company
+                    </span>
+                  </span>
+                </label>
+              )}
+            </div>
           </div>
         )}
         <div className="mt-2.5 flex flex-col gap-0.5">
