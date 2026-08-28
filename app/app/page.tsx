@@ -15177,7 +15177,11 @@ function FindsTab({
             (headingWord === "drafts" && filter === "drafted" && scheduledPending(f)) ||
             // The Sent view keeps the whole conversation ledger: sent AND
             // replied (and bounces, which stay status sent with the flag).
-            (headingWord === "sent" && filter === "sent" && f.status === "replied")
+            (headingWord === "sent" &&
+              filter === "sent" &&
+              // Replied rows, plus queued sends until the cron fires them:
+              // the Sent tab is "everything out the door or on its way".
+              (f.status === "replied" || scheduledPending(f)))
     )
     .filter(matchesFilters)
     // Who found it. Teammates' finds are adopted into this same list and carry
