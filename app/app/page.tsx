@@ -10596,17 +10596,26 @@ function SideNav({
         )}
         {/* Personal use: run outside any company. Offered when a company on
             this account allows it (a higher-tier company setting) or the
-            user owns one. */}
+            user owns one. Boxed with its own eyebrow so it reads as its own
+            thing, not a note on the Company picker or the Account link. */}
         {personalAllowed && (
-          <label className="mb-2 flex cursor-pointer items-center gap-2 px-2 text-[11px] font-semibold text-[color:var(--su-rail-muted)] transition hover:text-[color:var(--su-rail-fg,inherit)]">
-            <input
-              type="checkbox"
-              checked={activeCompanyId === "personal"}
-              onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
-              className="h-3.5 w-3.5 accent-[#19455e]"
-            />
-            Personal use, not for the company
-          </label>
+          <div className="mb-2.5">
+            <div className="kicker px-2 pb-1.5">Just for you</div>
+            <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-black/10 bg-white/40 px-3 py-2.5 transition hover:bg-white/60 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10">
+              <input
+                type="checkbox"
+                checked={activeCompanyId === "personal"}
+                onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
+                className="mt-0.5 h-3.5 w-3.5 accent-[#19455e]"
+              />
+              <span className="min-w-0">
+                <span className="block text-xs font-bold">Personal use</span>
+                <span className="block text-[11px] leading-snug text-[color:var(--su-rail-muted)]">
+                  Work for yourself, outside the company
+                </span>
+              </span>
+            </label>
+          </div>
         )}
         <div className="mt-2.5 flex flex-col gap-0.5">
           {hasAccount &&
@@ -17656,7 +17665,7 @@ function FindWorkflow({
                         : "no mailbox connected yet (connect one in Profile to send)"}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div data-guide="to-field" className="flex items-center gap-2">
                     <span className="w-12 shrink-0 text-[11px] font-bold uppercase tracking-wider text-body/50">
                       To
                     </span>
@@ -17984,6 +17993,7 @@ function FindWorkflow({
                     outright. The account's draft/send default no longer hides
                     one of them. */}
                 <button
+                  data-guide="send-btn"
                   onClick={attemptSend}
                   disabled={gmailBusy}
                   className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95 disabled:opacity-50"

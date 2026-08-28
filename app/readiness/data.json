@@ -1398,10 +1398,39 @@
               "title": "One real send",
               "good": "It arrives, in the inbox rather than spam, and it looks right on a phone.",
               "steps": [
-                "Send to an address on a different provider from yours.",
-                "Check where it landed and how it renders on a phone."
+                "Get a message drafted on a find (Draft button) if you don't have one already.",
+                "In the To bar above the subject, put an address you own on a DIFFERENT provider: sending from Gmail, use an Outlook or Yahoo address.",
+                "Press Send from Gmail on the draft.",
+                "Open that other inbox: it should be in the inbox (not spam or promotions) and read cleanly on a phone."
               ],
-              "key": "sending::one-real-message-to-a-real-inbox"
+              "key": "sending::one-real-message-to-a-real-inbox",
+              "tour": [
+                {
+                  "when": "noFinds",
+                  "tab": "outreach",
+                  "spot": "start",
+                  "text": "You need something to send first. Type a goal and press Start scouting; Scout will find people to reach."
+                },
+                {
+                  "when": "noDraft",
+                  "tab": "finds",
+                  "spot": "draft-btn",
+                  "text": "Pick a find and press Draft. Scout writes the message for you."
+                },
+                {
+                  "when": "hasDraft",
+                  "tab": "drafts",
+                  "text": "You already have drafts, so we'll send one of those. Open a draft card here."
+                },
+                {
+                  "spot": "to-field",
+                  "text": "In the To bar above the subject, replace the address with one YOU own on a different provider. Sending from Gmail? Use an Outlook or Yahoo address you can check."
+                },
+                {
+                  "spot": "send-btn",
+                  "text": "Press Send from Gmail. (This really sends, which is the point of the test.) Then open that other inbox: the message should be in the inbox, not spam or promotions, and read cleanly on your phone."
+                }
+              ]
             },
             {
               "sev": "must",
