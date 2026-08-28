@@ -3845,7 +3845,7 @@ function ScoutTool({
     }
   }
 
-  function removeProject(id: string) {
+  async function removeProject(id: string) {
     const proj = projects.find((p) => p.id === id);
     const findCount = finds.filter((f) => f.projectId === id).length;
     const catCount = categories.filter((c) => c.projectId === id).length;
@@ -3855,13 +3855,14 @@ function ScoutTool({
     // nothing. Say so in the prompt rather than surprising anyone.
     const sharedToo = !!teamLens && !!proj?.name;
     // Deleting a project removes its categories AND its finds, so confirm first.
-    if (typeof window !== "undefined" && (findCount || catCount)) {
-      const ok = window.confirm(
-        `Delete "${proj?.name || "this project"}"? This also removes its ` +
+    if (findCount || catCount) {
+      const ok = await scoutConfirm(
+        `This also removes its ` +
           `${catCount} categor${catCount === 1 ? "y" : "ies"} and ${findCount} ` +
           `find${findCount === 1 ? "" : "s"}` +
           (sharedToo ? `, including the copies you shared with the team` : "") +
-          `. This can't be undone.`
+          `. This can't be undone.`,
+        { title: `Delete "${proj?.name || "this project"}"?`, confirmLabel: "Delete project" }
       );
       if (!ok) return;
     }
@@ -7842,6 +7843,7 @@ function ScoutTool({
           </div>
         </div>
       )}
+      <ScoutConfirmHost />
       <Tutorial
         open={tourOpen}
         steps={TOUR_STEPS}
@@ -14706,6 +14708,70 @@ function AddContactModal({
   );
 }
 
+/* ---------------- Scout confirm ----------------
+ * The house replacement for window.confirm: same one-question contract,
+ * returned as a promise, rendered as a Scout modal instead of the browser's
+ * "scout-source.com says" sheet. One host lives in Home; anything can call
+ * scoutConfirm() from any component. If the host isn't mounted (SSR, tests)
+ * it falls back to the native confirm so nothing ever silently proceeds. */
+let scoutConfirmImpl:
+  | ((msg: string, opts?: { title?: string; confirmLabel?: string }) => Promise<boolean>)
+  | null = null;
+function scoutConfirm(
+  msg: string,
+  opts?: { title?: string; confirmLabel?: string }
+): Promise<boolean> {
+  if (scoutConfirmImpl) return scoutConfirmImpl(msg, opts);
+  return Promise.resolve(typeof window !== "undefined" ? window.confirm(msg) : false);
+}
+function ScoutConfirmHost() {
+  const [req, setReq] = useState<{
+    msg: string;
+    opts: { title?: string; confirmLabel?: string };
+    resolve: (b: boolean) => void;
+  } | null>(null);
+  useEffect(() => {
+    scoutConfirmImpl = (msg, opts) =>
+      new Promise((resolve) => setReq({ msg, opts: opts || {}, resolve }));
+    return () => {
+      scoutConfirmImpl = null;
+    };
+  }, []);
+  if (!req) return null;
+  const done = (b: boolean) => {
+    req.resolve(b);
+    setReq(null);
+  };
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/45 p-4" onClick={() => done(false)}>
+      <div
+        className="w-full max-w-md rounded-2xl border border-warm-border bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 className="font-display text-lg font-bold tracking-tight text-ink">
+          {req.opts.title || "Are you sure?"}
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-body">{req.msg}</p>
+        <div className="mt-5 flex items-center justify-end gap-3">
+          <button
+            onClick={() => done(false)}
+            className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+          >
+            Cancel
+          </button>
+          <button
+            autoFocus
+            onClick={() => done(true)}
+            className="rounded-xl bg-danger px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+          >
+            {req.opts.confirmLabel || "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Social and profile pages can't be previewed. LinkedIn and the rest refuse the
 // automated fetch outright (the proxy comes back 999/403) and refuse the embed
 // on top of that, so an iframe here only ever renders the "this site blocks
@@ -16443,10 +16509,12 @@ shared={shown.some((x) => !!x.foundByEmail)}
               )}
             </div>
             <button
-              onClick={() => {
+              onClick={async () => {
                 if (
-                  typeof window !== "undefined" &&
-                  !window.confirm(`Remove ${selectedShown.length} finds? This can't be undone.`)
+                  !(await scoutConfirm(`This can't be undone.`, {
+                    title: `Remove ${selectedShown.length} finds?`,
+                    confirmLabel: "Remove them",
+                  }))
                 )
                   return;
                 runBulk((f) => onRemove(f));
@@ -23727,8 +23795,13 @@ function ListsTab({
                   </div>
                 </button>
                 <button
-                  onClick={() => {
-                    if (confirm(`Delete the list "${l.name}"? (Finds are not touched.)`))
+                  onClick={async () => {
+                    if (
+                      await scoutConfirm("Its finds stay in your pipeline.", {
+                        title: `Delete the list "${l.name}"?`,
+                        confirmLabel: "Delete list",
+                      })
+                    )
                       onSave(lists.filter((x) => x.id !== l.id));
                   }}
                   title="Delete this list (its finds stay in your pipeline)"
@@ -28375,10 +28448,11 @@ function ProjectsCategoriesEditor({
                 />
                 {projects.length > 1 && (
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       if (
-                        window.confirm(
-                          `Delete the project "${p.name}" and its categories? Finds saved under it stay in your Finds list.`
+                        await scoutConfirm(
+                          "Its categories go with it. Finds saved under it stay in your Finds list.",
+                          { title: `Delete the project "${p.name}"?`, confirmLabel: "Delete project" }
                         )
                       )
                         onRemoveProject(p.id);
