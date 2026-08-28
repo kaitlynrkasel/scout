@@ -18661,7 +18661,12 @@ function DashboardTab({
   // already happened), and counting those said "1004 messages sent" to
   // someone who had sent four; imports count only once a real thread exists.
   const sentThroughScout = (f: Find) =>
-    f.foundVia !== "import" || !!f.gmailThreadId || !!f.outlookThreadId;
+    (f.foundVia !== "import" &&
+      // Rows imported before foundVia existed lack the stamp, but their opp
+      // ids carry the importer's "import-" prefix.
+      !String(f.opp?.id || "").startsWith("import-")) ||
+    !!f.gmailThreadId ||
+    !!f.outlookThreadId;
   const pipe = {
     new: finds.filter((f) => f.status === "new").length,
     drafted: finds.filter((f) => f.status === "drafted").length,
