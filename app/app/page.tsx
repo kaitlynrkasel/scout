@@ -9242,6 +9242,10 @@ function ScoutTool({
                 setAppKitId(null);
                 setTab("templates");
               }}
+              goProfile={() => {
+                setAppKitId(null);
+                setTab("profile");
+              }}
             />
           );
         })()}
@@ -11930,6 +11934,7 @@ function ApplicationKitModal({
   baseCoverLetter,
   onClose,
   goTemplates,
+  goProfile,
 }: {
   onPatch?: (patch: Partial<Find>) => void;
   find: Find;
@@ -11938,6 +11943,7 @@ function ApplicationKitModal({
   baseCoverLetter: string;
   onClose: () => void;
   goTemplates: () => void;
+  goProfile: () => void;
 }) {
   const o = find.opp;
   const jobText = [
@@ -12090,10 +12096,10 @@ function ApplicationKitModal({
                 </a>
               ) : (
                 <button
-                  onClick={goTemplates}
+                  onClick={goProfile}
                   className="w-full rounded-xl border border-dashed border-warm-border px-3.5 py-2.5 text-left text-sm text-body/70 transition hover:bg-warm-bg"
                 >
-                  No resume on file: add it in Templates
+                  No resume on file: add it in your Profile
                 </button>
               )}
               {(() => {
