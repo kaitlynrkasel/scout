@@ -141,17 +141,33 @@ function ReadinessInner() {
   // cache-buster lets the same spot be summoned twice in a row.
   const [liveSrc, setLiveSrc] = useState("/app");
   const liveFrameRef = useRef<HTMLIFrameElement>(null);
+  // The pane acks guide messages; no ack within a moment means it runs an old
+  // bundle (a long-lived tab), so we reload it straight onto the guided URL.
+  const guideAckRef = useRef(0);
+  useEffect(() => {
+    const onMsg = (e: MessageEvent) => {
+      if ((e.data as any)?.type === "scout-guide-ack") guideAckRef.current = Date.now();
+    };
+    window.addEventListener("message", onMsg);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
   function goLive(guide: string) {
     if (typeof window === "undefined") return;
     if (window.innerWidth < 900) {
       window.open(`/app?guide=${encodeURIComponent(guide)}`, "_blank");
       return;
     }
-    // postMessage first: the pane answers instantly, no reload. Fallback to a
-    // guided URL when the frame hasn't loaded yet.
+    const url = `/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`;
     const w = liveFrameRef.current?.contentWindow;
-    if (w) w.postMessage({ type: "scout-guide", guide }, window.location.origin);
-    else setLiveSrc(`/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`);
+    if (!w) {
+      setLiveSrc(url);
+      return;
+    }
+    const asked = Date.now();
+    w.postMessage({ type: "scout-guide", guide }, window.location.origin);
+    window.setTimeout(() => {
+      if (guideAckRef.current < asked) setLiveSrc(url);
+    }, 700);
   }
   const [openKey, setOpenKey] = useState("");
   // Text filter over all ~276 items: title, description, and section name.

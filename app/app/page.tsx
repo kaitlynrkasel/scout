@@ -1646,7 +1646,14 @@ function ScoutTool({
     } catch {}
     const onMsg = (e: MessageEvent) => {
       const d: any = e.data;
-      if (d && d.type === "scout-guide" && typeof d.guide === "string") runGuide(d.guide);
+      if (d && d.type === "scout-guide" && typeof d.guide === "string") {
+        // Ack first: the sender falls back to a full guided reload when this
+        // pane runs a bundle too old to answer.
+        try {
+          (e.source as Window | null)?.postMessage({ type: "scout-guide-ack" }, e.origin || "*");
+        } catch {}
+        runGuide(d.guide);
+      }
     };
     window.addEventListener("message", onMsg);
     return () => {
