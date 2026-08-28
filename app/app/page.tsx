@@ -3618,7 +3618,7 @@ function ScoutTool({
     resetResults();
   }
 
-  function addProject(name: string): string {
+  function addProject(name: string, context = ""): string {
     const nm = name.trim();
     if (!nm) return "";
     const activeProj = projects.find((p) => p.id === activeId);
@@ -3627,7 +3627,7 @@ function ScoutTool({
       id: `proj-${Date.now()}`,
       name: nm,
       useCase,
-      context: "",
+      context,
       // New projects belong to the company you're currently viewing (if any).
       ...(activeCompanyId ? { companyId: activeCompanyId } : {}),
     };
@@ -3642,7 +3642,7 @@ function ScoutTool({
     // The seeds above inherit the PREVIOUS project's use case; retune them to
     // what this project's NAME says it's for ("Grad School" should not open
     // with Sync & Licensing). Async and best-effort.
-    void retuneProject(proj.id, nm, "");
+    void retuneProject(proj.id, nm, context);
     return proj.id;
   }
 
@@ -8064,13 +8064,13 @@ function ScoutTool({
                       <div className="mt-4 flex items-center gap-3">
                         <button
                           onClick={() => {
-                            const id = addProject(npName);
+                            // Context rides INTO addProject: calling
+                            // setProjectContext right after it rewrote the
+                            // project list from this render's stale state,
+                            // which erased the project it had just created.
+                            const id = addProject(npName, npDesc.trim());
                             if (!id) return;
-                            if (npDesc.trim()) {
-                              setProjectContext(id, npDesc.trim());
-                              setGoal(npDesc.trim());
-                            }
-                            selectProject(id);
+                            if (npDesc.trim()) setGoal(npDesc.trim());
                             setNewProjOpen(false);
                             setNpName("");
                             setNpDesc("");
