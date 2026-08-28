@@ -107,12 +107,72 @@ async function projSelect(): Promise<string> {
 // Increasing power: viewer < editor < admin < owner. Unknown/legacy roles read
 // as editor so nobody is accidentally locked out mid-migration.
 export const ROLE_RANK: Record<string, number> = { viewer: 0, editor: 1, admin: 2, owner: 3 };
+
+/* ---------------- Custom role permissions ----------------
+ * What each role can do, per company. The defaults below are the shipped
+ * behavior; a workspace's `permissions` jsonb overrides individual cells
+ * ({cap: {role: boolean}}). Owners always can do everything, and the
+ * owner-only structural actions (transfer ownership, delete the company)
+ * are not customizable. */
+export const CAPABILITY_DEFAULTS: Record<string, Record<string, boolean>> = {
+  shared_finds: { viewer: true, editor: true, admin: true },
+  run_searches: { viewer: false, editor: true, admin: true },
+  add_finds: { viewer: false, editor: true, admin: true },
+  share_project: { viewer: false, editor: true, admin: true },
+  publish_templates: { viewer: false, editor: true, admin: true },
+  invite: { viewer: false, editor: false, admin: true },
+  weights: { viewer: false, editor: false, admin: false },
+};
+export function capabilityAllowed(perms: any, cap: string, role: string): boolean {
+  if (role === "owner") return true;
+  const d = CAPABILITY_DEFAULTS[cap];
+  if (!d) return true;
+  const custom = perms && typeof perms === "object" ? (perms as any)[cap] : null;
+  const v = custom && typeof custom[role] === "boolean" ? custom[role] : d[role];
+  return !!v;
+}
+// Sanitize a client-sent permissions object down to known caps/roles/booleans.
+export function cleanPermissions(input: any): Record<string, Record<string, boolean>> {
+  const out: Record<string, Record<string, boolean>> = {};
+  if (!input || typeof input !== "object") return out;
+  for (const cap of Object.keys(CAPABILITY_DEFAULTS)) {
+    const row = (input as any)[cap];
+    if (!row || typeof row !== "object") continue;
+    for (const role of ["viewer", "editor", "admin"]) {
+      if (typeof row[role] === "boolean") {
+        (out[cap] = out[cap] || {})[role] = row[role];
+      }
+    }
+  }
+  return out;
+}
 export const ASSIGNABLE_ROLES = ["admin", "editor", "viewer"] as const;
 function rankOf(role: string | null | undefined): number {
   return ROLE_RANK[String(role || "")] ?? ROLE_RANK.editor;
 }
 
 // Assert the caller is a workspace member of at least `min` power; returns role.
+// Capability-aware gate: the workspace's custom matrix decides, falling back
+// to the defaults. Pre-migration (no permissions column) the select errors and
+// the defaults apply, so this never blocks on the missing column.
+async function assertCapability(uid: string, workspaceId: string, cap: string) {
+  const role = await assertWorkspaceMember(uid, workspaceId);
+  let perms: any = null;
+  try {
+    const { data } = await db()
+      .from("workspaces")
+      .select("permissions")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    perms = (data as any)?.permissions ?? null;
+  } catch {
+    /* defaults */
+  }
+  if (!capabilityAllowed(perms, cap, role))
+    throw new TeamError("Your role doesn't have permission for that in this company.", 403);
+  return role;
+}
+
 async function assertRole(uid: string, workspaceId: string, min: keyof typeof ROLE_RANK) {
   const role = await assertWorkspaceMember(uid, workspaceId);
   if (rankOf(role) < ROLE_RANK[min])
@@ -235,6 +295,7 @@ export async function updateWorkspaceDetails(
     stage?: string;
     location?: string;
     allowPersonal?: boolean;
+    permissions?: any;
   }
 ) {
   await assertRole(uid, workspaceId, "admin");
@@ -250,6 +311,7 @@ export async function updateWorkspaceDetails(
   if (typeof patch.stage === "string") update.stage = patch.stage.trim() || null;
   if (typeof patch.location === "string") update.location = patch.location.trim() || null;
   if (typeof patch.allowPersonal === "boolean") update.allow_personal = patch.allowPersonal;
+  if (patch.permissions !== undefined) update.permissions = cleanPermissions(patch.permissions);
   if (!Object.keys(update).length) throw new TeamError("Nothing to update.");
   const { data, error } = await db()
     .from("workspaces")
@@ -269,7 +331,7 @@ export async function setMemberWeight(
   targetUserId: string,
   weight: number
 ) {
-  await assertRole(uid, workspaceId, "admin");
+  await assertCapability(uid, workspaceId, "weights");
   const w = Math.max(1, Math.min(5, Math.round(Number(weight) || 1)));
   const { error } = await db()
     .from("workspace_members")
@@ -326,7 +388,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
     // about/website/industry/stage/location as well, which made the whole
     // details form look blank instead of one switch looking stuck.
     const SELECTS = [
-      "id, name, about, website, industry, stage, location, created_by, created_at, comped, allow_personal",
+      "id, name, about, website, industry, stage, location, created_by, created_at, comped, allow_personal, permissions",
       "id, name, about, website, industry, stage, location, created_by, created_at, comped",
       "id, name, about, website, industry, stage, created_by, created_at",
       "id, name, created_by, created_at",
@@ -386,7 +448,7 @@ export async function inviteToWorkspace(
   opts: { role?: string; projectIds?: string[]; origin?: string } = {}
 ) {
   // Admins and owners can grow the roster; editors/viewers cannot.
-  const callerRole = await assertRole(uid, workspaceId, "admin");
+  const callerRole = await assertCapability(uid, workspaceId, "invite");
   const em = String(inviteEmail || "").trim().toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em))
     throw new TeamError("Enter a valid email address.");
@@ -494,7 +556,7 @@ async function sendInviteEmail(
 // Owner/admin: get (or generate) the shareable invite code for a workspace.
 // Anyone with the code can join as an editor — a code you send your team.
 export async function getInviteCode(uid: string, workspaceId: string) {
-  await assertRole(uid, workspaceId, "admin");
+  await assertCapability(uid, workspaceId, "invite");
   const { data: ws } = await db()
     .from("workspaces")
     .select("invite_code")
@@ -514,7 +576,7 @@ export async function getInviteCode(uid: string, workspaceId: string) {
 
 // Owner/admin: rotate the code (invalidates the old link).
 export async function resetInviteCode(uid: string, workspaceId: string) {
-  await assertRole(uid, workspaceId, "admin");
+  await assertCapability(uid, workspaceId, "invite");
   const alphabet = "abcdefghjkmnpqrstuvwxyz23456789";
   let code = "";
   for (let i = 0; i < 8; i++) code += alphabet[Math.floor(Math.random() * alphabet.length)];
@@ -644,7 +706,7 @@ export async function isMemberOfCompedWorkspace(uid: string): Promise<boolean> {
 
 // Owner/admin: cancel a pending invite (before it's accepted).
 export async function revokeInvite(uid: string, workspaceId: string, email: string) {
-  await assertRole(uid, workspaceId, "admin");
+  await assertCapability(uid, workspaceId, "invite");
   const em = String(email || "").trim().toLowerCase();
   await db()
     .from("workspace_invites")
@@ -706,7 +768,7 @@ export async function setMemberRole(
   targetUserId: string,
   role: string
 ) {
-  const callerRole = await assertRole(uid, workspaceId, "admin");
+  const callerRole = await assertCapability(uid, workspaceId, "invite");
   // Owners can also promote a member to co-owner; everyone else is limited to
   // the assignable set.
   const allowed =
@@ -752,7 +814,7 @@ export async function shareProject(
     openToWorkspace?: boolean;
   }
 ) {
-  await assertRole(uid, opts.workspaceId, "editor");
+  await assertCapability(uid, opts.workspaceId, "share_project");
   const nm = String(opts.name || "").trim();
   if (!nm) throw new TeamError("The project needs a name.");
   const hasOpen = await hasOpenToWorkspace();
@@ -1089,7 +1151,7 @@ export async function publishFindsToTeam(
   const nm = String(opts.projectName || "").trim();
   if (!nm) throw new TeamError("The project needs a name.");
   if (!Array.isArray(opts.finds) || !opts.finds.length) return { added: 0, sharedProjectId: "" };
-  await assertRole(uid, opts.workspaceId, "editor");
+  await assertCapability(uid, opts.workspaceId, "add_finds");
 
   // Match the local project to a shared one by name, the same way the manual-add
   // mirror does. Case-insensitive so "Internships" and "internships" are one

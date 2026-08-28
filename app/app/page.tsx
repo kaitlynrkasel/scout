@@ -21761,6 +21761,48 @@ function TeamTab({
   // Owner + admin can manage the roster (invite, set roles, weights).
   const canManage = workspace?.role === "owner" || workspace?.role === "admin";
 
+  // ---- Custom role permissions ----
+  // Mirrors CAPABILITY_DEFAULTS in lib/teams.ts; the server enforces the same
+  // matrix, this is just the editable table. Owners always can do everything.
+  const CAP_DEFAULTS: Record<string, Record<string, boolean>> = {
+    shared_finds: { viewer: true, editor: true, admin: true },
+    run_searches: { viewer: false, editor: true, admin: true },
+    add_finds: { viewer: false, editor: true, admin: true },
+    share_project: { viewer: false, editor: true, admin: true },
+    publish_templates: { viewer: false, editor: true, admin: true },
+    invite: { viewer: false, editor: false, admin: true },
+    weights: { viewer: false, editor: false, admin: false },
+  };
+  const [permEdits, setPermEdits] = useState<Record<string, Record<string, boolean>> | null>(null);
+  // Switching companies drops any local edits; the next company's stored
+  // matrix takes over.
+  useEffect(() => {
+    setPermEdits(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace?.id]);
+  const [permSavedAt, setPermSavedAt] = useState(0);
+  const permsObj: Record<string, Record<string, boolean>> =
+    permEdits ?? ((workspace as any)?.permissions || {});
+  const permAt = (cap: string, role: string) =>
+    role === "owner"
+      ? true
+      : typeof permsObj?.[cap]?.[role] === "boolean"
+        ? permsObj[cap][role]
+        : CAP_DEFAULTS[cap]?.[role] ?? false;
+  async function setPerm(cap: string, role: string, val: boolean) {
+    const next = { ...permsObj, [cap]: { ...(permsObj[cap] || {}), [role]: val } };
+    setPermEdits(next);
+    try {
+      await authFetch("/api/team/workspace", {
+        method: "PATCH",
+        body: JSON.stringify({ workspaceId: workspace?.id, permissions: next }),
+      });
+      setPermSavedAt(Date.now());
+    } catch {
+      /* the next reload shows the server's truth */
+    }
+  }
+
   const openProject = (id: string) =>
     run("open-" + id, async () => {
       setOpenId(id);
@@ -22224,8 +22266,12 @@ function TeamTab({
             <section className="mt-6">
               <h2 className="text-lg font-bold text-ink">What each role can do</h2>
               <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body/70">
-                Roles are set per person in the list above. Each one includes
-                everything the role below it can do.
+                Roles are set per person in the list above. Pick Yes or No to
+                change what a role can do in this company; these are the
+                defaults. Owners always can do everything.
+                {permSavedAt > 0 && (
+                  <span className="ml-2 text-xs font-semibold text-emerald-700">Saved.</span>
+                )}
               </p>
               <div className="mt-3 overflow-x-auto rounded-2xl border border-warm-border bg-surface shadow-card">
                 <table className="w-full min-w-[560px] border-collapse text-sm">
@@ -22247,32 +22293,50 @@ function TeamTab({
                   <tbody>
                     {(
                       [
-                        ["See the team's shared finds", true, true, true, true],
-                        ["Run searches and write drafts", false, true, true, true],
-                        ["Add finds to a shared project", false, true, true, true],
-                        ["Share a project with the team", false, true, true, true],
-                        ["Publish templates to the team", false, true, true, true],
-                        ["Invite people and set their role", false, false, true, true],
-                        ["Set how much a teammate's decisions count", false, false, false, true],
-                        ["Make someone else an owner", false, false, false, true],
-                        ["Delete the company", false, false, false, true],
+                        ["See the team's shared finds", "shared_finds"],
+                        ["Run searches and write drafts", "run_searches"],
+                        ["Add finds to a shared project", "add_finds"],
+                        ["Share a project with the team", "share_project"],
+                        ["Publish templates to the team", "publish_templates"],
+                        ["Invite people and set their role", "invite"],
+                        ["Set how much a teammate's decisions count", "weights"],
+                        ["Make someone else an owner", ""],
+                        ["Delete the company", ""],
                       ] as const
-                    ).map((row) => (
-                      <tr key={row[0] as string} className="border-b border-warm-border/60 last:border-0">
-                        <td className="px-4 py-2.5 text-body">{row[0]}</td>
-                        {[row[1], row[2], row[3], row[4]].map((yes, i) => (
-                          <td key={i} className="px-3 py-2.5 text-center">
-                            {yes ? (
-                              <span className="font-bold text-sage-deep" title="Yes">
-                                Yes
-                              </span>
-                            ) : (
-                              <span className="text-body/30" title="No">
-                                No
-                              </span>
-                            )}
-                          </td>
-                        ))}
+                    ).map(([label, cap]) => (
+                      <tr key={label} className="border-b border-warm-border/60 last:border-0">
+                        <td className="px-4 py-2.5 text-body">{label}</td>
+                        {["viewer", "editor", "admin", "owner"].map((role) => {
+                          const yes = cap ? permAt(cap, role) : role === "owner";
+                          // Owners always can; the two structural rows are
+                          // owner-only and not customizable.
+                          const editable = canManage && !!cap && role !== "owner";
+                          return (
+                            <td key={role} className="px-3 py-2.5 text-center">
+                              {editable ? (
+                                <select
+                                  value={yes ? "yes" : "no"}
+                                  onChange={(e) => setPerm(cap, role, e.target.value === "yes")}
+                                  aria-label={`${label}: ${role}`}
+                                  className={`cursor-pointer rounded-lg border border-warm-border bg-surface px-2 py-1 text-xs font-bold outline-none transition focus:border-coral ${
+                                    yes ? "text-sage-deep" : "text-body/40"
+                                  }`}
+                                >
+                                  <option value="yes">Yes</option>
+                                  <option value="no">No</option>
+                                </select>
+                              ) : yes ? (
+                                <span className="font-bold text-sage-deep" title="Yes">
+                                  Yes
+                                </span>
+                              ) : (
+                                <span className="text-body/35" title="No">
+                                  No
+                                </span>
+                              )}
+                            </td>
+                          );
+                        })}
                       </tr>
                     ))}
                   </tbody>
