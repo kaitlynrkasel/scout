@@ -1615,6 +1615,13 @@ function ScoutTool({
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
+  // A readiness test walked through IN the app: a floating card reads out the
+  // current step while the guide ring shows where to click. Driven by
+  // scout-tour messages from the checklist's pane.
+  const [testTour, setTestTour] = useState<{ title: string; steps: string[]; i: number } | null>(
+    null
+  );
+
   // Deep guidance: land on a tab and pulse a tutorial ring around the tagged
   // control. Reached two ways: /app?guide=tab.spot on load, and a
   // {type:"scout-guide"} postMessage from the readiness pane (no reload, so
@@ -1646,6 +1653,18 @@ function ScoutTool({
     } catch {}
     const onMsg = (e: MessageEvent) => {
       const d: any = e.data;
+      if (d && d.type === "scout-tour" && Array.isArray(d.steps)) {
+        try {
+          (e.source as Window | null)?.postMessage({ type: "scout-guide-ack" }, e.origin || "*");
+        } catch {}
+        setTestTour({
+          title: String(d.title || "Test walkthrough"),
+          steps: d.steps.map((x: any) => String(x)).filter(Boolean).slice(0, 12),
+          i: 0,
+        });
+        if (typeof d.guide === "string" && d.guide) runGuide(d.guide);
+        return;
+      }
       if (d && d.type === "scout-guide" && typeof d.guide === "string") {
         // Ack first: the sender falls back to a full guided reload when this
         // pane runs a bundle too old to answer.
@@ -7597,6 +7616,63 @@ function ScoutTool({
           window.location.reload();
         }}
       />
+      {testTour && (
+        <div className="fixed bottom-5 right-5 z-[85] w-[340px] max-w-[calc(100vw-2rem)] rounded-2xl border border-warm-border bg-surface p-4 shadow-xl">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-brown-deep">
+                Testing · step {testTour.i + 1} of {testTour.steps.length}
+              </div>
+              <div className="mt-0.5 truncate text-sm font-bold text-ink">{testTour.title}</div>
+            </div>
+            <button
+              onClick={() => setTestTour(null)}
+              aria-label="Close the walkthrough"
+              className="shrink-0 rounded-lg px-1.5 py-0.5 text-xs font-semibold text-body/50 transition hover:bg-warm-bg hover:text-ink"
+            >
+              ×
+            </button>
+          </div>
+          <p className="mt-2 text-[13px] leading-relaxed text-body">
+            {testTour.steps[testTour.i]}
+          </p>
+          <div className="mt-3 flex items-center justify-between">
+            <div className="flex gap-1">
+              {testTour.steps.map((_, di) => (
+                <span
+                  key={di}
+                  className={`h-1.5 w-1.5 rounded-full ${di === testTour.i ? "bg-brown" : "bg-warm-border"}`}
+                />
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              {testTour.i > 0 && (
+                <button
+                  onClick={() => setTestTour((t) => (t ? { ...t, i: t.i - 1 } : t))}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-body/70 transition hover:bg-warm-bg hover:text-ink"
+                >
+                  Back
+                </button>
+              )}
+              {testTour.i < testTour.steps.length - 1 ? (
+                <button
+                  onClick={() => setTestTour((t) => (t ? { ...t, i: t.i + 1 } : t))}
+                  className="rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+                >
+                  Next
+                </button>
+              ) : (
+                <button
+                  onClick={() => setTestTour(null)}
+                  className="rounded-lg bg-brand-gradient px-3.5 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+                >
+                  Done, back to marking it
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
       <Tutorial
         open={tourOpen}
         steps={TOUR_STEPS}

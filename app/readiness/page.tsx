@@ -151,6 +151,23 @@ function ReadinessInner() {
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, []);
+  function goTour(it: Item, guide: string) {
+    if (typeof window === "undefined") return;
+    const w = liveFrameRef.current?.contentWindow;
+    const url = `/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`;
+    if (window.innerWidth < 900 || !w) {
+      window.innerWidth < 900 ? window.open(url, "_blank") : setLiveSrc(url);
+      return;
+    }
+    const asked = Date.now();
+    w.postMessage(
+      { type: "scout-tour", title: it.title, steps: it.steps || [], guide },
+      window.location.origin
+    );
+    window.setTimeout(() => {
+      if (guideAckRef.current < asked) setLiveSrc(url);
+    }, 700);
+  }
   function goLive(guide: string) {
     if (typeof window === "undefined") return;
     if (window.innerWidth < 900) {
@@ -520,6 +537,16 @@ function ReadinessInner() {
                             className="ml-5 mt-1.5 text-xs font-bold text-accent hover:underline"
                           >
                             Show me where in Scout →
+                          </button>
+                        )}
+                        {!folded && (it.steps || []).length > 0 && (
+                          <button
+                            onClick={() =>
+                              goTour(it, ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id] || "")
+                            }
+                            className="ml-3 mt-1.5 text-xs font-bold text-accent hover:underline"
+                          >
+                            Walk me through it →
                           </button>
                         )}
                         {!folded && !open && (it.steps || []).length > 0 && (
