@@ -535,6 +535,25 @@
                 "On an account whose company has it off (and who owns no company), confirm the checkbox is absent."
               ],
               "key": "setup::personal-use-checkbox-under-the-company-picker"
+            },
+            {
+              "sev": "should",
+              "title": "Company details autosave",
+              "good": "Editing any company field saves by itself about a second after you stop typing, with a Saving then Saved note; there is no Save button.",
+              "steps": [
+                "In Profile, Your company, change the industry and stop typing.",
+                "Watch the status line switch to Saving then Saved without pressing anything.",
+                "Reload: the change stuck."
+              ]
+            },
+            {
+              "sev": "nice",
+              "title": "Confirm dialogs look like Scout",
+              "good": "Deleting a project, removing selected finds, or deleting a list opens a Scout-styled dialog (title, body, Cancel, red action), never the browser's scout-source.com-says sheet.",
+              "steps": [
+                "On Projects, press a project's trash icon: a Scout dialog appears.",
+                "Cancel it: nothing is deleted."
+              ]
             }
           ]
         },
@@ -2874,6 +2893,16 @@
                   "spot": "send-btn"
                 }
               ]
+            },
+            {
+              "sev": "must",
+              "title": "Consent popup before connecting email",
+              "good": "Clicking Gmail or Outlook opens a Scout popup first that says what you are agreeing to (drafts and sends as you; reply and bounce checking on Scout-sent threads only, headers-only on Gmail) and what the provider screen will ask; OAuth only starts after I agree.",
+              "steps": [
+                "In Profile, press Connect email, then Gmail: the What-you're-agreeing-to popup appears before any Google page.",
+                "Press Not now: nothing connects.",
+                "Press I agree: the Google consent screen opens with the described permissions."
+              ]
             }
           ]
         },
@@ -3318,6 +3347,17 @@
                 "Sanity-check the number against roughly 15 minutes per find plus 10 per draft."
               ],
               "key": "tracking::time-saved-scouting-is-on-the-dashboard"
+            },
+            {
+              "sev": "should",
+              "title": "Search bars find things",
+              "good": "Finds, Drafts, Sent, and Applications each have a search bar that matches name, company, contact email, URL, and draft text, shows a match count, and composes with the other filters.",
+              "steps": [
+                "Open Finds and type part of a contact's company into the search bar above the status tabs: only matching cards remain and a match count shows.",
+                "Type words that appear only inside a draft's body: the card still matches.",
+                "Repeat on the Applications tab's search bar.",
+                "Clear with the x button: everything returns."
+              ]
             }
           ]
         },
@@ -3488,6 +3528,17 @@
                 "Press 'Read, close' and confirm the card goes away and stays away until something new actually happens."
               ],
               "key": "teams::team-news-reads-like-sentences"
+            },
+            {
+              "sev": "should",
+              "title": "Role permissions are editable",
+              "good": "On the Company tab, the What-each-role-can-do table is Yes/No dropdowns for admins and owners; changes save on pick and actually gate the actions (an editor granted invites can invite; an admin with invites revoked gets a clear refusal). Owners always can do everything; making owners and deleting the company stay owner-only.",
+              "steps": [
+                "Run supabase/role_permissions.sql once in the Supabase SQL editor.",
+                "As an owner, open the Company tab and flip Invite people to Yes for Editor: Saved appears.",
+                "On an editor account, confirm the invite controls now work.",
+                "Flip it back and confirm the editor is refused with a readable message."
+              ]
             }
           ]
         },
