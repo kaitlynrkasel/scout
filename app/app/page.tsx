@@ -8194,35 +8194,10 @@ function ScoutTool({
                       : "order-2 mt-0 w-full max-w-3xl"
                   }
                 >
-                  {catId || goal.trim() ? (
-                    // Any defined search, saved category or a custom one seeded
-                    // from the project description, shows as what it IS: bullet
-                    // points, not a chat bar. Click to edit, add to sharpen.
-                    <StageBullets goal={goal} onGoal={setGoal} />
-                  ) : (
-                    <>
-                      <div className="flex items-start justify-between gap-3">
-                        <label htmlFor="stage-goal" className="sr-only">
-                          Who are you looking for?
-                        </label>
-                        <textarea
-                          id="stage-goal"
-                          data-guide="goal"
-                          ref={goalInputRef}
-                          value={goal}
-                          onChange={(e) => setGoal(e.target.value)}
-                          placeholder={goalPlaceholder || "Who are you looking for?"}
-                          rows={goal.length > 90 ? 3 : 2}
-                          className="stage-ask font-display w-full text-[26px] font-bold leading-snug tracking-[-0.01em] sm:text-[34px]"
-                        />
-                        <MicButton value={goal} onChange={setGoal} light />
-                      </div>
-                      <div className="mt-1 h-px w-full bg-white/15" />
-                      <p className="mt-2 text-xs text-white/45">
-                        Add your industry, genre, or city to sharpen the results.
-                      </p>
-                    </>
-                  )}
+                  {/* Always the bullet-point style she picked: a defined search shows
+                      its points, an empty one shows an inviting empty state with
+                      Add a point. The old full-width textarea front door is gone. */}
+                  <StageBullets goal={goal} onGoal={setGoal} />
 
                   {!aboutText && (
                     <button
@@ -8635,8 +8610,9 @@ function ScoutTool({
                   <button
                     onClick={() => {
                       setNoResults(false);
-                      goalInputRef.current?.focus();
-                      goalInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+                      document
+                        .querySelector('[data-guide="goal"]')
+                        ?.scrollIntoView({ behavior: "smooth", block: "center" });
                     }}
                     className="rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
                   >
@@ -27238,7 +27214,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
   };
 
   return (
-    <div>
+    <div data-guide="goal">
       <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 [.text-center_&]:justify-center">
         This search finds
         {distilling && (
@@ -27283,21 +27259,24 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
           )
         )}
         {editing === -1 ? (
-          <input
-            autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") commit();
-              if (e.key === "Escape") {
-                setEditing(null);
-                setDraft("");
-              }
-            }}
-            placeholder="Add a point…"
-            className="stage-sub border-b border-white/30 pb-0.5 text-[15px] font-semibold"
-          />
+          <div className="flex items-center gap-2">
+            <input
+              autoFocus
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") commit();
+                if (e.key === "Escape") {
+                  setEditing(null);
+                  setDraft("");
+                }
+              }}
+              placeholder={bullets.length ? "Add a point…" : "Who are you looking for?"}
+              className="stage-sub w-full border-b border-white/30 pb-0.5 text-[15px] font-semibold"
+            />
+            <MicButton value={draft} onChange={setDraft} light />
+          </div>
         ) : (
           <button
             onClick={() => {
@@ -27315,8 +27294,8 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
       </div>
       {bullets.length === 0 && editing === null && (
         <p className="mt-2 text-xs text-white/45">
-          This category has no description yet. Add a point or two, or write one
-          on the Projects tab.
+          Nothing here yet. Add a point or two describing who you&apos;re after,
+          e.g. brand managers at mid-size consumer goods companies.
         </p>
       )}
     </div>
