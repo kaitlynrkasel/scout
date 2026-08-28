@@ -18656,11 +18656,17 @@ function DashboardTab({
       Date.now() - f.sentAt >= 7 * 86400000 &&
       !f.lastFollowUpAt
   ).length;
+  // "Sent" on the dashboard means messages that actually went out THROUGH
+  // Scout. Imported rows arrive pre-marked sent (the sheet said the outreach
+  // already happened), and counting those said "1004 messages sent" to
+  // someone who had sent four; imports count only once a real thread exists.
+  const sentThroughScout = (f: Find) =>
+    f.foundVia !== "import" || !!f.gmailThreadId || !!f.outlookThreadId;
   const pipe = {
     new: finds.filter((f) => f.status === "new").length,
     drafted: finds.filter((f) => f.status === "drafted").length,
-    sent: finds.filter((f) => f.status === "sent").length,
-    replied: finds.filter((f) => f.status === "replied").length,
+    sent: finds.filter((f) => f.status === "sent" && sentThroughScout(f)).length,
+    replied: finds.filter((f) => f.status === "replied" && sentThroughScout(f)).length,
     denied: finds.filter((f) => f.status === "denied").length,
   };
   // Real activity series for the chart: people found vs messages sent, bucketed
