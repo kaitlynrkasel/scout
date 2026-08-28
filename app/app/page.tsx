@@ -637,13 +637,30 @@ interface Project {
   // When on, sending a find auto-queues one follow-up a few days later (canceled
   // automatically if they reply or the address bounces). Off by default.
   autoFollowUp?: boolean;
-  // Which company (Teams workspace) this project belongs to. Unset = "personal",
-  // shown only under "All companies". Lets one account keep several companies'
-  // projects separate and filter Outreach/Dashboard by company.
+  // Which company (Teams workspace) this project belongs to. The literal
+  // "personal" means the account's own side, kept out of every company view;
+  // unset means it answers to the primary company. Lets one account keep
+  // several companies' projects separate and filter Outreach/Dashboard by
+  // company.
   companyId?: string;
   // "name|context" the last automatic category retune ran against, so the same
   // wording never triggers a second inference call.
   suggestKey?: string;
+}
+
+// Does a project belong to the lens you are wearing? One definition for the
+// project list, the finds, the templates and the lens switch, so the four can
+// never disagree about what "personal" means.
+//
+// The case that matters: "All companies" used to mean NO filter, so personal
+// work sat in with the company's. Personal is not a company — it is the other
+// side of the account — so it stays out of every company view, and company work
+// stays out of Personal. A project with no companyId still answers to the
+// primary company, so nothing is stranded with no lens that shows it.
+function inLensFor(p: Project, lens: string, primaryCompanyId: string): boolean {
+  if (p.companyId === "personal") return lens === "personal";
+  if (lens === "personal") return false;
+  return !lens || (p.companyId || primaryCompanyId) === lens;
 }
 interface Category {
   id: string;
@@ -3241,12 +3258,26 @@ function ScoutTool({
     } catch {
       /* ignore */
     }
-    // Same semantics as visibleProjects: un-tagged projects default to the
-    // primary company; "personal" is an explicit tag (its own lens option).
-    const inScope = (p: Project) => !id || (p.companyId || primaryCompanyId) === id;
+    // Exactly the rule visibleProjects uses, so the active project can never be
+    // one the lens doesn't show.
+    const inScope = (p: Project) => inLensFor(p, id, primaryCompanyId);
     if (!projects.some((p) => p.id === activeId && inScope(p))) {
       const first = projects.find(inScope);
       if (first) selectProject(first.id);
+    }
+  }
+
+  // Personal use reads as a two-position switch, so turning it off has to put
+  // you back where you were. It used to drop you on "All companies" — a third
+  // place, showing everything at once, which is the opposite of what someone
+  // stepping out of their private work expects to land in.
+  const lensBeforePersonal = useRef("");
+  function togglePersonalLens(on: boolean) {
+    if (on) {
+      if (activeCompanyId !== "personal") lensBeforePersonal.current = activeCompanyId;
+      selectCompany("personal");
+    } else {
+      selectCompany(lensBeforePersonal.current || primaryCompanyId || companies[0]?.id || "");
     }
   }
 
@@ -4295,9 +4326,7 @@ function ScoutTool({
     // because the old select dropped the option.)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPersonalProjects, activeCompanyId]);
-  const visibleProjects = activeCompanyId
-    ? projects.filter((p) => (p.companyId || primaryCompanyId) === activeCompanyId)
-    : projects;
+  const visibleProjects = projects.filter((p) => inLensFor(p, activeCompanyId, primaryCompanyId));
   // Templates shown under the current company lens: global templates (no project)
   // always apply; project-scoped ones show only when their project is in view.
   const visibleProjectIdSet = new Set(visibleProjects.map((p) => p.id));
@@ -4356,9 +4385,9 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated, activeCompanyId, visibleProjects.length, activeId]);
 
-  const visibleTemplates = activeCompanyId
-    ? myTemplates.filter((t) => !t.projectId || visibleProjectIdSet.has(t.projectId))
-    : myTemplates;
+  const visibleTemplates = myTemplates.filter(
+    (t) => !t.projectId || visibleProjectIdSet.has(t.projectId)
+  );
 
   // On a team lens, templates are COMMUNAL: my visible templates auto-publish
   // to the workspace's shared library (debounced), and deleting one locally
@@ -4447,7 +4476,9 @@ function ScoutTool({
   }
   // Finds under the current company lens — so the Dashboard's top match / counts
   // reflect the company you're on, not a find from another company's project.
-  const visibleFinds = activeCompanyId
+  // Before projects hydrate there is no set to test against, and filtering then
+  // would blank the whole pipeline for a frame.
+  const visibleFinds = projects.length
     ? finds.filter((f) => visibleProjectIdSet.has(f.projectId))
     : finds;
   const activeCompanyName = companies.find((c) => c.id === activeCompanyId)?.name || "";
@@ -5229,7 +5260,12 @@ function ScoutTool({
   // sees a perfectly normal result list and has no idea their team got nothing.
   function publishFindsToTeam(fresh: Find[]) {
     if (!teamLens || !getToken || !fresh.length) return;
-    const projectName = (projects.find((p) => p.id === activeId)?.name || "").trim();
+    const proj = projects.find((p) => p.id === activeId);
+    // Personal work never reaches the company's shared pipeline. teamLens is
+    // already empty on the Personal lens, so this is the second lock: a find
+    // published once cannot be recalled from teammates who have seen it.
+    if (proj?.companyId === "personal") return;
+    const projectName = (proj?.name || "").trim();
     if (!projectName) return;
     const payload = fresh.map((f) => ({ opp: f.opp, status: f.status, dedupKey: sharedFindKey(f.opp) }));
     (async () => {
@@ -7729,6 +7765,7 @@ function ScoutTool({
         companies={companies}
         activeCompanyId={activeCompanyId}
         onSelectCompany={selectCompany}
+        onTogglePersonal={togglePersonalLens}
         showLogout={!!showLogout}
         onLogout={onLogout}
         accountEmail={accountEmail || ""}
@@ -10101,6 +10138,7 @@ function SideNav({
   hasPersonal,
   personalAllowed = false,
   onSelectCompany,
+  onTogglePersonal,
   showLogout,
   onLogout,
   accountEmail,
@@ -10128,6 +10166,9 @@ function SideNav({
   hasPersonal: boolean;
   personalAllowed?: boolean;
   onSelectCompany: (id: string) => void;
+  /** Personal use is a two-position switch: on remembers the company you left,
+      off puts you back on it. */
+  onTogglePersonal: (on: boolean) => void;
   showLogout: boolean;
   onLogout?: () => void;
   accountEmail?: string;
@@ -10647,7 +10688,7 @@ function SideNav({
                   <input
                     type="checkbox"
                     checked={activeCompanyId === "personal"}
-                    onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
+                    onChange={(e) => onTogglePersonal(e.target.checked)}
                     className="mt-0.5 h-3.5 w-3.5 accent-[#19455e]"
                   />
                   <span className="min-w-0">
