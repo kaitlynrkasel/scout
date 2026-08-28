@@ -4348,6 +4348,7 @@ function ScoutTool({
       // showing the previous lens's categories and search goal: clear the
       // stage so it reads empty until a project is created here.
       if (catId) setCatId("");
+      if (goal) setGoal("");
       return;
     }
     if (visibleProjects.some((p) => p.id === activeId)) return;
