@@ -10381,7 +10381,7 @@ function SideNav({
       ? [
           {
             key: "team",
-            label: "Team",
+            label: "Company",
             icon: (
               <>
                 <circle cx="9" cy="8" r="3.2" />
