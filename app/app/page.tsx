@@ -1615,35 +1615,45 @@ function ScoutTool({
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // Deep guidance links: /app?guide=tab.spot (the readiness checklist's "Show
-  // me where" buttons use these). Land on the tab, then pulse a ring around
-  // the element tagged data-guide=spot once it has rendered.
+  // Deep guidance: land on a tab and pulse a tutorial ring around the tagged
+  // control. Reached two ways: /app?guide=tab.spot on load, and a
+  // {type:"scout-guide"} postMessage from the readiness pane (no reload, so
+  // "Show me where" answers instantly). The message only ever drives a tab
+  // switch and a CSS class, so origin doesn't matter for safety.
   useEffect(() => {
     let cancelled = false;
-    let g = "";
-    try {
-      g = new URLSearchParams(window.location.search).get("guide") || "";
-    } catch {}
-    if (!g) return;
-    const [gtab, spot] = g.split(".");
-    if (gtab && (TABS as readonly string[]).includes(gtab)) setTab(gtab as TabId);
-    if (!spot) return;
-    const started = Date.now();
-    const tick = () => {
-      if (cancelled) return;
-      const el = document.querySelector(`[data-guide="${spot}"]`);
-      if (el) {
-        el.scrollIntoView({ block: "center", behavior: "smooth" });
-        el.classList.add("guide-glow");
-        setTimeout(() => el.classList.remove("guide-glow"), 8000);
-        return;
-      }
-      if (Date.now() - started < 15000) setTimeout(tick, 300);
+    const runGuide = (g: string) => {
+      const [gtab, spot] = String(g || "").split(".");
+      if (gtab && (TABS as readonly string[]).includes(gtab)) setTab(gtab as TabId);
+      if (!spot) return;
+      const started = Date.now();
+      const tick = () => {
+        if (cancelled) return;
+        const el = document.querySelector(`[data-guide="${spot}"]`);
+        if (el) {
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          el.classList.add("guide-glow");
+          setTimeout(() => el.classList.remove("guide-glow"), 8000);
+          return;
+        }
+        if (Date.now() - started < 15000) setTimeout(tick, 300);
+      };
+      setTimeout(tick, 400);
     };
-    setTimeout(tick, 500);
+    try {
+      const g = new URLSearchParams(window.location.search).get("guide") || "";
+      if (g) setTimeout(() => runGuide(g), 200);
+    } catch {}
+    const onMsg = (e: MessageEvent) => {
+      const d: any = e.data;
+      if (d && d.type === "scout-guide" && typeof d.guide === "string") runGuide(d.guide);
+    };
+    window.addEventListener("message", onMsg);
     return () => {
       cancelled = true;
+      window.removeEventListener("message", onMsg);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -1928,6 +1938,11 @@ function ScoutTool({
   // As the cursor moves toward the Scout button, nudge the mascot (CornerDog)
   // to wag. Proximity, not hover, it starts as you head that way. Throttled
   // to one signal per ~350ms while near, and skipped under reduced-motion.
+  // "+ New project…" from the stage's category picker: a small popup names
+  // and describes the project, then lands you on it ready to scout.
+  const [newProjOpen, setNewProjOpen] = useState(false);
+  const [npName, setNpName] = useState("");
+  const [npDesc, setNpDesc] = useState("");
   const scoutBtnRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
@@ -2908,11 +2923,11 @@ function ScoutTool({
     try {
       // Per-account first; the old browser-wide key is the migration fallback.
       const saved =
-        (uid && localStorage.getItem(`scout_active_company_${uid}`)) ||
+        (accountEmail && localStorage.getItem(`scout_active_company_${accountEmail}`)) ||
         localStorage.getItem("scout_active_company");
       if (saved) {
         setActiveCompanyId(saved);
-        if (uid) localStorage.setItem(`scout_active_company_${uid}`, saved);
+        if (accountEmail) localStorage.setItem(`scout_active_company_${accountEmail}`, saved);
       }
     } catch {
       /* ignore */
@@ -2969,7 +2984,7 @@ function ScoutTool({
         // apply without the user having to pick.
         if (wss.length === 1) {
           try {
-            const key = uid ? `scout_active_company_${uid}` : "scout_active_company";
+            const key = accountEmail ? `scout_active_company_${accountEmail}` : "scout_active_company";
             if (!localStorage.getItem(key)) {
               setActiveCompanyId(wss[0].id);
               localStorage.setItem(key, wss[0].id);
@@ -2988,7 +3003,7 @@ function ScoutTool({
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [getToken, uid]);
+  }, [getToken, accountEmail]);
 
   // ---- Team shared pipeline, merged into the Finds tab on a company lens ----
   // When the lens is a real workspace, the Finds tab is that team's SHARED
@@ -3088,7 +3103,7 @@ function ScoutTool({
       // Per-account key: the lens is an account preference, so it survives
       // the cross-account cache wipe (which used to reset it on every
       // account switch and read as "refresh loses my company").
-      const key = uid ? `scout_active_company_${uid}` : "scout_active_company";
+      const key = accountEmail ? `scout_active_company_${accountEmail}` : "scout_active_company";
       if (id) localStorage.setItem(key, id);
       else localStorage.removeItem(key);
     } catch {
@@ -7845,10 +7860,16 @@ function ScoutTool({
                         ariaLabel="Category of search"
                         bare
                         value={catId}
-                        onChange={selectCategory}
+                        onChange={(v) => {
+                          if (v === "__newproj__") {
+                            setNewProjOpen(true);
+                            return;
+                          }
+                          selectCategory(v);
+                        }}
                         options={[
                           ...myCats.map((c) => ({ value: c.id, label: c.name })),
-                          { value: "", label: "New search" },
+                          { value: "__newproj__", label: "+ New project…" },
                         ]}
                       />
                     </div>
@@ -7863,6 +7884,72 @@ function ScoutTool({
                     Manage projects
                   </button>
                 </div>
+
+                {newProjOpen && (
+                  <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4"
+                    onClick={() => setNewProjOpen(false)}
+                  >
+                    <div
+                      className="w-full max-w-md rounded-2xl border border-warm-border bg-surface p-5 text-left shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <span className="text-sm font-bold text-ink">New project</span>
+                        <button
+                          onClick={() => setNewProjOpen(false)}
+                          className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+                        >
+                          Close
+                        </button>
+                      </div>
+                      <label className="block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                          Name
+                        </span>
+                        <input
+                          value={npName}
+                          onChange={(e) => setNpName(e.target.value)}
+                          placeholder="e.g. Fall internship hunt"
+                          autoFocus
+                          className="mt-1 w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+                        />
+                      </label>
+                      <label className="mt-3 block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                          What is it looking for?
+                        </span>
+                        <textarea
+                          value={npDesc}
+                          onChange={(e) => setNpDesc(e.target.value)}
+                          rows={3}
+                          placeholder="Who you want to reach and why; this becomes the first search goal."
+                          className="mt-1 w-full resize-y rounded-xl border border-warm-border bg-surface px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                        />
+                      </label>
+                      <div className="mt-4 flex items-center gap-3">
+                        <button
+                          onClick={() => {
+                            const id = addProject(npName);
+                            if (!id) return;
+                            if (npDesc.trim()) {
+                              setProjectContext(id, npDesc.trim());
+                              setGoal(npDesc.trim());
+                            }
+                            selectProject(id);
+                            setNewProjOpen(false);
+                            setNpName("");
+                            setNpDesc("");
+                          }}
+                          disabled={!npName.trim()}
+                          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                        >
+                          Create and start scouting
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {firstSearchBanner && opps.length === 0 && (
                   <p className="scout-fade-in mt-5 text-sm font-medium text-white/70">

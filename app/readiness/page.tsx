@@ -140,10 +140,18 @@ function ReadinessInner() {
   // What the live pane is showing. "Show me where" swaps in a guided URL; the
   // cache-buster lets the same spot be summoned twice in a row.
   const [liveSrc, setLiveSrc] = useState("/app");
+  const liveFrameRef = useRef<HTMLIFrameElement>(null);
   function goLive(guide: string) {
-    const url = `/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`;
-    if (typeof window !== "undefined" && window.innerWidth >= 900) setLiveSrc(url);
-    else if (typeof window !== "undefined") window.open(url, "_blank");
+    if (typeof window === "undefined") return;
+    if (window.innerWidth < 900) {
+      window.open(`/app?guide=${encodeURIComponent(guide)}`, "_blank");
+      return;
+    }
+    // postMessage first: the pane answers instantly, no reload. Fallback to a
+    // guided URL when the frame hasn't loaded yet.
+    const w = liveFrameRef.current?.contentWindow;
+    if (w) w.postMessage({ type: "scout-guide", guide }, window.location.origin);
+    else setLiveSrc(`/app?guide=${encodeURIComponent(guide)}&t=${Date.now()}`);
   }
   const [openKey, setOpenKey] = useState("");
   // Text filter over all ~276 items: title, description, and section name.
@@ -487,11 +495,9 @@ function ReadinessInner() {
                             </span>
                           )}
                         </button>
-                        {!folded && (
-                          <p className="ml-5 mt-1 text-[13px] leading-relaxed text-body/75">
-                            <b className="text-ink/80">Good looks like:</b> {it.good}
-                          </p>
-                        )}
+                        {/* Description lives behind the expander now: an
+                            unexpanded row is one line + buttons, so 278 items
+                            scan instead of scroll. */}
                         {!folded && (ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id]) && (
                           <button
                             onClick={() => goLive(ITEM_GUIDE[it.key] || SECTION_GUIDE[s.id])}
@@ -573,6 +579,9 @@ function ReadinessInner() {
                         </div>
                         {(open || c?.verdict === "warn" || c?.verdict === "bad") && (
                           <div className="ml-5 mt-3 border-t border-warm-border pt-3">
+                            <p className="mb-3 text-[13px] leading-relaxed text-body/75">
+                              <b className="text-ink/80">Good looks like:</b> {it.good}
+                            </p>
                             {machine && (
                               <div
                                 className={`mb-3 rounded-lg border-l-2 px-3 py-2 text-xs leading-relaxed ${
@@ -714,7 +723,7 @@ function ReadinessInner() {
             Open in its own tab
           </a>
         </div>
-        <iframe src={liveSrc} title="Scout" className="min-h-0 w-full flex-1 bg-cream" />
+        <iframe ref={liveFrameRef} src={liveSrc} title="Scout" className="min-h-0 w-full flex-1 bg-cream" />
       </div>
 
     </div>
