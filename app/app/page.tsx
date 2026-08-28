@@ -8049,8 +8049,9 @@ function ScoutTool({
                         />
                       </label>
                       <label className="mt-3 block">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                        <span className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-body/50">
                           What is it looking for?
+                          <MicButton value={npDesc} onChange={setNpDesc} />
                         </span>
                         <textarea
                           value={npDesc}
