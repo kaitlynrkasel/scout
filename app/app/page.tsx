@@ -12028,6 +12028,7 @@ function FindDetailModal({
   templates = [],
   onWriteOwn,
   onSaveAsTemplate,
+  draftFirst = false,
   onClose,
   onToggleApplication,
   onOpenApplicationKit,
@@ -12075,6 +12076,7 @@ function FindDetailModal({
   onToggleApplication?: (v: boolean) => void;
   onOpenApplicationKit?: () => void;
   find: Find;
+  draftFirst?: boolean;
   templates?: OutreachTemplate[];
   onWriteOwn?: (kind: string, subject: string, body: string, to?: string, cc?: string) => void;
   onSaveAsTemplate?: () => void;
@@ -12178,23 +12180,28 @@ function FindDetailModal({
   }, []);
 
   // Section order for the stacked (mobile) layout — drag the panels into the
-  // order you like. Persisted so the modal remembers it next time.
+  // order you like. Persisted so the modal remembers it next time. The Drafts
+  // tab leads with the draft itself and keeps its OWN saved order, so a
+  // reorder there sticks without changing how Finds opens.
   const DEFAULT_ORDER = ["info", "work", "preview"] as const;
-  const [order, setOrder] = useState<string[]>(() => [...DEFAULT_ORDER]);
+  const orderKey = draftFirst ? "scout_modal_order_drafts" : "scout_modal_order";
+  const defaultOrder = draftFirst ? ["work", "info", "preview"] : [...DEFAULT_ORDER];
+  const [order, setOrder] = useState<string[]>(() => [...defaultOrder]);
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem("scout_modal_order") || "null");
+      const saved = JSON.parse(localStorage.getItem(orderKey) || "null");
       if (
         Array.isArray(saved) &&
         saved.length === 3 &&
         DEFAULT_ORDER.every((k) => saved.includes(k))
       )
         setOrder(saved);
+      else setOrder([...defaultOrder]);
     } catch {
       /* ignore malformed saved order */
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [orderKey]);
   const [dragKey, setDragKey] = useState<string>("");
   const reorder = (from: string, to: string) => {
     if (from === to) return;
@@ -12203,7 +12210,7 @@ function FindDetailModal({
       const at = next.indexOf(to);
       next.splice(at < 0 ? next.length : at, 0, from);
       try {
-        localStorage.setItem("scout_modal_order", JSON.stringify(next));
+        localStorage.setItem(orderKey, JSON.stringify(next));
       } catch {
         /* storage unavailable, keep in-memory */
       }
@@ -15965,6 +15972,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
 
       {detailFind && (
         <FindDetailModal
+          draftFirst={headingWord === "drafts"}
           find={detailFind}
           templates={templatesForFind ? templatesForFind(detailFind) : []}
           onClose={() => setDetailId("")}
