@@ -313,6 +313,18 @@
               "key": "setup::profile-pages-toggle",
               "title": "Profile splits into two pages",
               "good": "On a company account, Profile is two pages behind a top toggle: your role and experience on one, the company details and color on the other. No scrolling through the company card to reach your own fields."
+            },
+            {
+              "sev": "should",
+              "title": "Personal use checkbox",
+              "good": "With personal use allowed (or as a company owner), a Personal use checkbox appears under the company picker in the sidebar; checking it moves you out of the company lens, your work there stays out of company views, and unchecking returns you. It survives a refresh and does not snap off when you have no personal projects yet.",
+              "steps": [
+                "As a company owner, open Profile, the company page, and turn on Allow personal use. Save.",
+                "Check the Personal use checkbox in the sidebar and run a search: the project it creates should not appear to teammates or in the company lens.",
+                "Refresh: still checked. Uncheck: back to the company.",
+                "On an account whose company has it off (and who owns no company), confirm the checkbox is absent."
+              ],
+              "key": "setup::personal-use-checkbox-under-the-company-picker"
             }
           ]
         },
@@ -1333,6 +1345,16 @@
               "key": "writing::delete-shared-template",
               "title": "Delete team templates",
               "good": "A shared template row has Delete: your own delete removes it from the library (and your local copy so sync can't resurrect it); an admin can delete anyone's. A non-admin deleting someone else's gets a plain refusal, not a broken row."
+            },
+            {
+              "sev": "should",
+              "title": "Walkthroughs use your real account",
+              "good": "A walkthrough checks what is on the account first: with messages already sent, the follow-up walkthrough goes straight to a real sent message instead of asking you to draft a first one from scratch.",
+              "steps": [
+                "On an account with sent messages, press Walk me through it on Follow-ups remember the first: it should open Sent and use a real card.",
+                "On a fresh account, the same walkthrough should start from running a search instead."
+              ],
+              "key": "writing::walkthroughs-adapt-to-the-account-state"
             }
           ]
         },
