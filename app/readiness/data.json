@@ -12,7 +12,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Sign up with an email address never used before",
+              "title": "Sign up fresh",
               "good": "The verification code arrives within a minute or so, it is six digits, and the app accepts it.",
               "steps": [
                 "Open the site in a private or incognito window.",
@@ -25,7 +25,7 @@
             },
             {
               "sev": "must",
-              "title": "Sign up again with an address that already has an account",
+              "title": "Sign up with a taken email",
               "good": "You are taken to the sign-in screen with a clear message, rather than left waiting on a verify screen for an email that will never arrive.",
               "steps": [
                 "Try to sign up using an address you already registered.",
@@ -47,7 +47,7 @@
             },
             {
               "sev": "must",
-              "title": "Sign in on a second device and find everything there",
+              "title": "Sign in on a second device",
               "good": "Your profile, projects, and saved work all appear. Nothing has to be re-entered.",
               "steps": [
                 "Set up an account on a laptop.",
@@ -59,7 +59,7 @@
             },
             {
               "sev": "should",
-              "title": "Stay signed in works the way it says",
+              "title": "Stay signed in holds",
               "good": "Ticking remember me keeps you signed in after closing the browser. Leaving it unticked does not.",
               "steps": [
                 "Sign in with remember me on, close the browser, reopen.",
@@ -69,7 +69,7 @@
             },
             {
               "sev": "should",
-              "title": "Switching between two saved accounts",
+              "title": "Switch saved accounts",
               "good": "You can flip between accounts without re-typing a password, and you never see the other account's data.",
               "steps": [
                 "Add two accounts.",
@@ -79,7 +79,7 @@
             },
             {
               "sev": "must",
-              "title": "Signing out really signs you out",
+              "title": "Sign out fully",
               "good": "After signing out, pressing back does not show the previous account's data.",
               "steps": [
                 "Sign out.",
@@ -90,12 +90,12 @@
             },
             {
               "key": "getting-in::continue-as-survives-admin-days",
-              "title": "One-click Continue as keeps working day after day",
+              "title": "Continue-as works next day",
               "good": "Sign in, spend time in the app AND the admin pages, come back the next day signed out: 'Continue as' signs you straight in, no 'saved session expired' loop. If it does fail once, the error names the reason and your email is prefilled so recovery is one password."
             },
             {
               "key": "getting-in::empty-boot-cannot-wipe",
-              "title": "A bad boot can't wipe your profile",
+              "title": "Bad boot never wipes the profile",
               "good": "If the profile/state load times out or fails, Scout lets you in but HOLDS all server writes for that session, an all-blank profile can never overwrite a filled row (server-side guard too), and blank server fields never shadow real local ones on merge. Kaitlyn's profile was wiped this way on 2026-08-24 and restored.",
               "must": true,
               "steps": [
@@ -115,7 +115,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "A brand new empty account looks welcoming, not broken",
+              "title": "Empty account looks welcoming",
               "good": "Empty screens explain what goes there and what to do next. No zeroes with no context, no blank panels, no error messages.",
               "steps": [
                 "Sign up fresh and look at every tab before doing anything: dashboard, finds, lists, templates.",
@@ -125,7 +125,7 @@
             },
             {
               "sev": "must",
-              "title": "Onboarding for a personal account",
+              "title": "Onboard a personal account",
               "good": "The questions make sense, the answers are saved, and what you typed visibly shapes what Scout suggests next.",
               "steps": [
                 "Go through onboarding as an individual.",
@@ -135,7 +135,7 @@
             },
             {
               "sev": "must",
-              "title": "Onboarding for a company or team account",
+              "title": "Onboard a company account",
               "good": "Same as above, plus the team features appear afterwards.",
               "steps": [
                 "Sign up a second fresh account and pick the company path.",
@@ -145,7 +145,7 @@
             },
             {
               "sev": "should",
-              "title": "The suggested starting projects are actually relevant",
+              "title": "Starter projects fit you",
               "good": "Scout suggests projects and search categories that match what you described, not generic filler like coffee chats.",
               "steps": [
                 "During setup, describe something specific, for example a student org booking speakers for a spring showcase.",
@@ -156,7 +156,7 @@
             },
             {
               "sev": "must",
-              "title": "Your profile still exists tomorrow",
+              "title": "Profile survives overnight",
               "good": "Fill in the profile, close everything, come back the next day, and it is all still there.",
               "steps": [
                 "Complete the profile fully.",
@@ -167,7 +167,7 @@
             },
             {
               "sev": "should",
-              "title": "Uploading a resume or bio fills in the right fields",
+              "title": "Resume upload fills the fields",
               "good": "It pulls out the name and a likely use case, leaves blank anything it cannot find, and never makes something up.",
               "steps": [
                 "Upload a real resume.",
@@ -178,7 +178,7 @@
             },
             {
               "sev": "should",
-              "title": "The walkthrough makes sense to someone who has never seen Scout",
+              "title": "Walkthrough works for a stranger",
               "good": "A person who did not build this can follow it without asking questions.",
               "steps": [
                 "Sit someone outside the team in front of it.",
@@ -188,7 +188,7 @@
             },
             {
               "sev": "later",
-              "title": "Voice dictation works where it is offered",
+              "title": "Dictation works everywhere offered",
               "good": "The mic button appears only in browsers that support it, and dictated text lands in the right field.",
               "steps": [
                 "Try it in Chrome, then in a browser that does not support it, and confirm it hides rather than erroring."
@@ -197,7 +197,7 @@
             },
             {
               "sev": "should",
-              "title": "Naming a project retunes its starter categories",
+              "title": "Project name retunes categories",
               "good": "A project named for a different world (say, Grad School) gets starter categories about that world, not leftovers from your last project.",
               "steps": [
                 "Create a project called something clearly different from your usual work, like Grad School.",
@@ -209,7 +209,7 @@
             },
             {
               "sev": "should",
-              "title": "You can delete the last project",
+              "title": "Delete the last project",
               "good": "Deleting your only project is allowed; Scout drops you into a fresh blank one instead of refusing.",
               "steps": [
                 "On a test account, delete every project.",
@@ -219,7 +219,7 @@
             },
             {
               "sev": "should",
-              "title": "A search only auto-creates a category when it adds something",
+              "title": "Empty runs make no categories",
               "good": "Running the project-level search, or a goal nearly identical to the project description or an existing category, does not mint a redundant category. A genuinely new goal still saves itself.",
               "steps": [
                 "Run the default project search; check Projects for a new near-duplicate category (fail if one appears).",
@@ -230,7 +230,7 @@
             },
             {
               "sev": "should",
-              "title": "New search (no category) is a picker choice, not a button",
+              "title": "New search reads as a choice",
               "good": "The category picker ends with 'New search' for a one-off goal; there is no separate Solo Search pill any more, and nothing near the picker can be mistaken for the run button.",
               "steps": [
                 "Show the Scout tab to someone new and ask them to start a search.",
@@ -240,7 +240,7 @@
             },
             {
               "sev": "should",
-              "title": "Dictation shows your words as you speak",
+              "title": "Dictation shows words live",
               "good": "Pressing Dictate shows the live transcript on the button so it never looks dead.",
               "steps": [
                 "Press Dictate, speak a sentence, watch the words appear while speaking."
@@ -249,7 +249,7 @@
             },
             {
               "sev": "should",
-              "title": "Add your LinkedIn lands on the adding step",
+              "title": "Add LinkedIn lands right",
               "good": "The dashboard checklist's Add your LinkedIn button opens Profile AND scrolls to the resume/LinkedIn drop zone, not just the top of the tab.",
               "steps": [
                 "Click Add your LinkedIn from the dashboard checklist.",
@@ -259,7 +259,7 @@
             },
             {
               "sev": "should",
-              "title": "Templates is three pages behind one toggle",
+              "title": "Templates splits into three pages",
               "good": "Outreach, Application materials, and Email signatures are separate pages switched at the top — no scrolling between worlds. Cover letters are written, uploaded, or pasted IN Application materials; the outreach builder is not involved.",
               "steps": [
                 "Flip through all three pages.",
@@ -269,7 +269,7 @@
             },
             {
               "sev": "should",
-              "title": "Your links prefill from the profile",
+              "title": "Your links prefill",
               "good": "The Your links card starts filled with what Scout already knows (LinkedIn, account email, site/phone when present) and stays editable; nothing you typed is ever overwritten. Every kit surfaces them with copy buttons.",
               "steps": [
                 "On a fresh device, open Application materials and confirm the prefill.",
@@ -279,12 +279,12 @@
             },
             {
               "key": "setup::template-scope-new-project",
-              "title": "Templates can mint a project on the spot",
+              "title": "Templates mint projects",
               "good": "In Templates' Where-it-applies picker (a house-styled dropdown, not the OS menu), '+ New project…' opens an inline name field; Create makes the project and scopes the template to it in one motion, same as Add-a-contact."
             },
             {
               "key": "setup::profile-pages-toggle",
-              "title": "Profile splits into About you / Your company",
+              "title": "Profile splits into two pages",
               "good": "On a company account, Profile is two pages behind a top toggle: your role and experience on one, the company details and color on the other. No scrolling through the company card to reach your own fields."
             }
           ]
@@ -296,7 +296,7 @@
           "items": [
             {
               "sev": "should",
-              "title": "Scout shows it understood your goal before it searches",
+              "title": "Scout restates your goal first",
               "good": "Before spending a search, it reflects back what it thinks you are looking for, and you recognise your own request in it.",
               "steps": [
                 "Type a goal and watch what it says it understood.",
@@ -307,7 +307,7 @@
             },
             {
               "sev": "should",
-              "title": "It asks a question when the goal is genuinely vague",
+              "title": "Vague goals get a question",
               "good": "A vague request gets one or two clarifying questions, not a shrug and a bad search.",
               "steps": [
                 "Type something deliberately thin, for example find me people in music.",
@@ -317,7 +317,7 @@
             },
             {
               "sev": "must",
-              "title": "A real search for each of the three main use cases",
+              "title": "Run all three use cases",
               "good": "Networking, job and internship hunting, and music PR each return people you would genuinely contact.",
               "steps": [
                 "Run one real search per use case.",
@@ -328,7 +328,7 @@
             },
             {
               "sev": "must",
-              "title": "A goal that fits none of the three templates still works",
+              "title": "Odd goals still work",
               "good": "We promise Scout adapts to any free-text use case, so a request outside the templates has to produce sensible results.",
               "steps": [
                 "Type a goal from a completely different world, for example finding wedding venues or local suppliers.",
@@ -338,7 +338,7 @@
             },
             {
               "sev": "must",
-              "title": "The people it finds are real and the details are right",
+              "title": "Finds are real people",
               "good": "Names, roles, outlets, and links all check out when you click through.",
               "steps": [
                 "Take five results at random.",
@@ -349,7 +349,7 @@
             },
             {
               "sev": "must",
-              "title": "The reason it gives for each match is true",
+              "title": "Why-it-fits is true",
               "good": "The why it fits line refers to something you can confirm on the linked page, not a plausible-sounding guess.",
               "steps": [
                 "For five results, read the reason and then try to confirm it from the source.",
@@ -369,7 +369,7 @@
             },
             {
               "sev": "should",
-              "title": "No duplicates, and no repeats of people you already have",
+              "title": "No duplicates or repeats",
               "good": "The same person does not appear twice in one search, and does not come back in the next search either.",
               "steps": [
                 "Run the same search twice and compare.",
@@ -379,7 +379,7 @@
             },
             {
               "sev": "should",
-              "title": "Typing a short category name produces a sensible search",
+              "title": "Short names search sensibly",
               "good": "Typing something like radio DJs or panelists gives Scout enough to find the right people, using your profile for context.",
               "steps": [
                 "Add two or three categories by name only.",
@@ -389,7 +389,7 @@
             },
             {
               "sev": "should",
-              "title": "A deeper scan on one result adds real information",
+              "title": "Deep scan adds real info",
               "good": "It returns facts you did not already have, all traceable to a source.",
               "steps": [
                 "Run it on someone you already know a lot about.",
@@ -399,7 +399,7 @@
             },
             {
               "sev": "should",
-              "title": "Website previews load for results",
+              "title": "Previews load",
               "good": "The preview shows the actual site, quickly, without breaking the page.",
               "steps": [
                 "Scroll a full page of results with previews on.",
@@ -409,7 +409,7 @@
             },
             {
               "sev": "must",
-              "title": "A contact stops being suggested once several users have pitched them",
+              "title": "Over-pitched contacts rest",
               "good": "Once a handful of different Scout users have reached out to the same person, that person stops appearing for everyone else.",
               "steps": [
                 "Ask a developer to confirm the cap is switched on and to show it working with test data.",
@@ -420,7 +420,7 @@
             },
             {
               "sev": "should",
-              "title": "Passing on results changes what comes back",
+              "title": "Denies change the next run",
               "good": "After you pass on several results for the same reason, the next search shows fewer like them.",
               "steps": [
                 "Pass on five results and give the same reason each time.",
@@ -440,7 +440,7 @@
             },
             {
               "sev": "should",
-              "title": "A search that finds nothing explains itself",
+              "title": "Empty searches explain why",
               "good": "You are told why and given something to try, not shown an empty box.",
               "steps": [
                 "Search for something deliberately impossible.",
@@ -450,7 +450,7 @@
             },
             {
               "sev": "must",
-              "title": "Website previews require being signed in",
+              "title": "Previews need sign-in",
               "good": "Signed in, previews load fast and can be resized with the drag bar under them. Signed out, the preview area shows a polite sign-in page with a direct link to the site.",
               "steps": [
                 "Open a find while signed in and confirm the preview loads and the drag bar resizes it.",
@@ -461,7 +461,7 @@
             },
             {
               "sev": "must",
-              "title": "A find's website is the real website",
+              "title": "Websites are the real site",
               "good": "New finds never list a Yelp or YellowPages listing page as the company's site. If no real site is known, the field is empty and the listing stays under evidence.",
               "steps": [
                 "Run a search for local companies.",
@@ -471,7 +471,7 @@
             },
             {
               "sev": "should",
-              "title": "Hand-added contacts steer the next search",
+              "title": "Hand-adds steer searches",
               "good": "After you add a few people by hand, the next search in that project leans toward more people like them.",
               "steps": [
                 "Manually add two or three contacts of a very specific type.",
@@ -481,7 +481,7 @@
             },
             {
               "sev": "should",
-              "title": "The shared index helps without making everyone's results the same",
+              "title": "Index helps without cloning results",
               "good": "Searches quietly reuse people Scout has already verified, but two accounts running the same goal still get clearly different result sets, and fresh-from-the-web people always make up the majority.",
               "steps": [
                 "Open two browsers (or one normal + one private window): your account in one, a second account (Suri's, or a fresh signup) in the other.",
@@ -495,7 +495,7 @@
             {
               "sev": "must",
               "key": "finding::people-goals-run-as-networking-even-in-a-job-project",
-              "title": "People-goals run as networking even in a job project",
+              "title": "People-goals run as networking",
               "good": "A goal about alumni, mentors, or people open to a chat returns PEOPLE with strong fits, never the 'few active postings matched' banner, even when the project is about applying to programs or jobs.",
               "steps": [
                 "In a job/grad-school project, search for alumni open to a coffee chat.",
@@ -507,7 +507,7 @@
             {
               "sev": "should",
               "key": "finding::people-searches-sweep-public-linkedin-profiles",
-              "title": "People-searches sweep public LinkedIn profiles",
+              "title": "People-searches sweep LinkedIn",
               "good": "An alumni or professionals search returns several results whose contact route is a LinkedIn profile, pulled from LinkedIn's public pages, not just news articles and school spotlights.",
               "steps": [
                 "Run a people-search (alumni of a program, professionals in a niche).",
@@ -519,7 +519,7 @@
             {
               "sev": "should",
               "key": "finding::searches-sweep-the-right-platforms-for-the-goal",
-              "title": "Searches sweep the right platforms for the goal",
+              "title": "Right platforms per goal",
               "good": "The progress log names the platforms it swept, and they fit the request: alumni searches sweep LinkedIn and university pages, music searches sweep music profiles and Instagram, developer searches sweep GitHub, press searches sweep journalist sites. A wedding-venue search should not be sweeping music sites.",
               "steps": [
                 "Run searches in two very different worlds and watch the progress lines.",
@@ -531,7 +531,7 @@
             {
               "sev": "should",
               "key": "finding::roster-searches-reach-people-with-no-web-footprint",
-              "title": "Roster searches reach people with no web footprint",
+              "title": "Rosters reach the unGoogleable",
               "good": "A search naming a specific school, employer, or job title returns people the open web would never surface, with real names, roles, companies, and LinkedIn profiles. The progress log says it checked the people directory and how many match.",
               "steps": [
                 "Search for alumni of a named school, or people with a named job title.",
@@ -542,7 +542,7 @@
             },
             {
               "sev": "should",
-              "title": "A company's home base pulls nearby results up without hiding the rest",
+              "title": "Home base boosts nearby",
               "good": "With a base set, results in that region come first, and strong matches elsewhere still appear further down rather than vanishing.",
               "steps": [
                 "Set a company location, for example Seattle, and run a search whose targets are national.",
@@ -556,7 +556,7 @@
             },
             {
               "sev": "must",
-              "title": "A search with no location given is not steered to any city",
+              "title": "No location, no steering",
               "good": "Results sit wherever the best matches are. No single city or region dominates, and nothing in the plan mentions a place nobody typed.",
               "steps": [
                 "Use an account with no location in the profile and no company base set.",
@@ -570,7 +570,7 @@
             },
             {
               "sev": "should",
-              "title": "Setting a location narrows results as much as you meant it to",
+              "title": "Location narrows as meant",
               "good": "You have decided, deliberately, how strict a location should be, and what the app does matches that decision.",
               "steps": [
                 "Set a profile or company location, then run a search whose best matches are mostly elsewhere.",
@@ -583,7 +583,7 @@
             },
             {
               "sev": "should",
-              "title": "Scout asks where the work happens before searching for a role",
+              "title": "Role searches ask where",
               "good": "A role-shaped search that never says remote or on-site pauses to ask, with one-tap answers, and the answer visibly changes who comes back.",
               "steps": [
                 "Search for a kind of role without saying anything about where the work happens.",
@@ -597,7 +597,7 @@
             },
             {
               "sev": "must",
-              "title": "Nobody reaches your pipeline without a way to contact them",
+              "title": "Every find is reachable",
               "good": "Every find has an email, a phone number, or a handle. Not one is a bio page with no way to get in touch.",
               "steps": [
                 "Run a few searches across different use cases, including one for a sport, a league, or a club.",
@@ -611,7 +611,7 @@
             },
             {
               "sev": "should",
-              "title": "The contact rule has not quietly starved the results",
+              "title": "Contact rule isn't starving results",
               "good": "Searches still come back with a useful number of people. When one is thin, the skipped list explains why rather than leaving it looking broken.",
               "steps": [
                 "Run the searches you would actually run and note how many finds each returns.",
@@ -624,7 +624,7 @@
             },
             {
               "sev": "should",
-              "title": "Starring a find moves it to the top in your own color",
+              "title": "Starring floats to top",
               "good": "The star fills with the color set in the profile, the find jumps to the top of the list, and it is still counted in its status tab rather than disappearing from it.",
               "steps": [
                 "Open Finds and star something near the bottom of the list.",
@@ -640,7 +640,7 @@
             },
             {
               "sev": "must",
-              "title": "Job searches return openings and employers, never bare people",
+              "title": "Job runs return employers",
               "good": "On a job or internship search, every result is either a specific posting or a company you could approach. No plain LinkedIn profiles or staff bios of people who merely work somewhere.",
               "steps": [
                 "Run a job-type search (the Work Opportunities project works).",
@@ -651,7 +651,7 @@
             },
             {
               "sev": "must",
-              "title": "Every scout brings back at least five results",
+              "title": "Five finds minimum",
               "good": "A search never comes back with one or two finds. Under five, Scout widens on its own and fills the rest with fittable employers to cold-email, and a banner says plainly that those are not confirmed openings.",
               "steps": [
                 "Run a narrow search where live postings are scarce.",
@@ -662,7 +662,7 @@
             },
             {
               "sev": "must",
-              "title": "A deny reason that names an unwanted world is a hard filter",
+              "title": "World-denies hard-filter",
               "good": "After denying with a reason like 'I don't want to work in country music', later searches never surface results squarely in that world, not even as low-fit.",
               "steps": [
                 "Deny a find with a reason naming a genre or industry you don't want.",
@@ -673,7 +673,7 @@
             },
             {
               "sev": "should",
-              "title": "Timing denies go on a reopen watch, not a blocklist",
+              "title": "Timing denies get a watch",
               "good": "Denying with 'no open positions' does not banish the company. It can come back occasionally as a check-in, and comes back prominently when it actually has a live opening, saying positions have opened since you last checked.",
               "steps": [
                 "Deny a company with the reason 'No open positions'.",
@@ -684,7 +684,7 @@
             },
             {
               "sev": "should",
-              "title": "The detail rail answers your own criteria as fields",
+              "title": "Criteria answered as fields",
               "good": "Opening a new find shows static labeled rows answering the goal's explicit asks: Remote? In person, Vancouver. Paid? Not stated. Answers come from the source; silent sources say Not stated, never a guess.",
               "steps": [
                 "Run a search whose goal states criteria (remote or in person, paid, timeframe).",
@@ -695,7 +695,7 @@
             },
             {
               "sev": "must",
-              "title": "Eligibility requirements you cannot meet disqualify a find",
+              "title": "Impossible requirements disqualify",
               "good": "A program that requires an affiliation the profile clearly lacks (a specific school, members only, residency) never shows up as a fit. When you DO meet a stated requirement, Why it fits says so.",
               "steps": [
                 "Search with a profile that names your school/location.",
@@ -706,7 +706,7 @@
             },
             {
               "sev": "should",
-              "title": "Scout knows when companies post and recommends first",
+              "title": "Posting seasons steer advice",
               "good": "The shared index remembers stated posting windows ('Opens each January') and the months live postings were seen, and searches check an org right as its window opens.",
               "steps": [
                 "Hard to test directly; spot-check that a find whose page states an application window shows it in the criteria rows.",
@@ -717,7 +717,7 @@
             },
             {
               "sev": "could",
-              "title": "Handshake pages appear when they are public",
+              "title": "Public Handshake pages appear",
               "good": "Job searches sweep joinhandshake.com. Yield is thin by design: Handshake walls most postings behind login and Scout only sees public pages.",
               "steps": [
                 "Run a student-flavored job search and look for any joinhandshake.com results.",
@@ -727,7 +727,7 @@
             },
             {
               "sev": "must",
-              "title": "Refreshing the page stops a running scout",
+              "title": "Refresh stops a run",
               "good": "Closing or refreshing the tab aborts the search server-side instead of burning credits in the background.",
               "steps": [
                 "Start a search, refresh mid-run.",
@@ -747,7 +747,7 @@
             },
             {
               "sev": "should",
-              "title": "Scouting shows honest live timers",
+              "title": "Timers are honest",
               "good": "Under the reading deck: Time saving leads at display size, with 'Xm scouting vs Ym doing these searches yourself' beneath. The manual estimate is computed from the run's real counts with research-backed rates: 30s per web search (eye-tracking puts picking a result at ~9s, plus typing and reformulating; Mediative 2014, Granka et al.) and 60s per site opened (Nielsen Norman Group: average page visit just under a minute). The tooltip shows the formula — nothing invented.",
               "steps": [
                 "Run a search and watch the numbers move.",
@@ -757,7 +757,7 @@
             },
             {
               "sev": "should",
-              "title": "Variety searches rotate industries run over run",
+              "title": "Variety rotates industries",
               "good": "When a goal welcomes many industries, back-to-back scouts don't find the same field twice: the planner reads which industries past keeps already cover and points the new run at ones not yet represented.",
               "steps": [
                 "On a variety goal, run two scouts in a row and compare the industries of the results."
@@ -766,7 +766,7 @@
             },
             {
               "sev": "must",
-              "title": "The 5-find floor holds: rescue rounds, then salvage",
+              "title": "Rescue reaches the floor",
               "good": "A run under 5 finds widens into other industries up to three times (fresh angles each round), and if still short re-reads every fetched page under a junk-only bar with honest low fit scores. Coming back with 3 is a Broken, not a shrug.",
               "steps": [
                 "Run a narrow search where the specific ask runs dry.",
@@ -781,17 +781,17 @@
             },
             {
               "key": "finding::tile-pastel",
-              "title": "Find tiles read as Scout, not as brand slabs",
+              "title": "Tiles read as Scout",
               "good": "Grid tiles paint a soft pastel of the site's brand color with the logo or dog in the deepened color itself. No full-strength color blocks, and a find with no known color gets a pastel from the field deck, never a dead grey tile."
             },
             {
               "key": "finding::junk-import-sweep",
-              "title": "Spreadsheet junk can't haunt the grid",
+              "title": "Junk can't haunt the grid",
               "good": "Old imports that let FALSE/TRUE cells or bare ids through as names get scrubbed on load; anything left nameless moves to recently deleted (recoverable), so no more FALSE cards or id-titled tiles."
             },
             {
               "key": "finding::careers-page-strategy",
-              "title": "Job hunts hit company careers pages, not gated boards",
+              "title": "Job hunts hit careers pages",
               "good": "A job/internship search shows 'Adding the careers pages of N employers Scout already knows' once the company index has matches, and finds point at employers' own sites instead of LinkedIn/Handshake walls. The list grows itself: every organization any search finds joins it. Needs supabase/company_index.sql run once."
             }
           ]
@@ -803,7 +803,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Only real application prospects reach the desk",
+              "title": "Only real prospects reach the desk",
               "good": "The Applications tab holds things you APPLY to. People (coordinators, professors, contacts) never appear automatically, and a school name in the organization field alone does not qualify a find.",
               "steps": [
                 "Open Applications on a pipeline that includes networking contacts.",
@@ -813,7 +813,7 @@
             },
             {
               "sev": "must",
-              "title": "Organized by your projects and categories",
+              "title": "Organized by your projects",
               "good": "The toggles mirror your own structure: one chip per project (with counts), and picking a project reveals its categories as a second row. Filtering never loses anything; All brings it back.",
               "steps": [
                 "Click through the project chips and a category sub-chip.",
@@ -823,7 +823,7 @@
             },
             {
               "sev": "must",
-              "title": "Deadline first, full-width rows",
+              "title": "Deadline-first rows",
               "good": "The list is ordered by parsed deadline (soonest first, red under a week, 'no deadline found' honest when absent), one application per row across the screen.",
               "steps": [
                 "Add a posting with a stated deadline ('apply by …') and confirm it sorts above undated ones with the right date and days-left.",
@@ -833,7 +833,7 @@
             },
             {
               "sev": "must",
-              "title": "The kit walks you through the whole application",
+              "title": "The kit walks you through",
               "good": "Opening a prospect is a full-screen, numbered walkthrough: (1) point of contact and your materials, (2) a cover letter tailored to THIS posting with minimal edits and bracketed fill-ins, (3) know-them research with interview prep — plus Open posting up top.",
               "steps": [
                 "Open a kit on a real posting.",
@@ -843,7 +843,7 @@
             },
             {
               "sev": "should",
-              "title": "Paste a posting builds the prospect from nothing",
+              "title": "Paste a posting, get a prospect",
               "good": "Pasting a whole job description (Applications or Manual) parses role/org/contact, researches the organization, and lands the prospect in Finds and Applications with its kit ready.",
               "steps": [
                 "Paste a real posting from the web.",
@@ -863,7 +863,7 @@
             },
             {
               "sev": "should",
-              "title": "Application files persist and match the moment",
+              "title": "Files persist and match",
               "good": "A file added during one application (a song, a portfolio) is kept and pulled up automatically the next time it fits — audio for playlist/music submissions, documents broadly. Files are grouped by kind in Templates > Application materials.",
               "steps": [
                 "Add a file from inside a kit; reload; open another kit of the same kind and confirm it surfaces.",
@@ -873,7 +873,7 @@
             },
             {
               "sev": "should",
-              "title": "Compare charts a group with your own ranking",
+              "title": "Compare charts with your ranks",
               "good": "Compare view shows a type group side by side — location, the group's own criteria (tuition, paid, remote, deadline…), fit, status — with a My-rank column you type into that reorders the list.",
               "steps": [
                 "Switch a group with several prospects to Compare.",
@@ -883,7 +883,7 @@
             },
             {
               "sev": "should",
-              "title": "Cover letter mastery keeps your voice",
+              "title": "Tailoring keeps your voice",
               "good": "Tailoring (in a kit or Templates > Application materials) proposes the SMALLEST spot edits: your sentences survive, truly incompatible passages are flagged for YOU to resolve, and suggestions never point at text that isn't in your letter.",
               "steps": [
                 "Run your real letter against a real posting.",
@@ -893,7 +893,7 @@
             },
             {
               "sev": "should",
-              "title": "Deadlines are editable in place",
+              "title": "Deadlines edit in place",
               "good": "Clicking the deadline spot on any Applications row (or its 'set deadline' placeholder) opens the native date picker right there. A hand-set date wins over the parsed one and the list re-sorts immediately; clearing it falls back to the parsed date.",
               "steps": [
                 "Click a row's deadline, pick a date next week: it should turn red-ish with days-left and re-sort.",
@@ -903,7 +903,7 @@
             },
             {
               "sev": "should",
-              "title": "A kit can skip the cover letter",
+              "title": "Kits can skip the letter",
               "good": "'Don't need a cover letter' on a kit's cover-letter step removes that section for THIS application only (the next step renumbers), with a small link to bring it back. The choice sticks across reopens.",
               "steps": [
                 "Remove it on one application, close and reopen the kit: still gone.",
@@ -922,7 +922,7 @@
             },
             {
               "sev": "could",
-              "title": "Your links read as links, not stray files",
+              "title": "Links read as links",
               "good": "In the kit's files column, saved links sit under their own 'Your links (what forms ask for)' heading with LINKEDIN / EMAIL / WEBSITE labels and copy buttons — never as unexplained bare values among the files.",
               "steps": [
                 "Open a kit with saved links and check the labeling."
@@ -931,7 +931,7 @@
             },
             {
               "key": "applications::kit-voice-brevity",
-              "title": "Kit research talks to you, briefly",
+              "title": "Research talks to you, briefly",
               "good": "Know-them research says 'you' and 'your', never your name in the third person, and stays short: a couple of company facts, 2-3 before-you-apply points, 3-4 prep questions, one scannable line each."
             }
           ]
@@ -943,7 +943,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Import a real, messy spreadsheet",
+              "title": "Import a messy sheet",
               "good": "It handles merged cells, blank rows, notes in odd places, and inconsistent headers without falling over.",
               "steps": [
                 "Use an actual working file, not a clean sample.",
@@ -953,7 +953,7 @@
             },
             {
               "sev": "should",
-              "title": "Scout reads the columns correctly, or asks",
+              "title": "Columns read right, or ask",
               "good": "It works out which column is a name, an email, or a company. When it is unsure, it asks rather than guessing.",
               "steps": [
                 "Import a file with unusual header names.",
@@ -963,7 +963,7 @@
             },
             {
               "sev": "should",
-              "title": "Import from a Google Sheets link",
+              "title": "Import a Sheets link",
               "good": "Pasting a link imports the rows, and a link that is not shared gives a clear message about permissions.",
               "steps": [
                 "Import a shared sheet.",
@@ -973,7 +973,7 @@
             },
             {
               "sev": "should",
-              "title": "Accents and unusual characters survive",
+              "title": "Accents survive",
               "good": "Names with accents or non-English characters come through intact.",
               "steps": [
                 "Include names with accents in a test file.",
@@ -984,7 +984,7 @@
             },
             {
               "sev": "should",
-              "title": "A very large file does not hang the app",
+              "title": "Huge files don't hang",
               "good": "It either handles it or tells you the limit. It never spins forever.",
               "steps": [
                 "Try a file with several thousand rows.",
@@ -994,7 +994,7 @@
             },
             {
               "sev": "should",
-              "title": "A broken or wrong file fails politely",
+              "title": "Bad files fail politely",
               "good": "A corrupt file, or a photo renamed as a spreadsheet, produces a clear message and no damage.",
               "steps": [
                 "Rename an image to end in .csv and upload it.",
@@ -1004,7 +1004,7 @@
             },
             {
               "sev": "should",
-              "title": "Adding a contact by hand",
+              "title": "Add a contact by hand",
               "good": "You can add someone manually with everything you know, and they behave exactly like a found result afterwards.",
               "steps": [
                 "Add one manually, then draft to them and confirm it works the same way."
@@ -1013,7 +1013,7 @@
             },
             {
               "sev": "must",
-              "title": "Spreadsheet junk does not become contacts",
+              "title": "Junk cells never become contacts",
               "good": "Checkbox values like TRUE and FALSE never show up as names or LinkedIn handles, sentence-long notes are skipped instead of imported as people, and emails are found even when the email column was mislabeled.",
               "steps": [
                 "Import a messy sheet that has checkbox columns and note rows.",
@@ -1024,7 +1024,7 @@
             },
             {
               "sev": "should",
-              "title": "Imported rows link back to the exact sheet row",
+              "title": "Rows link back to the sheet",
               "good": "A contact from a linked Google Sheet has a small open-in-sheet arrow that opens the source spreadsheet scrolled to that person's row.",
               "steps": [
                 "Open the Spreadsheet tab after a sheet sync.",
@@ -1035,7 +1035,7 @@
             {
               "sev": "must",
               "key": "importing::imported-personal-contacts-stay-private",
-              "title": "Imported personal contacts stay private",
+              "title": "Imported contacts stay private",
               "good": "After importing a spreadsheet, published business addresses (submissions@, booking@, info@) may help other accounts' searches, but a private individual's personal address (a gmail, a named person's work mailbox) never leaves your account.",
               "steps": [
                 "Import a sheet containing both a role inbox and a personal address.",
@@ -1046,12 +1046,12 @@
             },
             {
               "key": "importing::manual-research",
-              "title": "A hand-added contact researches itself",
+              "title": "Hand-adds research themselves",
               "good": "Right after adding a contact by hand, Scout quietly runs the same public-web enrichment as Autofill: blank fields (role, outlet, link, location) fill in and the 'Added by you' placeholder becomes one real factual line when the web has one. Nothing invented; blanks stay blank when nothing is found."
             },
             {
               "key": "importing::imported-fields-survive",
-              "title": "A sheet's data actually lands on the finds",
+              "title": "Sheet data lands on finds",
               "good": "After importing a real tracking sheet, the rows carry the sheet's company, email, phone, and links, not blanks with placeholder text. Kaitlyn's current pipeline shows imported rows with empty contact fields, so this is under investigation.",
               "steps": [
                 "Re-import the sheet from Manual and watch the column-mapping step: does each column map to the right field?",
@@ -1061,7 +1061,7 @@
             },
             {
               "key": "importing::posting-destination",
-              "title": "A pasted posting files where you choose",
+              "title": "Postings file where you choose",
               "good": "Both Paste-a-posting boxes (Manual and Applications) offer project and category pickers; the built prospect lands exactly there, not in whatever project was active."
             }
           ]
@@ -1073,7 +1073,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "The first draft sounds like a person, not a template",
+              "title": "Drafts sound like a person",
               "good": "You would be willing to send it with light edits. It does not open with generic flattery or read like every other outreach email.",
               "steps": [
                 "Generate five drafts for five different people.",
@@ -1084,7 +1084,7 @@
             },
             {
               "sev": "must",
-              "title": "Two drafts for two different people are obviously different",
+              "title": "Two people, two different drafts",
               "good": "Swap the names between two drafts and it should immediately look wrong. If they are interchangeable, the personalisation is fake.",
               "steps": [
                 "Put two drafts side by side.",
@@ -1094,7 +1094,7 @@
             },
             {
               "sev": "must",
-              "title": "No draft claims anything about the recipient we cannot back up",
+              "title": "No unbacked claims",
               "good": "Every specific claim about their work traces back to something in the result, not to a guess.",
               "steps": [
                 "Take three drafts and highlight every factual claim.",
@@ -1105,7 +1105,7 @@
             },
             {
               "sev": "should",
-              "title": "Email gets a full message, a social handle gets a short note",
+              "title": "Email long, DM short",
               "good": "The format matches the channel automatically, without you having to ask.",
               "steps": [
                 "Draft for one contact with an email and one with only a social handle.",
@@ -1115,7 +1115,7 @@
             },
             {
               "sev": "should",
-              "title": "Editing a draft teaches Scout your voice",
+              "title": "Edits teach your voice",
               "good": "After you rewrite a few drafts heavily, later drafts start closer to how you write.",
               "steps": [
                 "Rewrite three drafts substantially in your own words.",
@@ -1125,7 +1125,7 @@
             },
             {
               "sev": "should",
-              "title": "The writing coach comments on your actual messages",
+              "title": "Coach reads your real messages",
               "good": "The advice quotes your real drafts and says something specific. Generic outreach tips are a needs-work.",
               "steps": [
                 "Ask for advice after writing several messages.",
@@ -1135,7 +1135,7 @@
             },
             {
               "sev": "should",
-              "title": "Follow-up drafts remember the first message",
+              "title": "Follow-ups remember the first",
               "good": "The follow-up reads like a second message to the same person, not a fresh cold email.",
               "steps": [
                 "Draft a first message, then a follow-up.",
@@ -1145,7 +1145,7 @@
             },
             {
               "sev": "should",
-              "title": "Redrafting a batch at once",
+              "title": "Redraft a batch",
               "good": "Redoing several drafts together produces the same quality as doing them one at a time, and nothing gets mixed up between people.",
               "steps": [
                 "Redraft ten at once.",
@@ -1155,7 +1155,7 @@
             },
             {
               "sev": "should",
-              "title": "The application writer produces something submittable",
+              "title": "Application writer is submittable",
               "good": "Given a real job posting, the cover letter and answers are specific to that posting and to the applicant.",
               "steps": [
                 "Paste a real internship posting.",
@@ -1165,7 +1165,7 @@
             },
             {
               "sev": "should",
-              "title": "House writing rules are respected",
+              "title": "House rules respected",
               "good": "No em dashes anywhere, no filler openings, no exclamation marks unless you wrote them.",
               "steps": [
                 "Scan ten drafts for the house rules.",
@@ -1175,7 +1175,7 @@
             },
             {
               "key": "writing::template-choice",
-              "title": "You choose which template a draft starts from",
+              "title": "Pick the template per draft",
               "good": "On a find with two or more templates in scope, the Draft button grows a 'Best template (auto)' picker listing each template by kind and first words. Picking one drafts from that voice alone; auto still matches by format."
             },
             {
@@ -1185,7 +1185,7 @@
             },
             {
               "key": "writing::delete-shared-template",
-              "title": "Team templates can be deleted",
+              "title": "Delete team templates",
               "good": "A shared template row has Delete: your own delete removes it from the library (and your local copy so sync can't resurrect it); an admin can delete anyone's. A non-admin deleting someone else's gets a plain refusal, not a broken row."
             }
           ]
@@ -1197,7 +1197,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Connect a Gmail account",
+              "title": "Connect Gmail",
               "good": "The connection completes on the live site and still works a week later.",
               "steps": [
                 "Connect a Gmail account on the real domain.",
@@ -1208,7 +1208,7 @@
             },
             {
               "sev": "must",
-              "title": "Connect an Outlook account",
+              "title": "Connect Outlook",
               "good": "Same as Gmail, including for a work account with stricter settings.",
               "steps": [
                 "Connect a personal Outlook account, then a work one if you have access to one."
@@ -1217,7 +1217,7 @@
             },
             {
               "sev": "must",
-              "title": "Draft-for-review mode versus send-directly mode",
+              "title": "Draft mode vs send mode",
               "good": "Whichever you choose, Scout does exactly that. In review mode nothing ever leaves without you pressing send.",
               "steps": [
                 "Set it to create drafts only and run the whole flow.",
@@ -1227,7 +1227,7 @@
             },
             {
               "sev": "must",
-              "title": "One real message, to a real inbox",
+              "title": "One real send",
               "good": "It arrives, in the inbox rather than spam, and it looks right on a phone.",
               "steps": [
                 "Send to an address on a different provider from yours.",
@@ -1237,7 +1237,7 @@
             },
             {
               "sev": "must",
-              "title": "Opting out works through the mail client",
+              "title": "Opt-out works via the client",
               "good": "Cold sends carry a List-Unsubscribe header, so Gmail and other clients show their own Unsubscribe control on the message; using it lands the address in the suppression table and Scout never emails it again. The message BODY carries no unsubscribe line or token URL, it reads like a personal note.",
               "steps": [
                 "Open a received message and click the unsubscribe link.",
@@ -1247,7 +1247,7 @@
             },
             {
               "sev": "must",
-              "title": "Unsubscribing actually stops future messages",
+              "title": "Opt-outs actually stop mail",
               "good": "After someone opts out, no further message from that account can reach them, including scheduled and automatic ones.",
               "steps": [
                 "Unsubscribe an address.",
@@ -1258,7 +1258,7 @@
             },
             {
               "sev": "must",
-              "title": "Schedule a message and watch it go",
+              "title": "Schedule a send",
               "good": "It goes out at the time promised, once, and not twice.",
               "steps": [
                 "Schedule a message a short time ahead.",
@@ -1268,7 +1268,7 @@
             },
             {
               "sev": "should",
-              "title": "Sending respects working hours where the recipient is",
+              "title": "Sends respect their hours",
               "good": "Messages land during their working day, not the middle of their night.",
               "steps": [
                 "Schedule to contacts in two very different time zones.",
@@ -1278,7 +1278,7 @@
             },
             {
               "sev": "should",
-              "title": "An unknown or blank location falls back sensibly",
+              "title": "Blank location falls back",
               "good": "A contact with no location still gets a reasonable send time rather than three in the morning somewhere.",
               "steps": [
                 "Schedule to a contact with the location left empty.",
@@ -1288,7 +1288,7 @@
             },
             {
               "sev": "must",
-              "title": "Someone who replied never gets the automatic follow-up",
+              "title": "Repliers never get follow-ups",
               "good": "A real reply stops the sequence immediately.",
               "steps": [
                 "Send a message, reply from the other inbox.",
@@ -1298,7 +1298,7 @@
             },
             {
               "sev": "must",
-              "title": "Disconnecting a mailbox stops everything queued for it",
+              "title": "Disconnect stops the queue",
               "good": "Disconnecting revokes access and cancels anything waiting to send from that account.",
               "steps": [
                 "Queue several scheduled messages.",
@@ -1309,7 +1309,7 @@
             },
             {
               "sev": "should",
-              "title": "A failed send is visible and fixable",
+              "title": "Failed sends are visible",
               "good": "If a message fails, you can see it failed and why, and try again.",
               "steps": [
                 "Send to a deliberately invalid address.",
@@ -1336,7 +1336,7 @@
             },
             {
               "sev": "should",
-              "title": "The digest email arrives and reads well on a phone",
+              "title": "Digest reads well on a phone",
               "good": "It is scannable, the results are clear, and the buttons are easy to tap.",
               "steps": [
                 "Open a real digest on a phone.",
@@ -1346,7 +1346,7 @@
             },
             {
               "sev": "should",
-              "title": "Approve and deny from the email without signing in",
+              "title": "Approve from the email",
               "good": "Tapping approve or deny works straight from the email and confirms what happened.",
               "steps": [
                 "Tap both, on a phone, while signed out."
@@ -1355,7 +1355,7 @@
             },
             {
               "sev": "must",
-              "title": "An old or tampered link is refused",
+              "title": "Stale links refused",
               "good": "Editing the link, or using a very old one, gets a clear refusal rather than acting on someone else's account.",
               "steps": [
                 "Change a character in the link and open it.",
@@ -1365,7 +1365,7 @@
             },
             {
               "sev": "must",
-              "title": "Nothing is ever sent without a person approving it",
+              "title": "Nothing sends unapproved",
               "good": "There is no path, including a double click or a reused link, that gets a message out without human approval.",
               "steps": [
                 "Walk the whole automatic flow and try to break the approval step.",
@@ -1375,7 +1375,7 @@
             },
             {
               "sev": "must",
-              "title": "Turning autopilot off stops everything",
+              "title": "Off means off",
               "good": "Switching it off cancels pending searches, drafts, and sends, immediately.",
               "steps": [
                 "Turn it off with work queued.",
@@ -1392,7 +1392,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Decide whether the self-editing job stays on at launch",
+              "title": "Decide on the self-editing job",
               "good": "This is a decision, not a test. A nightly job reads how people are rating results and then edits our own live code and publishes it, with no human reviewing the change first.",
               "steps": [
                 "Agree as a team whether that runs on launch day.",
@@ -1404,7 +1404,7 @@
             },
             {
               "sev": "should",
-              "title": "The reasons people give for passing are grouped sensibly",
+              "title": "Deny reasons group sensibly",
               "good": "Three differently worded versions of wrong industry count as one reason, not three.",
               "steps": [
                 "Pass on results using slightly different wordings of the same reason.",
@@ -1414,7 +1414,7 @@
             },
             {
               "sev": "should",
-              "title": "Scout visibly gets better within one session",
+              "title": "Better within one session",
               "good": "After a round of passes and edits, the next batch is noticeably closer to what you want.",
               "steps": [
                 "Score the first ten results out of ten.",
@@ -1424,7 +1424,7 @@
             },
             {
               "sev": "must",
-              "title": "Community comparisons can never point at one person",
+              "title": "Comparisons stay anonymous",
               "good": "Any people like you statistic is an average over enough other users that nobody can be identified.",
               "steps": [
                 "Ask a developer to confirm the minimum group size and show what happens below it."
@@ -1433,7 +1433,7 @@
             },
             {
               "sev": "should",
-              "title": "The insights screen matches reality",
+              "title": "Insights matches reality",
               "good": "The numbers on it agree with what you can count yourself.",
               "steps": [
                 "Pick two numbers and verify them by hand against the underlying rows."
@@ -1449,7 +1449,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Dashboard numbers match reality",
+              "title": "Dashboard numbers are real",
               "good": "Every count on the dashboard can be verified by hand against the actual rows.",
               "steps": [
                 "Pick three numbers.",
@@ -1469,7 +1469,7 @@
             },
             {
               "sev": "should",
-              "title": "List and grid views of finds",
+              "title": "List and grid views",
               "good": "Both views show the same items, sort the same way, and stay usable with hundreds of rows.",
               "steps": [
                 "Switch between views with a large set of finds.",
@@ -1479,7 +1479,7 @@
             },
             {
               "sev": "should",
-              "title": "Saved lists survive a reload",
+              "title": "Lists survive reloads",
               "good": "A saved list is still there after a refresh, and after signing in somewhere else.",
               "steps": [
                 "Save a list, reload, then check it on another device."
@@ -1497,7 +1497,7 @@
             },
             {
               "sev": "should",
-              "title": "Writing results out to Google Sheets",
+              "title": "Write results to Sheets",
               "good": "The rows land in the right sheet, in the right columns, without overwriting anything.",
               "steps": [
                 "Write to a sheet that already has data in it.",
@@ -1507,7 +1507,7 @@
             },
             {
               "sev": "should",
-              "title": "Your own pass reasons become one-tap options",
+              "title": "Pass reasons become one-tap",
               "good": "After you type a custom reason for passing on a find, it appears as a tappable chip next time, most-used first.",
               "steps": [
                 "Pass on a find and type a reason of your own.",
@@ -1517,7 +1517,7 @@
             },
             {
               "sev": "should",
-              "title": "Finds can be filtered by where they came from",
+              "title": "Filter finds by source",
               "good": "The Finds tab has a Scout-found / Manual / Both toggle, defaulting to Scout-found, and the counts always match the list shown.",
               "steps": [
                 "On an account with both kinds, open Finds.",
@@ -1527,7 +1527,7 @@
             },
             {
               "sev": "must",
-              "title": "Lists give an outsider a clear status board",
+              "title": "Lists read for outsiders",
               "good": "A list (say, Band members) shows everyone in plain English: not contacted yet, reached out with the date, replied, passed. Someone who has never used Scout can read it cold.",
               "steps": [
                 "Create a list from the Lists tab for one project or category.",
@@ -1538,7 +1538,7 @@
             },
             {
               "sev": "should",
-              "title": "The dashboard lives on the colour field",
+              "title": "Dashboard sits on the field",
               "good": "The dashboard ground is a soft blended colour field (a fresh trio of tints dealt every time you open it, never repeating its lead), with film grain on the ground only and frosted translucent cards in one consistent surface style.",
               "steps": [
                 "Open the dashboard several times; the field's colours must change each open.",
@@ -1548,7 +1548,7 @@
             },
             {
               "sev": "should",
-              "title": "Time saved scouting is on the dashboard",
+              "title": "Time saved shows on dashboard",
               "good": "The stat band shows hours saved (an estimate of manual sourcing plus drafting time), and it grows as finds accumulate.",
               "steps": [
                 "Check the dashboard band for 'Hours saved scouting'.",
@@ -1565,7 +1565,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Two real people, one invite, one join",
+              "title": "Invite and join",
               "good": "One person creates a workspace and invites, the other signs in, sees the invite, and joins successfully.",
               "steps": [
                 "Use two genuinely separate accounts on two machines.",
@@ -1576,7 +1576,7 @@
             },
             {
               "sev": "must",
-              "title": "Sharing a project with the team",
+              "title": "Share a project",
               "good": "The shared project's finds appear for everyone on it, and only for them.",
               "steps": [
                 "Share a project with one teammate and not another.",
@@ -1586,7 +1586,7 @@
             },
             {
               "sev": "must",
-              "title": "Two people cannot claim the same contact",
+              "title": "No double claims",
               "good": "The second person is told it is already taken. Nobody gets pitched twice by the same company.",
               "steps": [
                 "Have both people click claim on the same contact at nearly the same time."
@@ -1595,7 +1595,7 @@
             },
             {
               "sev": "must",
-              "title": "A viewer cannot do editor things",
+              "title": "Viewers can't edit",
               "good": "Someone with view-only access cannot change anything, even if they know the direct link.",
               "steps": [
                 "Sign in as a viewer and try to change a status and send an invite.",
@@ -1605,7 +1605,7 @@
             },
             {
               "sev": "must",
-              "title": "Removing someone cuts their access immediately",
+              "title": "Removal cuts access instantly",
               "good": "Access ends the moment they are removed, not when they next sign out.",
               "steps": [
                 "Remove a member while they are actively using the app.",
@@ -1615,7 +1615,7 @@
             },
             {
               "sev": "must",
-              "title": "The team does not email the same person twice",
+              "title": "No double emails from a team",
               "good": "If two teammates both have the same contact, only one message goes out.",
               "steps": [
                 "Put the same contact in two teammates' lists and run the automatic flow."
@@ -1624,7 +1624,7 @@
             },
             {
               "sev": "should",
-              "title": "Invite and company codes cannot be guessed",
+              "title": "Codes can't be guessed",
               "good": "The codes are long enough not to be brute-forced, and repeated wrong attempts are slowed down.",
               "steps": [
                 "Ask a developer to confirm the code length and whether attempts are limited."
@@ -1633,7 +1633,7 @@
             },
             {
               "sev": "should",
-              "title": "Shared templates work for everyone",
+              "title": "Shared templates work",
               "good": "A template saved for the team is usable by every member and edits do not clash.",
               "steps": [
                 "Have two people use and edit the same template."
@@ -1643,7 +1643,7 @@
             {
               "sev": "should",
               "key": "teams::a-co-owner-can-be-promoted-and-not-demoted",
-              "title": "A co-owner can be promoted and not demoted",
+              "title": "Co-owners promote, not demote",
               "good": "The owner can set a member's role to Co-owner. Once someone is an owner, nobody (including the other owner) can change or remove their role.",
               "steps": [
                 "As the owner, change a teammate's role to Co-owner in the Team tab.",
@@ -1653,7 +1653,7 @@
             },
             {
               "sev": "must",
-              "title": "A find one teammate turns up shows up for the others",
+              "title": "Teammate finds show for all",
               "good": "Someone else's find appears in your list under the same project it was found in, and under All projects, with their name on it.",
               "steps": [
                 "With two real accounts on the same team, have the first person run a search under a named project.",
@@ -1667,7 +1667,7 @@
             },
             {
               "sev": "should",
-              "title": "Someone who joins the team later still sees what was already found",
+              "title": "Late joiners see history",
               "good": "A person invited after the searching happened opens the project and sees the finds already in it.",
               "steps": [
                 "On a team that already has finds, invite a fresh account and accept.",
@@ -1678,7 +1678,7 @@
             },
             {
               "sev": "must",
-              "title": "You can see who found each find while scrolling",
+              "title": "See who found what",
               "good": "On a shared pipeline, grid cards carry a small chip with the finder's name next to the status, and the list view says 'Found by <name>' instead of a generic label.",
               "steps": [
                 "Open Finds on the team lens with the Everyone filter.",
@@ -1704,7 +1704,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "The free allowance matches what we advertise",
+              "title": "Free tier matches the ads",
               "good": "The number of free searches in the product, on the pricing page, and in our documentation are all the same number.",
               "steps": [
                 "Count the free searches you actually get.",
@@ -1715,7 +1715,7 @@
             },
             {
               "sev": "must",
-              "title": "Buy the Starter plan with a real card",
+              "title": "Buy Starter with a real card",
               "good": "Checkout completes, the plan shows as active, the allowance goes up straight away, and a receipt arrives.",
               "steps": [
                 "Buy it properly on the live site.",
@@ -1725,7 +1725,7 @@
             },
             {
               "sev": "should",
-              "title": "Buy the Pro plan, and upgrade from Starter to Pro",
+              "title": "Buy Pro, upgrade from Starter",
               "good": "Both work, and upgrading gives the higher allowance immediately without double charging.",
               "steps": [
                 "Buy Pro on one account, upgrade another from Starter."
@@ -1734,7 +1734,7 @@
             },
             {
               "sev": "must",
-              "title": "Running out of searches is a clear next step, not an error",
+              "title": "Running out reads as a next step",
               "good": "You are told what happened, when it resets, and how to get more. It should read like an offer, not a failure.",
               "steps": [
                 "Use up an account's allowance completely.",
@@ -1744,7 +1744,7 @@
             },
             {
               "sev": "must",
-              "title": "Managing the subscription from inside the app",
+              "title": "Manage the subscription in-app",
               "good": "You can update a card, see invoices, and cancel without emailing us.",
               "steps": [
                 "Do all three from the billing screen."
@@ -1753,7 +1753,7 @@
             },
             {
               "sev": "should",
-              "title": "Cancelling keeps access until the end of the paid month",
+              "title": "Cancel keeps the paid month",
               "good": "Cancelling does not cut someone off the moment they click it.",
               "steps": [
                 "Cancel and confirm the access end date shown is the end of the paid period."
@@ -1762,7 +1762,7 @@
             },
             {
               "sev": "should",
-              "title": "Two searches at the same time cannot cheat the limit",
+              "title": "Parallel runs can't cheat limits",
               "good": "Someone on their last search cannot get two by starting them together.",
               "steps": [
                 "Open two tabs on an account with one search left and start both at once."
@@ -1771,7 +1771,7 @@
             },
             {
               "sev": "should",
-              "title": "A free access code works once and only once",
+              "title": "Access codes work once",
               "good": "It grants access on the first account and is refused on the second.",
               "steps": [
                 "Redeem a code, then try the same code on another account."
@@ -1780,7 +1780,7 @@
             },
             {
               "sev": "should",
-              "title": "A failed payment does not lock someone out mid-work",
+              "title": "Failed payments don't lock out",
               "good": "A card that fails gives a warning and a grace period, not an immediate wall.",
               "steps": [
                 "Ask a developer to simulate a failed renewal and watch what the user sees."
@@ -1796,7 +1796,7 @@
           "items": [
             {
               "sev": "should",
-              "title": "Trying Scout without an account",
+              "title": "Try without an account",
               "good": "The trial link runs a real search, and the path into signing up is obvious once it runs out.",
               "steps": [
                 "Open the trial link in a private window.",
@@ -1806,7 +1806,7 @@
             },
             {
               "sev": "must",
-              "title": "Only the right people can reach the admin screens",
+              "title": "Admin is locked down",
               "good": "An ordinary account cannot see or reach the admin area, even with the direct link.",
               "steps": [
                 "Sign in as a normal account and try the admin address directly.",
@@ -1816,7 +1816,7 @@
             },
             {
               "sev": "should",
-              "title": "Running a search on someone's behalf",
+              "title": "Search on someone's behalf",
               "good": "It works, the results land in their account, and there is a record of who did it and when.",
               "steps": [
                 "Seed results for a test account and sign in as that account to check."
@@ -1825,7 +1825,7 @@
             },
             {
               "sev": "must",
-              "title": "Seeded results appear only for the intended person",
+              "title": "Seeds reach only their person",
               "good": "Nobody else ever sees results prepared for someone else.",
               "steps": [
                 "Seed for one account, then sign in as a different one and confirm nothing appears."
@@ -1834,7 +1834,7 @@
             },
             {
               "sev": "must",
-              "title": "Deleting an account really deletes everything",
+              "title": "Delete really deletes",
               "good": "After deletion, none of that person's data is left anywhere.",
               "steps": [
                 "Delete a test account.",
@@ -1844,7 +1844,7 @@
             },
             {
               "sev": "should",
-              "title": "The people index gauge shows the flywheel turning",
+              "title": "Index gauge shows the flywheel",
               "good": "The admin page's Index tab shows how many people the shared index holds, how fast it is growing day by day, what share have an email or profile link, and the newest additions.",
               "steps": [
                 "Open the admin page and switch to the Index tab.",
@@ -1855,7 +1855,7 @@
             },
             {
               "sev": "later",
-              "title": "The pricing model responds to every lever",
+              "title": "Pricing model responds to levers",
               "good": "The admin Pricing tab recalculates profit, margin, and breakeven instantly as you drag users, prices, usage, and costs, and the numbers agree with a hand check.",
               "steps": [
                 "Open the admin page, Pricing tab.",
@@ -1867,7 +1867,7 @@
             {
               "sev": "later",
               "key": "trial-admin::pricing-benchmarks-read-honestly",
-              "title": "Pricing benchmarks read honestly",
+              "title": "Benchmarks read honestly",
               "good": "The Pricing tab's health card compares your numbers to the standard targets (70%+ gross margin, 2 to 5% free-to-paid conversion, every paid tier profitable) and its advice matches what the levers show.",
               "steps": [
                 "Set a tier's search allowance high enough that the tier loses money.",
@@ -1876,7 +1876,7 @@
             },
             {
               "sev": "should",
-              "title": "The design lab makes, saves, and paints palettes",
+              "title": "Design lab paints palettes",
               "good": "Make a palette has colour/range/punch sliders; click locks a swatch, double-click opens the colour wheel; Keep it and Save this palette store locally without shipping; Edit colours in the website editor paints the live frame per palette or per element.",
               "steps": [
                 "Build a palette, lock one swatch, shuffle: locked colour survives.",
@@ -1887,7 +1887,7 @@
             },
             {
               "sev": "should",
-              "title": "Admin remembers which tab you were on",
+              "title": "Admin remembers your tab",
               "good": "Refreshing /admin stays on the same tab (the tab lives in the URL hash), instead of snapping back to Insights.",
               "steps": [
                 "Open Design, refresh: still on Design.",
@@ -1897,27 +1897,27 @@
             },
             {
               "key": "trial-admin::show-me-where",
-              "title": "Checklist items point into the app",
+              "title": "Items point into the app",
               "good": "Expanding a checklist item shows 'Show me where in Scout'; clicking it makes the live pane jump to the right tab, scroll to the control the step means, and pulse a ring around it. On a phone it opens the app in a new tab instead."
             },
             {
               "key": "trial-admin::algorithm-health-panel",
-              "title": "Algorithm health reads at a glance",
+              "title": "Algorithm health at a glance",
               "good": "Admin Insights shows the finding engine's vitals in plain words: finds discovered, keep rate, arrive-reachable rate, average fit, reply and bounce rates, finds per run and the 5-find-floor hit rate. Numbers match what you can hand-count for a small account."
             },
             {
               "key": "trial-admin::search-categories-panel",
-              "title": "What people use Scout for, from real searches",
+              "title": "Real-search categories",
               "good": "Admin Insights categorizes the goals of real searches (internships, music promotion, press, investors...) with counts, distinct users, and example goals. Matches your gut read of the example goals; the old profile question is gone from Profile."
             },
             {
               "key": "trial-admin::time-on-scout-windows",
-              "title": "Time on Scout bends to any window",
+              "title": "Time on Scout, any window",
               "good": "The Time on Scout card toggles between totals and a per-day line graph, with presets (2 weeks, month, 3 months) and custom from/to dates. Windowed totals shrink sensibly and the lines match the bars."
             },
             {
               "key": "trial-admin::decision-quality-metrics",
-              "title": "Metrics measures choices, not output",
+              "title": "Metrics measure choices",
               "good": "Admin > Metrics leads with decision quality: fit-score calibration (keep rate per bucket), avoidable vs taste denials, 15-minute re-runs, and keep rate per pass and per source. Pass/index numbers fill in from newly-stamped finds; the custom counter builder sits below."
             }
           ]
@@ -1929,7 +1929,7 @@
           "items": [
             {
               "sev": "should",
-              "title": "First load on a phone on mobile data",
+              "title": "First load on mobile data",
               "good": "The landing page appears quickly on a normal phone connection, not just on office wifi.",
               "steps": [
                 "Turn wifi off on a phone and load the site.",
@@ -1939,7 +1939,7 @@
             },
             {
               "sev": "must",
-              "title": "Error messages are in plain English",
+              "title": "Errors in plain English",
               "good": "Every error says what went wrong and what to do. No raw technical text, no silent nothing.",
               "steps": [
                 "Force failures: let a session expire, disconnect from wifi mid-search, hit a limit.",
@@ -1949,7 +1949,7 @@
             },
             {
               "sev": "should",
-              "title": "The whole app can be used with a keyboard",
+              "title": "Keyboard-only works",
               "good": "You can tab through everything and always see where you are.",
               "steps": [
                 "Put the mouse away and try to run a full search and draft."
@@ -1958,7 +1958,7 @@
             },
             {
               "sev": "should",
-              "title": "Text is readable in both light and dark mode",
+              "title": "Readable in light and dark",
               "good": "Nothing is grey-on-grey. Placeholder text is as readable as normal text.",
               "steps": [
                 "Switch your system to dark mode and go through every screen."
@@ -1967,7 +1967,7 @@
             },
             {
               "sev": "should",
-              "title": "Animation respects the reduce motion setting",
+              "title": "Reduced motion respected",
               "good": "Turning on reduce motion in the operating system calms the animations down.",
               "steps": [
                 "Turn it on and reload the landing page and the app."
@@ -1976,7 +1976,7 @@
             },
             {
               "sev": "must",
-              "title": "Works in the browsers people actually use",
+              "title": "Works in real browsers",
               "good": "Chrome, Safari, Firefox, and Safari on an iPhone all work, especially file uploads and previews.",
               "steps": [
                 "Run a short search, an import, and a draft in each."
@@ -1985,7 +1985,7 @@
             },
             {
               "sev": "should",
-              "title": "The whole app on a phone",
+              "title": "Whole app on a phone",
               "good": "Navigation, long result lists, the draft editor, and checkout all work on a real phone.",
               "steps": [
                 "Do a full pass on a phone, not a shrunken desktop window."
@@ -1994,7 +1994,7 @@
             },
             {
               "sev": "later",
-              "title": "A wrong address gives a helpful page",
+              "title": "404s are helpful",
               "good": "A mistyped link shows a friendly page with a way back, not a default error screen.",
               "steps": [
                 "Type a nonsense address on the site."
@@ -2003,7 +2003,7 @@
             },
             {
               "sev": "later",
-              "title": "Settings reads as organized categories",
+              "title": "Settings reads organized",
               "good": "Settings is grouped under Display, Account, Sending, and Your data instead of one long pile.",
               "steps": [
                 "Open Settings and confirm the group labels are present and each card sits under a sensible one."
@@ -2012,7 +2012,7 @@
             },
             {
               "sev": "must",
-              "title": "The brown is gone everywhere except the logo",
+              "title": "Brown only in the logo",
               "good": "Every screen is whites and bright pops now: cool navy ink on white, no beige surfaces, no espresso dark mode. The dog logo keeps its brown, and brown may appear only as the neutral for things outside the five idea colours.",
               "steps": [
                 "Click through every tab in light AND dark mode.",
@@ -2032,7 +2032,7 @@
             },
             {
               "sev": "should",
-              "title": "The Scout stage shares the field and always feels new",
+              "title": "Stage colour feels new",
               "good": "The Scout tab wears the same blended colour field as the dashboard (same deals, fresh per open), toggles and bullets read clearly on it, the results shelf below is plain white, and the cursor glow follows the mouse in the ground's own blended colour on both tabs.",
               "steps": [
                 "Open the Scout tab twice; the field changes.",
@@ -2043,7 +2043,7 @@
             },
             {
               "sev": "should",
-              "title": "Dashboard: aura blobs, grain on the ground only",
+              "title": "Blobs and grain, ground only",
               "good": "The dashboard ground is white with soft blended colour blobs and film grain, and the grain textures ONLY the background: buttons, cards, and text are clean. The ground runs all the way to the footer.",
               "steps": [
                 "Look closely at the Start scouting button and stat card: no speckle.",
@@ -2053,7 +2053,7 @@
             },
             {
               "sev": "should",
-              "title": "Dashboard is a mosaic, not rows",
+              "title": "Dashboard is a mosaic",
               "good": "On a wide screen, sections pair up side by side sharing horizontal lines (learned + preferences, activity + what-makes-yours-special) with no lakes of empty space. Below 1280px everything stacks.",
               "steps": [
                 "View at full width and at laptop width.",
@@ -2063,7 +2063,7 @@
             },
             {
               "sev": "could",
-              "title": "Empty sections stay off the page",
+              "title": "Empty sections hide",
               "good": "You vs the community does not render at all until enough people share the use case; no placeholder card promising future data.",
               "steps": [
                 "With a small cohort, confirm the section is absent entirely."
@@ -2072,7 +2072,7 @@
             },
             {
               "sev": "could",
-              "title": "The update banner can be dismissed",
+              "title": "Update banner dismisses",
               "good": "'A newer Scout is ready' has a close button; dismissing keeps the current version for this session without reloading, and the banner returns on the next deploy.",
               "steps": [
                 "Dismiss it mid-work and confirm nothing reloads."
@@ -2095,7 +2095,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Decide what happens to the work not yet published",
+              "title": "Decide on unpublished work",
               "good": "There are several changed files on a local machine that are not on the live site. Either they are finished and published, or they are set aside deliberately.",
               "steps": [
                 "Ask the developer to list what is unpublished and why.",
@@ -2106,7 +2106,7 @@
             },
             {
               "sev": "must",
-              "title": "Publish the browser security protections",
+              "title": "Publish security headers",
               "good": "The live site sends the standard protections that stop other sites impersonating or embedding us. They are written but not published.",
               "steps": [
                 "Confirm they are live by asking the developer to show the response headers on the real domain."
@@ -2116,7 +2116,7 @@
             },
             {
               "sev": "must",
-              "title": "Close the page preview loophole",
+              "title": "Close the preview loophole",
               "good": "The feature that shows a preview of someone's website can currently be used by anyone on the internet to make our servers fetch any page they like, at our expense.",
               "steps": [
                 "Confirm the fix that limits it to signed-in users is published before launch."
@@ -2126,7 +2126,7 @@
             },
             {
               "sev": "must",
-              "title": "Know how to undo a bad release",
+              "title": "Know the rollback",
               "good": "Anyone on the team can put the site back to the previous version in a couple of minutes, without waking the developer.",
               "steps": [
                 "Write the steps down in one place.",
@@ -2136,7 +2136,7 @@
             },
             {
               "sev": "should",
-              "title": "Agree who runs this page before each release",
+              "title": "Agree who runs this page",
               "good": "There are no automated tests in the project, so a person walking the core journeys is the only safety net we have.",
               "steps": [
                 "Name that person and agree which sections they run each time."
@@ -2145,7 +2145,7 @@
             },
             {
               "sev": "should",
-              "title": "Fix the project description for anyone new",
+              "title": "Fix the project description",
               "good": "The project's own readme still describes an early experiment with no accounts and no database, which will badly mislead anyone new.",
               "steps": [
                 "Have it rewritten to describe what Scout actually is now."
@@ -2155,7 +2155,7 @@
             {
               "sev": "later",
               "key": "unfinished::decide-on-the-browser-extension-for-linkedin",
-              "title": "Decide on the browser extension for LinkedIn",
+              "title": "Decide on the extension",
               "good": "A decision is written down, build it after launch or drop it, so it stops being an open question.",
               "steps": [
                 "The idea: a Chrome extension the user runs on LinkedIn pages they already have open. They click it, it reads the profiles showing on their screen, sends that text (never their login) to Scout, and Scout ranks the people by fit to their goal, writes why each fits, drafts in their voice, and drops them into the pipeline deduped against the team.",
@@ -2175,7 +2175,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Every setting is filled in for the live site specifically",
+              "title": "Live settings all filled",
               "good": "All keys and settings exist in the live environment, not only in the testing one, and the site has been republished since they were set.",
               "steps": [
                 "Ask for the list of settings and confirm each one is present on production.",
@@ -2185,7 +2185,7 @@
             },
             {
               "sev": "must",
-              "title": "The three signing secrets are set explicitly",
+              "title": "Signing secrets set",
               "good": "Three separate features sign links to prove they came from us. If any is left unset, it falls back to a value that is written in the code itself, which means anyone could forge those links.",
               "steps": [
                 "Ask the developer to confirm all three are set to real random values on the live site."
@@ -2195,7 +2195,7 @@
             },
             {
               "sev": "must",
-              "title": "The site address is the same everywhere",
+              "title": "One site address everywhere",
               "good": "Every place that needs the site address points at the real domain. A wrong one breaks sign-in with Google and puts broken links inside sent email.",
               "steps": [
                 "Ask for confirmation that all the address settings match the live domain."
@@ -2205,7 +2205,7 @@
             },
             {
               "sev": "must",
-              "title": "Any key that has ever been shared is replaced",
+              "title": "Rotate every shared key",
               "good": "If a key was pasted into a chat, a document, or a screenshot, it is replaced and the old one is switched off at the provider.",
               "steps": [
                 "Ask honestly whether any key has been shared anywhere.",
@@ -2215,7 +2215,7 @@
             },
             {
               "sev": "should",
-              "title": "The list of people with admin access is correct",
+              "title": "Admin list is correct",
               "good": "Only the right people can see the admin and insight screens, and the list is reviewed when someone joins or leaves.",
               "steps": [
                 "Read the list out loud and confirm every name should be there."
@@ -2224,7 +2224,7 @@
             },
             {
               "sev": "should",
-              "title": "Free access codes are accounted for",
+              "title": "Access codes accounted for",
               "good": "Every free-access code that exists was deliberately created, and we know how to switch one off if it leaks.",
               "steps": [
                 "List the codes and who has each one."
@@ -2233,7 +2233,7 @@
             },
             {
               "sev": "should",
-              "title": "One page saying who can replace each key",
+              "title": "Key-owner page exists",
               "good": "If one person is unavailable, someone else can still rotate a key or reach a provider account.",
               "steps": [
                 "Write it down. Ten minutes now, a very bad afternoon avoided later."
@@ -2249,7 +2249,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Take a backup before touching anything",
+              "title": "Back up first",
               "good": "A snapshot exists from immediately before any setup script is run.",
               "steps": [
                 "Confirm the backup was taken and where it is."
@@ -2258,7 +2258,7 @@
             },
             {
               "sev": "must",
-              "title": "All eleven setup scripts have been run on the live database",
+              "title": "All setup scripts run live",
               "good": "Every one has been run, and someone can show you the list with each ticked off.",
               "steps": [
                 "Ask for the list with a yes or no against each.",
@@ -2269,7 +2269,7 @@
             },
             {
               "sev": "must",
-              "title": "One user genuinely cannot see another user's data",
+              "title": "Users can't see each other",
               "good": "This has been tested by actually trying it, not by reading the rules.",
               "steps": [
                 "Ask the developer to demonstrate a failed attempt to read another account's data."
@@ -2278,7 +2278,7 @@
             },
             {
               "sev": "must",
-              "title": "Backups are switched on, and a restore has been practised",
+              "title": "Backups on, restore practised",
               "good": "Automatic backups run, and somebody has actually restored one at least once so we know the process works.",
               "steps": [
                 "Confirm both, not just the first."
@@ -2287,7 +2287,7 @@
             },
             {
               "sev": "should",
-              "title": "Testing and live use separate databases",
+              "title": "Test and live split",
               "good": "Development work cannot touch real customer data.",
               "steps": [
                 "Ask for confirmation that the two point at different projects."
@@ -2296,7 +2296,7 @@
             },
             {
               "sev": "must",
-              "title": "The people index table exists in the live database",
+              "title": "Index table exists live",
               "good": "The supabase/people_index.sql script has been pasted into the Supabase SQL editor and run. Until then, searches work normally but nothing compounds and the admin Index tab shows its set-up note.",
               "steps": [
                 "Open the Supabase SQL editor for the production project.",
@@ -2307,7 +2307,7 @@
             },
             {
               "sev": "must",
-              "title": "Re-run the teams setup script after the sharing and location changes",
+              "title": "Re-run the teams script",
               "good": "The script has been run again since those changes went in, and a company's location field saves without an error.",
               "steps": [
                 "Run the teams setup script against the live database one more time.",
@@ -2319,7 +2319,7 @@
             },
             {
               "key": "database::index-backup-button",
-              "title": "The people index backs up in one click",
+              "title": "Index backs up in one click",
               "good": "Admin > Index has Download a backup: the whole table lands as a dated JSON file. Open it and spot-check a few records against the Index view."
             }
           ]
@@ -2331,7 +2331,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "We send through our own mail provider, not the built-in one",
+              "title": "Own mail provider wired",
               "good": "The built-in sender allows only a handful of messages an hour and drops the rest without an error, which on launch day looks like a completely broken signup.",
               "steps": [
                 "Confirm the custom mail settings are switched on for the live project."
@@ -2340,7 +2340,7 @@
             },
             {
               "sev": "must",
-              "title": "The domain records are verified",
+              "title": "Domain records verified",
               "good": "The mail provider shows the sending domain as verified, with all four records in place.",
               "steps": [
                 "Look at the provider's domain screen and confirm it says verified."
@@ -2349,7 +2349,7 @@
             },
             {
               "sev": "must",
-              "title": "The email templates actually contain the code",
+              "title": "Templates carry the code",
               "good": "Both the signup and password reset emails show the six-digit code. The default templates do not, they show a link instead.",
               "steps": [
                 "Trigger both emails and look at what arrives."
@@ -2358,7 +2358,7 @@
             },
             {
               "sev": "must",
-              "title": "The code is six digits, not eight",
+              "title": "Code is six digits",
               "good": "The app's box accepts exactly six characters, so any other length makes signing up impossible.",
               "steps": [
                 "Count the digits in a real received code."
@@ -2367,7 +2367,7 @@
             },
             {
               "sev": "should",
-              "title": "Somebody watches for bounces",
+              "title": "Somebody watches bounces",
               "good": "A named person checks the mail provider for bounces and complaints, because that is the first sign of a delivery problem.",
               "steps": [
                 "Name that person and agree how often they look."
@@ -2383,7 +2383,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Close the fifteen features that anyone can trigger for free",
+              "title": "Close the free-trigger features",
               "good": "Fifteen features that cost us money each time they run can currently be used by anyone who knows the address, with no account, no limit, and no counting. Somebody could run up a large bill from a script.",
               "steps": [
                 "Ask the developer to confirm these now require an account or are rate limited.",
@@ -2394,7 +2394,7 @@
             },
             {
               "sev": "must",
-              "title": "Hard spending caps set with the providers themselves",
+              "title": "Hard caps at the providers",
               "good": "Even if something goes badly wrong in our code, the providers stop serving us before the bill becomes serious.",
               "steps": [
                 "Set a monthly cap and an alert with each paid provider.",
@@ -2404,7 +2404,7 @@
             },
             {
               "sev": "must",
-              "title": "The trial cannot be used to run up costs",
+              "title": "Trial can't run up costs",
               "good": "The no-account trial is capped per person per day, and the cap is switched on.",
               "steps": [
                 "Try to use the trial repeatedly from one connection and confirm it stops you."
@@ -2413,7 +2413,7 @@
             },
             {
               "sev": "should",
-              "title": "Understand what our current limiting actually does",
+              "title": "Know what limiting does",
               "good": "Everyone knows that the current protection only slows down one very fast caller and is not a real quota.",
               "steps": [
                 "Have the developer explain the limitation in plain terms and decide whether it is enough for our expected volume."
@@ -2422,7 +2422,7 @@
             },
             {
               "sev": "must",
-              "title": "The website reading features cannot be aimed at our own systems",
+              "title": "Readers can't aim at us",
               "good": "Features that fetch a web address the user provides refuse addresses that point inside our own infrastructure.",
               "steps": [
                 "Ask the developer to confirm private and internal addresses are blocked."
@@ -2431,7 +2431,7 @@
             },
             {
               "sev": "should",
-              "title": "One alert for an unusual day of spending",
+              "title": "Spend-spike alert exists",
               "good": "A simple threshold that emails somebody. It does not need to be clever, it needs to be read.",
               "steps": [
                 "Set it and test it fires."
@@ -2447,7 +2447,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Our hosting plan allows the schedule we have set",
+              "title": "Plan allows the cron schedule",
               "good": "Sending runs every fifteen minutes, automatic searching every ten, and tuning once a day. Cheaper plans do not allow this, and a job that is never scheduled looks exactly like a job that is working.",
               "steps": [
                 "Confirm the plan, then confirm each job has genuinely run by looking at its history."
@@ -2456,7 +2456,7 @@
             },
             {
               "sev": "must",
-              "title": "Our plan allows long-running tasks",
+              "title": "Plan allows long tasks",
               "good": "A single search can take several minutes because it chains many steps. On a smaller plan it is cut off part way and leaves work half done.",
               "steps": [
                 "Confirm the allowed run time is at least five minutes."
@@ -2465,7 +2465,7 @@
             },
             {
               "sev": "must",
-              "title": "Somebody finds out when a background job fails",
+              "title": "Job failures get noticed",
               "good": "Right now a failing job is completely silent. That needs to change before launch.",
               "steps": [
                 "Agree how failures surface, even if it is just one person checking a log daily."
@@ -2474,7 +2474,7 @@
             },
             {
               "sev": "should",
-              "title": "Watch one full run of each job on the live site",
+              "title": "Watch each job run live",
               "good": "Not the code, the real scheduled run. It started, it did something, it finished.",
               "steps": [
                 "Sit and watch all three at least once."
@@ -2483,7 +2483,7 @@
             },
             {
               "sev": "should",
-              "title": "Work left over from a busy run is picked up next time",
+              "title": "Leftover work gets picked up",
               "good": "Each run does as much as it safely can. The remainder should wait for the next run, not vanish.",
               "steps": [
                 "Queue more work than one run can handle and confirm nothing is lost."
@@ -2499,7 +2499,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "Payments are switched from test mode to live",
+              "title": "Payments live, not test",
               "good": "Live keys are in place and no test key is left anywhere in the live site.",
               "steps": [
                 "Confirm with the developer, then buy something with a real card to prove it."
@@ -2508,7 +2508,7 @@
             },
             {
               "sev": "must",
-              "title": "The prices in the payment system match what we advertise",
+              "title": "Prices match the site",
               "good": "Fifteen dollars a month for thirty searches, thirty dollars for sixty, exactly as the pricing page says.",
               "steps": [
                 "Compare the payment system's prices with the pricing page word for word."
@@ -2517,7 +2517,7 @@
             },
             {
               "sev": "must",
-              "title": "The payment system can tell our site about a purchase",
+              "title": "Webhooks reach the site",
               "good": "When someone pays, our site hears about it immediately and upgrades them. If this connection is wrong, people pay and nothing happens.",
               "steps": [
                 "Send a test notification from the payment dashboard and confirm our site accepted it.",
@@ -2527,7 +2527,7 @@
             },
             {
               "sev": "should",
-              "title": "We have agreed our refund position",
+              "title": "Refund position agreed",
               "good": "The rule is written down before the first request arrives, not decided during it.",
               "steps": [
                 "Agree it and put it on the terms page."
@@ -2536,7 +2536,7 @@
             },
             {
               "sev": "should",
-              "title": "Somebody reads the payment inbox",
+              "title": "Payment inbox is read",
               "good": "Disputes and failed payments arrive by email and have a named owner.",
               "steps": [
                 "Name them."
@@ -2561,7 +2561,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "DONE: previewed websites are in a locked box",
+              "title": "DONE: previews sandboxed",
               "good": "Websites shown inside Scout's preview used to be able to read your Scout login and act as you. They now run in a sealed frame with no access to anything of yours.",
               "steps": [
                 "Preview a few sites and confirm they still load and scroll normally.",
@@ -2572,7 +2572,7 @@
             },
             {
               "sev": "must",
-              "title": "DONE: strangers cannot spend our money or borrow our server",
+              "title": "DONE: endpoints gated",
               "good": "The features that cost us money per use (AI cleanup, website previews) refuse anyone who is not signed in, and have per-hour speed limits on top.",
               "steps": [
                 "Open a preview address in a private window: you get a sign-in page.",
@@ -2582,7 +2582,7 @@
             },
             {
               "sev": "must",
-              "title": "DONE: email approve links expire",
+              "title": "DONE: approve links expire",
               "good": "The approve buttons in digest emails stop working after two weeks, so a forwarded email is not a forever-key to sending from your account.",
               "steps": [
                 "Find a digest older than two weeks and click its approve link.",
@@ -2592,7 +2592,7 @@
             },
             {
               "sev": "must",
-              "title": "DONE: mailbox keys are stored scrambled",
+              "title": "DONE: mailbox keys encrypted",
               "good": "The keys that let Scout send from connected Gmail and Outlook accounts are now encrypted in the database, so a database leak alone would yield gibberish.",
               "steps": [
                 "Each person who connected Gmail or Outlook before the change should disconnect and reconnect once, that re-saves their key in the scrambled form."
@@ -2601,7 +2601,7 @@
             },
             {
               "sev": "must",
-              "title": "DONE: the server cannot be tricked into fetching internal addresses",
+              "title": "DONE: SSRF blocked",
               "good": "A classic attack makes an app fetch secret internal addresses by disguising them as normal links. Every disguise we know of is now blocked, and the blocks are covered by automated tests.",
               "steps": [
                 "Nothing to do by hand; noted here so the protection is on the record."
@@ -2610,7 +2610,7 @@
             },
             {
               "sev": "must",
-              "title": "DONE: standard browser protections switched on",
+              "title": "DONE: security headers on",
               "good": "The site now sends the standard protective headers, which stop other sites from framing Scout to trick clicks, among other classic tricks.",
               "steps": [
                 "Nothing to do by hand; verifiable with any online header checker against scout-source.com."
@@ -2619,7 +2619,7 @@
             },
             {
               "sev": "must",
-              "title": "TO DO: two-factor login on the five accounts that own Scout",
+              "title": "TO DO: two-factor the owners",
               "good": "Google, GitHub, Supabase, Vercel, and Stripe each need a second login step. One stolen password currently beats every protection above.",
               "steps": [
                 "Follow the separate Scout Lockdown checklist page, it walks each account step by step with time estimates.",
@@ -2629,7 +2629,7 @@
             },
             {
               "sev": "must",
-              "title": "TO DO: collaborators follow the same rules",
+              "title": "TO DO: collaborators follow rules",
               "good": "Anyone with access (Delaney included) has two-factor on their accounts, their own login rather than a shared one, and access gets reviewed quarterly.",
               "steps": [
                 "Send collaborators the Scout Lockdown page.",
@@ -2639,7 +2639,7 @@
             },
             {
               "sev": "should",
-              "title": "TO DO AT LAUNCH: real database backups",
+              "title": "AT LAUNCH: real backups",
               "good": "The paid database plan turns on automatic daily backups, so a bad mistake is recoverable. Point-in-time recovery gets added once there are paying customers.",
               "steps": [
                 "Part of the planned move to the paid Supabase plan at launch.",
@@ -2649,7 +2649,7 @@
             },
             {
               "sev": "should",
-              "title": "TO DO AT LAUNCH: separate practice database from the real one",
+              "title": "AT LAUNCH: split the databases",
               "good": "Development currently uses the same database as the live site, so experiments touch real data. A separate practice copy ends that.",
               "steps": [
                 "About an hour of setup, planned alongside the launch upgrades."
@@ -2658,7 +2658,7 @@
             },
             {
               "sev": "later",
-              "title": "TO DO LATER: one remaining dependency advisory",
+              "title": "LATER: dependency advisory",
               "good": "One low-risk security notice remains in a building block of the site; clearing it requires a major framework upgrade that deserves its own careful pass.",
               "steps": [
                 "Scheduled as deliberate post-launch work; automatic weekly dependency checks are already running in the meantime."
@@ -2674,7 +2674,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "The privacy policy and terms describe what Scout does today",
+              "title": "Policy matches reality",
               "good": "Both pages are current, linked from the footer and from signup, and give a real address for questions.",
               "steps": [
                 "Read both start to finish against the actual product."
@@ -2683,7 +2683,7 @@
             },
             {
               "sev": "must",
-              "title": "We say plainly that content goes to outside services",
+              "title": "Outside services disclosed",
               "good": "Profiles, uploaded files, and page content are sent to outside search and writing services. Users should learn that from our policy, not from someone else.",
               "steps": [
                 "Check the policy says so in words a normal person understands."
@@ -2692,7 +2692,7 @@
             },
             {
               "sev": "must",
-              "title": "We have a position on storing details of people who never signed up",
+              "title": "Non-user data position set",
               "good": "We know how long we keep contact details, what a removal request looks like, and where someone sends one.",
               "steps": [
                 "Decide it, write it into the privacy policy, and make sure the address works."
@@ -2701,7 +2701,7 @@
             },
             {
               "sev": "must",
-              "title": "The marketing email rules have been checked against what we actually send",
+              "title": "Email law checked",
               "good": "Honest subject lines, a real identifiable sender, opt-outs honoured promptly, and any address disclosure that applies to us.",
               "steps": [
                 "Walk the rules against a real sent message rather than assuming."
@@ -2710,7 +2710,7 @@
             },
             {
               "sev": "should",
-              "title": "There is a way to ask for your data or its deletion",
+              "title": "Data requests possible",
               "good": "Reachable inside the product, with a named person responsible for answering within a stated time.",
               "steps": [
                 "Try it as a user would."
@@ -2719,7 +2719,7 @@
             },
             {
               "sev": "should",
-              "title": "A support address that a person actually reads",
+              "title": "Support inbox is read",
               "good": "One address, one named owner, and a stated response time.",
               "steps": [
                 "Publish it and test it."
@@ -2735,7 +2735,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "The domain works both with and without the www",
+              "title": "www and bare domain work",
               "good": "Both forms load over a secure connection, and one redirects to the other rather than both being separately live.",
               "steps": [
                 "Try both in a browser and watch the address bar."
@@ -2744,7 +2744,7 @@
             },
             {
               "sev": "must",
-              "title": "We find out when something breaks",
+              "title": "Breakage gets noticed",
               "good": "Errors on the live site raise an alert to a person. Without this, the first sign of trouble is a customer telling us, if they bother.",
               "steps": [
                 "Confirm error alerting is switched on and test that an alert actually arrives."
@@ -2753,7 +2753,7 @@
             },
             {
               "sev": "should",
-              "title": "Something checks the site is up",
+              "title": "Uptime is watched",
               "good": "A regular automatic check on both the public page and one signed-in feature, because the front page can look perfectly fine while everything behind sign-in is down.",
               "steps": [
                 "Set it up and confirm the alert reaches a phone."
@@ -2762,7 +2762,7 @@
             },
             {
               "sev": "should",
-              "title": "The old version of the site sends people to the new one",
+              "title": "Old site redirects",
               "good": "The retired address redirects to the real one, so there are not two live copies of the product.",
               "steps": [
                 "Open the old address and confirm it moves you."
@@ -2780,7 +2780,7 @@
             },
             {
               "sev": "should",
-              "title": "Visitor numbers are actually being recorded",
+              "title": "Visitors are counted",
               "good": "Not just installed. Load the site and watch the visit appear.",
               "steps": [
                 "Do exactly that."
@@ -2789,7 +2789,7 @@
             },
             {
               "sev": "should",
-              "title": "Search engines are told what to index",
+              "title": "Search engines directed",
               "good": "The public pages can be found, and everything behind sign-in is excluded.",
               "steps": [
                 "Ask the developer to confirm. Neither of the usual files exists yet."
@@ -2798,7 +2798,7 @@
             },
             {
               "sev": "later",
-              "title": "Somewhere to tell people when something is wrong",
+              "title": "A status page exists",
               "good": "Even a pinned post. People forgive outages, they do not forgive silence.",
               "steps": [
                 "Decide where it lives."
@@ -2814,7 +2814,7 @@
           "items": [
             {
               "sev": "must",
-              "title": "1. Stop making changes and confirm the site builds",
+              "title": "1. Freeze and confirm the build",
               "good": "No further changes except fixes for things on this page.",
               "steps": [
                 "Announce the freeze so everyone knows."
@@ -2823,7 +2823,7 @@
             },
             {
               "sev": "must",
-              "title": "2. Back up the database, then run any outstanding setup scripts",
+              "title": "2. Back up, run setup scripts",
               "good": "Backup first, every time, even for a script that says it is safe to re-run.",
               "steps": [
                 "Backup, run, then confirm each one took effect."
@@ -2832,7 +2832,7 @@
             },
             {
               "sev": "must",
-              "title": "3. Put the live settings in place, then republish",
+              "title": "3. Live settings, republish",
               "good": "Settings do not take effect until the site is published again. Republishing is part of setting them.",
               "steps": [
                 "Set them, publish, then spot-check one feature that depends on them."
@@ -2841,7 +2841,7 @@
             },
             {
               "sev": "must",
-              "title": "4. Switch payments to live and prove the connection works",
+              "title": "4. Payments live, prove webhook",
               "good": "A test notification from the payment dashboard is accepted by our site before any real customer tries it.",
               "steps": [
                 "Send it and watch for the confirmation."
@@ -2850,7 +2850,7 @@
             },
             {
               "sev": "must",
-              "title": "5. Run the short version of part one on the live site",
+              "title": "5. Smoke-test part one live",
               "good": "Sign up, search, draft, send, and buy. Fresh account, real card, real inbox.",
               "steps": [
                 "If any step needs a workaround, we are not launched yet."
@@ -2859,7 +2859,7 @@
             },
             {
               "sev": "must",
-              "title": "6. Turn the background jobs on last, and watch each one run",
+              "title": "6. Jobs on last, watch each",
               "good": "Turn them on only once the data they act on is known to be good.",
               "steps": [
                 "Watch one full run of each before walking away."
@@ -2868,7 +2868,7 @@
             },
             {
               "sev": "should",
-              "title": "7. Announce, then watch spending, errors, and support for two days",
+              "title": "7. Announce, watch two days",
               "good": "Agreed in advance: who is watching, when, and what would make us roll back.",
               "steps": [
                 "Put names against the hours."
@@ -2877,7 +2877,7 @@
             },
             {
               "sev": "should",
-              "title": "8. Write down what broke, in the first week",
+              "title": "8. Write down what broke",
               "good": "While it is still fresh. It becomes the next version of this page.",
               "steps": [
                 "Book the half hour now."
