@@ -1623,6 +1623,7 @@ function ScoutTool({
     spot?: string; // data-guide element to pulse for this step
     click?: string; // data-guide element the step CLICKS for you on entry
     tab?: string; // tab to land on for this step
+    when?: string; // account-state condition; steps that don't apply are skipped
   }
   const [testTour, setTestTour] = useState<{ title: string; steps: TourStep[]; i: number } | null>(
     null
@@ -1695,21 +1696,53 @@ function ScoutTool({
         try {
           (e.source as Window | null)?.postMessage({ type: "scout-guide-ack" }, e.origin || "*");
         } catch {}
+        // Tours adapt to what's actually on the account: a step tagged
+        // when:"hasSent" only shows when something has really been sent, so
+        // someone with live outreach isn't walked through drafting a first
+        // message they already have. Fewer steps, real data.
+        const stateOk = (w?: string) => {
+          if (!w) return true;
+          const fs = findsRef.current;
+          const sent = fs.some((f) => f.status === "sent" || f.status === "replied");
+          const draft = fs.some(
+            (f) => !!f.draft && f.status !== "sent" && f.status !== "replied"
+          );
+          switch (w) {
+            case "hasSent":
+              return sent;
+            case "noSent":
+              return !sent;
+            case "hasDraft":
+              return draft;
+            case "noDraft":
+              return !draft;
+            case "hasFinds":
+              return fs.length > 0;
+            case "noFinds":
+              return fs.length === 0;
+            default:
+              return true;
+          }
+        };
+        const all = d.steps
+          .map((x: any) =>
+            typeof x === "string"
+              ? { text: x }
+              : {
+                  text: String(x?.text || ""),
+                  spot: x?.spot ? String(x.spot) : undefined,
+                  click: x?.click ? String(x.click) : undefined,
+                  tab: x?.tab ? String(x.tab) : undefined,
+                  when: x?.when ? String(x.when) : undefined,
+                }
+          )
+          .filter((x: any) => x.text);
+        const applicable = all.filter((x: any) => stateOk(x.when));
         setTestTour({
           title: String(d.title || "Test walkthrough"),
-          steps: d.steps
-            .map((x: any) =>
-              typeof x === "string"
-                ? { text: x }
-                : {
-                    text: String(x?.text || ""),
-                    spot: x?.spot ? String(x.spot) : undefined,
-                    click: x?.click ? String(x.click) : undefined,
-                    tab: x?.tab ? String(x.tab) : undefined,
-                  }
-            )
-            .filter((x: any) => x.text)
-            .slice(0, 12),
+          // If every step was conditional and none applied, fall back to the
+          // full script rather than an empty walkthrough.
+          steps: (applicable.length ? applicable : all).slice(0, 12),
           i: 0,
         });
         if (typeof d.guide === "string" && d.guide) runGuide(d.guide);
@@ -2100,7 +2133,7 @@ function ScoutTool({
   const [activeId, setActiveId] = useState<string>("");
   // The companies (Teams workspaces) this account belongs to, and which one is
   // the active lens. "" = All companies (show everything). Persisted per device.
-  const [companies, setCompanies] = useState<{ id: string; name: string; role: string }[]>([]);
+  const [companies, setCompanies] = useState<{ id: string; name: string; role: string; allowPersonal?: boolean }[]>([]);
   // Has the workspace lookup below settled yet? `companies` starts empty, so on
   // its own it can't tell "still loading" from "belongs to nothing" — and the
   // first-run gate must not fire on that ambiguity.
@@ -3027,7 +3060,7 @@ function ScoutTool({
         });
         const data = await res.json().catch(() => ({}));
         if (!alive) return;
-        const wss = (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role }));
+        const wss = (data.workspaces || []).map((w: any) => ({ id: w.id, name: w.name, role: w.role, allowPersonal: !!w.allow_personal }));
         setCompanies(wss);
         // Belonging to a company makes this a COMPANY account — no personal
         // profile, just role + specialization (invited teammates auto-become this
@@ -4233,7 +4266,10 @@ function ScoutTool({
   // active, the option disappears — reset the lens so the select never holds a
   // value it no longer offers.
   useEffect(() => {
-    if (activeCompanyId === "personal" && !hasPersonalProjects) selectCompany("");
+    // The Personal lens stays put even with no personal projects yet: the
+    // rail checkbox turns it on BEFORE the first personal project exists, and
+    // kicking the lens made the checkbox snap back off. (It used to reset
+    // because the old select dropped the option.)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasPersonalProjects, activeCompanyId]);
   const visibleProjects = activeCompanyId
@@ -7636,6 +7672,10 @@ function ScoutTool({
         openCommand={() => setCmdOpen(true)}
         projects={visibleProjects}
         hasPersonal={hasPersonalProjects}
+        personalAllowed={
+          companies.length > 0 &&
+          companies.some((c) => c.allowPersonal || c.role === "owner")
+        }
         activeId={findsAllProjects ? "__all__" : activeId}
         onSelectProject={(id: string) => {
           if (id === "__all__") setFindsAllProjects(true);
@@ -10024,6 +10064,7 @@ function SideNav({
   companies,
   activeCompanyId,
   hasPersonal,
+  personalAllowed = false,
   onSelectCompany,
   showLogout,
   onLogout,
@@ -10050,6 +10091,7 @@ function SideNav({
   companies: { id: string; name: string; role: string }[];
   activeCompanyId: string;
   hasPersonal: boolean;
+  personalAllowed?: boolean;
   onSelectCompany: (id: string) => void;
   showLogout: boolean;
   onLogout?: () => void;
@@ -10537,7 +10579,7 @@ function SideNav({
             carries no Active-project picker any more: every screen that cares
             about the project has its own picker (the Scout stage, Finds,
             paste-a-posting), so the rail copy was a duplicate control. */}
-        {(companies.length > 1 || (companies.length > 0 && hasPersonal)) && (
+        {(companies.length > 1 || (companies.length > 0 && (hasPersonal || personalAllowed))) && (
           <div className="mb-2.5">
             <div className="kicker px-2 pb-1.5">Company</div>
             <PrettySelect
@@ -10546,11 +10588,25 @@ function SideNav({
               onChange={onSelectCompany}
               options={[
                 { value: "", label: "All companies" },
-                ...(hasPersonal ? [{ value: "personal", label: "Personal" }] : []),
+                ...(hasPersonal || personalAllowed ? [{ value: "personal", label: "Personal" }] : []),
                 ...companies.map((c) => ({ value: c.id, label: c.name })),
               ]}
             />
           </div>
+        )}
+        {/* Personal use: run outside any company. Offered when a company on
+            this account allows it (a higher-tier company setting) or the
+            user owns one. */}
+        {personalAllowed && (
+          <label className="mb-2 flex cursor-pointer items-center gap-2 px-2 text-[11px] font-semibold text-[color:var(--su-rail-muted)] transition hover:text-[color:var(--su-rail-fg,inherit)]">
+            <input
+              type="checkbox"
+              checked={activeCompanyId === "personal"}
+              onChange={(e) => onSelectCompany(e.target.checked ? "personal" : "")}
+              className="h-3.5 w-3.5 accent-[#19455e]"
+            />
+            Personal use, not for the company
+          </label>
         )}
         <div className="mt-2.5 flex flex-col gap-0.5">
           {hasAccount &&
@@ -17981,6 +18037,7 @@ function FindWorkflow({
         {find.status === "sent" && (
           <>
             <button
+              data-guide="follow-up"
               onClick={onFollowUp}
               disabled={followUpBusy}
               title={
@@ -25118,6 +25175,7 @@ function CompanyDetailsEditor({
   const [industry, setIndustry] = useState("");
   const [stage, setStage] = useState("");
   const [location, setLocation] = useState("");
+  const [allowPersonal, setAllowPersonal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -25147,6 +25205,7 @@ function CompanyDetailsEditor({
           setIndustry(ws.industry || "");
           setStage(ws.stage || "");
           setLocation(ws.location || "");
+          setAllowPersonal(!!ws.allow_personal);
         }
       } catch {
         /* teams may not be set up; fall back to the profile name */
@@ -25189,6 +25248,7 @@ function CompanyDetailsEditor({
           industry,
           stage,
           location,
+          allowPersonal,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -25300,6 +25360,33 @@ function CompanyDetailsEditor({
           <div className="mt-4">
             <Label>Website</Label>
             <input value={website} onChange={(e) => setWebsite(e.target.value)} disabled={!isOwner} placeholder="e.g. cedarco.com" className={`${inputCls} disabled:opacity-70`} />
+          </div>
+          <div className="mt-4 rounded-2xl border border-warm-border bg-warm-bg/50 p-4">
+            <label className={`flex items-start gap-3 ${isOwner ? "cursor-pointer" : ""}`}>
+              <input
+                type="checkbox"
+                checked={allowPersonal}
+                onChange={(e) => isOwner && setAllowPersonal(e.target.checked)}
+                disabled={!isOwner}
+                className="mt-0.5 h-4 w-4 accent-[#19455e]"
+              />
+              <span>
+                <span className="block text-sm font-bold text-ink">Allow personal use</span>
+                <span className="mt-0.5 block text-xs leading-relaxed text-body/70">
+                  Teammates get a Personal checkbox in the sidebar so they can run
+                  searches and outreach for themselves, outside the company&apos;s
+                  projects. Personal work stays out of the company&apos;s pipeline and
+                  team views. Part of the higher company tier.
+                </span>
+              </span>
+            </label>
+            {!isOwner && (
+              <p className="mt-2 text-xs text-body/60">
+                {allowPersonal
+                  ? "Your company allows personal use. Use the Personal checkbox in the sidebar."
+                  : "Your company hasn't turned on personal use. Ask your admin."}
+              </p>
+            )}
           </div>
           {isOwner && (
             <div className="mt-4 flex flex-wrap items-center gap-3">

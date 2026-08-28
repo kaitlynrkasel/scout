@@ -1246,6 +1246,33 @@
                 "Draft a first message, then a follow-up.",
                 "Read them in sequence as the recipient would."
               ],
+              "tour": [
+                {
+                  "when": "hasSent",
+                  "tab": "sent",
+                  "spot": "follow-up",
+                  "text": "You already have sent messages, so we can test with a real one. This is your Sent list; each card has a Follow up button."
+                },
+                {
+                  "when": "hasSent",
+                  "tab": "sent",
+                  "click": "follow-up",
+                  "spot": "follow-up",
+                  "text": "Scout is drafting a follow-up to your first sent message now. When it lands on the card, check it reads like a second note to the same person, referencing your first message, not a fresh cold email."
+                },
+                {
+                  "when": "noSent",
+                  "tab": "outreach",
+                  "spot": "start",
+                  "text": "Nothing has been sent yet, so first get one message out: run a search here, draft a message on a find, and send it (or Mark as sent)."
+                },
+                {
+                  "when": "noSent",
+                  "tab": "sent",
+                  "spot": "follow-up",
+                  "text": "Once it shows in Sent, press Follow up on the card and check the draft reads like a second note to the same person, not a fresh cold email."
+                }
+              ],
               "key": "writing::follow-up-drafts-remember-the-first-message"
             },
             {

@@ -234,6 +234,7 @@ export async function updateWorkspaceDetails(
     industry?: string;
     stage?: string;
     location?: string;
+    allowPersonal?: boolean;
   }
 ) {
   await assertRole(uid, workspaceId, "admin");
@@ -248,6 +249,7 @@ export async function updateWorkspaceDetails(
   if (typeof patch.industry === "string") update.industry = patch.industry.trim() || null;
   if (typeof patch.stage === "string") update.stage = patch.stage.trim() || null;
   if (typeof patch.location === "string") update.location = patch.location.trim() || null;
+  if (typeof patch.allowPersonal === "boolean") update.allow_personal = patch.allowPersonal;
   if (!Object.keys(update).length) throw new TeamError("Nothing to update.");
   const { data, error } = await db()
     .from("workspaces")
@@ -321,7 +323,7 @@ export async function getWorkspaceContext(uid: string, email: string) {
     // have always existed rather than losing the workspaces.
     const full = await db()
       .from("workspaces")
-      .select("id, name, about, website, industry, stage, location, created_by, created_at, comped")
+      .select("id, name, about, website, industry, stage, location, created_by, created_at, comped, allow_personal")
       .in("id", wsIds);
     let wsRows: any[] | null = full.data as any[] | null;
     if (full.error) {
