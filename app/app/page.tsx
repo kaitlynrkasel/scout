@@ -8052,8 +8052,20 @@ function ScoutTool({
                         ariaLabel="Project"
                         bare
                         value={activeId}
-                        onChange={selectProject}
-                        options={visibleProjects.map((p) => ({ value: p.id, label: p.name }))}
+                        onChange={(v) => {
+                          if (v === "__newproj__") {
+                            setNewProjOpen(true);
+                            return;
+                          }
+                          selectProject(v);
+                        }}
+                        options={[
+                          ...visibleProjects.map((p) => ({ value: p.id, label: p.name })),
+                          // A fresh lens (new personal mode, new company) has no
+                          // projects, so the picker must be able to CREATE one,
+                          // not just sit on "Select...".
+                          { value: "__newproj__", label: "+ New project…" },
+                        ]}
                       />
                     </div>
                     <span className="hidden text-white/40 sm:inline">·</span>
