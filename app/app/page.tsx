@@ -793,11 +793,30 @@ function goalWantsPeopleNotPostings(goal: string): boolean {
 // of 2018, a beat, a genre). Titles alone are weak scanning material, two
 // unfamiliar names look identical, so the card leads the eye with this line.
 // Anything already said by the card's title is dropped so nothing repeats.
+// Imported sheets carry literal filler ("Unknown", "N/A", "-") in role and
+// outlet columns; showing it verbatim reads as a broken card. Treat it as
+// absent everywhere a context line is built.
+function realBit(v: unknown): boolean {
+  const t = String(v || "").trim().toLowerCase();
+  return !!t && !["unknown", "n/a", "na", "none", "-", "--", "?", "tbd", "null"].includes(t);
+}
+// When a find has no role/outlet/location at all, say something real instead
+// of nothing: the contact address, the site, or where the row came from.
+function contextFallback(o: Opportunity, foundVia?: string): string {
+  if (realBit(o.contactEmail)) return String(o.contactEmail);
+  try {
+    const h = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
+    if (h) return h;
+  } catch {}
+  if (foundVia === "import") return "From your sheet import";
+  if (foundVia === "manual") return "Added by you";
+  return realBit(o.channel) ? String(o.channel) : "";
+}
 function substanceLine(o: Opportunity): string {
   const title = String(o.name || "").toLowerCase();
   const parts = [o.contactRole, o.outlet, o.location]
     .map((v) => String(v || "").trim())
-    .filter(Boolean)
+    .filter(realBit)
     // Drop a part the title already contains (the extractor often folds the
     // company or credential into the name).
     .filter((v) => !title.includes(v.toLowerCase()));
@@ -15028,7 +15047,8 @@ function FindGridCard({
   const o = find.opp;
   const fit = typeof o.fitScore === "number" ? Math.round(o.fitScore * 100) : null;
   const role =
-    [o.contactRole, o.outlet, o.location].filter(Boolean).join(" · ") || o.channel || "";
+    [o.contactRole, o.outlet, o.location].filter(realBit).join(" · ") ||
+    contextFallback(o, find.foundVia);
   const st = FIND_STATUS[find.status];
   let host = "";
   try {
@@ -15582,16 +15602,23 @@ function FindsTab({
   useEffect(() => {
     if (headingWord === "drafts" || headingWord === "sent") setSrcFilter("both");
   }, [headingWord]);
+  // "Yours" covers hand-added AND imported rows: a spreadsheet import is your
+  // own list, not something Scout found. Legacy imports predate foundVia and
+  // are recognized by their import- opportunity ids.
+  const isYourFind = (f: Find) =>
+    f.foundVia === "manual" ||
+    f.foundVia === "import" ||
+    String(f.opp?.id || "").startsWith("import-");
   const srcCounts = {
-    scout: finds.filter((f) => f.foundVia !== "manual").length,
-    manual: finds.filter((f) => f.foundVia === "manual").length,
+    scout: finds.filter((f) => !isYourFind(f)).length,
+    manual: finds.filter(isYourFind).length,
   };
   const bySrc = (f: Find) => {
     if (srcFilter === "both") return true;
     // Single-source pipelines hide the toggle, so don't filter them either, a
     // default of "scout" must never blank out an all-manual pipeline.
     if (srcCounts.scout === 0 || srcCounts.manual === 0) return true;
-    return (f.foundVia === "manual" ? "manual" : "scout") === srcFilter;
+    return (isYourFind(f) ? "manual" : "scout") === srcFilter;
   };
 
   const catNameOf = (f: Find) =>
@@ -15997,7 +16024,7 @@ function FindsTab({
           {(
             [
               ["scout", `Scout-found ${srcCounts.scout}`],
-              ["manual", `Manual ${srcCounts.manual}`],
+              ["manual", `Added by you ${srcCounts.manual}`],
               ["both", `Both ${srcCounts.scout + srcCounts.manual}`],
             ] as const
           ).map(([val, lbl]) => (
@@ -19209,7 +19236,7 @@ function DashboardTab({
         FIND_AVATAR_COLORS.length
     ];
   const roleLine = (o: Opportunity) =>
-    [o.contactRole, o.outlet, o.location].filter(Boolean).join(" · ") || o.channel || "";
+    [o.contactRole, o.outlet, o.location].filter(realBit).join(" · ") || contextFallback(o);
   const replyRatePct = learned.replyRate != null ? `${Math.round(learned.replyRate * 100)}%` : "·";
   const weekday = new Date().toLocaleDateString(undefined, { weekday: "long" });
 
