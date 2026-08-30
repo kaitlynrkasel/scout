@@ -13649,18 +13649,23 @@ function FindDetailModal({
                 />
                 {previewFailed && (
                   <div className="absolute inset-0 overflow-y-auto bg-warm-bg/95 p-6">
-                    {/* No preview is not an empty pane: everything Scout
-                        gathered stands in for the page. */}
-                    <div className="mx-auto max-w-lg">
-                      <div className="flex flex-wrap items-center gap-3">
+                    {/* No preview is not an empty pane: the whole width becomes
+                        a company card built ONLY from what Scout actually
+                        gathered: identity, fit gauge, per-signal bars, and the
+                        criteria as a tile grid. */}
+                    <div className="mx-auto max-w-2xl">
+                      <div className="flex flex-wrap items-center gap-4">
+                        <div className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border border-warm-border bg-surface font-display text-2xl font-bold text-brown">
+                          {(o.name || host || "?").trim().charAt(0).toUpperCase()}
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <div className="text-sm font-bold text-ink">
-                            This site can&apos;t be previewed here
+                          <div className="truncate font-display text-xl font-bold tracking-tight text-ink">
+                            {o.name}
                           </div>
                           <p className="mt-0.5 text-xs leading-relaxed text-body/70">
                             {heavyPortal
                               ? `${host || "This"} is a full application portal that only loads in its own tab.`
-                              : `${host || "The site"} blocks embedding or is too slow to preview.`}
+                              : `${host || "The site"} blocks embedding, so here's everything Scout gathered instead.`}
                           </p>
                         </div>
                         <a
@@ -13672,8 +13677,54 @@ function FindDetailModal({
                           Open in new tab ↗
                         </a>
                       </div>
+
+                      {/* Fit gauge + per-signal bars: the same numbers behind
+                          the rank, drawn instead of listed. Real data only. */}
+                      {(typeof o.fitScore === "number" || o.scores) && (
+                        <div className="mt-5 flex flex-wrap items-center gap-5 rounded-2xl border border-warm-border bg-surface p-4">
+                          {typeof o.fitScore === "number" && (
+                            <div className="relative grid h-20 w-20 shrink-0 place-items-center">
+                              <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90">
+                                <circle cx="18" cy="18" r="15.5" fill="none" stroke="rgb(var(--c-warm-bg))" strokeWidth="4" />
+                                <circle
+                                  cx="18" cy="18" r="15.5" fill="none"
+                                  stroke="rgb(var(--c-brown))" strokeWidth="4" strokeLinecap="round"
+                                  strokeDasharray={`${Math.round(o.fitScore * 97.4)} 97.4`}
+                                />
+                              </svg>
+                              <div className="absolute text-center">
+                                <div className="text-lg font-bold tabular-nums text-ink">{Math.round(o.fitScore * 100)}%</div>
+                                <div className="text-[9px] font-bold uppercase tracking-wider text-body/50">fit</div>
+                              </div>
+                            </div>
+                          )}
+                          {o.scores && (
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              {(
+                                [
+                                  ["Relevance", o.scores.relevance],
+                                  ["Reachability", o.scores.reachability],
+                                  ["Timing", o.scores.timing],
+                                  ["Momentum", o.scores.momentum],
+                                ] as [string, number | undefined][]
+                              )
+                                .filter((r): r is [string, number] => typeof r[1] === "number")
+                                .map(([label, v]) => (
+                                  <div key={label} className="flex items-center gap-2 text-[11px]">
+                                    <span className="w-20 shrink-0 font-semibold text-body/60">{label}</span>
+                                    <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-warm-bg">
+                                      <div className="h-full rounded-full bg-brown/70" style={{ width: `${Math.round(v * 100)}%` }} />
+                                    </div>
+                                    <span className="w-8 shrink-0 text-right font-semibold tabular-nums text-body/70">{Math.round(v * 100)}</span>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       {o.whyItFits && (
-                        <div className="mt-5">
+                        <div className="mt-4">
                           <div className="mb-1 text-[11px] font-bold uppercase tracking-wider text-body/50">
                             Why it fits
                           </div>
@@ -13681,13 +13732,21 @@ function FindDetailModal({
                         </div>
                       )}
                       {(o.criteria || []).length > 0 && (
-                        <div className="mt-4 space-y-1.5 border-t border-warm-border pt-3">
+                        <div className="mt-4 grid gap-2 sm:grid-cols-2">
                           {(o.criteria || []).map((c) => (
-                            <div key={c.ask} className="flex items-baseline gap-3">
-                              <span className="w-24 shrink-0 text-[10px] font-bold uppercase tracking-wider text-body/50">
+                            <div key={c.ask} className="rounded-xl border border-warm-border bg-surface p-3">
+                              <div className="text-[10px] font-bold uppercase tracking-wider text-body/50">
                                 {c.ask}
-                              </span>
-                              <span className="text-sm font-semibold text-ink">{c.answer}</span>
+                              </div>
+                              <div
+                                className={`mt-0.5 text-sm leading-snug ${
+                                  /not stated|unknown|unclear|not confirmed|no .*found/i.test(c.answer)
+                                    ? "text-body/50"
+                                    : "font-semibold text-ink"
+                                }`}
+                              >
+                                {c.answer}
+                              </div>
                             </div>
                           ))}
                         </div>
