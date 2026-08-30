@@ -2382,7 +2382,7 @@ export async function discover(
       });
       const added = opps[opps.length - 1];
       emit(
-        `Kept ${added.name}${added.fitScore != null ? ` — ${Math.round(added.fitScore * 100)}% fit` : ""}`
+        `Kept ${added.name}${added.fitScore != null ? `, ${Math.round(added.fitScore * 100)}% fit` : ""}`
       );
       opts?.onOpp?.(added); // stream this find to the caller live
     }

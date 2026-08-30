@@ -9898,12 +9898,23 @@ function SearchProgress({
   // the whole subtree; refs let CSS + textContent carry the update.
   const barRef = useRef<HTMLDivElement | null>(null);
   const pctRef = useRef<HTMLSpanElement | null>(null);
+  const hintRef = useRef<HTMLSpanElement | null>(null);
   const stageRef = useRef<HTMLSpanElement | null>(null);
 
   const apply = (pctVal: number, stageIdx: number) => {
     if (barRef.current) barRef.current.style.width = `${pctVal}%`;
     if (pctRef.current) pctRef.current.textContent = `${Math.round(pctVal)}%`;
     if (stageRef.current) stageRef.current.textContent = SEARCH_STAGES[stageIdx];
+    // The bar caps at 92% until the request answers, which read as FROZEN on a
+    // long run. Say what's true instead: how long it's been, that it's still
+    // working, and that Cancel keeps everything found so far.
+    if (hintRef.current && startedAt) {
+      const secs = Math.floor((Date.now() - startedAt) / 1000);
+      hintRef.current.textContent =
+        secs <= 70
+          ? "… Usually 30 to 60 seconds."
+          : `… Still working (${Math.floor(secs / 60)}m ${String(secs % 60).padStart(2, "0")}s). Big searches run a few minutes; you can leave this tab, or Cancel and keep everything found so far.`;
+    }
   };
 
   useEffect(() => {
@@ -9944,8 +9955,8 @@ function SearchProgress({
         />
       </div>
       <p className={`mt-2 text-xs ${dark ? "text-white/60" : "text-body"}`}>
-        <span ref={stageRef}>{SEARCH_STAGES[searchStageFor(startedAt)]}</span>… Usually 30
-        to 60 seconds.
+        <span ref={stageRef}>{SEARCH_STAGES[searchStageFor(startedAt)]}</span>
+        <span ref={hintRef}>… Usually 30 to 60 seconds.</span>
       </p>
     </div>
   );
