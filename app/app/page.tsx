@@ -9780,16 +9780,36 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
       title={`Searching yourself = ${searches} web searches × 30s + ${sitesRead} sites × 60s, counted from this run's real activity. Rates from published research: ~9s to pick a result on a search page (Mediative eye-tracking) plus typing/reformulating; average page visit just under a minute (Nielsen Norman Group).`}
     >
       <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
-        Time saving
+        Time saved
       </div>
       <div className="mt-0.5 font-display text-3xl font-bold leading-none tabular-nums text-white">
         {fmt(savingS)}
       </div>
-      <p className="mt-1.5 text-[11px] leading-relaxed text-white/55">
-        <span className="font-semibold tabular-nums text-white/75">{fmt(scoutingS)}</span> scouting
-        {" vs "}
-        <span className="font-semibold tabular-nums text-white/75">{fmt(manualS)}</span> doing
-        these {searches} searches and {sitesRead} pages yourself
+      {/* The comparison as two labeled bars, not a run-on sentence: the sliver
+          next to the full bar IS the point. */}
+      <div className="mt-2.5 w-56 max-w-full space-y-1.5">
+        {(
+          [
+            ["Scout", scoutingS],
+            ["By hand", manualS],
+          ] as const
+        ).map(([who, sec]) => (
+          <div key={who} className="flex items-center gap-2 text-[11px]">
+            <span className="w-14 shrink-0 font-semibold text-white/55">{who}</span>
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/15">
+              <div
+                className="h-full rounded-full bg-white/80 transition-[width] duration-500"
+                style={{ width: `${manualS ? Math.max(2, Math.round((sec / Math.max(manualS, scoutingS)) * 100)) : 0}%` }}
+              />
+            </div>
+            <span className="w-14 shrink-0 text-right font-semibold tabular-nums text-white/80">
+              {fmt(sec)}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[11px] text-white/45">
+        {searches} searches and {sitesRead} pages, done for you
       </p>
     </div>
   );
