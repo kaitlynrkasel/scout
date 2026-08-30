@@ -686,6 +686,11 @@ async function planQueries(
       "businesses', '{target type} companies {city}' (only if the goal names a place), '{industry} startups contact us', " +
       "'{target type} companies with phone number email'. Prefer queries that surface company contact / about pages, business " +
       "directories, chamber-of-commerce and association member lists, and curated roundups of companies. " +
+      "The user is SELLING, not job hunting: a job posting is useful only as EVIDENCE about the company behind it " +
+      "(they're hiring for the pain the user solves), so a query may hunt postings ('{target type} hiring operations " +
+      "manager') but the TARGET is always the company and its owner/decision-maker, never the vacancy. Trade " +
+      "associations and chambers are SOURCES to read member lists from, not targets to pitch, unless the goal " +
+      "explicitly asks for associations. " +
       "HALF AND HALF, a hard rule when the goal names ONE industry plus openness beyond it ('music industry and other " +
       "industries', 'tech but open to anything'): split the query set close to evenly, half inside the named industry, " +
       "half deliberately across DIFFERENT industries, so results come back balanced instead of collapsing into the named one. " +

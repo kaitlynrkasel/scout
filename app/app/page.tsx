@@ -13146,7 +13146,10 @@ function FindDetailModal({
                   gridTemplateColumns: "minmax(280px, 340px) 1fr",
                   gridTemplateRows: editingDraft
                     ? "minmax(0,1fr)"
-                    : "minmax(0,0.9fr) minmax(0,1.1fr)",
+                    : // Contact gets the bigger share: the outreach block below
+                      // is a few buttons until a draft is being edited (which
+                      // takes the whole column anyway).
+                      "minmax(0,1.4fr) minmax(0,0.6fr)",
                   gridTemplateAreas: editingDraft
                     ? "'info work'"
                     : "'info preview' 'work preview'",
