@@ -2525,6 +2525,21 @@ export async function discover(
     extractOverride = personalOverride;
   }
 
+  // Quality gate, applied AFTER every widening/rescue/salvage pass: a "match"
+  // under 20% fit is not a match, it's noise wearing a card (a wedding chapel
+  // on a consulting search). Coming back short with honest results beats
+  // padding to the floor; the UI already explains a thin batch and offers to
+  // loosen the goal.
+  {
+    const before = opps.length;
+    const kept = opps.filter((o) => typeof o.fitScore !== "number" || o.fitScore >= 0.2);
+    if (kept.length < before) {
+      opps.length = 0;
+      opps.push(...kept);
+      emit(`Dropped ${before - kept.length} too-weak ${before - kept.length === 1 ? "match" : "matches"} (under 20% fit)`);
+    }
+  }
+
   // The same company can slip past name/host dedup by appearing both as a generic
   // entry ("Round Hill Music") and a specific posting ("Round Hill Music, Copyright
   // Internship"), often from different pages/hosts. For job/internship hunts, where

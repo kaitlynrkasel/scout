@@ -350,6 +350,21 @@ function escHtml(v: string): string {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
 }
+// Meta content arrives HTML-encoded; without decoding, a description that is
+// mostly whitespace ships as literal "&#xA;&#x9;..." on the simplified card.
+function decodeEntities(t: string): string {
+  return t
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(parseInt(d, 10)))
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&nbsp;/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 function metaContent(html: string, name: string): string {
   const re = new RegExp(
     `<meta[^>]+(?:property|name)=["']${name}["'][^>]+content=["']([^"']+)["']`,
@@ -359,7 +374,7 @@ function metaContent(html: string, name: string): string {
     `<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${name}["']`,
     "i"
   );
-  return (html.match(re) || html.match(alt))?.[1] || "";
+  return decodeEntities((html.match(re) || html.match(alt))?.[1] || "");
 }
 function bioLinks(html: string): { title: string; url: string }[] {
   // Preferred source: the embedded NEXT_DATA JSON (Linktree ships every link

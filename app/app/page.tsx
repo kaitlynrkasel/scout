@@ -922,6 +922,37 @@ function FindAvatar({ opp, size = 34 }: { opp: Opportunity; size?: number }) {
   );
 }
 
+// Reasons Scout anticipates for THIS find, from its own signals: what the
+// extractor flagged weak is exactly what a person is about to type. Shown
+// first in the deny dropdown; picking one trains ranking like any reason.
+function anticipatedDenyReasons(f?: Find | null): string[] {
+  if (!f) return [];
+  // Accepts a Find or a bare Opportunity (one call site passes the find row
+  // under the name o); both carry the same signal fields.
+  const o: any = (f as any).opp || f || {};
+  const out: string[] = [];
+  const nm = `${o.name || ""} ${o.outlet || ""}`.toLowerCase();
+  const url = String(o.url || "").toLowerCase();
+  if (/\b(association|chamber of commerce|society|council|coalition|federation|institute)\b/.test(nm))
+    out.push("An association, not a prospect");
+  if (/\/jobs?\/|careers|greenhouse\.io|lever\.co|myworkdayjobs|\btalents?\./.test(url))
+    out.push("A job posting, not the company");
+  if (/directory|listicle|\btop-?\d+\b/.test(url)) out.push("A list page, not a real target");
+  if (typeof o.fitScore === "number" && o.fitScore < 0.35) out.push("Fit is too weak");
+  for (const c of o.criteria || []) {
+    const a = String(c?.answer || "");
+    if (/not stated|unknown|unclear|not confirmed|no .*found|none found/i.test(a)) {
+      const ask = String(c.ask || "").replace(/\?+$/, "");
+      if (ask) out.push(`${ask}: ${a}`.slice(0, 58));
+    }
+    if (out.length >= 5) break;
+  }
+  // Never duplicate the standing presets below.
+  return Array.from(new Set(out))
+    .filter((r) => !DENY_REASONS.some((d) => d.toLowerCase() === r.toLowerCase()))
+    .slice(0, 5);
+}
+
 // Quick reasons offered when passing on a find (plus free-text "Other").
 const DENY_REASONS = [
   "Wrong industry",
@@ -11176,6 +11207,7 @@ function FindsList({
                       Why? optional, but a reason helps Scout learn faster
                     </span>
                     <DenyReasons
+                      find={o as any}
                       onPick={(r) => {
                         setDenyingId("");
                         onDeny(o, r);
@@ -11334,10 +11366,13 @@ function parseDenyReason(current?: string): { base: string | null; extra: string
 function DenyReasons({
   current,
   onPick,
+  find,
 }: {
   current?: string;
   onPick: (reason: string) => void;
+  find?: Find | null;
 }) {
+  const anticipated = anticipatedDenyReasons(find);
   const parsed = parseDenyReason(current);
   // "pick" = choosing a reason chip; "elaborate" = optional detail step that
   // pops up after a chip is chosen. Start in elaborate when editing an existing
@@ -11361,6 +11396,10 @@ function DenyReasons({
       onPick(label);
       return;
     }
+    if (label && anticipated.includes(label)) {
+      onPick(label);
+      return;
+    }
     setPhase("elaborate");
   }
   function commit() {
@@ -11378,7 +11417,14 @@ function DenyReasons({
     return (
       <div className="flex flex-wrap items-center gap-2">
         <select
-          value={current && (DENY_REASONS.includes(current) || customReasons.some((r) => r.t === current)) ? current : "__none__"}
+          value={
+            current &&
+            (DENY_REASONS.includes(current) ||
+              anticipated.includes(current) ||
+              customReasons.some((r) => r.t === current))
+              ? current
+              : "__none__"
+          }
           onChange={(e) => {
             if (e.target.value !== "__none__") choose(e.target.value);
           }}
@@ -11386,6 +11432,15 @@ function DenyReasons({
           title="A quick reason trains your Scout: it stops surfacing ones like this."
         >
           <option value="__none__">Why? Pick a reason…</option>
+          {anticipated.length > 0 && (
+            <optgroup label="Scout's guesses for this one">
+              {anticipated.map((r) => (
+                <option key={`ant-${r}`} value={r}>
+                  {r}
+                </option>
+              ))}
+            </optgroup>
+          )}
           {DENY_REASONS.map((r) => (
             <option key={r} value={r}>
               {r}
@@ -13074,6 +13129,7 @@ function FindDetailModal({
               <div className="flex shrink-0 flex-wrap items-center gap-1.5">
                 <span className="text-[10px] text-body/45">Why?</span>
                 <DenyReasons
+                  find={find}
                   onPick={(r) => {
                     setDenyingModal(false);
                     onDeny(r);
@@ -18479,6 +18535,7 @@ function FindWorkflow({
               optional, but a reason helps Scout learn faster
             </span>
             <DenyReasons
+              find={find}
               onPick={(r) => {
                 setDenying(false);
                 onDeny(r);
@@ -18550,7 +18607,7 @@ function FindWorkflow({
               ? "Reason you passed"
               : "Add a reason (optional, but it helps Scout learn faster)"}
           </div>
-          <DenyReasons current={find.denyReason} onPick={(r) => onSetReason(r)} />
+          <DenyReasons find={find} current={find.denyReason} onPick={(r) => onSetReason(r)} />
         </div>
       )}
     </>
