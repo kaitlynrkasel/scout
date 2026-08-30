@@ -3801,7 +3801,15 @@ function ScoutTool({
       const projCats = liveCats.filter((c) => c.projectId === id);
       const pristine = new Set(
         projCats
-          .filter((c) => !used.has(c.id) && stock.has(`${c.name}::${c.goal}`))
+          .filter(
+            (c) =>
+              !used.has(c.id) &&
+              // Stock seeds by content, plus any Scout-created suggestion
+              // (sug- ids) with no finds on it: the popup hands the project
+              // description into the first seed's goal, which broke the
+              // exact-match test and left music seeds on a consulting project.
+              (stock.has(`${c.name}::${c.goal}`) || String(c.id).startsWith("sug-"))
+          )
           .map((c) => c.id)
       );
 
@@ -8158,6 +8166,28 @@ function ScoutTool({
                         ]}
                       />
                     </div>
+                    {/* Scout-made suggestions (sug- ids) get a one-click way
+                        out, right where they're picked: a wrong-genre seed
+                        shouldn't need a trip to Projects to remove. */}
+                    {catId.startsWith("sug-") && (
+                      <button
+                        onClick={async () => {
+                          const nm = myCats.find((c) => c.id === catId)?.name || "this search";
+                          if (
+                            await scoutConfirm("Its finds stay in your pipeline.", {
+                              title: `Remove the "${nm}" search?`,
+                              confirmLabel: "Remove it",
+                            })
+                          )
+                            removeCategory(catId);
+                        }}
+                        title="Remove this Scout-suggested search"
+                        aria-label="Remove this Scout-suggested search"
+                        className="shrink-0 rounded-lg p-1.5 text-white/45 transition hover:bg-white/15 hover:text-white"
+                      >
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+                      </button>
+                    )}
                   </div>
                   {/* The separate "Solo Search" pill is gone: the category
                       picker's "New search" entry is the same action, and two

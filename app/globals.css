@@ -858,6 +858,11 @@ select.scout-kind-picker option {
 .scout-stage [class*="bg-white/"] { border-color: rgb(var(--c-ink) / 0.2); }
 .scout-stage .text-white,
 .scout-stage [class*="text-white/"] { color: rgb(var(--c-ink) / 0.75); }
+/* Solid accent fills keep white text: the remap above must never darken the
+   label on a filled button inside the stage (the new-project popup lives here). */
+.scout-stage .bg-brand-gradient,
+.scout-stage .bg-brand-gradient.text-white,
+.scout-stage .bg-brand-gradient .text-white { color: #ffffff; }
 .scout-stage [class*="border-white/"] { border-color: rgb(var(--c-ink) / 0.25); }
 .scout-stage [class*="bg-white/"] { background-color: rgb(255 255 255 / 0.6); }
 /* The cream Scout button becomes the navy CTA so it still reads as THE button. */
