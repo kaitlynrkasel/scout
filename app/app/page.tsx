@@ -1971,7 +1971,19 @@ function ScoutTool({
     // Muted deep tones only: full-screen colour has to sit quiet behind white
     // text, so every deal is dark and low-saturation (the bright magenta made
     // people seasick).
-    const deeps = ["#19455e", "#232d55", "#11504b", "#5d2a44", "#453a66", "#2c4a63"];
+    //
+    // COOL ONLY, and the whole run reads as one family: green through teal and
+    // cyan to blue, ending at navy. The wine (#5d2a44) and the violet (#453a66)
+    // that used to sit in this deck are the two the stage no longer deals — a
+    // plum stage read as a different product from a teal one.
+    const deeps = [
+      "#1b4d3e", // pine green
+      "#11504b", // deep teal
+      "#0f3f4f", // petrol
+      "#19455e", // deep sea blue
+      "#2c4a63", // slate blue
+      "#232d55", // navy
+    ];
     // Guaranteed different from the LAST visit, not merely random: with six
     // options a plain draw repeats one time in six, which reads as "it didn't
     // change". Remember the previous deal and exclude it.
@@ -1997,12 +2009,12 @@ function ScoutTool({
     document.documentElement.style.setProperty("--results-bg", shade(deeps[j]));
   }, []);
 
-  // The dashboard ground alternates through soft mid-tones — dealt fresh
-  // EVERY time the dashboard is opened (tab switches included), never the
-  // same lead twice in a row.
+  // The ground alternates through soft mid-tones — dealt fresh EVERY time the
+  // screen is opened (tab switches included), never the same lead twice in a
+  // row.
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "outreach") return;
-    const tints = [
+    const DASH_TINTS = [
       "186 205 172", // soft sage
       "147 174 203", // sky
       "217 161 180", // blush
@@ -2010,22 +2022,44 @@ function ScoutTool({
       "169 156 196", // lilac
       "176 209 201", // soft seafoam
     ];
-    // Three tints per visit, fading into one field — and deliberately
-    // temperature-diverse, so the alternation is visible in the FIRST
-    // viewport instead of three near-identical warms blurring into one.
-    const WARM = new Set(["217 161 180", "224 180 138"]);
+    // The Scout stage is cool-only, so its ground is too — a blush-and-apricot
+    // field under a teal stage was the warm half of the page fighting the cold
+    // half. Same six-deep deck, walked green to blue with nothing warm and
+    // nothing violet in it. The dashboard keeps the full range: it is a look
+    // back at finished work, not the screen the stage colours.
+    const COOL_TINTS = [
+      "186 205 172", // soft sage
+      "150 196 186", // mint
+      "176 209 201", // soft seafoam
+      "158 199 210", // pale cyan
+      "147 174 203", // sky
+      "168 186 214", // periwinkle blue
+    ];
+    const onStage = tab === "outreach";
+    const tints = onStage ? COOL_TINTS : DASH_TINTS;
+    // Three tints per visit, fading into one field — and deliberately diverse,
+    // so the alternation is visible in the FIRST viewport instead of three
+    // near-identical shades blurring into one. On the dashboard that means
+    // pairing across temperature; on the cool-only stage there is no warm half
+    // to pair against, so it pairs across the green and blue ends instead.
+    const SECOND_GROUP = new Set(
+      onStage
+        ? ["186 205 172", "150 196 186", "176 209 201"] // the green end
+        : ["217 161 180", "224 180 138"] // the warm ones
+    );
+    const storeKey = onStage ? "scout_stage_ground_last" : "scout_dash_last";
     let lastT = -1;
     try {
-      lastT = tints.indexOf(localStorage.getItem("scout_dash_last") || "");
+      lastT = tints.indexOf(localStorage.getItem(storeKey) || "");
     } catch {}
     const pick = (pool: number[]) => pool[Math.floor(Math.random() * pool.length)];
     const all = tints.map((_, k) => k);
     const lead = pick(all.filter((k) => k !== lastT));
-    const leadWarm = WARM.has(tints[lead]);
-    const second = pick(all.filter((k) => k !== lead && WARM.has(tints[k]) !== leadWarm));
+    const leadGroup = SECOND_GROUP.has(tints[lead]);
+    const second = pick(all.filter((k) => k !== lead && SECOND_GROUP.has(tints[k]) !== leadGroup));
     const third = pick(all.filter((k) => k !== lead && k !== second));
     try {
-      localStorage.setItem("scout_dash_last", tints[lead]);
+      localStorage.setItem(storeKey, tints[lead]);
     } catch {}
     document.documentElement.style.setProperty("--dash-tint", tints[lead]);
     document.documentElement.style.setProperty("--dash-tint2", tints[second]);
