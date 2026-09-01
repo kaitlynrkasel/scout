@@ -14,17 +14,17 @@
   "dependencies": {
     "@gsap/react": "^2.1.2",
     "@measured/puck": "^0.20.2",
-    "@supabase/supabase-js": "^2.110.0",
+    "@supabase/supabase-js": "^2.112.4",
     "@types/papaparse": "^5.5.2",
     "gsap": "^3.15.0",
-    "mammoth": "^1.12.0",
+    "mammoth": "^1.12.2",
     "next": "^14.2.35",
-    "papaparse": "^5.5.4",
+    "papaparse": "^5.7.0",
     "pdfjs-dist": "^6.1.200",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "stripe": "^22.3.0",
-    "unpdf": "^1.6.2",
+    "stripe": "^22.6.0",
+    "unpdf": "^1.8.1",
     "web-push": "^3.6.7",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
@@ -33,8 +33,8 @@
     "@types/react": "18.3.3",
     "@types/react-dom": "18.3.0",
     "@types/web-push": "^3.6.4",
-    "autoprefixer": "10.4.20",
-    "postcss": "8.4.47",
+    "autoprefixer": "10.5.4",
+    "postcss": "8.5.26",
     "tailwindcss": "3.4.13",
     "typescript": "5.5.4"
   }
