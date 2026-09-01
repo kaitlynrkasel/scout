@@ -14967,22 +14967,29 @@ function YourLinksCard() {
  * "scout-source.com says" sheet. One host lives in Home; anything can call
  * scoutConfirm() from any component. If the host isn't mounted (SSR, tests)
  * it falls back to the native confirm so nothing ever silently proceeds. */
-let scoutConfirmImpl:
-  | ((msg: string, opts?: { title?: string; confirmLabel?: string }) => Promise<boolean>)
-  | null = null;
-function scoutConfirm(
-  msg: string,
-  opts?: { title?: string; confirmLabel?: string }
-): Promise<boolean> {
+interface ConfirmOpts {
+  title?: string;
+  confirmLabel?: string;
+  /** Uppercase eyebrow above the heading, same as every other Scout panel. */
+  kicker?: string;
+}
+let scoutConfirmImpl: ((msg: string, opts?: ConfirmOpts) => Promise<boolean>) | null = null;
+function scoutConfirm(msg: string, opts?: ConfirmOpts): Promise<boolean> {
   if (scoutConfirmImpl) return scoutConfirmImpl(msg, opts);
   return Promise.resolve(typeof window !== "undefined" ? window.confirm(msg) : false);
 }
+// Destructive by the WORD ON THE BUTTON, so a confirm that isn't throwing
+// anything away doesn't get dressed in red. Anything undoable takes the brand
+// gradient like every other primary action in the app.
+const DESTRUCTIVE_LABEL = /\b(delete|remove|discard|disconnect|revoke|erase|wipe|clear)\b/i;
+
 function ScoutConfirmHost() {
   const [req, setReq] = useState<{
     msg: string;
-    opts: { title?: string; confirmLabel?: string };
+    opts: ConfirmOpts;
     resolve: (b: boolean) => void;
   } | null>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     scoutConfirmImpl = (msg, opts) =>
       new Promise((resolve) => setReq({ msg, opts: opts || {}, resolve }));
@@ -14990,34 +14997,67 @@ function ScoutConfirmHost() {
       scoutConfirmImpl = null;
     };
   }, []);
+  // Escape backs out, and the keyboard lands on Cancel rather than on the
+  // button that deletes things — Enter used to fire the destructive action the
+  // instant the dialog appeared.
+  useEffect(() => {
+    if (!req) return;
+    cancelRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        req.resolve(false);
+        setReq(null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [req]);
   if (!req) return null;
   const done = (b: boolean) => {
     req.resolve(b);
     setReq(null);
   };
+  const label = req.opts.confirmLabel || "Delete";
+  const destructive = DESTRUCTIVE_LABEL.test(label);
   return (
-    <div className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/45 p-4" onClick={() => done(false)}>
+    <div
+      className="fixed inset-0 z-[95] flex items-center justify-center bg-ink/45 p-4 backdrop-blur-sm"
+      onClick={() => done(false)}
+    >
       <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-label={req.opts.title || "Are you sure?"}
         className="w-full max-w-md rounded-2xl border border-warm-border bg-surface p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <h3 className="font-display text-lg font-bold tracking-tight text-ink">
+        <div className="kicker mb-2">
+          {req.opts.kicker || (destructive ? "This one's permanent" : "Just checking")}
+        </div>
+        <h3 className="font-display text-xl font-bold tracking-tight text-ink">
           {req.opts.title || "Are you sure?"}
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-body">{req.msg}</p>
-        <div className="mt-5 flex items-center justify-end gap-3">
+        {/* The message is always the consequence, so it sits in the same warm
+            panel the rest of the app uses for "here's what happens next". */}
+        <p className="mt-3 rounded-xl border border-warm-border bg-warm-bg/50 px-3.5 py-3 text-sm leading-relaxed text-body">
+          {req.msg}
+        </p>
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
           <button
+            ref={cancelRef}
             onClick={() => done(false)}
-            className="rounded-xl border border-warm-border px-4 py-2 text-sm font-semibold text-body transition hover:bg-warm-bg"
+            className="rounded-xl px-3 py-2.5 text-sm font-semibold text-body/60 transition hover:text-ink"
           >
             Cancel
           </button>
           <button
-            autoFocus
             onClick={() => done(true)}
-            className="rounded-xl bg-danger px-4 py-2 text-sm font-bold text-white shadow-soft transition hover:opacity-90"
+            className={`rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 ${
+              destructive ? "bg-danger" : "bg-brand-gradient"
+            }`}
           >
-            {req.opts.confirmLabel || "Delete"}
+            {label}
           </button>
         </div>
       </div>
