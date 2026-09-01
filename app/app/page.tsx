@@ -666,6 +666,14 @@ interface Category {
   id: string;
   name: string;
   goal: string;
+  // Which way round this search runs on a job-shaped project. "seeking" looks
+  // for openings and employers; "hiring" looks for the PEOPLE who could fill a
+  // role. Unset reads as seeking, which is what every existing search was.
+  direction?: "seeking" | "hiring";
+  // A job listing the user is hiring for, pasted whole. Kept beside the goal
+  // rather than folded into it: the bullets on the stage are the search, and a
+  // real listing carries far more than four short points can hold.
+  listing?: string;
   // Optional exemplars the user pasted (links, names, companies "like this").
   // Fed to the search as TYPE/QUALITY exemplars, never as scope filters — an
   // explicit "any industry" in the goal always beats the examples' industry.
@@ -1935,6 +1943,9 @@ function ScoutTool({
   // this"). Loaded from the active category, persisted back to it (debounced),
   // and folded into the goal sent to the engine as exemplars-not-filters.
   const [examples, setExamples] = useState("");
+  const [listing, setListing] = useState("");
+  const [direction, setDirection] = useState<"seeking" | "hiring">("seeking");
+  const [listingOpen, setListingOpen] = useState(false);
   const [discovering, setDiscovering] = useState(false);
   // Scroll the "Scout is searching" indicator into view when a search kicks off,
   // so it's obvious something's happening without scrolling down (task #9).
@@ -5034,10 +5045,26 @@ function ScoutTool({
         `kind, caliber, and vibe.`
       : "";
 
+  // The listing the user is hiring for, framed so the planner cannot mistake it
+  // for a description of what to FIND. Without the framing the engine reads a
+  // page of role requirements and goes looking for other people's job adverts,
+  // which is the one result a hiring manager has no use for.
+  const listingBlock = () =>
+    listing.trim()
+      ? `\n\nTHE ROLE BEING FILLED (the user is hiring for this; it describes the OPENING, not the ` +
+        `target): ${listing.trim()}\n` +
+        `IMPORTANT: do NOT search for job postings, openings, or careers pages. Search for PEOPLE who ` +
+        `could do this job and might move for it. Use the text above only to judge who fits: the ` +
+        `skills, seniority, industry and location it implies. The user's own points above still define ` +
+        `the scope; where this text is narrower than they are, they win.`
+      : "";
+
   // Examples travel with the category: load when the selected category changes
   // (covers every switch path without touching each setGoal site)…
   useEffect(() => {
     setExamples(categories.find((c) => c.id === catId)?.examples || "");
+    setListing(categories.find((c) => c.id === catId)?.listing || "");
+    setDirection(categories.find((c) => c.id === catId)?.direction || "seeking");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [catId]);
   // …and persist edits back onto it, debounced like the goal above.
@@ -5051,6 +5078,22 @@ function ScoutTool({
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [examples, catId, categories]);
+  // Same for the pasted listing. Written on paste and on clear, not on typing,
+  // so it saves immediately rather than debounced.
+  useEffect(() => {
+    if (!catId) return;
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat || listing === (cat.listing || "")) return;
+    saveCats(categories.map((c) => (c.id === catId ? { ...c, listing } : c)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing, catId, categories]);
+  useEffect(() => {
+    if (!catId) return;
+    const cat = categories.find((c) => c.id === catId);
+    if (!cat || direction === (cat.direction || "seeking")) return;
+    saveCats(categories.map((c) => (c.id === catId ? { ...c, direction } : c)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [direction, catId, categories]);
 
   // Same auto-save, for which contact channels this search should prioritize.
   // Immediate (not debounced) since it's discrete toggle clicks, not typing.
@@ -6766,9 +6809,13 @@ function ScoutTool({
       // For job/internship searches, layer in the competitiveness + company-size
       // directives so the LLM narrows to the right tier of opportunity. The
       // per-search override wins over the profile setting.
-      const effectiveUseCase = goalWantsPeopleNotPostings(goal)
-        ? "networking"
-        : activeUseCase;
+      // Hiring is a PEOPLE search whatever the project says. A job project left
+      // in its own use case sends the engine after openings and employers, and
+      // a hiring manager gets back a list of other companies' adverts — so the
+      // explicit switch overrides the project, and the goal-text heuristic only
+      // gets a say when the user hasn't answered the question outright.
+      const effectiveUseCase =
+        direction === "hiring" || goalWantsPeopleNotPostings(goal) ? "networking" : activeUseCase;
       const jobish = isJobUseCaseClient(effectiveUseCase);
       // "na" (the default) = competitiveness isn't factored in; "" = inherit
       // the profile's setting; a level = explicit per-search override.
@@ -6817,7 +6864,8 @@ function ScoutTool({
       const goalForApi =
         (extras.length ? `${goal}\n\n${extras.join(" ")}` : goal) +
         clarifyBlock +
-        examplesBlock();
+        examplesBlock() +
+        listingBlock();
       // Per-project "read my profile" setting (default on). When OFF, the search
       // ignores your Profile and your cross-project history, using only who this
       // project is for — so representing someone outside your world doesn't bias
@@ -7121,7 +7169,7 @@ function ScoutTool({
     );
   }
   function needsWorkArrangement(asked: string[], answers: string): boolean {
-    const goalText = `${goal} ${examplesBlock()}`;
+    const goalText = `${goal} ${examplesBlock()} ${listing}`;
     if (!ROLE_SHAPED_RE.test(goalText)) return false;
     if (WORK_ARRANGEMENT_RE.test(goalText)) return false;
     // The profile can settle it too ("open to remote", "Seattle only").
@@ -7150,7 +7198,8 @@ function ScoutTool({
         ? `${goal}\n\nMore detail from me: ${clarifyText.trim()}`
         : goal) +
       denyHint +
-      examplesBlock();
+      examplesBlock() +
+      listingBlock();
     const token = getToken ? await getToken() : null;
     try {
       const res = await fetch("/api/plan", {
@@ -7247,6 +7296,8 @@ function ScoutTool({
     const sig = JSON.stringify({
       goal: goal.trim(),
       examples: examplesBlock(),
+      listing: listingBlock(),
+      direction,
       about: aboutForProject(activeProject),
       priorAnswers,
       priorAsked,
@@ -7935,6 +7986,20 @@ function ScoutTool({
           </div>
         </div>
       )}
+      {listingOpen && (
+        <ListingPaste
+          initial={listing}
+          onClose={() => setListingOpen(false)}
+          onRead={(text, bullets) => {
+            setListing(text);
+            // The bullets REPLACE the goal: they are Scout's reading of who to
+            // find, and leaving the old goal underneath would search for two
+            // different people at once.
+            if (bullets.length) setGoal(bullets.join("; "));
+            setListingOpen(false);
+          }}
+        />
+      )}
       <ScoutConfirmHost />
       <Tutorial
         open={tourOpen}
@@ -8350,7 +8415,86 @@ function ScoutTool({
                   {/* Always the bullet-point style she picked: a defined search shows
                       its points, an empty one shows an inviting empty state with
                       Add a point. The old full-width textarea front door is gone. */}
+                  {/* Which way round this search runs. Only on job-shaped
+                      projects: on a music-PR or networking project there is no
+                      second direction to pick, and the control would be a
+                      question about nothing. */}
+                  {isJobUseCaseClient(activeUseCase) && (
+                    <div className="mb-5 flex flex-wrap items-center gap-2 [.text-center_&]:justify-center">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+                        I&apos;m
+                      </span>
+                      {(
+                        [
+                          ["seeking", "looking for a job"],
+                          ["hiring", "hiring for a role"],
+                        ] as const
+                      ).map(([v, label]) => (
+                        <button
+                          key={v}
+                          onClick={() => setDirection(v)}
+                          aria-pressed={direction === v}
+                          className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
+                            direction === v
+                              ? "bg-cream text-brown-deep"
+                              : "border border-white/25 text-white/70 hover:border-white/50 hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      {direction === "hiring" && (
+                        <span className="text-[12px] text-white/45">
+                          Scout looks for people, not postings.
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   <StageBullets goal={goal} onGoal={setGoal} />
+
+                  {/* Hiring only: the listing itself. Four bullets cannot hold a
+                      real posting, so the whole text rides along with the search
+                      instead of being squeezed into the goal. */}
+                  {isJobUseCaseClient(activeUseCase) && direction === "hiring" && (
+                    <div className="mt-4 [.text-center_&]:flex [.text-center_&]:justify-center">
+                      {listing ? (
+                        <div className="flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/20 bg-white/5 px-3.5 py-2.5 text-left">
+                          <span className="text-[13px] font-semibold text-white/85">
+                            Listing attached
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-white/50">
+                            {listing.replace(/\s+/g, " ").slice(0, 70)}…
+                          </span>
+                          <button
+                            onClick={() => setListingOpen(true)}
+                            className="text-[12px] font-semibold text-white/70 underline-offset-2 hover:text-white hover:underline"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => setListing("")}
+                            className="text-[12px] font-semibold text-white/45 transition hover:text-white"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setListingOpen(true)}
+                          className="flex items-center gap-2 text-[13px] font-semibold text-white/45 transition hover:text-white"
+                        >
+                          <span
+                            aria-hidden
+                            className="grid h-4 w-4 place-items-center rounded-full border border-white/35 text-[11px] leading-none"
+                          >
+                            +
+                          </span>
+                          Paste the job listing
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {!aboutText && (
                     <button
@@ -14992,6 +15136,123 @@ function YourLinksCard() {
         ))}
       </div>
     </FadeIn>
+  );
+}
+
+/* ---------------- Paste a job listing ----------------
+ * The hiring half of the Scout stage. A posting is long, and the stage's own
+ * search is four short points, so this reads the listing once, writes the
+ * points from it, and keeps the full text alongside as context.
+ *
+ * The reading is the part worth having. Pasting a posting straight into the
+ * goal searches for the posting: every word in a listing is written about the
+ * ROLE, and the engine follows the words. /api/listing-brief turns the role
+ * back into the person. */
+function ListingPaste({
+  initial,
+  onClose,
+  onRead,
+}: {
+  initial: string;
+  onClose: () => void;
+  onRead: (text: string, bullets: string[]) => void;
+}) {
+  const [text, setText] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, onClose]);
+
+  async function read() {
+    const t = text.trim();
+    if (t.length < 40) {
+      setErr("Paste a bit more of the listing so Scout has something to read.");
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      const r = await fetch("/api/listing-brief", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ listing: t }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setErr(j?.error || "Couldn't read that listing.");
+        return;
+      }
+      const bullets: string[] = Array.isArray(j?.bullets) ? j.bullets : [];
+      // The brief is the rest of what the listing said that still changes who
+      // fits. Kept with the listing so the search sees both.
+      const brief = String(j?.brief || "").trim();
+      onRead(brief ? `${t}\n\nWHAT MATTERS MOST: ${brief}` : t, bullets);
+    } catch {
+      setErr("Couldn't reach Scout. Try again in a moment.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-[92] flex items-center justify-center bg-ink/45 p-4 backdrop-blur-sm"
+      onClick={() => !busy && onClose()}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Paste the job listing"
+        className="max-h-[88vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-warm-border bg-surface p-6 shadow-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="kicker mb-2">The role you&apos;re filling</div>
+        <h3 className="font-display text-xl font-bold tracking-tight text-ink">
+          Paste the job listing
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-body">
+          The whole thing, as posted. Scout reads it and turns it around: instead of
+          the role, it searches for the people who could do it.
+        </p>
+        <textarea
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          rows={12}
+          placeholder="Paste the listing here, responsibilities and requirements and all."
+          className="mt-4 w-full resize-y rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+        />
+        <div className="mt-1.5 flex flex-wrap items-center justify-between gap-2 text-xs text-body/55">
+          <span>Pay, benefits and how to apply are ignored, they don&apos;t change who fits.</span>
+          <span className="tabular-nums">
+            {text.trim().length.toLocaleString()}
+            {text.trim().length > 12000 ? " characters, only the first 12,000 are read" : " characters"}
+          </span>
+        </div>
+        {err && <p className="mt-3 text-sm font-medium text-attention">{err}</p>}
+        <div className="mt-5 flex flex-wrap items-center justify-end gap-3">
+          <button
+            onClick={onClose}
+            disabled={busy}
+            className="rounded-xl px-3 py-2.5 text-sm font-semibold text-body/60 transition hover:text-ink disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={read}
+            disabled={busy}
+            className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+          >
+            {busy ? "Reading it…" : "Read it"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }
 
