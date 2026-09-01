@@ -9810,15 +9810,18 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
       className="mt-5"
       title={`Searching yourself = ${searches} web searches × 30s + ${sitesRead} sites × 60s, counted from this run's real activity. Rates from published research: ~9s to pick a result on a search page (Mediative eye-tracking) plus typing/reformulating; average page visit just under a minute (Nielsen Norman Group).`}
     >
-      <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
+      {/* Same shell as the reading-deck cards beside it, so the column reads
+          as one family instead of a floating stat. */}
+      <div className="mb-2 text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">
         Time saved
       </div>
-      <div className="mt-0.5 font-display text-3xl font-bold leading-none tabular-nums text-white">
+      <div className="rounded-2xl border border-white/15 bg-white/[0.07] p-3.5 backdrop-blur-sm">
+      <div className="font-display text-3xl font-bold leading-none tabular-nums text-white">
         {fmt(savingS)}
       </div>
       {/* The comparison as two labeled bars, not a run-on sentence: the sliver
           next to the full bar IS the point. */}
-      <div className="mt-2.5 w-56 max-w-full space-y-1.5">
+      <div className="mt-3 w-full space-y-1.5">
         {(
           [
             ["Scout", scoutingS],
@@ -9839,9 +9842,10 @@ function ScoutTimers({ startedAt, log }: { startedAt: number | null; log: string
           </div>
         ))}
       </div>
-      <p className="mt-1.5 text-[11px] text-white/45">
+      <p className="mt-2 text-[11px] text-white/45">
         {searches} searches and {sitesRead} pages, done for you
       </p>
+      </div>
     </div>
   );
 }

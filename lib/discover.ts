@@ -931,7 +931,10 @@ const PLATFORM_SWEEPS: {
     label: "public developer profiles",
     domains: ["github.com", "wellfound.com"],
     when: /\b(engineer|engineers|developer|developers|programmer|programmers|software|technical|cto|devops|data scientist|machine learning|ml|ai|open source|startup|startups|founder|founders)\b/i,
-    unless: /\b(music|musician|band|artist|fashion|restaurant|realtor|real estate)\b/i,
+    // "AI automation" in a goal usually describes the SERVICE being sold, not
+    // the people sought; buyer-side prospecting goals get no developer sweep.
+    unless:
+      /\b(music|musician|band|artist|fashion|restaurant|realtor|real estate|clients?|customers?|prospects?|sell|selling|pitch|smb|small business(es)?|business owners?|operations|ops manager|coo)\b/i,
   },
   {
     // Mostly login-walled, so yield is thin; swept anyway at the user's
@@ -1889,7 +1892,20 @@ export async function discover(
           continue;
         }
         if (looksLikePodcastOrVideoClip(r.url)) {
-          logSkip(r.title, r.url, "podcast episode or video clip (guest ≠ contact channel)");
+          logSkip(r.title, r.url, "podcast episode or video clip (guest != contact channel)");
+          continue;
+        }
+        // Prospecting reads staffing-aggregator job lists for nothing: those
+        // postings hide the actual employer behind the agency, so a page of
+        // "206 Logistics Coordinator Jobs" can never yield an approachable
+        // company. (Job SEARCHES keep them; the agency itself hires.)
+        if (
+          prospecting &&
+          /(^|\.)(roberthalf|randstad|adecco|kellyservices|manpower|expresspros|insightglobal|aerotek|kforce|spherion|appleone|staffmark|vaia|simplyhired|snagajob)\.(com|org|net|io)/i.test(
+            r.url || ""
+          )
+        ) {
+          logSkip(r.title, r.url, "staffing aggregator: postings hide the actual employer");
           continue;
         }
         const k = canonicalLink(r.url) || urlHost(r.url);
