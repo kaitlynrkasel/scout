@@ -1895,12 +1895,13 @@ export async function discover(
           logSkip(r.title, r.url, "podcast episode or video clip (guest != contact channel)");
           continue;
         }
+        // (computed here from the same rule the planner uses)
         // Prospecting reads staffing-aggregator job lists for nothing: those
         // postings hide the actual employer behind the agency, so a page of
         // "206 Logistics Coordinator Jobs" can never yield an approachable
         // company. (Job SEARCHES keep them; the agency itself hires.)
         if (
-          prospecting &&
+          (isProspectingUseCase(useCase) || goalWantsAnyIndustry(goal)) &&
           /(^|\.)(roberthalf|randstad|adecco|kellyservices|manpower|expresspros|insightglobal|aerotek|kforce|spherion|appleone|staffmark|vaia|simplyhired|snagajob)\.(com|org|net|io)/i.test(
             r.url || ""
           )
