@@ -924,29 +924,32 @@ select.scout-kind-picker option {
   border-color: rgb(var(--c-ink) / 0.45);
 }
 
-/* The ask itself: no border, no fill, no focus ring. Just words on the ground. */
+/* The ask itself: no border, no fill, no focus ring. Just words on the ground.
+   Uses the theme ink token so the typed text stays dark (near-navy) on the light
+   stage, and flips to near-white in dark mode, rather than the old hardcoded
+   cream that vanished against the light field. */
 .stage-ask {
   background: transparent;
   border: 0;
   outline: none;
-  color: #fdf8f1;
-  caret-color: #fdf8f1;
+  color: rgb(var(--c-ink));
+  caret-color: rgb(var(--c-ink));
   resize: none;
 }
 .stage-ask::placeholder {
-  color: rgb(253 248 241 / 0.42);
+  color: rgb(var(--c-ink) / 0.42);
 }
 
-/* A quiet second line for the optional exemplars. */
+/* A quiet second line for the optional exemplars / write-in answers. */
 .stage-sub {
   background: transparent;
   border: 0;
   outline: none;
-  color: rgb(253 248 241 / 0.9);
+  color: rgb(var(--c-ink) / 0.92);
   resize: none;
 }
 .stage-sub::placeholder {
-  color: rgb(253 248 241 / 0.34);
+  color: rgb(var(--c-ink) / 0.4);
 }
 
 /* Results arriving during a run: they lift in rather than snapping into place,
