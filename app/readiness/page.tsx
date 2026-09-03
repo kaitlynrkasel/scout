@@ -772,7 +772,9 @@ function ReadinessInner() {
                           >
                             {SEV_LABEL[it.sev]}
                           </span>
-                          <div className="flex gap-1">
+                          {/* Wraps: in a narrow pane the three-button group
+                              was clipping at the card edge. */}
+                          <div className="flex min-w-0 flex-wrap gap-1">
                             {VERDICTS.map(({ v, label }) => (
                               <button
                                 key={v}
