@@ -35,6 +35,15 @@ export async function GET(req: NextRequest) {
     );
   }
 
+  // Reap stale claims first: a run killed mid-send leaves rows stuck in
+  // "sending"; anything claimed more than 15 minutes ago is safely dead
+  // (a live send takes seconds) and returns to the queue.
+  await supabaseAdmin
+    .from("scheduled_sends")
+    .update({ status: "pending" })
+    .eq("status", "sending")
+    .lt("send_at", new Date(Date.now() - 15 * 60 * 1000).toISOString());
+
   // Pull the batch of due messages. Cap the batch so a large backlog doesn't
   // exceed maxDuration; extras drain on the next tick.
   const BATCH = 25;
@@ -62,6 +71,17 @@ export async function GET(req: NextRequest) {
   for (const row of due) {
     const id = row.id as string;
     const provider = row.provider as "gmail" | "outlook";
+    // Atomic claim BEFORE any provider call: flip pending to sending and only
+    // proceed if this invocation won the row. A retried or overlapping run
+    // (maxDuration kill mid-batch, concurrent invocation) otherwise re-reads
+    // the same pending rows and re-sends real email.
+    const claim = await supabaseAdmin
+      .from("scheduled_sends")
+      .update({ status: "sending" })
+      .eq("id", id)
+      .eq("status", "pending")
+      .select("id");
+    if (!claim.data?.length) continue; // someone else owns it
     try {
       const conn = await supabaseAdmin
         .from(provider === "gmail" ? "gmail_connections" : "outlook_connections")

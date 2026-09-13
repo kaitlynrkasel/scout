@@ -370,7 +370,13 @@ export async function draftFor(
   // to email drafts only. DMs/forms don't use email signatures. If the signature
   // came from a SHARED project (seeded by a teammate), it may carry the
   // teammate's name — swap that name line for the actual sender's.
-  let body = noDash(gen?.body || "(could not generate a draft for this one, try again)");
+  // Generation failed: surface a FAILURE, never a placeholder body that
+  // downstream (auto-search digests) would mark drafted and email to the
+  // user as ready to send.
+  if (!gen?.body) {
+    throw new Error("Draft generation failed for this find; try again.");
+  }
+  let body = noDash(gen.body);
   if (signature && channelType === "email") {
     body =
       body.replace(/\s+$/, "") +

@@ -315,7 +315,10 @@ export async function gmailThreadsWithReplies(
         String(headers.find((h: any) => (h.name || "").toLowerCase() === name)?.value || "");
       const from = hv("from");
       if (!from) continue;
-      if (from.toLowerCase().includes(me)) {
+      // An empty stored address must never classify EVERY message as ours:
+      // that silently disabled the replied guard and follow-ups went to
+      // people who had already answered.
+      if (me && from.toLowerCase().includes(me)) {
         sentByMe.add(tid); // a real (non-draft) message of ours went out
         continue;
       }
