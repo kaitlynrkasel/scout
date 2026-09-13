@@ -12181,7 +12181,7 @@ function ApplicationsTab({
         </div>
         {appQ.trim() && (
           <span className="shrink-0 text-xs font-semibold text-body/60">
-            {apps.length} match{apps.length === 1 ? "" : "es"}
+            {shown.length} match{shown.length === 1 ? "" : "es"}
           </span>
         )}
       </div>
@@ -13262,11 +13262,16 @@ function FindDetailModal({
   // Close on Escape.
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      // Flip through finds with the arrow keys, unless typing in a field.
       const el = e.target as HTMLElement | null;
       const typing =
         el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.isContentEditable);
+      // Escape mid-typing only leaves the field; a second Escape closes.
+      // Losing an open draft edit to a reflexive Escape was the bug.
+      if (e.key === "Escape") {
+        if (typing) el?.blur();
+        else onClose();
+        return;
+      }
       if (typing) return;
       if (e.key === "ArrowLeft") onPrev();
       if (e.key === "ArrowRight") onNext();
@@ -15712,7 +15717,7 @@ function FindGridCard({
           className={`absolute right-2 top-2 z-10 grid h-7 w-7 cursor-pointer place-items-center rounded-lg border backdrop-blur transition ${
             find.pinned
               ? "border-coral/40 bg-surface/90"
-              : "border-transparent bg-surface/70 text-body/40 opacity-0 hover:bg-surface hover:text-accent group-hover:opacity-100"
+              : "border-transparent bg-surface/70 text-body/40 opacity-0 hover:bg-surface hover:text-accent group-hover:opacity-100 [@media(pointer:coarse)]:opacity-60"
           }`}
         >
           {/* Painted on the SVG itself rather than inherited through `color`.
@@ -16217,6 +16222,9 @@ function FindsTab({
   // find was Scout-found or hand-added, and hiding half of them read as bugs.
   useEffect(() => {
     if (headingWord === "drafts" || headingWord === "sent") setSrcFilter("both");
+    // Coming back to Finds restores the default, so a visit to Drafts doesn't
+    // permanently flip the Source toggle underneath the user.
+    else setSrcFilter("scout");
   }, [headingWord]);
   // "Yours" covers hand-added AND imported rows: a spreadsheet import is your
   // own list, not something Scout found. Legacy imports predate foundVia and
@@ -17205,7 +17213,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
             <button
               onClick={async () => {
                 if (
-                  !(await scoutConfirm(`This can't be undone.`, {
+                  !(await scoutConfirm("They move to recently deleted, where you can bring them back.", {
                     title: `Remove ${selectedShown.length} finds?`,
                     confirmLabel: "Remove them",
                   }))
@@ -20055,7 +20063,13 @@ ${body}
 <script>window.onload = () => { window.print(); };<\/script></body></html>`;
 
     const w = window.open("", "_blank", "width=900,height=1100");
-    if (!w) return;
+    if (!w) {
+      void scoutConfirm(
+        "Your browser blocked the report window. Allow popups for scout-source.com and try again.",
+        { title: "Couldn't open the report", confirmLabel: "OK" }
+      );
+      return;
+    }
     w.document.write(html);
     w.document.close();
     setReportOpen(false);
@@ -20608,10 +20622,6 @@ ${body}
       {community && community.users >= 50 && (
       <section data-jig="6" className="mt-10">
         <h2 className="text-lg font-semibold tracking-tight text-ink">You vs the community</h2>
-        {false ? (
-          <div />
-        ) : (
-          <>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <CompareRow
                 label="Deny rate"
@@ -20633,8 +20643,6 @@ ${body}
                 fmt="num"
               />
             </div>
-          </>
-        )}
       </section>
       )}
 
