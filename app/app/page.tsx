@@ -28062,11 +28062,19 @@ async function autoSection(text: string): Promise<string> {
  * date range ("Founder - Cue Creative  Dec 2025 - Present") shows the title
  * bold with the dates set off to the right, everything else is plain prose.
  * Purely presentational; the stored text is untouched. */
-function SectionLines({ text }: { text: string }) {
+function SectionLines({ text, role = false }: { text: string; role?: boolean }) {
   const DATE_RE =
     // Space between month and year optional: PDFs emit "May2025" often enough.
     /^(.*?)[\s,·|-]*((?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}\s*(?:-|–|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}))\s*$/i;
-  const lines = text.replace(/\r/g, "").split("\n");
+  const PURE_DATE_RE =
+    /^(?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}\s*(?:-|–|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2})$/i;
+  // A run of 3+ spaces is a column separator from the PDF (two skills side by
+  // side, a right-aligned date): stack the pieces as their own lines instead
+  // of letting HTML collapse them into one glued phrase.
+  const lines = text
+    .replace(/\r/g, "")
+    .split("\n")
+    .flatMap((ln) => (ln.includes("   ") && !DATE_RE.test(ln.trim()) ? ln.split(/\s{3,}/) : [ln]));
   return (
     <div className="space-y-1">
       {lines.map((ln, i) => {
@@ -28075,14 +28083,25 @@ function SectionLines({ text }: { text: string }) {
         const bullet = /^[-•·*]\s+/.test(t);
         const body = bullet ? t.replace(/^[-•·*]\s+/, "") : t;
         const m = body.match(DATE_RE);
+        // Role sections: the first line is the title, bold even when its
+        // dates sit on the following line; a following pure-date line renders
+        // as that title's right-side chip via the same flex row.
+        const isTitle = role && i === 0 && !bullet;
         const main = m ? m[1].replace(/[\s,·|-]+$/, "") : body;
         const date = m && m[1].trim() ? m[2] : "";
+        if (role && i > 0 && PURE_DATE_RE.test(body)) {
+          return (
+            <div key={i} className="-mt-1 flex justify-end">
+              <span className="shrink-0 text-xs font-medium tabular-nums text-body/50">{body}</span>
+            </div>
+          );
+        }
         return (
           <div key={i} className="flex items-baseline gap-3">
             {bullet && <span className="w-3 shrink-0 text-center text-body/40">·</span>}
             <span
               className={`min-w-0 flex-1 text-sm leading-relaxed ${
-                date ? "font-semibold text-ink" : "text-body"
+                date || isTitle ? "font-semibold text-ink" : "text-body"
               }`}
             >
               {date ? main : body}
@@ -28235,7 +28254,7 @@ function SectionedText({
               className="cursor-text rounded-lg bg-surface px-3.5 py-3 transition hover:ring-1 hover:ring-warm-border"
             >
               {s.text.trim() ? (
-                <SectionLines text={s.text} />
+                <SectionLines text={s.text} role={/:/.test(s.label)} />
               ) : (
                 <span className="text-sm text-body/40">Empty, click to write</span>
               )}
