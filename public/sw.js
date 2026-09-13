@@ -13,7 +13,7 @@
  * Bump VERSION to retire every old cache on the next deploy.
  */
 
-const VERSION = "v2";
+const VERSION = "v2026-09-13";
 const SHELL = `scout-shell-${VERSION}`; // precached, rarely changes
 const PAGES = `scout-pages-${VERSION}`; // last-seen HTML per route
 const ASSETS = `scout-assets-${VERSION}`; // hashed build output + images

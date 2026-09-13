@@ -2885,6 +2885,11 @@ function ScoutTool({
     } catch {}
   };
   const saveFinds = (n: Find[]) => {
+    // Keep the ref current SYNCHRONOUSLY: two mutations in the same tick (a
+    // bulk action, or an async save landing mid-interaction) must each build
+    // on the other's result, not on the render-captured array. findsRef is
+    // declared below; assignment here runs at call time, after mount.
+    findsRef.current = n;
     setFinds(n);
     try {
       localStorage.setItem(FINDS_KEY, JSON.stringify(n));
@@ -3997,7 +4002,7 @@ function ScoutTool({
     }
     saveProjects(nextProjects);
     saveCats(nextCats);
-    saveFinds(finds.filter((f) => f.projectId !== id));
+    saveFinds(findsRef.current.filter((f) => f.projectId !== id));
     if (activeId === id) selectProject(nextProjects[0].id);
     // Best-effort, and only ever removes the shared rows THIS user added — a
     // teammate's finds in the same shared project are their work, not something
@@ -5234,7 +5239,7 @@ function ScoutTool({
       });
     }
     if (fresh.length || updates.size) {
-      const merged = finds.map((f) => updates.get(f.id) || f);
+      const merged = findsRef.current.map((f) => updates.get(f.id) || f);
       saveFinds([...fresh, ...merged]);
     }
     if (fresh.length) publishFindsToTeam(fresh);
@@ -5792,7 +5797,7 @@ function ScoutTool({
 
   function setFindStatus(id: string, status: FindStatus) {
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === id
           ? {
               ...f,
@@ -5812,7 +5817,7 @@ function ScoutTool({
   }
   // Star/unstar a find so it sorts to the top of whatever list it's in.
   function togglePin(id: string) {
-    saveFinds(finds.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
+    saveFinds(findsRef.current.map((f) => (f.id === id ? { ...f, pinned: !f.pinned } : f)));
   }
   // Move a find to a different project. `id` bakes in the project (project::
   // name::host), so a move needs a fresh id in the target project's scheme, 
@@ -5828,7 +5833,7 @@ function ScoutTool({
       return;
     }
     saveFinds(
-      finds.map((x) =>
+      findsRef.current.map((x) =>
         x.id === id
           ? { ...x, id: newId, projectId: targetProjectId, categoryId: undefined }
           : x
@@ -5840,7 +5845,7 @@ function ScoutTool({
   function setFindCategory(id: string, categoryId: string) {
     const cat = categories.find((c) => c.id === categoryId);
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === id
           ? {
               ...f,
@@ -5854,7 +5859,7 @@ function ScoutTool({
   // Toggle whether this find's email draft attaches the resume.
   function setFindAttach(find: Find, on: boolean) {
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === find.id && f.draft ? { ...f, draft: { ...f.draft, attachResume: on } } : f
       )
     );
@@ -5885,7 +5890,7 @@ function ScoutTool({
       whyItFits: o.whyItFits || "",
     };
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === find.id ? { ...f, draft, status: "drafted" as FindStatus, draftedAt: Date.now() } : f
       )
     );
@@ -5896,7 +5901,7 @@ function ScoutTool({
     const prevBody = find.draft?.body || "";
     recordEdit(prevBody, body, find.id);
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === find.id && f.draft
           ? {
               ...f,
@@ -6001,7 +6006,7 @@ function ScoutTool({
   // Deny a find and record why (reason optional).
   function denyFindWithReason(id: string, reason: string) {
     saveFinds(
-      finds.map((f) =>
+      findsRef.current.map((f) =>
         f.id === id
           ? { ...f, status: "denied" as FindStatus, denyReason: reason.trim() || f.denyReason || "" }
           : f
@@ -6009,11 +6014,11 @@ function ScoutTool({
     );
   }
   function setFindReason(id: string, reason: string) {
-    saveFinds(finds.map((f) => (f.id === id ? { ...f, denyReason: reason.trim() } : f)));
+    saveFinds(findsRef.current.map((f) => (f.id === id ? { ...f, denyReason: reason.trim() } : f)));
   }
   function removeFind(id: string) {
     const gone = finds.find((f) => f.id === id);
-    saveFinds(finds.filter((f) => f.id !== id));
+    saveFinds(findsRef.current.filter((f) => f.id !== id));
     if (gone) saveTrash([{ find: gone, deletedAt: Date.now() }, ...trash].slice(0, 100));
   }
   // Bring a deleted find back exactly as it was (draft, status, notes intact).
@@ -6030,11 +6035,11 @@ function ScoutTool({
 
   // Edit a find's contact fields from the spreadsheet view. Patches the opp.
   function patchFind(id: string, patch: Partial<Find>) {
-    saveFinds(finds.map((f) => (f.id === id ? { ...f, ...patch } : f)));
+    saveFinds(findsRef.current.map((f) => (f.id === id ? { ...f, ...patch } : f)));
   }
   function updateFindOpp(id: string, patch: Partial<Opportunity>) {
     saveFinds(
-      finds.map((f) => (f.id === id ? { ...f, opp: { ...f.opp, ...patch } } : f))
+      findsRef.current.map((f) => (f.id === id ? { ...f, opp: { ...f.opp, ...patch } } : f))
     );
   }
 
@@ -6478,7 +6483,7 @@ function ScoutTool({
       let f = find;
       if ((opts?.force || !f.scanned) && f.opp.url) {
         f = await scanFindData(f);
-        if (f !== find) saveFinds(finds.map((x) => (x.id === find.id ? f : x)));
+        if (f !== find) saveFinds(findsRef.current.map((x) => (x.id === find.id ? f : x)));
       }
       const res = await fetch("/api/draft", {
         method: "POST",
@@ -6640,7 +6645,7 @@ function ScoutTool({
         }),
       });
       if (!res.ok) return;
-      saveFinds(finds.map((f) => (f.id === find.id ? { ...f, followUpQueuedAt: Date.now() } : f)));
+      saveFinds(findsRef.current.map((f) => (f.id === find.id ? { ...f, followUpQueuedAt: Date.now() } : f)));
       setRepliesNote(
         `Auto follow-up queued for ${find.opp.name} in ${FOLLOWUP_DAYS} days (canceled if they reply).`
       );
@@ -7921,7 +7926,7 @@ function ScoutTool({
         onSwitchAccount={async (email: string) => {
           const err = await switchAccount(email);
           if (err) {
-            alert(err);
+            void scoutConfirm(err, { title: "Couldn't switch account", confirmLabel: "OK" });
             await supabase?.auth.signOut({ scope: "local" });
           }
           // Reload either way so every piece of per-account state reinitializes.
@@ -11985,7 +11990,7 @@ function AskAboutFind({ opp }: { opp: Opportunity }) {
                   isn't mistaken for a confirmed one. */}
               {t.role === "scout" && t.grounded === false && (
                 <div className="mt-1 text-[11px] font-semibold text-attention">
-                  Not stated on the page — worth checking with them directly.
+                  Not stated on the page, worth checking with them directly.
                 </div>
               )}
             </div>
@@ -12310,7 +12315,7 @@ function ApplicationsTab({
       {shown.length === 0 ? (
         <p className="mt-6 max-w-[56ch] rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-sm text-body/70">
           Nothing tracked here yet. Scout marks postings, programs, and
-          submissions automatically as it finds them — or open any find in{" "}
+          submissions automatically as it finds them: or open any find in{" "}
           <button onClick={goFinds} className="font-semibold text-accent hover:underline">
             Finds
           </button>{" "}
@@ -13734,7 +13739,7 @@ function FindDetailModal({
                 applying={applying}
                 hasResume={hasResume}
                 onToggleAttach={onToggleAttach}
-                otherProjects={[]}
+                otherProjects={otherProjects}
                 onMoveProject={onMoveProject}
                 currentSignature={currentSignature}
                 onEditSignature={onEditSignature}
@@ -15084,7 +15089,7 @@ function AddContactModal({
                 type="button"
                 onClick={autofill}
                 disabled={!name.trim() || enriching}
-                title="Scout searches the public web and fills whatever you leave blank — role, company, profile, site, location. Nothing is overwritten."
+                title="Scout searches the public web and fills whatever you leave blank, role, company, profile, site, location. Nothing is overwritten."
                 className="shrink-0 rounded-xl border border-sage/50 px-3.5 py-2 text-xs font-bold text-sage transition hover:bg-sage/10 disabled:opacity-50"
               >
                 {enriching ? "Looking them up…" : "Autofill the rest"}
@@ -17233,6 +17238,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
 
       {detailFind && (
         <FindDetailModal
+          key={detailFind.id}
           draftFirst={headingWord === "drafts"}
           find={detailFind}
           onMarkSent={() => {
@@ -17804,7 +17810,7 @@ function FindCard({
                       <ContactValue value={val} className="text-body" />
                     )
                   ) : (
-                    <span className="text-body/35">, </span>
+                    <span className="text-body/35">none listed</span>
                   )}
                 </span>
               </span>
@@ -20914,7 +20920,7 @@ ${body}
               {tuningBusy ? "Writing…" : "Generate tuning prompt"}
             </button>
             <span className="text-xs text-body/50">
-              Writes a prompt you can paste into Claude Code to recalibrate the search.
+              Writes a tuning prompt you can hand to your developer tools to recalibrate the search.
             </span>
           </div>
           {tuningErr && (
@@ -21736,46 +21742,7 @@ function CompareRow({
   );
 }
 
-function StatTile({
-  n,
-  label,
-  icon,
-}: {
-  n: number;
-  label: string;
-  icon: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-3xl border border-warm-border bg-surface p-5 shadow-card">
-      <span className="mb-3 flex h-9 w-9 items-center justify-center rounded-xl bg-brown-tint">
-        <svg
-          width="17"
-          height="17"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.7"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="text-brown-deep"
-        >
-          {icon}
-        </svg>
-      </span>
-      <div className="text-3xl font-extrabold tracking-tight text-ink">
-        <CountUp value={n} />
-      </div>
-      <div className="mt-1 text-xs font-semibold text-body">{label}</div>
-    </div>
-  );
-}
 
-/* ---------------- Meeting prep ----------------
- * Once a find's status is "sent" or later, meaning the user has actually
- * reached out, Scout offers to prep them for a meeting/interview by
- * pulling fresh facts about the contact + outlet. Statuses "new" and
- * "drafted" don't show the button; that's the deliberate incentive to
- * keep statuses current. Denied hides it too. */
 function MeetingPrepBlock({
   find,
   busy,
@@ -28964,545 +28931,7 @@ function WarnIcon() {
 // One project's categories: drag to reorder, click to multi-select and delete,
 // rename inline, and add your own (suggestions + free text, with the goal the
 // search will use derived so the API understands what to look for).
-function ProjectCategoryList({
-  project,
-  cats,
-  onRename,
-  onRemoveMany,
-  onReorder,
-  onAdd,
-  onDeriveGoal,
-}: {
-  project: Project;
-  cats: Category[];
-  onRename: (id: string, name: string) => void;
-  onRemoveMany: (ids: string[]) => void;
-  onReorder: (orderedIds: string[]) => void;
-  onAdd: (name: string, goal?: string) => void;
-  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
-}) {
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [dragId, setDragId] = useState("");
-  const [overId, setOverId] = useState("");
-  const [addOpen, setAddOpen] = useState(false);
-  const [addText, setAddText] = useState("");
-  const [deriving, setDeriving] = useState(false);
 
-  const toggle = (id: string) =>
-    setSelected((prev) => {
-      const n = new Set(prev);
-      n.has(id) ? n.delete(id) : n.add(id);
-      return n;
-    });
-  const deleteSelected = () => {
-    onRemoveMany([...selected]);
-    setSelected(new Set());
-  };
-  const drop = (targetId: string) => {
-    if (dragId && dragId !== targetId) {
-      const order = cats.map((c) => c.id).filter((id) => id !== dragId);
-      const at = order.indexOf(targetId);
-      order.splice(at < 0 ? order.length : at, 0, dragId);
-      onReorder(order);
-    }
-    setDragId("");
-    setOverId("");
-  };
-  const submitFree = async () => {
-    const name = addText.trim();
-    if (!name || deriving) return;
-    setDeriving(true);
-    try {
-      const goal = await onDeriveGoal(name, project.useCase);
-      onAdd(name, goal);
-      setAddText("");
-    } finally {
-      setDeriving(false);
-    }
-  };
-
-  const existing = new Set(cats.map((c) => c.name.trim().toLowerCase()));
-  const suggestions = suggestionsFor(project.useCase).filter(
-    (s) => !existing.has(s.name.trim().toLowerCase())
-  );
-
-  return (
-    <div>
-      {/* Multi-select toolbar */}
-      {selected.size > 0 && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-warm-bg px-2.5 py-1.5 text-xs">
-          <span className="font-semibold text-ink">{selected.size} selected</span>
-          <button
-            onClick={deleteSelected}
-            className="rounded-md bg-brand-gradient px-2.5 py-1 font-bold text-white transition hover:opacity-95"
-          >
-            Delete
-          </button>
-          <button
-            onClick={() => setSelected(new Set())}
-            className="font-semibold text-body/60 transition hover:text-ink"
-          >
-            Clear
-          </button>
-        </div>
-      )}
-
-      {cats.length === 0 && (
-        <p className="px-1 text-xs text-body/50">No categories yet. Add one below.</p>
-      )}
-
-      <ul className="space-y-1">
-        {cats.map((c) => {
-          const isSel = selected.has(c.id);
-          return (
-            <li
-              key={c.id}
-              onDragOver={(e) => {
-                e.preventDefault();
-                if (dragId) setOverId(c.id);
-              }}
-              onDrop={() => drop(c.id)}
-              className={`flex items-center gap-1.5 rounded-lg px-1 py-0.5 transition ${
-                overId === c.id && dragId !== c.id ? "bg-coral/10 ring-1 ring-coral/30" : ""
-              } ${isSel ? "bg-sage/10" : ""}`}
-            >
-              <span
-                draggable
-                onDragStart={() => setDragId(c.id)}
-                onDragEnd={() => {
-                  setDragId("");
-                  setOverId("");
-                }}
-                title="Drag to reorder"
-                aria-label="Drag to reorder"
-                className="cursor-grab select-none px-0.5 text-body/40 active:cursor-grabbing"
-              >
-                ⠿
-              </span>
-              <input
-                type="checkbox"
-                checked={isSel}
-                onChange={() => toggle(c.id)}
-                aria-label={`Select ${c.name}`}
-                className="h-3.5 w-3.5 shrink-0 accent-brown"
-              />
-              <input
-                defaultValue={c.name}
-                key={c.name}
-                onBlur={(e) => {
-                  const v = e.target.value.trim();
-                  if (v && v !== c.name) onRename(c.id, v);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-                aria-label={`Category name for ${c.name}`}
-                className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-sm text-ink outline-none transition hover:border-warm-border focus:border-coral"
-              />
-              <button
-                onClick={() => onRemoveMany([c.id])}
-                title={`Remove ${c.name}`}
-                aria-label={`Remove category ${c.name}`}
-                className="shrink-0 rounded-md border border-warm-border p-1 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-              >
-                <TrashIcon />
-              </button>
-            </li>
-          );
-        })}
-      </ul>
-
-      {/* Add: a plus that opens suggestions + free text */}
-      {!addOpen ? (
-        <button
-          onClick={() => setAddOpen(true)}
-          className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-dashed border-warm-border px-2.5 py-1.5 text-xs font-semibold text-accent transition hover:bg-warm-bg"
-        >
-          <span className="text-sm leading-none">+</span> Add a category
-        </button>
-      ) : (
-        <div className="mt-2 rounded-xl border border-warm-border bg-warm-bg/40 p-2.5">
-          {suggestions.length > 0 && (
-            <>
-              <div className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-body/50">
-                Suggestions
-              </div>
-              <div className="mb-2.5 flex flex-wrap gap-1.5">
-                {suggestions.map((s) => (
-                  <button
-                    key={s.name}
-                    onClick={() => onAdd(s.name, s.goal)}
-                    title={s.goal}
-                    className="rounded-full border border-warm-border bg-surface px-2.5 py-1 text-xs font-medium text-ink transition hover:border-coral/40 hover:bg-warm-bg"
-                  >
-                    + {s.name}
-                  </button>
-                ))}
-              </div>
-            </>
-          )}
-          <div className="flex items-center gap-1.5">
-            <input
-              value={addText}
-              onChange={(e) => setAddText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") submitFree();
-              }}
-              placeholder="Or type your own (Scout figures out who to find)"
-              className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
-            />
-            <button
-              onClick={submitFree}
-              disabled={!addText.trim() || deriving}
-              className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40"
-            >
-              {deriving ? "Reading…" : "Add"}
-            </button>
-            <button
-              onClick={() => {
-                setAddOpen(false);
-                setAddText("");
-              }}
-              className="shrink-0 rounded-lg px-2 py-1.5 text-xs font-semibold text-body/60 transition hover:text-ink"
-            >
-              Done
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Inline, always-visible editor for the user's projects and their categories.
-// Lives on the Profile tab (the popover CategoryManager stays on Outreach).
-function ProjectsCategoriesEditor({
-  projects,
-  categories,
-  onAddProject,
-  onRenameProject,
-  onRemoveProject,
-  onAddCategory,
-  onRenameCategory,
-  onRemoveCategory,
-  onRemoveCategories,
-  onReorderCategories,
-  onDeriveGoal,
-  onSetProjectContext,
-  onSetProjectUsesProfile,
-  onSetProjectUsesCompany,
-  onSetProjectCompany,
-  companies,
-  primaryCompanyId,
-  isCompany,
-}: {
-  projects: Project[];
-  categories: Category[];
-  onAddProject: (name: string) => void;
-  onRenameProject: (id: string, name: string) => void;
-  onRemoveProject: (id: string) => void;
-  onAddCategory: (projectId: string, name: string, goal?: string) => void;
-  onRenameCategory: (id: string, name: string) => void;
-  onRemoveCategory: (id: string) => void;
-  onRemoveCategories: (ids: string[]) => void;
-  onReorderCategories: (projectId: string, orderedIds: string[]) => void;
-  onDeriveGoal: (name: string, useCase: string) => Promise<string>;
-  onSetProjectContext: (id: string, context: string) => void;
-  onSetProjectUsesProfile: (id: string, usesProfile: boolean) => void;
-  onSetProjectUsesCompany: (id: string, usesCompany: boolean) => void;
-  onSetProjectCompany: (id: string, companyId: string) => void;
-  companies: { id: string; name: string; role: string }[];
-  primaryCompanyId: string;
-  isCompany: boolean;
-}) {
-  const [newProject, setNewProject] = useState("");
-
-  return (
-    <div>
-      <Label>Your projects and categories</Label>
-      <p className="mt-1 mb-3 text-xs leading-relaxed text-body/70">
-        A project is usually one client, brand, or goal you're working on. Describe
-        what it's for, choose whether it uses your Profile, and manage its
-        categories, the kinds of people you search for. Drag to reorder, click to
-        select and delete, or add your own. Synced with the Scout tab.
-      </p>
-
-      <div className="space-y-3">
-        {projects.map((p) => {
-          const cats = categories.filter((c) => c.projectId === p.id);
-          return (
-            <div
-              key={p.id}
-              className="rounded-2xl border border-warm-border bg-surface p-4 shadow-card"
-            >
-              <div className="flex items-center gap-2">
-                <span
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-warm-bg text-[11px] font-bold text-body/60"
-                  aria-hidden
-                >
-                  {p.name.trim().charAt(0).toUpperCase() || "?"}
-                </span>
-                <input
-                  defaultValue={p.name}
-                  key={p.name}
-                  onBlur={(e) => {
-                    const v = e.target.value.trim();
-                    if (v && v !== p.name) onRenameProject(p.id, v);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") e.currentTarget.blur();
-                  }}
-                  aria-label={`Project name for ${p.name}`}
-                  className="min-w-0 flex-1 rounded-lg border border-transparent px-2 py-1.5 text-sm font-bold text-ink outline-none transition hover:border-warm-border focus:border-coral"
-                />
-                {projects.length > 1 && (
-                  <button
-                    onClick={async () => {
-                      if (
-                        await scoutConfirm(
-                          "Its categories go with it. Finds saved under it stay in your Finds list.",
-                          { title: `Delete the project "${p.name}"?`, confirmLabel: "Delete project" }
-                        )
-                      )
-                        onRemoveProject(p.id);
-                    }}
-                    title={`Delete ${p.name}`}
-                    aria-label={`Delete project ${p.name}`}
-                    className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-                  >
-                    <TrashIcon />
-                  </button>
-                )}
-              </div>
-
-              <div className="mt-2.5 border-t border-warm-border pt-2.5">
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <Label className="mb-0">What is this project for?</Label>
-                  <MicButton
-                    value={p.context || ""}
-                    onChange={(v) => onSetProjectContext(p.id, v)}
-                  />
-                </div>
-                <textarea
-                  value={p.context || ""}
-                  onChange={(e) => onSetProjectContext(p.id, e.target.value)}
-                  rows={2}
-                  placeholder="e.g. a sustainable-fashion DTC brand launching a new collection, targeting Gen Z shoppers who care about ethical sourcing."
-                  className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-                />
-                {/* Companies pitch as the company, not a person — the personal
-                    profile toggle is noise for them (task #51). */}
-                {!isCompany && (
-                  <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={p.usesProfile !== false}
-                      onChange={(e) => onSetProjectUsesProfile(p.id, e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                    />
-                    <span className="text-xs leading-relaxed text-body/80">
-                      <span className="font-semibold text-ink">Use my personal profile for this project</span>
-                      <br />
-                      On, searches match your own field and learn from your other projects. Turn
-                      it off when this project isn&apos;t about you personally.
-                    </span>
-                  </label>
-                )}
-                {isCompany && (
-                  <label className="mt-2.5 flex cursor-pointer items-start gap-2.5">
-                    <input
-                      type="checkbox"
-                      checked={p.usesCompany !== false}
-                      onChange={(e) => onSetProjectUsesCompany(p.id, e.target.checked)}
-                      className="mt-0.5 h-4 w-4 shrink-0 rounded border-warm-border text-brown accent-brown focus:ring-brown/30"
-                    />
-                    <span className="text-xs leading-relaxed text-body/80">
-                      <span className="font-semibold text-ink">Use my company for this project</span>
-                      <br />
-                      On, outreach represents your company. Independent of the personal toggle,
-                      so you can pitch as the company only, as just yourself, both, or neither.
-                    </span>
-                  </label>
-                )}
-                {/* Move this project (its categories + finds ride along) to another
-                    company — or make it Personal (outside every company lens). */}
-                {isCompany && companies.length > 0 && (
-                  <div className="mt-2.5">
-                    <Label className="mb-1">This project belongs to</Label>
-                    <select
-                      value={p.companyId || primaryCompanyId}
-                      onChange={(e) => onSetProjectCompany(p.id, e.target.value)}
-                      className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-2 text-sm font-semibold text-ink outline-none transition focus:border-coral sm:max-w-xs"
-                    >
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                      <option value="personal">Personal (no company)</option>
-                    </select>
-                    <p className="mt-1 text-[11px] leading-relaxed text-body/60">
-                      Its categories and saved finds move with it. Personal projects
-                      only show under the &ldquo;Personal&rdquo; lens.
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-2.5 border-t border-warm-border pt-2.5">
-                <ProjectCategoryList
-                  project={p}
-                  cats={cats}
-                  onRename={onRenameCategory}
-                  onRemoveMany={onRemoveCategories}
-                  onReorder={(orderedIds) => onReorderCategories(p.id, orderedIds)}
-                  onAdd={(name, goal) => onAddCategory(p.id, name, goal)}
-                  onDeriveGoal={onDeriveGoal}
-                />
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Add a project */}
-      <div className="mt-3 flex items-center gap-1.5">
-        <input
-          value={newProject}
-          onChange={(e) => setNewProject(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && newProject.trim()) {
-              onAddProject(newProject);
-              setNewProject("");
-            }
-          }}
-          placeholder="New project (e.g. another client or brand)"
-          className="min-w-0 flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-        />
-        <button
-          onClick={() => {
-            if (newProject.trim()) {
-              onAddProject(newProject);
-              setNewProject("");
-            }
-          }}
-          disabled={!newProject.trim()}
-          className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-40"
-        >
-          Add project
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function CategoryManager({
-  cats,
-  onAdd,
-  onRename,
-  onRemove,
-  onClose,
-  title = "Edit categories",
-  addPlaceholder = "New category name",
-  emptyText = "No categories yet. Add one below.",
-  canRemove = true,
-}: {
-  cats: { id: string; name: string }[];
-  onAdd: (name: string) => void;
-  onRename: (id: string, name: string) => void;
-  onRemove: (id: string) => void;
-  onClose: () => void;
-  title?: string;
-  addPlaceholder?: string;
-  emptyText?: string;
-  canRemove?: boolean;
-}) {
-  const [newName, setNewName] = useState("");
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) onClose();
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [onClose]);
-
-  function add() {
-    if (!newName.trim()) return;
-    onAdd(newName);
-    setNewName("");
-  }
-
-  return (
-    <div
-      ref={ref}
-      className="absolute left-0 top-full z-50 mt-2 max-h-[70vh] w-[300px] overflow-auto rounded-2xl border border-warm-border bg-surface p-3 shadow-xl"
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <span className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-          {title}
-        </span>
-        <button
-          onClick={onClose}
-          className="text-xs font-semibold text-accent transition hover:underline"
-        >
-          Done
-        </button>
-      </div>
-
-      <div className="max-h-56 space-y-1.5 overflow-auto">
-        {cats.length === 0 && (
-          <p className="px-1 py-2 text-xs text-body/60">{emptyText}</p>
-        )}
-        {cats.map((c) => (
-          <div key={c.id} className="flex items-center gap-1.5">
-            <input
-              defaultValue={c.name}
-              onBlur={(e) => {
-                if (e.target.value.trim() && e.target.value.trim() !== c.name)
-                  onRename(c.id, e.target.value);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") e.currentTarget.blur();
-              }}
-              className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
-            />
-            {canRemove && cats.length > 1 && (
-              <button
-                onClick={() => onRemove(c.id)}
-                title={`Remove ${c.name}`}
-                aria-label={`Remove ${c.name}`}
-                className="shrink-0 rounded-lg border border-warm-border p-1.5 text-body/60 transition hover:border-coral/40 hover:bg-warm-bg hover:text-accent"
-              >
-                <TrashIcon />
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-2.5 flex items-center gap-1.5 border-t border-warm-border pt-2.5">
-        <input
-          value={newName}
-          onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") add();
-          }}
-          placeholder={addPlaceholder}
-          className="min-w-0 flex-1 rounded-lg border border-warm-border px-2.5 py-1.5 text-sm text-ink outline-none transition focus:border-coral"
-        />
-        <button
-          onClick={add}
-          disabled={!newName.trim()}
-          className="shrink-0 rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white transition hover:opacity-95 disabled:opacity-40"
-        >
-          Add
-        </button>
-      </div>
-    </div>
-  );
-}
 
 function TrashIcon() {
   return (
@@ -29523,24 +28952,6 @@ function TrashIcon() {
   );
 }
 
-function PencilIcon() {
-  return (
-    <svg
-      width="15"
-      height="15"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.9"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z" />
-    </svg>
-  );
-}
 
 function ExpandIcon() {
   return (
@@ -29559,47 +28970,6 @@ function ExpandIcon() {
   );
 }
 
-function HeroArt() {
-  return (
-    <div className="relative mx-auto h-56 w-full max-w-sm">
-      <div className="absolute right-6 top-2 w-60 rounded-2xl rounded-tr-sm border border-warm-border bg-surface p-3.5 shadow-soft">
-        <span
-          aria-hidden
-          className="absolute -right-[6px] top-5 h-3 w-3 rotate-45 border-r border-t border-warm-border bg-surface"
-        />
-        <div className="mb-2 flex items-center gap-2">
-          <span className="h-6 w-6 rounded-full bg-brand-gradient" />
-          <span className="text-xs font-bold text-ink">You</span>
-          <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-accent">
-            Email
-          </span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-warm-bg" />
-        <div className="mt-1.5 h-2 w-4/5 rounded-full bg-warm-bg" />
-      </div>
-      <div className="absolute left-2 top-24 w-52 rounded-2xl rounded-tl-sm bg-brand-gradient p-3.5 text-white shadow-soft">
-        <span
-          aria-hidden
-          className="absolute -left-[6px] top-5 h-3 w-3 rotate-45 bg-[#ff8159]"
-        />
-        <div className="mb-2 flex items-center gap-2">
-          <span className="h-6 w-6 rounded-full bg-white/30" />
-          <span className="text-xs font-bold">Reply</span>
-          <span className="ml-auto text-[10px] font-semibold uppercase tracking-wide text-white/80">
-            LinkedIn
-          </span>
-        </div>
-        <div className="h-2 w-full rounded-full bg-white/35" />
-        <div className="mt-1.5 h-2 w-3/4 rounded-full bg-white/35" />
-      </div>
-      <div className="absolute bottom-1 right-10 flex items-center gap-1.5 rounded-full border border-warm-border bg-surface px-3 py-2 shadow-card">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-blush [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-coral [animation-delay:300ms]" />
-      </div>
-    </div>
-  );
-}
 
 function Logo({ small = false, white = false }: { small?: boolean; white?: boolean }) {
   const s = white ? 18 : small ? 18 : 24;
