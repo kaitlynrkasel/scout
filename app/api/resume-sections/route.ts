@@ -43,9 +43,15 @@ export async function POST(req: NextRequest) {
       'own section), "Summary" for an opening paragraph about the person, "Other" only as a last resort. Do not repeat the ' +
       "heading inside that section's text.\n\n" +
       "Keep the document's own sections; do not invent a structure it does not have. A resume " +
-      "with Experience, Education, and Skills returns exactly those three (plus Contact if the " +
-      "header block is there). Merge nothing; split nothing further than the document does. " +
-      "Drop a section that would be empty. Never use em-dashes in a label.";
+      "with Experience, Education, and Skills returns those (plus Contact if the header block is " +
+      "there). Merge nothing. Drop a section that would be empty. Never use em-dashes in a label.\n\n" +
+      "ONE EXCEPTION to splitting no further: a section that is a LIST OF DATED ROLES (Experience, " +
+      "Work History, Internships, Leadership, Activities) splits into one section PER ROLE, in " +
+      'order, each labeled "<parent heading>: <the role\'s own title line>" (title copied verbatim, ' +
+      "Sentence case). PDF extraction often tears a role apart, gluing its dates or title onto a " +
+      "neighboring line; within a role you may REORDER whole lines (and rejoin a date fragment " +
+      "with its role's title line) so each role's section holds its own title, dates, and bullets " +
+      "together. Reordering only: every character still comes from the document, nothing rewritten.";
 
     const parsed: any = parseJsonLoose(await claudeJson(sys, `DOCUMENT:\n${t}`, 8000));
     const raw = Array.isArray(parsed?.sections) ? parsed.sections : [];
