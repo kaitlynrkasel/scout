@@ -20,7 +20,31 @@ function page(title: string, body: string, ok = true): Response {
   return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
 }
 
+// GET only CONFIRMS: email scanners and link prefetchers (Outlook SafeLinks
+// and kin) fetch every URL in a digest, and a mutating GET let them silently
+// approve or deny finds before the user opened the email. The real decision
+// happens on the POST from the confirm button, which prefetchers never send.
 export async function GET(req: NextRequest) {
+  const token = req.nextUrl.searchParams.get("t") || "";
+  const parsed = verifyAction(token);
+  if (!parsed) {
+    return page("Link expired or invalid", "This action link couldn't be verified. Open Scout to review your finds.", false);
+  }
+  const verb = parsed.action === "deny" ? "Pass on" : "Approve";
+  const html = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Scout</title></head>
+<body style="margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F5F2EB;color:#241C13">
+  <div style="max-width:460px;margin:12vh auto;padding:32px;background:#fff;border:1px solid #DED6C7;border-radius:16px;text-align:center">
+    <h1 style="font-size:20px;margin:0 0 6px">${verb} this find?</h1>
+    <p style="font-size:14px;line-height:1.55;color:#57503f;margin:0 0 20px">One tap to confirm; Scout records it for this search.</p>
+    <form method="POST" style="margin:0">
+      <button type="submit" style="background:#241C13;color:#F5F2EB;font-weight:700;font-size:14px;border:0;padding:11px 20px;border-radius:9px;cursor:pointer">${verb}</button>
+    </form>
+  </div>
+</body></html>`;
+  return new Response(html, { headers: { "content-type": "text/html; charset=utf-8" } });
+}
+
+export async function POST(req: NextRequest) {
   const token = req.nextUrl.searchParams.get("t") || "";
   const parsed = verifyAction(token);
   if (!parsed) {
