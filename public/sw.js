@@ -47,6 +47,16 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(keys.filter((k) => !keep.has(k)).map((k) => caches.delete(k)))
       )
+      // Re-precache the shell on every activation: the update banner clears
+      // all caches (including this one), and install only re-runs when sw.js
+      // bytes change, so without this the offline page stayed gone forever.
+      .then(() =>
+        caches
+          .open(SHELL)
+          .then((cache) =>
+            Promise.all(PRECACHE.map((url) => cache.add(url).catch(() => {})))
+          )
+      )
       .then(() => self.clients.claim())
   );
 });

@@ -614,7 +614,7 @@ export default function ImportOutreach({
         onClick={(e) => e.stopPropagation()}
         className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-warm-border bg-surface shadow-soft"
       >
-        <div className="flex items-center gap-3 border-b border-warm-border bg-white px-6 py-4">
+        <div className="flex items-center gap-3 border-b border-warm-border bg-surface px-6 py-4">
           <div>
             <h2 className="text-lg font-extrabold tracking-tight text-ink">
               Import your outreach history
@@ -643,7 +643,7 @@ export default function ImportOutreach({
                 const f = e.dataTransfer.files?.[0];
                 if (f) handleFile(f);
               }}
-              className="rounded-2xl border-2 border-dashed border-warm-border bg-white p-10 text-center"
+              className="rounded-2xl border-2 border-dashed border-warm-border bg-surface p-10 text-center"
             >
               <p className="text-sm font-semibold text-ink">
                 Drop a spreadsheet here
@@ -708,7 +708,7 @@ export default function ImportOutreach({
           {/* Step 2, column mapping + preview + config */}
           {rows.length > 0 && imported === null && (
             <div className="space-y-6">
-              <div className="rounded-2xl border border-warm-border bg-white p-5">
+              <div className="rounded-2xl border border-warm-border bg-surface p-5">
                 <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                   File
                 </div>
@@ -722,7 +722,7 @@ export default function ImportOutreach({
                   Senders, Config…). Only import the ones that hold your finds so a
                   Senders/Config tab doesn't hijack the import. */}
               {tabs.length > 1 && (
-                <div className="rounded-2xl border border-warm-border bg-white p-5">
+                <div className="rounded-2xl border border-warm-border bg-surface p-5">
                   <div className="text-xs font-bold uppercase tracking-wider text-body/60">
                     Which tabs hold your contacts?
                   </div>
@@ -746,7 +746,7 @@ export default function ImportOutreach({
                           className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
                             on
                               ? "border-transparent bg-brand-gradient text-white"
-                              : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                              : "border-warm-border bg-surface text-body hover:bg-warm-bg"
                           }`}
                         >
                           {on ? "✓ " : ""}
@@ -764,7 +764,7 @@ export default function ImportOutreach({
               {/* Understanding gate — Scout reads the doc and asks until it gets it.
                   The % is its honest read, and rises as you answer. */}
               {(understand || uBusy) && (
-                <div className="rounded-2xl border border-warm-border bg-white p-5">
+                <div className="rounded-2xl border border-warm-border bg-surface p-5">
                   <div className="flex items-center justify-between gap-3">
                     <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                       What Scout understands
@@ -809,7 +809,7 @@ export default function ImportOutreach({
                                   className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                                     sel.includes(opt)
                                       ? "border-transparent bg-brand-gradient text-white"
-                                      : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                                      : "border-warm-border bg-surface text-body hover:bg-warm-bg"
                                   }`}
                                 >
                                   {opt}
@@ -820,7 +820,7 @@ export default function ImportOutreach({
                                 className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
                                   sel.includes("__other__")
                                     ? "border-transparent bg-brand-gradient text-white"
-                                    : "border-warm-border bg-white text-body hover:bg-warm-bg"
+                                    : "border-warm-border bg-surface text-body hover:bg-warm-bg"
                                 }`}
                               >
                                 Other…
@@ -874,7 +874,7 @@ export default function ImportOutreach({
                 </div>
               ) : (
               <>
-              <div className="rounded-2xl border border-warm-border bg-white p-4">
+              <div className="rounded-2xl border border-warm-border bg-surface p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
@@ -897,7 +897,7 @@ export default function ImportOutreach({
                   {headers.map((h) => (
                     <div
                       key={h}
-                      className="flex items-center gap-2 rounded-xl border border-warm-border bg-white p-3"
+                      className="flex items-center gap-2 rounded-xl border border-warm-border bg-surface p-3"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-xs font-bold uppercase tracking-wider text-body/60">
@@ -912,9 +912,9 @@ export default function ImportOutreach({
                         onChange={(e) =>
                           setMapping((m) => ({ ...m, [h]: e.target.value as FieldKey }))
                         }
-                        className="scout-select shrink-0 rounded-lg border border-warm-border bg-white px-2.5 py-1.5 text-xs font-semibold text-ink outline-none"
+                        className="scout-select shrink-0 rounded-lg border border-warm-border bg-surface px-2.5 py-1.5 text-xs font-semibold text-ink outline-none"
                       >
-                        <option value="">, ignore, </option>
+                        <option value="">(ignore)</option>
                         {(Object.keys(FIELD_LABELS) as (keyof typeof FIELD_LABELS)[]).map((k) => (
                           <option
                             key={k}
@@ -935,7 +935,7 @@ export default function ImportOutreach({
                 <h3 className="text-sm font-extrabold uppercase tracking-wide text-ink">
                   Preview
                 </h3>
-                <div className="mt-2 overflow-x-auto rounded-xl border border-warm-border bg-white">
+                <div className="mt-2 overflow-x-auto rounded-xl border border-warm-border bg-surface">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-warm-border text-left text-[10px] font-bold uppercase tracking-wider text-body/60">
@@ -975,7 +975,7 @@ export default function ImportOutreach({
                   <select
                     value={projectId}
                     onChange={(e) => setProjectId(e.target.value)}
-                    className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                    className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none"
                   >
                     {projects.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -991,7 +991,7 @@ export default function ImportOutreach({
                   <select
                     value={defaultStatus}
                     onChange={(e) => setDefaultStatus(e.target.value as FindStatus)}
-                    className="scout-select w-full rounded-xl border border-warm-border bg-white px-3 py-2 text-sm font-semibold text-ink outline-none"
+                    className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm font-semibold text-ink outline-none"
                   >
                     <option value="sent">Already reached out</option>
                     <option value="replied">Replied</option>
@@ -1005,7 +1005,7 @@ export default function ImportOutreach({
               {/* Keep-synced — only when imported from a link (a dropped file has
                   nothing to re-read). */}
               {sourceUrl && onSaveSync && (
-                <div className="rounded-2xl border border-warm-border bg-white p-4">
+                <div className="rounded-2xl border border-warm-border bg-surface p-4">
                   <label className="flex cursor-pointer items-start gap-2.5">
                     <input
                       type="checkbox"
@@ -1048,7 +1048,7 @@ export default function ImportOutreach({
                             value={writeTab}
                             onChange={(e) => setWriteTab(e.target.value)}
                             placeholder="Scout"
-                            className="w-full max-w-xs rounded-xl border border-warm-border bg-white px-3 py-2 text-sm text-ink outline-none focus:border-coral"
+                            className="w-full max-w-xs rounded-xl border border-warm-border bg-surface px-3 py-2 text-sm text-ink outline-none focus:border-coral"
                           />
                           <p className="mt-1.5 text-[11px] leading-relaxed text-body/60">
                             Scout creates this tab if it doesn&apos;t exist and writes there,
@@ -1111,7 +1111,7 @@ export default function ImportOutreach({
         </div>
 
         {rows.length > 0 && imported === null && understand && (
-          <div className="flex items-center gap-3 border-t border-warm-border bg-white px-6 py-4">
+          <div className="flex items-center gap-3 border-t border-warm-border bg-surface px-6 py-4">
             <span className="text-xs text-body/70">
               {rows.length} rows ready. Duplicates you already have are skipped.
             </span>

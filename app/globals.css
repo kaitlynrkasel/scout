@@ -1189,7 +1189,7 @@ select.scout-kind-picker option {
 }
 .tpl-materials input:focus,
 .tpl-materials textarea:focus {
-  background: #ffffff;
+  background: rgb(var(--c-surface));
 }
 
 /* "Show me where": guided deep links (/app?guide=tab.spot) pulse a ring

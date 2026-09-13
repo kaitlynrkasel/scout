@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-// Web app manifest — this is what lets Scout be installed to a phone's home
+// Web app manifest: this is what lets Scout be installed to a phone's home
 // screen and launch without browser chrome. Next serves it at
 // /manifest.webmanifest and links it from every page automatically.
 //
@@ -9,7 +9,7 @@ import type { MetadataRoute } from "next";
 export default function manifest(): MetadataRoute.Manifest {
   return {
     id: "/app",
-    name: "Scout — Find Your People",
+    name: "Scout: Find Your People",
     short_name: "Scout",
     description:
       "Find the right people, get their contacts, and draft personalized outreach in your voice.",

@@ -51,7 +51,7 @@ const SEV_LABEL: Record<string, string> = {
   later: "Later",
 };
 // "Show me where": each section (and some specific items) maps to a guided
-// deep link the live pane can open — /app?guide=tab.spot lands the app on the
+// deep link the live pane can open, /app?guide=tab.spot lands the app on the
 // right tab and pulses a ring around the tagged control. Item entries win over
 // their section's default; sections with no in-app home (database, billing
 // infra, the runbook) simply have no link.
@@ -192,8 +192,7 @@ function ReadinessInner() {
   const unseenCount = seenByChecker.size
     ? allItems.filter((i) => !seenByChecker.has(i.key)).length
     : 0;
-  // Unchecked items whose own wording points at something in the repository —
-  // the checker's worklist, carried here so it's visible to whoever is testing.
+  // Unchecked items whose own wording points at something in the repository, // the checker's worklist, carried here so it's visible to whoever is testing.
   const candidateCount = (((AUTO as any).candidates as any[]) || []).filter(
     (c) => !checks[c.key]?.verdict
   ).length;
@@ -533,7 +532,7 @@ function ReadinessInner() {
               <b className="text-ink/80">
                 {unseenCount} item{unseenCount === 1 ? " has" : "s have"} been added since that run
               </b>{" "}
-              and {unseenCount === 1 ? "it hasn't" : "they haven't"} been through the checker yet — some
+              and {unseenCount === 1 ? "it hasn't" : "they haven't"} been through the checker yet, some
               may settle themselves. Run <code className="text-[11px]">npm run readiness</code> again.
             </>
           )}
@@ -596,7 +595,7 @@ function ReadinessInner() {
                     // say who owns this one. Name the gap rather than showing
                     // an anonymous row.
                     <span className="text-attention">
-                      nobody&apos;s name on this one — put yours in the box at the top before
+                      nobody&apos;s name on this one, put yours in the box at the top before
                       you claim an item
                     </span>
                   )}
@@ -815,7 +814,7 @@ function ReadinessInner() {
                               });
                               setOpenKey("");
                             }}
-                            title="Someone is fixing this now — lift it onto the In works board at the top"
+                            title="Someone is fixing this now, lift it onto the In works board at the top"
                             className="rounded-lg border border-warm-border px-2.5 py-1 text-xs font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
                           >
                             In works

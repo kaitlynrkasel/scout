@@ -63,7 +63,7 @@ export default function AuthScreen({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
-  // Accounts previously signed in on this device — one-tap continue.
+  // Accounts previously signed in on this device, one-tap continue.
   const [savedAccts, setSavedAccts] = useState<{ email: string; name?: string }[]>([]);
   const [switching, setSwitching] = useState("");
   useEffect(() => {
@@ -105,13 +105,13 @@ export default function AuthScreen({
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo });
       if (error) throw error;
       // Deliberately conditional. Supabase returns success for an address with
-      // NO account — it sends nothing rather than confirm the address isn't
-      // registered — so "we sent a code" is a claim this code cannot make, and
+      // NO account, it sends nothing rather than confirm the address isn't
+      // registered, so "we sent a code" is a claim this code cannot make, and
       // stating it flatly sends someone hunting through their inbox for a mail
       // that was never sent. The wording has to cover both outcomes without
       // revealing which one happened.
       setNotice(
-        `If ${email.trim()} has a Scout account, a 6-digit code is on its way — ` +
+        `If ${email.trim()} has a Scout account, a 6-digit code is on its way, ` +
           `enter it below with your new password. Nothing arriving after a minute or two ` +
           `usually means the account is under a different address; check your spam folder too.`
       );
@@ -124,7 +124,7 @@ export default function AuthScreen({
   }
 
   // Verify the emailed recovery code, which signs the user in, then set the new
-  // password. No link-click / redirect needed — this mirrors the signup verify.
+  // password. No link-click / redirect needed, this mirrors the signup verify.
   async function resetWithCode(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase) return;
@@ -151,7 +151,7 @@ export default function AuthScreen({
       setNotice("Your password is updated. Taking you in…");
       // verifyOtp created a persisted session. Don't rely on the parent's auth
       // listener to route us in (this AuthScreen instance has no onRecoveryDone
-      // and the event doesn't always advance the gate) — reload so getSession()
+      // and the event doesn't always advance the gate), reload so getSession()
       // finds the fresh session and drops us straight into the app.
       setTimeout(() => {
         try {

@@ -163,7 +163,7 @@ export function InstallCard() {
 
       {!installed && !canPrompt && !needsManualIos && (
         <p className="mt-4 border-t border-warm-border pt-4 text-sm leading-relaxed text-body/80">
-          Your browser handles this from its own menu — look for{" "}
+          Your browser handles this from its own menu, look for{" "}
           <b className="text-ink">Install</b> or{" "}
           <b className="text-ink">Add to Home Screen</b>. Chrome, Edge, and
           Safari on iOS all support it.
@@ -205,8 +205,7 @@ export function InstallBanner() {
         <span className="font-semibold text-ink">Add Scout to your home screen</span>{" "}
         <span className="text-body/80">
           {needsManualIos ? (
-            <>
-              — Share <ShareIcon /> then Add to Home Screen.
+            <>, Share <ShareIcon /> then Add to Home Screen.
             </>
           ) : (
             "— opens full screen, no browser bar."

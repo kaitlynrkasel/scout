@@ -109,9 +109,16 @@ export default function AccountOnboarding({
   useEffect(() => {
     if (step !== "company-join" || companies !== null) return;
     let alive = true;
-    listCompanies().then((list) => {
-      if (alive) setCompanies(list);
-    });
+    listCompanies().then(
+      (list) => {
+        if (alive) setCompanies(list);
+      },
+      () => {
+        // A failed fetch must not strand the step on "Loading companies":
+        // an empty list renders the create-instead path with its own copy.
+        if (alive) setCompanies([]);
+      }
+    );
     return () => {
       alive = false;
     };
