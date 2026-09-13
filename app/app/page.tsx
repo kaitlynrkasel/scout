@@ -28064,7 +28064,8 @@ async function autoSection(text: string): Promise<string> {
  * Purely presentational; the stored text is untouched. */
 function SectionLines({ text }: { text: string }) {
   const DATE_RE =
-    /^(.*?)[\s,·|-]*((?:[A-Za-z]{3,9}\.? )?(?:19|20)\d{2}\s*(?:-|–|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.? )?(?:19|20)\d{2}))\s*$/i;
+    // Space between month and year optional: PDFs emit "May2025" often enough.
+    /^(.*?)[\s,·|-]*((?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}\s*(?:-|–|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}))\s*$/i;
   const lines = text.replace(/\r/g, "").split("\n");
   return (
     <div className="space-y-1">

@@ -53,29 +53,51 @@ export async function POST(req: NextRequest) {
       "with its role's title line) so each role's section holds its own title, dates, and bullets " +
       "together. Reordering only: every character still comes from the document, nothing rewritten.";
 
-    const parsed: any = parseJsonLoose(await claudeJson(sys, `DOCUMENT:\n${t}`, 8000));
-    const raw = Array.isArray(parsed?.sections) ? parsed.sections : [];
-    const sections = raw
-      .map((s: any) => ({
-        label: String(s?.label || "").trim().slice(0, 60),
-        text: String(s?.text || "").replace(/\r/g, "").trim(),
-      }))
-      .filter((s: any) => s.label && s.text);
-
-    // If the split lost or invented a meaningful amount of the document, the
-    // result is worse than the wall it replaced, so return nothing and let the
-    // caller keep what it had. Compared on letters and digits only, so
-    // whitespace and heading punctuation don't trip it.
-    const sig = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const sig = (x: string) => x.toLowerCase().replace(/[^a-z0-9]/g, "");
     const before = sig(t);
-    const after = sig(sections.map((s: any) => s.text).join(""));
-    const ok =
-      sections.length > 1 &&
-      before.length > 0 &&
-      after.length >= before.length * 0.9 &&
-      after.length <= before.length * 1.05;
+    const attempt = async (extra: string) => {
+      const parsed: any = parseJsonLoose(
+        await claudeJson(sys + extra, `DOCUMENT:\n${t}`, 8000)
+      );
+      const raw = Array.isArray(parsed?.sections) ? parsed.sections : [];
+      const sections = raw
+        .map((s: any) => ({
+          label: String(s?.label || "").trim().slice(0, 60),
+          text: String(s?.text || "").replace(/\r/g, "").trim(),
+        }))
+        .filter((s: any) => s.label && s.text);
+      const after = sig(sections.map((s: any) => s.text).join(""));
+      const ok =
+        sections.length > 1 &&
+        before.length > 0 &&
+        after.length >= before.length * 0.9 &&
+        after.length <= before.length * 1.05;
+      return { sections, ok, after };
+    };
 
-    return NextResponse.json({ sections: ok ? sections : [] });
+    let r = await attempt("");
+    if (!r.ok) {
+      // A format we haven't met yet: one retry, telling the model exactly how
+      // its first pass failed the verbatim check. This is how the endpoint
+      // "learns" unfamiliar layouts without ever being allowed to rewrite.
+      const drift =
+        before.length > 0 ? Math.round((r.after.length / before.length) * 100) : 0;
+      console.warn(
+        `[resume-sections] integrity fail (kept ${drift}% of characters, ${r.sections.length} sections); retrying`
+      );
+      r = await attempt(
+        `\n\nYOUR PREVIOUS ATTEMPT ON THIS DOCUMENT FAILED the verbatim check: it kept about ${drift}% ` +
+          "of the document's characters. This document's layout may be unusual (columns, tables, torn " +
+          "lines). Do it again and output EVERY line of the document exactly once, verbatim, even lines " +
+          "you cannot classify (put those under 'Other'). Losing or paraphrasing text is the only wrong answer."
+      );
+      if (!r.ok)
+        console.warn(
+          `[resume-sections] retry also failed; returning unsplit (format worth a look)`
+        );
+    }
+
+    return NextResponse.json({ sections: r.ok ? r.sections : [] });
   } catch (e: any) {
     if (e instanceof ApiCreditError) {
       return NextResponse.json(
