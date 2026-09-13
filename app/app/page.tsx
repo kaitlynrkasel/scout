@@ -27778,7 +27778,10 @@ function AccountCard({
           <div className="flex flex-wrap gap-2">
             <input
               value={nm}
-              onChange={(e) => (nmTouched.current = true), setNm(e.target.value)}
+              onChange={(e) => {
+                nmTouched.current = true;
+                setNm(e.target.value);
+              }}
               placeholder="Your name"
               className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
