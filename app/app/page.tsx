@@ -27161,6 +27161,10 @@ function ProfileTab({
   // Company profiles split into two pages behind a top toggle, same pattern
   // as Templates: what's about YOU, and what's about the company.
   const [pView, setPView] = useState<"you" | "company">("you");
+  // On the Personal lens the profile IS the person: the whole page renders as
+  // an individual profile (name, bio, resume, links), company framing gone.
+  const personalLens = activeCompanyId === "personal";
+  const kindHere = personalLens ? "individual" : kind;
 
   return (
     <main className="w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12">
@@ -27172,7 +27176,18 @@ function ProfileTab({
       {/* Company accounts: a prominent switcher at the very top, so it's obvious the
           entire page (company details, your role, projects) reflects the company
           you pick here — it drives the same lens as the sidebar. */}
-      {kind === "company" && companies.length > 0 && (
+      {personalLens && (
+        <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-blue-deep/25 bg-blue-tint/30 px-4 py-3">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-blue-deep">
+            Personal
+          </span>
+          <span className="text-xs leading-snug text-body/70">
+            You&apos;re working as yourself. This page is your own profile; searches
+            and drafts on the Personal lens use it, never a company&apos;s details.
+          </span>
+        </div>
+      )}
+      {kindHere === "company" && companies.length > 0 && (
         <div className="mt-5 flex flex-wrap items-center gap-3 rounded-2xl border border-blue-deep/25 bg-blue-tint/30 px-4 py-3">
           <span className="text-[11px] font-bold uppercase tracking-wider text-blue-deep">
             Company
@@ -27193,7 +27208,7 @@ function ProfileTab({
         </div>
       )}
 
-      {kind === "company" && (
+      {kindHere === "company" && (
         <div data-guide="profile-pages" className="mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
           {(
             [
@@ -27219,16 +27234,16 @@ function ProfileTab({
           you can tell at a glance which company you're working in; a solo
           account gets the same picker for its own profile. */}
       {onSetAccent &&
-        (kind !== "company" || pView === "company") &&
-        (kind === "company"
+        (kindHere !== "company" || pView === "company") &&
+        (kindHere === "company"
           ? !!activeCompanyId && activeCompanyId !== "personal"
           : true) && (
         <div className="mt-3 rounded-2xl border border-warm-border bg-surface px-4 py-3.5">
           <div className="text-[11px] font-bold uppercase tracking-wider text-body/60">
-            {kind === "company" ? "Company color" : "Profile color"}
+            {kindHere === "company" ? "Company color" : "Profile color"}
           </div>
           <p className="mt-0.5 text-xs text-body/70">
-            {kind === "company"
+            {kindHere === "company"
               ? "Sets Scout's accent color while you're on this company."
               : "Sets Scout's accent color across the app."}
           </p>
@@ -27270,7 +27285,7 @@ function ProfileTab({
 
       {/* Company accounts: role + how you serve the company's work (set at
           signup, editable here). Individuals never see this. */}
-      {kind === "company" && (
+      {kindHere === "company" && (
         <>
           {/* The company's onboarding answers, editable from Profile. Admin edits
               the shared record; members see it read-only. */}
@@ -27393,7 +27408,7 @@ function ProfileTab({
         {/* Company accounts get their website + "what the company does" in the
             company card above — no second website here. Individuals start from a
             resume/LinkedIn. */}
-        {kind !== "company" && (
+        {kindHere !== "company" && (
           <>
             <Label>Start with your resume or LinkedIn</Label>
             <div data-guide="resume-drop">
@@ -27436,7 +27451,7 @@ function ProfileTab({
 
         {/* Resume kept for email attachments (individuals; a company profile
             shows this chip beside its own dropzone above). */}
-        {resumeFileName && kind !== "company" && (
+        {resumeFileName && kindHere !== "company" && (
           <div className="mt-2 flex flex-wrap items-center gap-2 rounded-xl border border-sage/40 bg-sage/10 px-3 py-2 text-xs text-brown-deep">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" aria-hidden><path d="M21.4 11.05 12.25 20.2a5 5 0 0 1-7.07-7.07l9.19-9.19a3 3 0 0 1 4.24 4.24l-9.2 9.19a1 1 0 0 1-1.41-1.41l8.48-8.49" /></svg>
             <span className="font-semibold">{resumeFileName}</span>
@@ -27450,7 +27465,7 @@ function ProfileTab({
           </div>
         )}
 
-        {kind !== "company" && (
+        {kindHere !== "company" && (
           <p className="mt-2 text-xs leading-relaxed text-body/70">
             Scout reads it and fills in your name, use case, and background below.{" "}
             <span className="font-semibold text-body">From LinkedIn:</span> open your
@@ -27485,7 +27500,7 @@ function ProfileTab({
 
         {/* Individuals name themselves here; a company's name lives in the company
             card above, so this field is redundant (and confusing) for company. */}
-        {kind !== "company" && (
+        {kindHere !== "company" && (
           <div className="mt-6">
             <div className="sm:max-w-md">
               <Label>Your name</Label>
@@ -27503,7 +27518,7 @@ function ProfileTab({
              members have no personal profile — their whole identity is the
              company role + specialization above. So this block is hidden for
              company accounts (no personal use). -------- */}
-        {kind !== "company" && (
+        {kindHere !== "company" && (
         <>
         <div className="mt-7 rounded-2xl border border-warm-border bg-warm-bg/40 p-5">
           <div className="mb-3">
