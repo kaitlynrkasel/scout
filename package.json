@@ -9,7 +9,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "readiness": "node --import ./scripts/readiness-hook.mjs scripts/readiness-auto.mjs"
+    "readiness": "node --import ./scripts/readiness-hook.mjs scripts/readiness-auto.mjs",
+    "test:pdf": "node --experimental-strip-types scripts/testPdfLayout.ts"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
