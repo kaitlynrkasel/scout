@@ -129,6 +129,25 @@ export async function accessTokenFromRefresh(refreshToken: string): Promise<stri
   });
   if (!r.ok) throw new Error("token refresh failed: " + (await r.text()));
   const j = await r.json();
+  // Microsoft ROTATES refresh tokens: the response carries a new one and the
+  // old one keeps a ~90-day sliding window. Never persisting the rotation is
+  // why connections died three months in. Best-effort update keyed by the
+  // stored value itself, so no caller has to thread a user id through.
+  try {
+    const rotated = String(j.refresh_token || "");
+    if (rotated && rotated !== openToken(refreshToken)) {
+      const { supabaseAdmin } = await import("./supabaseAdmin");
+      const { sealToken } = await import("./tokenCrypto");
+      if (supabaseAdmin) {
+        await supabaseAdmin
+          .from("outlook_connections")
+          .update({ refresh_token: sealToken(rotated) })
+          .eq("refresh_token", refreshToken);
+      }
+    }
+  } catch {
+    /* rotation persistence is best-effort; the current access token works */
+  }
   return j.access_token as string;
 }
 
@@ -144,7 +163,14 @@ export function emailFromIdToken(idToken: string): string {
   }
 }
 
-function buildMessage(to: string, subject: string, body: string, html?: string, cc?: string) {
+function buildMessage(
+  to: string,
+  subject: string,
+  body: string,
+  html?: string,
+  cc?: string,
+  listUnsubscribe?: string
+) {
   return {
     subject,
     body: html
@@ -157,6 +183,16 @@ function buildMessage(to: string, subject: string, body: string, html?: string, 
             .split(/[,;\s]+/)
             .filter(Boolean)
             .map((address) => ({ emailAddress: { address } })),
+        }
+      : {}),
+    // Same cold-outreach opt-out Gmail sends carry: header-only, never a
+    // visible footer. Graph custom headers must be x- prefixed EXCEPT a
+    // known set; List-Unsubscribe is accepted via internetMessageHeaders.
+    ...(listUnsubscribe
+      ? {
+          internetMessageHeaders: [
+            { name: "X-List-Unsubscribe", value: listUnsubscribe },
+          ],
         }
       : {}),
   };
@@ -172,6 +208,7 @@ export async function outlookSendOrDraft(opts: {
   mode: "send" | "draft";
   html?: string; // rendered HTML body (notifications); body stays the text fallback
   cc?: string; // optional CC list, comma/space separated
+  listUnsubscribe?: string; // RFC 2369 value for cold outreach (see gmail.ts)
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   // Always create the draft first (gives us id + conversationId), then send it
@@ -179,7 +216,7 @@ export async function outlookSendOrDraft(opts: {
   const create = await fetch(`${GRAPH}/me/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html, opts.cc)),
+    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html, opts.cc, opts.listUnsubscribe)),
   });
   if (!create.ok) throw new Error("graph draft failed: " + (await create.text()));
   const msg = await create.json();

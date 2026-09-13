@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { signUnsub } from "@/lib/unsubscribe";
+import { reqOrigin } from "@/lib/gmail";
 import { humanHtml, needsHtml } from "@/lib/emailHtml";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { outlookSendOrDraft } from "@/lib/outlook";
@@ -38,6 +40,13 @@ export async function POST(req: NextRequest) {
       ? "send"
       : "draft";
 
+  // Cold outreach carries the same header-only opt-out as Gmail sends: the
+  // one-click unsubscribe lives in the header, never as a visible footer.
+  const recipient = String(to).toLowerCase();
+  const token = signUnsub(uid, recipient);
+  const unsubUrl = `${reqOrigin(req)}/api/unsubscribe?t=${encodeURIComponent(token)}`;
+  const listUnsubscribe = `<${unsubUrl}>, <mailto:${data.email || "me"}?subject=unsubscribe>`;
+
   try {
     const result = await outlookSendOrDraft({
       refreshToken: data.refresh_token,
@@ -47,6 +56,7 @@ export async function POST(req: NextRequest) {
       body: String(body || ""),
       html: needsHtml(String(body || "")) ? humanHtml(String(body || "")) : undefined,
       mode,
+      listUnsubscribe,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {
