@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 import type { Opportunity } from "@/lib/types";
@@ -8,6 +9,11 @@ export const maxDuration = 30;
 // Write a short, kind follow-up nudge for a message that got no reply. When the
 // original went out over email, this is phrased as an in-thread reply.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`draftfollowu:${requestIp(req.headers)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { opp, about, useCase, firstMessage, inThread } = await req.json();
     const o: Opportunity = opp || {};

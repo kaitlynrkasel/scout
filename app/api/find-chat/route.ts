@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeUrl } from "@/lib/pageText";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -33,23 +35,6 @@ function stripHtml(html: string): string {
 
 // Block internal/local addresses before fetching a stored URL (same guard the
 // deep scan uses — the URL came from a model and a page, not from us).
-function safeUrl(raw: string): URL | null {
-  let s = String(raw || "").trim();
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
-  let u: URL;
-  try {
-    u = new URL(s);
-  } catch {
-    return null;
-  }
-  if (
-    !/^https?:$/.test(u.protocol) ||
-    /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[)/i.test(u.hostname)
-  )
-    return null;
-  return u;
-}
 
 async function readPage(u: URL): Promise<string> {
   try {
@@ -89,6 +74,11 @@ const SYS =
   "cover the question.";
 
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`findchat:${requestIp(req.headers)}`, 40, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { opp, question, history, about, useCase } = await req.json();
     const q = String(question || "").trim();

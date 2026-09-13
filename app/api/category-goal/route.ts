@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -9,6 +10,11 @@ export const maxDuration = 20;
 // concrete search goal describing exactly WHO to find, so discovery understands
 // the category. Uses the user's use case and profile for context.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`categorygoal:${requestIp(req.headers)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { name, useCase, about } = await req.json();
     const nm = String(name || "").trim();

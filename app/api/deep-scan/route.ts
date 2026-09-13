@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeUrl } from "@/lib/pageText";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -23,23 +25,6 @@ function stripHtml(html: string): string {
 }
 
 // Block internal/local addresses before we fetch a user/model-supplied URL.
-function safeUrl(raw: string): URL | null {
-  let s = String(raw || "").trim();
-  if (!s) return null;
-  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
-  let u: URL;
-  try {
-    u = new URL(s);
-  } catch {
-    return null;
-  }
-  if (
-    !/^https?:$/.test(u.protocol) ||
-    /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[)/i.test(u.hostname)
-  )
-    return null;
-  return u;
-}
 
 async function readPage(u: URL): Promise<string> {
   const r = await fetch(u.toString(), {
@@ -56,6 +41,11 @@ async function readPage(u: URL): Promise<string> {
 // linked) and pull out a SPECIFIC contact plus what they ask submitters/applicants
 // for. Never invents anything, only what appears on the page.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`deepscan:${requestIp(req.headers)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { url, name, outlet, goal, useCase } = await req.json();
     const u = safeUrl(url);

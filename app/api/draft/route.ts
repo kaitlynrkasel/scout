@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { draftFor } from "@/lib/draft";
 import { ApiCreditError } from "@/lib/apiErrors";
 import type { Opportunity, OutreachTemplate } from "@/lib/types";
@@ -6,6 +7,11 @@ import type { Opportunity, OutreachTemplate } from "@/lib/types";
 export const maxDuration = 300; // Pro plan max; batches up to 8 parallel Claude drafts
 
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`draft:${requestIp(req.headers)}`, 30, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const {
       opportunities,

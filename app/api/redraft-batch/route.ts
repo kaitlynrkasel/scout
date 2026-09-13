@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { reviseDraft } from "@/lib/draft";
 import { ApiCreditError } from "@/lib/apiErrors";
 import type { Draft } from "@/lib/types";
@@ -12,6 +13,11 @@ export const maxDuration = 120;
 // other field on the draft (to, channelType, whyItFits, attachResume) is
 // carried through unchanged.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`redraftbatch:${requestIp(req.headers)}`, 10, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { drafts, instruction, about } = await req.json();
     const list: Draft[] = Array.isArray(drafts) ? drafts : [];

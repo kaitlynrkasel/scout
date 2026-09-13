@@ -8,12 +8,13 @@
 import crypto from "crypto";
 
 function secret(): string {
-  return (
-    process.env.ACTION_SECRET ||
-    process.env.CRON_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "dev-secret"
-  );
+  const v =
+    process.env.ACTION_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (v) return v;
+  // Fail closed in production: with a guessable secret the preview proxy
+  // becomes an open proxy.
+  if (process.env.NODE_ENV === "production") throw new Error("ACTION_SECRET is required");
+  return "dev-secret";
 }
 
 export const PREVIEW_TOKEN_TTL_MS = 6 * 60 * 60 * 1000; // 6h; client refreshes sooner

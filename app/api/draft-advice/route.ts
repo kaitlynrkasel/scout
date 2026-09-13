@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -8,6 +9,11 @@ export const maxDuration = 60; // reads many drafts + one Claude pass; scales wi
 // Read the user's own recent drafts and coach them on their actual writing, 
 // specific observations about THESE messages, not generic outreach tips.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`draftadvice:${requestIp(req.headers)}`, 15, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { drafts, about, useCase } = await req.json();
     const aboutStr = String(about || "").slice(0, 1200).trim();

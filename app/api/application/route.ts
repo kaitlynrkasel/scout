@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { draftApplication } from "@/lib/application";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -8,6 +9,11 @@ export const maxDuration = 240; // Pro plan headroom for reading pages + two Cla
 // Read a specific internship/job posting and draft every written application
 // component (cover letter, essays, short answers) from the applicant's profile.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`application:${requestIp(req.headers)}`, 15, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { url, name, outlet, about, useCase, coaching, dismissedAdvice, editPairs } =
       await req.json();

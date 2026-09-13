@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { tavilySearch } from "@/lib/tavily";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
@@ -15,6 +16,11 @@ export const maxDuration = 120; // two Tavily searches + one Claude pass
 // to ask. If Tavily or Claude fails, degrades to whatever was already in the
 // opp record so we still hand back something useful.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`meetingprep:${requestIp(req.headers)}`, 20, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const { opp, about, useCase } = await req.json();
     if (!opp?.name) {

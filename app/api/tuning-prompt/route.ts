@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -11,6 +12,11 @@ export const maxDuration = 30;
 // is meant to be handed directly to Claude Code in a future session, not
 // shown as user-facing copy.
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`tuningprompt:${requestIp(req.headers)}`, 10, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const body = await req.json();
     const {

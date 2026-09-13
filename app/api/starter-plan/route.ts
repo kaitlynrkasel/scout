@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 import { claudeJson, parseJsonLoose, noDash } from "@/lib/claude";
 import { ApiCreditError } from "@/lib/apiErrors";
 
@@ -11,6 +12,11 @@ export const maxDuration = 25;
 // events with speakers should get a "Spring Showcase" style project with
 // categories like "Guest speakers", "Panelists", "Sponsors", "Venue partners".
 export async function POST(req: NextRequest) {
+  // Cost-bearing and reachable before login (guest mode), so the guard is
+  // per-IP rate limiting, same as the other open-by-design endpoints.
+  if (!withinRateLimit(`starterplan:${requestIp(req.headers)}`, 15, 10 * 60 * 1000)) {
+    return NextResponse.json({ error: "Slow down a moment." }, { status: 429 });
+  }
   try {
     const body = await req.json().catch(() => ({}));
     const about = String(body.about || "").trim();

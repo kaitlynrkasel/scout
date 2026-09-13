@@ -87,6 +87,14 @@ export async function POST(req: NextRequest) {
   } catch {
     return NextResponse.json({ error: "Couldn't reach that link." }, { status: 502 });
   }
+  // Redirects were followed; the DESTINATION must pass the same host rules
+  // (a friendly host 302ing to an internal address was the hole).
+  try {
+    const finalHost = new URL(res.url || "").hostname;
+    if (finalHost && isBlockedHost(finalHost)) {
+      return NextResponse.json({ error: "That address isn't allowed." }, { status: 400 });
+    }
+  } catch {}
   if (!res.ok) {
     return NextResponse.json({ error: gUrl ? NOT_PUBLIC : `The link returned ${res.status}.` }, { status: 400 });
   }

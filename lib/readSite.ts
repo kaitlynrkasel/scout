@@ -7,6 +7,7 @@
 // says about them instead.
 
 import { tavilySearch } from "./tavily";
+import { safeUrl } from "./pageText";
 
 function stripHtml(html: string): string {
   return html
@@ -88,18 +89,11 @@ export async function readSite(rawUrl: string): Promise<SiteRead> {
   if (!raw) throw new ReadSiteError("Enter your website or a social link.");
   if (!/^https?:\/\//i.test(raw)) raw = "https://" + raw;
 
-  let u: URL;
-  try {
-    u = new URL(raw);
-  } catch {
-    throw new ReadSiteError("That doesn't look like a valid link.");
-  }
-  if (
-    !/^https?:$/.test(u.protocol) ||
-    /^(localhost|127\.|0\.0\.0\.0|10\.|192\.168\.|169\.254\.|\[)/i.test(u.hostname)
-  ) {
-    throw new ReadSiteError("That address isn't allowed.");
-  }
+  // The hardened shared guard (private ranges incl. 172.16-31, numeric and
+  // hex IP forms, internal DNS suffixes), not the old local regex.
+  const safe = safeUrl(raw);
+  if (!safe) throw new ReadSiteError("That address isn't allowed.");
+  const u = safe;
 
   const platform = socialPlatform(u.hostname);
 

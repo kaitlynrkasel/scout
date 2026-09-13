@@ -6,12 +6,13 @@
 import crypto from "crypto";
 
 function secret(): string {
-  return (
-    process.env.ACTION_SECRET ||
-    process.env.CRON_SECRET ||
-    process.env.SUPABASE_SERVICE_ROLE_KEY ||
-    "scout-action-secret"
-  );
+  const v =
+    process.env.ACTION_SECRET || process.env.CRON_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (v) return v;
+  // Fail closed in production: these tokens authorize sends from the user's
+  // own mailbox, so a guessable fallback secret is not acceptable there.
+  if (process.env.NODE_ENV === "production") throw new Error("ACTION_SECRET is required");
+  return "scout-action-secret";
 }
 
 export type AutoAction = "approve" | "deny";

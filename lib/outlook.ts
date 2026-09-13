@@ -23,7 +23,15 @@ const SCOPES = [
   "Mail.Send",
 ];
 
-const STATE_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "scout-state-secret";
+// Fail closed in production, but LAZILY: the check runs when a state is
+// signed or verified, never at import (a module-level throw breaks builds
+// on machines without the env). Dev keeps a fallback so keyless runs work.
+function stateSecret(): string {
+  const v = process.env.MICROSOFT_CLIENT_SECRET;
+  if (v) return v;
+  if (process.env.NODE_ENV === "production") throw new Error("MICROSOFT_CLIENT_SECRET is required");
+  return "scout-state-secret";
+}
 
 // The public origin of the current request (matches a registered redirect URI).
 export function reqOrigin(req: Request): string {
@@ -45,7 +53,7 @@ export function signState(userId: string): string {
     JSON.stringify({ u: userId, t: Date.now() })
   ).toString("base64url");
   const sig = crypto
-    .createHmac("sha256", STATE_SECRET)
+    .createHmac("sha256", stateSecret())
     .update(payload)
     .digest("base64url");
   return `${payload}.${sig}`;
@@ -55,7 +63,7 @@ export function verifyState(state: string): string | null {
   const [payload, sig] = String(state || "").split(".");
   if (!payload || !sig) return null;
   const expect = crypto
-    .createHmac("sha256", STATE_SECRET)
+    .createHmac("sha256", stateSecret())
     .update(payload)
     .digest("base64url");
   const a = Buffer.from(sig);

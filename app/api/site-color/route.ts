@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { safeUrl } from "@/lib/pageText";
 import { withinRateLimit, requestIp } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
@@ -131,6 +132,8 @@ export async function GET(req: NextRequest) {
   try {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 6000);
+    // SSRF guard: same hardened rules as every other server-side fetch.
+    if (!safeUrl(`https://${host}`)) return NextResponse.json({ color: "", logo: false });
     const res = await fetch(`https://${host}/`, {
       signal: ctrl.signal,
       redirect: "follow",
