@@ -2260,6 +2260,15 @@
                   "spot": "app-paste"
                 }
               ]
+            },
+            {
+              "sev": "should",
+              "title": "Importer readable in dark mode",
+              "good": "With the phone or browser in dark mode, every panel of the import dialog shows readable text; nothing renders light-on-white.",
+              "steps": [
+                "Switch to dark mode, open Import a file, and walk each step through the column mapping.",
+                "Check the mapping dropdown offers (ignore) as its empty choice."
+              ]
             }
           ]
         },
@@ -3012,6 +3021,15 @@
                   "text": "Press 'Stop' beside every entry in the list at the bottom of the panel. That is the off switch; there is no separate autopilot toggle. Then wait past the next scheduled run and confirm nothing new arrived and no search was spent."
                 }
               ]
+            },
+            {
+              "sev": "must",
+              "title": "Digest links need a tap to decide",
+              "good": "Opening an approve or deny link from the digest email shows a confirm page first; the decision is only recorded after pressing the button, so mail scanners can't decide for you.",
+              "steps": [
+                "From an auto-search digest email, open a Pass link: a confirm page appears and the find's status has NOT changed.",
+                "Press the button: now it records, and reopening the link says a decision was already made."
+              ]
             }
           ]
         },
@@ -3357,6 +3375,15 @@
                 "Type words that appear only inside a draft's body: the card still matches.",
                 "Repeat on the Applications tab's search bar.",
                 "Clear with the x button: everything returns."
+              ]
+            },
+            {
+              "sev": "must",
+              "title": "Bulk actions hit every selected find",
+              "good": "Selecting several finds and using Remove, Deny, Mark sent, or Move applies to all of them, not just the last one.",
+              "steps": [
+                "In Finds, enter select mode, pick 3 finds, press Remove and confirm.",
+                "All 3 leave the list (and appear under recently deleted)."
               ]
             }
           ]
@@ -4738,6 +4765,16 @@
                 "Scheduled as deliberate post-launch work; automatic weekly dependency checks are already running in the meantime."
               ],
               "key": "security::to-do-later-one-remaining-dependency-advisory"
+            },
+            {
+              "sev": "must",
+              "title": "Cost endpoints rate limited",
+              "good": "Every endpoint that spends model or search money refuses with a 429 after repeated rapid calls from one address; none can be curl-looped for free.",
+              "steps": [
+                "From a terminal, POST /api/draft (or /api/meeting-prep) more than 30 times in a minute with no login.",
+                "Confirm responses flip to 429 Slow down a moment.",
+                "Confirm normal in-app drafting still works at human pace."
+              ]
             }
           ]
         },
