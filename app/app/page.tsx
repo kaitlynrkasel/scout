@@ -2174,6 +2174,11 @@ function ScoutTool({
   const [newProjOpen, setNewProjOpen] = useState(false);
   const [npName, setNpName] = useState("");
   const [npDesc, setNpDesc] = useState("");
+  // "+ New search…" in the CATEGORY picker: a search belongs to the current
+  // project, so this makes a category, never a project.
+  const [newCatOpen, setNewCatOpen] = useState(false);
+  const [ncName, setNcName] = useState("");
+  const [ncGoal, setNcGoal] = useState("");
   const scoutBtnRef = useRef<HTMLButtonElement | null>(null);
   useEffect(() => {
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
@@ -8288,6 +8293,10 @@ function ScoutTool({
                             setNewProjOpen(true);
                             return;
                           }
+                          if (v === "__newcat__") {
+                            setNewCatOpen(true);
+                            return;
+                          }
                           if (v === "__editcats__") {
                             // Edit lives with the project definition: names,
                             // goals, reorder, delete, add, all in one place.
@@ -8298,8 +8307,10 @@ function ScoutTool({
                         }}
                         options={[
                           ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                          // These are SEARCHES within the project; the project
+                          // picker to the left owns "+ New project".
+                          { value: "__newcat__", label: "+ New search…" },
                           { value: "__editcats__", label: "Edit searches…" },
-                          { value: "__newproj__", label: "+ New project…" },
                         ]}
                       />
                       {/* Scout-made suggestions (sug- ids) get a one-click way
@@ -8337,6 +8348,80 @@ function ScoutTool({
                     Manage projects
                   </button>
                 </div>
+
+                {newCatOpen && (
+                  <div
+                    className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4"
+                    onClick={() => setNewCatOpen(false)}
+                  >
+                    <div
+                      className="w-full max-w-md rounded-2xl border border-warm-border bg-surface p-5 text-left shadow-xl"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="kicker mb-1.5">New search</div>
+                      <h3 className="font-display text-lg font-bold tracking-tight text-ink">
+                        Add a search to {activeProject?.name || "this project"}
+                      </h3>
+                      <label className="mt-3 block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">Name</span>
+                        <input
+                          autoFocus
+                          value={ncName}
+                          onChange={(e) => setNcName(e.target.value)}
+                          placeholder="e.g. Internship postings"
+                          className="mt-0.5 w-full rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+                        />
+                      </label>
+                      <label className="mt-3 block">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+                          Who should it find? (optional)
+                        </span>
+                        <div className="mt-0.5 flex items-start gap-2">
+                          <textarea
+                            value={ncGoal}
+                            onChange={(e) => setNcGoal(e.target.value)}
+                            rows={2}
+                            placeholder="e.g. spring internship postings in my field accepting applications"
+                            className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm leading-relaxed text-ink outline-none transition focus:border-coral"
+                          />
+                          <MicButton value={ncGoal} onChange={setNcGoal} />
+                        </div>
+                      </label>
+                      <div className="mt-4 flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => setNewCatOpen(false)}
+                          className="text-sm font-semibold text-body/60 transition hover:text-ink"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={() => {
+                            const nm = ncName.trim();
+                            if (!nm) return;
+                            const c: Category = {
+                              id: `cat-${Date.now()}`,
+                              name: nm,
+                              goal: ncGoal.trim(),
+                              projectId: activeId,
+                            };
+                            saveCats([...categories, c]);
+                            setCatId(c.id);
+                            setGoal(ncGoal.trim());
+                            setWantedChannels([]);
+                            resetResults();
+                            setNewCatOpen(false);
+                            setNcName("");
+                            setNcGoal("");
+                          }}
+                          disabled={!ncName.trim()}
+                          className="rounded-xl bg-brand-gradient px-5 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
+                        >
+                          Add search
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {newProjOpen && (
                   <div
