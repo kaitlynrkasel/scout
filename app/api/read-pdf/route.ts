@@ -120,7 +120,9 @@ function pageToText(items: Item[]): string {
   const lines: { y: number; size: number; items: Item[] }[] = [];
   for (const it of usable) {
     const size = it.fontSize || it.height || 10;
-    const line = lines.find((l) => sameLine(l.y, it.y, Math.max(l.size, size)));
+    // Tolerance from the SMALLER of the two sizes: a 38pt name must not
+    // swallow the 10pt location line 19pt below it into one glued line.
+    const line = lines.find((l) => sameLine(l.y, it.y, Math.min(l.size, size)));
     if (line) {
       line.items.push(it);
       line.size = Math.max(line.size, size);
@@ -155,7 +157,12 @@ function pageToText(items: Item[]): string {
         continue;
       }
       if (prevEnd !== null && gap > l.size * 2.5) out += "   ";
-      else if (prevEnd !== null && gap > l.size * 0.18 && !/\s$/.test(out) && !/^\s/.test(it.str))
+      else if (
+        prevEnd !== null &&
+        (gap > l.size * 0.18 || gap < -l.size * 0.5) &&
+        !/\s$/.test(out) &&
+        !/^\s/.test(it.str)
+      )
         out += " ";
       out += it.str;
       prevEnd = it.x + (it.width || 0);
