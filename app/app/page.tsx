@@ -8277,7 +8277,7 @@ function ScoutTool({
                     <span className="hidden text-white/40 sm:inline">·</span>
                     <div
                       data-tour="category-switcher"
-                      className="stage-toggle min-w-0 flex-auto sm:flex-none"
+                      className="stage-toggle flex min-w-0 flex-auto items-center sm:flex-none"
                     >
                       <PrettySelect
                         ariaLabel="Category of search"
@@ -8295,29 +8295,30 @@ function ScoutTool({
                           { value: "__newproj__", label: "+ New project…" },
                         ]}
                       />
+                      {/* Scout-made suggestions (sug- ids) get a one-click way
+                          out. INSIDE the pill it belongs to, and the tooltip
+                          names exactly what goes: a bare trash floating next to
+                          two pickers read as "delete... something". */}
+                      {catId.startsWith("sug-") && (
+                        <button
+                          onClick={async () => {
+                            const nm = myCats.find((c) => c.id === catId)?.name || "this search";
+                            if (
+                              await scoutConfirm("Its finds stay in your pipeline.", {
+                                title: `Remove the "${nm}" search?`,
+                                confirmLabel: "Remove it",
+                              })
+                            )
+                              removeCategory(catId);
+                          }}
+                          title={`Remove the "${myCats.find((c) => c.id === catId)?.name || "selected"}" search from this project`}
+                          aria-label={`Remove the "${myCats.find((c) => c.id === catId)?.name || "selected"}" search from this project`}
+                          className="-ml-1 mr-1 shrink-0 rounded-md p-1 text-ink/35 transition hover:bg-black/10 hover:text-ink/70"
+                        >
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
+                        </button>
+                      )}
                     </div>
-                    {/* Scout-made suggestions (sug- ids) get a one-click way
-                        out, right where they're picked: a wrong-genre seed
-                        shouldn't need a trip to Projects to remove. */}
-                    {catId.startsWith("sug-") && (
-                      <button
-                        onClick={async () => {
-                          const nm = myCats.find((c) => c.id === catId)?.name || "this search";
-                          if (
-                            await scoutConfirm("Its finds stay in your pipeline.", {
-                              title: `Remove the "${nm}" search?`,
-                              confirmLabel: "Remove it",
-                            })
-                          )
-                            removeCategory(catId);
-                        }}
-                        title="Remove this Scout-suggested search"
-                        aria-label="Remove this Scout-suggested search"
-                        className="shrink-0 rounded-lg p-1.5 text-white/45 transition hover:bg-white/15 hover:text-white"
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" /></svg>
-                      </button>
-                    )}
                   </div>
                   {/* The separate "Solo Search" pill is gone: the category
                       picker's "New search" entry is the same action, and two
