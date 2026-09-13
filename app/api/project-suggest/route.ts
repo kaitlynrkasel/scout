@@ -25,6 +25,8 @@ use_case: pick the closest from this list when one fits: ${USE_CASE_SUGGESTIONS.
 
 categories: three DIFFERENT angles on the project, each a concrete kind of person/organization to find. Goals are written as "who are you looking for" answers, specific enough to search on (e.g. for a grad-school project: "admissions officers at MBA programs with rolling admissions", "current students or recent alumni of target programs open to a quick chat", "scholarship and fellowship programs for entrepreneurship students").
 
+When the project is a job, internship, or application hunt of any kind, the FIRST category must be the actual thing being applied to (e.g. "Open internships" with goal "internship postings in my field accepting applications now"), with the people angles (recruiters, hiring managers, alumni) after it. Someone hunting internships needs internships before networking targets.
+
 Rules: ground everything in the given name/description, never invent a different topic. Plain language. No em dashes anywhere.`;
 
 export async function POST(req: NextRequest) {
