@@ -8288,10 +8288,17 @@ function ScoutTool({
                             setNewProjOpen(true);
                             return;
                           }
+                          if (v === "__editcats__") {
+                            // Edit lives with the project definition: names,
+                            // goals, reorder, delete, add, all in one place.
+                            setTab("projects");
+                            return;
+                          }
                           selectCategory(v);
                         }}
                         options={[
                           ...myCats.map((c) => ({ value: c.id, label: c.name })),
+                          { value: "__editcats__", label: "Edit searches…" },
                           { value: "__newproj__", label: "+ New project…" },
                         ]}
                       />
