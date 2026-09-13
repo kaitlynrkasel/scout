@@ -300,10 +300,7 @@ const BODY = `
   <div class="eyebrow2">Don't waste time.</div>
   <div class="backword">Scout</div>
   <div class="headline headfont"><span class="l">Find</span><span class="l">Your</span><span class="l">People</span></div>
-  <div class="dog"><div class="lab">
-    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="12" cy="12" r="3.4"/><path d="M7 5l1.2-2h7.6L17 5"/></svg>
-    <div class="t">Template photo</div><div class="s">dog leaps through the letters</div>
-  </div></div>
+  <div class="dog"><img src="/scout-dog.png" alt="Scout the dog" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 22px rgb(36 28 19 / 0.18))"></div>
   <div class="sticker">Fetch · Track · Find</div>
   <div class="ledechip">
     <p>Scout hunts down the mentors, recruiters, and alumni who fit your goal, then drafts a warm intro in your own voice.</p>
@@ -337,9 +334,9 @@ const BODY = `
 <section class="sec" id="uses" style="background:#EFE7D6"><div class="wrap">
   <div style="max-width:640px"><div class="kicker">What you can use it for</div><h2 class="h2">Whatever you're hunting for.</h2></div>
   <div class="stack">
-    <div class="card c1"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For students</div><h3>Coffee chats &amp; alumni</h3><p>Alumni in your field, opened with a note that doesn't read like a cold email.</p></div></div>
-    <div class="card c2"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For job seekers</div><h3>Recruiters &amp; referrals</h3><p>The people hiring right now, with a warm intro ready to send.</p></div></div>
-    <div class="card c3"><div class="ph"><div class="t">Template photo</div></div><div class="bd"><div class="who">For founders</div><h3>Partners &amp; press</h3><p>Point the whole team at one pipeline of real contacts.</p></div></div>
+    <div class="card c1"><div class="ph" style="background:#E9E0CE;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h11a4 4 0 0 1 0 8h-1"/><path d="M4 9v6a4 4 0 0 0 4 4h3a4 4 0 0 0 4-4V9z"/><path d="M8 3v2M11 3v2"/></svg></div><div class="bd"><div class="who">For students</div><h3>Coffee chats &amp; alumni</h3><p>Alumni in your field, opened with a note that doesn't read like a cold email.</p></div></div>
+    <div class="card c2"><div class="ph" style="background:#D7E1EE;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg></div><div class="bd"><div class="who">For job seekers</div><h3>Recruiters &amp; referrals</h3><p>The people hiring right now, with a warm intro ready to send.</p></div></div>
+    <div class="card c3"><div class="ph" style="background:#E4D6C3;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v3l10 4V7z"/><path d="M14 8a8 8 0 0 1 0 9"/><path d="M6 14v5"/></svg></div><div class="bd"><div class="who">For founders</div><h3>Partners &amp; press</h3><p>Point the whole team at one pipeline of real contacts.</p></div></div>
   </div>
   <div class="exlist">
     <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Job seeker</span><span class="q">Recruiters hiring remote UX designers</span></div>
@@ -392,9 +389,9 @@ const BODY = `
 <section class="sec" id="team" style="background:#EFE7D6"><div class="wrap">
   <div style="max-width:640px"><div class="kicker">Who's behind it</div><h2 class="h2">Meet the creators.</h2></div>
   <div class="teamgrid">
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/kaitlyn.jpg" alt="Kaitlyn Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/mera.jpg" alt="Mera Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
-    <div class="member"><div class="slot ph" style="height:260px"><div class="t"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="12" cy="9" r="3.4"/><path d="M5 20a7 7 0 0 1 14 0"/></svg>Photo</div><img src="/team/suri.jpg" alt="Suri Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
+    <div class="member"><div class="slot ph" style="height:260px;display:grid;place-items:center;background:#E4D6C3"><div style="font-size:64px;font-weight:800;color:#5b4632;opacity:.55">K</div><img src="/team/kaitlyn.jpg" alt="Kaitlyn Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Kaitlyn Kasel</div><div class="rl">Founder</div></div>
+    <div class="member"><div class="slot ph" style="height:260px;display:grid;place-items:center;background:#E4D6C3"><div style="font-size:64px;font-weight:800;color:#5b4632;opacity:.55">M</div><img src="/team/mera.jpg" alt="Mera Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Mera Kasel</div><div class="rl">Team</div></div>
+    <div class="member"><div class="slot ph" style="height:260px;display:grid;place-items:center;background:#E4D6C3"><div style="font-size:64px;font-weight:800;color:#5b4632;opacity:.55">S</div><img src="/team/suri.jpg" alt="Suri Kasel" data-hide-if-broken style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:2"></div><div class="nm">Suri Kasel</div><div class="rl">Team</div></div>
   </div>
   <div class="pack">
     <div class="kicker" style="color:var(--muted)">Our scouts</div>
@@ -415,9 +412,10 @@ const BODY = `
     <div class="em">Or email <b>scout.source.contact@gmail.com</b></div>
   </div>
   <div class="form">
-    <div class="two"><input class="inp" placeholder="Your name"><input class="inp" placeholder="Email"></div>
-    <textarea class="inp" placeholder="What can we help with?"></textarea>
-    <a class="btn btn-t send" href="mailto:scout.source.contact@gmail.com">Send message →</a>
+    <div class="two"><input class="inp" id="c-name" placeholder="Your name"><input class="inp" id="c-email" placeholder="Email"></div>
+    <textarea class="inp" id="c-msg" placeholder="What can we help with?"></textarea>
+    <a class="btn btn-t send" id="c-send" href="mailto:scout.source.contact@gmail.com">Send message →</a>
+    <script>document.getElementById("c-send").addEventListener("click",function(){var n=document.getElementById("c-name").value.trim(),e=document.getElementById("c-email").value.trim(),m=document.getElementById("c-msg").value.trim();var b=m+(n||e?"\n\n"+[n,e].filter(Boolean).join(" · "):"");this.href="mailto:scout.source.contact@gmail.com?subject="+encodeURIComponent("Scout inquiry"+(n?" from "+n:""))+"&body="+encodeURIComponent(b);});</script>
   </div>
 </div></section>
 

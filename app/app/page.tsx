@@ -19978,7 +19978,7 @@ function DashboardTab({
       .sort((a, b) => b.total - a.total);
 
     const bar = (n: number, max: number) =>
-      `<div style="height:10px;border-radius:5px;background:#5e69ff;width:${Math.max(
+      `<div style="height:10px;border-radius:5px;background:#8A5A34;width:${Math.max(
         2,
         Math.round((n / max) * 100)
       )}%"></div>`;
@@ -27743,6 +27743,13 @@ function AccountCard({
 }) {
   const [pw, setPw] = useState("");
   const [nm, setNm] = useState(currentName || "");
+  // The profile loads async: when the real name arrives and the field is
+  // untouched, adopt it instead of sitting on the empty first seed.
+  const nmTouched = useRef(false);
+  useEffect(() => {
+    if (!nmTouched.current) setNm(currentName || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentName]);
   const [confirming, setConfirming] = useState(false);
 
   return (
@@ -27771,7 +27778,7 @@ function AccountCard({
           <div className="flex flex-wrap gap-2">
             <input
               value={nm}
-              onChange={(e) => setNm(e.target.value)}
+              onChange={(e) => (nmTouched.current = true), setNm(e.target.value)}
               placeholder="Your name"
               className="min-w-[220px] flex-1 rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
