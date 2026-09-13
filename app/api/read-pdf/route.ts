@@ -57,11 +57,22 @@ function pageToText(items: Item[]): string {
   //    runs (kerning, a font switch mid-word), so only a real horizontal gap
   //    earns a space, and a gap wide enough to be a column becomes a longer
   //    separator rather than jamming two columns into one phrase.
+  //    Resume date gutters get their own channel: runs starting in the right
+  //    ~28% of the text area are kept apart from the left text, because a
+  //    wrapped date range ("Feb 2026 -" then "Jul 2026" a line lower) lands on
+  //    the same baseline as the NEXT bullet and used to glue onto it.
+  const rightEdge = Math.max(...usable.map((it) => it.x + (it.width || 0)));
+  const gutterX = rightEdge * 0.72;
   const rendered = lines.map((l) => {
     const sorted = [...l.items].sort((a, b) => a.x - b.x);
     let out = "";
+    let gutter = "";
     let prevEnd: number | null = null;
     for (const it of sorted) {
+      if (it.x >= gutterX && out.trim()) {
+        gutter += (gutter && !/\s$/.test(gutter) && !/^\s/.test(it.str) ? " " : "") + it.str;
+        continue;
+      }
       const gap = prevEnd === null ? 0 : it.x - prevEnd;
       if (prevEnd !== null && gap > l.size * 2.5) out += "   ";
       else if (prevEnd !== null && gap > l.size * 0.18 && !/\s$/.test(out) && !/^\s/.test(it.str))
@@ -69,8 +80,39 @@ function pageToText(items: Item[]): string {
       out += it.str;
       prevEnd = it.x + (it.width || 0);
     }
-    return { text: out.replace(/[ \t]+$/g, ""), y: l.y, size: l.size };
+    return {
+      text: out.replace(/[ \t]+$/g, ""),
+      gutter: gutter.trim(),
+      y: l.y,
+      size: l.size,
+    };
   });
+
+  // A date range that wraps in the gutter continues the PREVIOUS line's
+  // gutter ("Feb 2026 -" ... "Jul 2026"), it does not belong to whatever left
+  // text shares its baseline. Reunite, then fold each gutter back onto its
+  // own line's end.
+  for (let i = 1; i < rendered.length; i++) {
+    const cur = rendered[i];
+    if (!cur.gutter) continue;
+    for (let k = i - 1; k >= Math.max(0, i - 2); k--) {
+      const prev = rendered[k];
+      const openRange =
+        /-\s*$/.test(prev.gutter) ||
+        // "Jun 2025- July" wraps its closing year onto the next gutter line.
+        (/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*$/i.test(prev.gutter) &&
+          /^(19|20)\d{2}$/.test(cur.gutter));
+      if (prev.gutter && openRange) {
+        prev.gutter += " " + cur.gutter;
+        cur.gutter = "";
+        break;
+      }
+      if (prev.gutter) break;
+    }
+  }
+  for (const l of rendered) {
+    if (l.gutter) l.text = l.text ? `${l.text}   ${l.gutter}` : l.gutter;
+  }
 
   // 3. Blank line where the vertical step is bigger than ordinary leading, so
   //    sections separate the way they do on the page.
