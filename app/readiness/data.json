@@ -1923,6 +1923,18 @@
                   "text": "Read the research: it should say you and your, never your name, and stay short: a couple of facts, 2 to 3 Before you apply points, 3 to 4 prep questions, one line each. Then mark the item."
                 }
               ]
+            },
+            {
+              "sev": "should",
+              "title": "Extension fills applications",
+              "good": "With the Scout Application Filler extension loaded, Fill this page populates a real application form's empty fields from your profile (name, contact, links, school, major, experience textarea), highlights what it filled, never overwrites typed text, and never submits; the popup offers per-role Copy buttons.",
+              "steps": [
+                "chrome://extensions, Developer mode on, Load unpacked, pick the extension folder from the repo (or unzip scout-extension.zip).",
+                "Open scout-source.com/app signed in, then visit your Profile once.",
+                "Open a real job application page, click the Scout icon, press Fill this page.",
+                "Check the highlighted fields match your profile, that a field you'd typed in was untouched, and that a Company name field did NOT get your name.",
+                "In the popup, Copy one experience role and paste it into a Workday-style repeater."
+              ]
             }
           ]
         },
