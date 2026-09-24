@@ -1,0 +1,20 @@
+{
+  "manifest_version": 3,
+  "name": "Scout Application Filler",
+  "version": "0.1.0",
+  "description": "Fills job and internship application forms from your Scout profile: contact info, links, education, and experience.",
+  "permissions": ["storage", "activeTab", "scripting"],
+  "host_permissions": ["https://scout-source.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://scout-source.com/*"],
+      "js": ["sync.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Scout Application Filler"
+  },
+  "icons": { "128": "icon128.png" }
+}

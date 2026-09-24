@@ -2683,6 +2683,69 @@ function ScoutTool({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyLocation, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
 
+  // ---- Structured profile for the Scout browser extension ----
+  // The extension fills application forms from ONE tidy object; parsing lives
+  // here (not in the extension) so the app's own section format stays the
+  // single source of truth. Written to localStorage; the extension's content
+  // script on this site copies it into chrome.storage.
+  useEffect(() => {
+    try {
+      const RANGE_RE =
+        /((?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}\s*(?:-|to)+\s*(?:Present|Current|Now|(?:[A-Za-z]{3,9}\.?\s?)?(?:19|20)\d{2}))/i;
+      const sections = parseSections(profile.bio || "");
+      const sec = (re: RegExp) => sections.find((x) => re.test(x.label));
+      let links: Record<string, string> = {};
+      try {
+        links = JSON.parse(localStorage.getItem("scout_app_links") || "{}");
+      } catch {}
+      const experience = sections
+        .filter((x) => /^experience/i.test(x.label))
+        .map((x) => {
+          const lines = x.text.split("\n").map((l) => l.trim()).filter(Boolean);
+          const first = lines[0] || x.label.replace(/^experience:\s*/i, "");
+          const dm = (lines.slice(0, 3).join(" ").match(RANGE_RE) || [])[1] || "";
+          const [title, company = ""] = first
+            .replace(RANGE_RE, "")
+            .replace(/\s{2,}/g, " ")
+            .split(/\s+-\s+/, 2);
+          const bullets = lines
+            .slice(1)
+            .filter((l) => !RANGE_RE.test(l) || l.replace(RANGE_RE, "").trim().length > 6);
+          return { title: title || "", company, dates: dm, bullets };
+        })
+        .filter((r) => r.title);
+      const edu = sec(/education/i);
+      const skillsSec = sec(/skills/i);
+      const contactSec = sec(/contact/i);
+      const phoneFrom = (t: string) => (t.match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/) || [""])[0];
+      const fill = {
+        v: 1,
+        updatedAt: Date.now(),
+        name: profile.name || "",
+        email: links.email || accountEmail || "",
+        phone: links.phone || phoneFrom(contactSec?.text || ""),
+        linkedin: links.linkedin || "",
+        website: links.website || "",
+        other: links.other || "",
+        location: profile.location || (sec(/location/i)?.text.split("\n")[0] || ""),
+        school: profile.college || (edu?.text.split("\n")[0] || ""),
+        major: profile.major || "",
+        eduStatus: profile.eduStatus || "",
+        education: edu?.text || "",
+        experience,
+        skills: (skillsSec?.text || "")
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean),
+        summary: sec(/summary|about/i)?.text || "",
+      };
+      localStorage.setItem("scout_fill_profile", JSON.stringify(fill));
+    } catch {
+      /* the extension just sees the last good copy */
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.bio, profile.name, profile.location, profile.college, profile.major, profile.eduStatus, accountEmail]);
+
   // Flip the hydrated flag AFTER the sync effect's first (skipped) run, so the
   // sync only fires on genuine post-load changes, never on the initial values.
   useEffect(() => {
