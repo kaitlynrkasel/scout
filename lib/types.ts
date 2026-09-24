@@ -107,6 +107,7 @@ export interface Draft {
   body: string;
   whyItFits: string;
   attachResume?: boolean; // suggested default for attaching the user's resume
+  attachAssets?: string[]; // asset-library file names to attach (song, press kit)
 }
 
 // An outreach template: how a given KIND of message (email, LinkedIn note,

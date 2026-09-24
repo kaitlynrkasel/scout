@@ -3569,11 +3569,38 @@ function ScoutTool({
     if (!token) return null;
     setError("");
     setGmailBusyId(d.opportunityId);
-    // Attach the resume only when this email opted in AND we actually have one.
-    const attachment =
-      d.channelType === "email" && d.attachResume && resumeFile
-        ? { name: resumeFile.name, dataUrl: resumeFile.dataUrl }
-        : undefined;
+    // Attachments: the resume when opted in, plus any library files (song,
+    // press kit) toggled onto this draft. Blobs load from IndexedDB here, at
+    // send time, so drafts stay light.
+    const attachments: { name: string; dataUrl: string; mime?: string }[] = [];
+    if (d.channelType === "email" && d.attachResume && resumeFile) {
+      attachments.push({ name: resumeFile.name, dataUrl: resumeFile.dataUrl });
+    }
+    if (d.channelType === "email" && (d.attachAssets || []).length) {
+      try {
+        const lib = await listAssets();
+        for (const nm of d.attachAssets || []) {
+          const a = lib.find((x) => x.name === nm);
+          if (!a) continue;
+          const dataUrl: string = await new Promise((res, rej) => {
+            const r = new FileReader();
+            r.onload = () => res(String(r.result));
+            r.onerror = () => rej(r.error);
+            r.readAsDataURL(a.blob);
+          });
+          attachments.push({ name: a.name, dataUrl, mime: a.type });
+        }
+      } catch {
+        /* a missing library file never blocks the send; it just isn't attached */
+      }
+    }
+    const totalB64 = attachments.reduce((n, a) => n + a.dataUrl.length, 0);
+    if (totalB64 > 24_000_000) {
+      setError("Attachments are too big together (about 18MB max). Untick one and try again.");
+      setGmailBusyId("");
+      return null;
+    }
+    const attachment = attachments[0]; // legacy single-file field, kept for the API
     try {
       const r = await fetch("/api/gmail/send", {
         method: "POST",
@@ -3586,6 +3613,7 @@ function ScoutTool({
           mode: mode || undefined,
           threadId: threadId || undefined,
           attachment,
+          attachments: attachments.length ? attachments : undefined,
         }),
       });
       const j = await parseApiResponse(r);
@@ -5928,6 +5956,19 @@ function ScoutTool({
     );
   }
 
+  // Toggle a library file (song, press kit) on a draft. Names only; the blob
+  // is loaded from IndexedDB at send time.
+  function setFindAttachAsset(find: Find, name: string, on: boolean) {
+    saveFinds(
+      findsRef.current.map((f) => {
+        if (f.id !== find.id || !f.draft) return f;
+        const cur = f.draft.attachAssets || [];
+        const next = on ? Array.from(new Set([...cur, name])) : cur.filter((n) => n !== name);
+        return { ...f, draft: { ...f.draft, attachAssets: next } };
+      })
+    );
+  }
+
   // Save a hand-edited draft AND learn the before→after delta for future drafts.
   // Save a message the user wrote THEMSELVES as this find's draft: no model in
   // the loop, their words verbatim, straight to drafted status.
@@ -6634,10 +6675,27 @@ function ScoutTool({
           sendAt: sendAt.toISOString(),
           findId: find.id,
           opportunityId: find.opp.id,
-          attachment:
-            find.draft.channelType === "email" && find.draft.attachResume && resumeFile
-              ? { name: resumeFile.name, dataUrl: resumeFile.dataUrl }
-              : null,
+          attachments: await (async () => {
+            if (find.draft!.channelType !== "email") return undefined;
+            const out: { name: string; dataUrl: string; mime?: string }[] = [];
+            if (find.draft!.attachResume && resumeFile)
+              out.push({ name: resumeFile.name, dataUrl: resumeFile.dataUrl });
+            try {
+              const lib = await listAssets();
+              for (const nm of find.draft!.attachAssets || []) {
+                const a = lib.find((x) => x.name === nm);
+                if (!a) continue;
+                const dataUrl: string = await new Promise((res2, rej) => {
+                  const r = new FileReader();
+                  r.onload = () => res2(String(r.result));
+                  r.onerror = () => rej(r.error);
+                  r.readAsDataURL(a.blob);
+                });
+                out.push({ name: a.name, dataUrl, mime: a.type });
+              }
+            } catch {}
+            return out.length ? out : undefined;
+          })(),
         }),
       });
       const data = await parseApiResponse(res);
@@ -9412,6 +9470,7 @@ function ScoutTool({
           applyingId={applyingId}
           hasResume={!!resumeFile}
           onToggleAttach={setFindAttach}
+          onToggleAsset={setFindAttachAsset}
           onTogglePin={togglePin}
           onMoveProject={(f, pid) => moveFindToProject(f.id, pid)}
           getSignatureFor={signatureFor}
@@ -12996,6 +13055,7 @@ function FindDetailModal({
   applying,
   hasResume,
   onToggleAttach,
+  onToggleAsset,
   otherProjects,
   onMoveProject,
   currentSignature,
@@ -13058,6 +13118,7 @@ function FindDetailModal({
   applying: boolean;
   hasResume: boolean;
   onToggleAttach: (on: boolean) => void;
+  onToggleAsset?: (name: string, on: boolean) => void;
   otherProjects: Project[];
   onMoveProject: (projectId: string) => void;
   currentSignature: string;
@@ -13807,6 +13868,7 @@ function FindDetailModal({
                 applying={applying}
                 hasResume={hasResume}
                 onToggleAttach={onToggleAttach}
+                onToggleAsset={onToggleAsset}
                 otherProjects={otherProjects}
                 onMoveProject={onMoveProject}
                 currentSignature={currentSignature}
@@ -15254,6 +15316,75 @@ function AddContactModal({
   );
 }
 
+/* ---------------- Project files ----------------
+ * Files that belong to ONE project (its song, its press kit, a one-sheet).
+ * Stored in the same asset library; the composer offers them as attach chips
+ * on every draft in the project. */
+function ProjectFilesStrip({ projectId }: { projectId: string }) {
+  const [files, setFiles] = useState<StoredAsset[]>([]);
+  const refresh = () => listAssets().then((a) => setFiles(a.filter((x) => x.projectId === projectId)));
+  useEffect(() => {
+    let alive = true;
+    listAssets().then((a) => {
+      if (alive) setFiles(a.filter((x) => x.projectId === projectId));
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId]);
+  return (
+    <div className="mt-4 border-t border-warm-border pt-3">
+      <div className="text-[10px] font-bold uppercase tracking-wider text-body/50">
+        Project files
+      </div>
+      <p className="mt-0.5 text-[11px] text-body/60">
+        The song, the press kit: drop them once and every email drafted in this
+        project can attach them with one tick.
+      </p>
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {files.map((a) => (
+          <span
+            key={a.name}
+            className="inline-flex max-w-[240px] items-center gap-1.5 rounded-full border border-warm-border bg-surface px-2.5 py-1 text-[11px] font-semibold text-ink"
+          >
+            <span className="truncate">{a.name}</span>
+            <span className="text-body/40">{Math.round(a.size / 1024)} KB</span>
+            <button
+              onClick={async () => {
+                await removeAsset(a.name);
+                refresh();
+              }}
+              title={`Remove ${a.name} from the library`}
+              aria-label={`Remove ${a.name}`}
+              className="text-body/40 transition hover:text-accent"
+            >
+              x
+            </button>
+          </span>
+        ))}
+        <label className="cursor-pointer rounded-full border border-dashed border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body/60 transition hover:bg-warm-bg">
+          + Drop or pick a file
+          <input
+            type="file"
+            multiple
+            className="hidden"
+            onChange={async (e) => {
+              const list = Array.from(e.target.files || []);
+              e.currentTarget.value = "";
+              for (const f of list) {
+                if (f.size > 18 * 1024 * 1024) continue; // over the email cap
+                await saveAsset(f, projectId);
+              }
+              refresh();
+            }}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Your links ----------------
  * The same links the Application materials page keeps (one storage key,
  * scout_app_links), surfaced on the Profile too so a company account with
@@ -16139,6 +16270,7 @@ function FindsTab({
   applyingId,
   hasResume,
   onToggleAttach,
+  onToggleAsset,
   onTogglePin,
   onMoveProject,
   getSignatureFor,
@@ -16211,6 +16343,7 @@ function FindsTab({
   applyingId: string;
   hasResume: boolean;
   onToggleAttach: (f: Find, on: boolean) => void;
+  onToggleAsset: (f: Find, name: string, on: boolean) => void;
   onTogglePin: (id: string) => void;
   onMoveProject: (f: Find, projectId: string) => void;
   getSignatureFor: (projectId: string) => string;
@@ -17116,6 +17249,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
                       applying={false}
                       hasResume={hasResume}
                       onToggleAttach={() => {}}
+                      onToggleAsset={() => {}}
                       onTogglePin={() => {}}
                       onOpenDetail={() => {}}
                       wantedChannels={
@@ -17164,6 +17298,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
               applying={applyingId === f.id}
               hasResume={hasResume}
               onToggleAttach={(on) => onToggleAttach(f, on)}
+              onToggleAsset={(nm, on) => onToggleAsset(f, nm, on)}
               onTogglePin={() => onTogglePin(f.id)}
               onOpenDetail={() => setDetailId(f.id)}
               wantedChannels={
@@ -17352,6 +17487,7 @@ shared={shown.some((x) => !!x.foundByEmail)}
           applying={applyingId === detailFind.id}
           hasResume={hasResume}
           onToggleAttach={(on) => onToggleAttach(detailFind, on)}
+          onToggleAsset={(nm, on) => onToggleAsset(detailFind, nm, on)}
           otherProjects={projects.filter((p) => p.id !== detailFind.projectId)}
           onMoveProject={(pid) => onMoveProject(detailFind, pid)}
           currentSignature={getSignatureFor(detailFind.projectId)}
@@ -17574,6 +17710,7 @@ function FindCard({
   applying,
   hasResume,
   onToggleAttach,
+  onToggleAsset,
   onTogglePin,
   onOpenDetail,
   wantedChannels,
@@ -17622,6 +17759,7 @@ function FindCard({
   applying: boolean;
   hasResume: boolean;
   onToggleAttach: (on: boolean) => void;
+  onToggleAsset?: (name: string, on: boolean) => void;
   onTogglePin: () => void;
   onOpenDetail: () => void;
   wantedChannels: string[];
@@ -17939,6 +18077,7 @@ function FindCard({
         applying={applying}
         hasResume={hasResume}
         onToggleAttach={onToggleAttach}
+        onToggleAsset={onToggleAsset}
         otherProjects={otherProjects}
         onMoveProject={onMoveProject}
         currentSignature={currentSignature}
@@ -18110,6 +18249,7 @@ function FindWorkflow({
   applying,
   hasResume,
   onToggleAttach,
+  onToggleAsset,
   otherProjects,
   onMoveProject,
   currentSignature,
@@ -18155,6 +18295,7 @@ function FindWorkflow({
   applying: boolean;
   hasResume: boolean;
   onToggleAttach: (on: boolean) => void;
+  onToggleAsset?: (name: string, on: boolean) => void;
   otherProjects: Project[];
   onMoveProject: (projectId: string) => void;
   currentSignature: string;
@@ -18168,6 +18309,17 @@ function FindWorkflow({
   // Contacted (or beyond): hide the send/mark actions.
   const done = find.status === "sent" || find.status === "replied";
   const emailDraft = d && d.channelType === "email" && !!mailHref(d.to);
+  // The asset library, for the attach chips (loaded once per mount).
+  const [libAssets, setLibAssets] = useState<StoredAsset[]>([]);
+  useEffect(() => {
+    let alive = true;
+    listAssets().then((a) => {
+      if (alive) setLibAssets(a);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
   const [denying, setDenying] = useState(false); // reason picker shown pre-deny
   const [sendGuard, setSendGuard] = useState<null | {
     local: string;
@@ -18400,6 +18552,60 @@ function FindWorkflow({
                 This looks like it wants a resume. Add one in your Profile to attach it.
               </p>
             ) : null)}
+          {/* Library files (the song, the press kit): tick to ride this email.
+              Project files first, then the rest of the library. */}
+          {d.channelType === "email" && onToggleAsset && (
+            <div className="mt-2">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {libAssets
+                  .filter((a) => !a.projectId || a.projectId === find.projectId)
+                  .sort((a, b) => Number(!!b.projectId) - Number(!!a.projectId))
+                  .slice(0, 8)
+                  .map((a) => {
+                    const on = (d.attachAssets || []).includes(a.name);
+                    return (
+                      <button
+                        key={a.name}
+                        onClick={() => onToggleAsset(a.name, !on)}
+                        title={`${a.name} (${Math.round(a.size / 1024)} KB)${on ? ", attached to this email" : ""}`}
+                        className={`max-w-[220px] truncate rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
+                          on
+                            ? "border-brown bg-brown-tint/50 text-brown-deep"
+                            : "border-warm-border bg-surface text-body/70 hover:bg-warm-bg"
+                        }`}
+                      >
+                        {on ? "Attached: " : "Attach "}
+                        {a.name}
+                      </button>
+                    );
+                  })}
+                <label className="cursor-pointer rounded-full border border-dashed border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body/60 transition hover:bg-warm-bg">
+                  + Add a file
+                  <input
+                    type="file"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const f2 = e.target.files?.[0];
+                      e.currentTarget.value = "";
+                      if (!f2) return;
+                      if (f2.size > 18 * 1024 * 1024) {
+                        return; // over the email cap; the chip row stays honest
+                      }
+                      await saveAsset(f2, find.projectId);
+                      setLibAssets(await listAssets());
+                      onToggleAsset(f2.name, true);
+                    }}
+                  />
+                </label>
+              </div>
+              {(d.attachAssets || []).length > 0 && (
+                <p className="mt-1 text-[11px] text-body/50">
+                  {(d.attachAssets || []).length} file
+                  {(d.attachAssets || []).length === 1 ? "" : "s"} will be attached to this email.
+                </p>
+              )}
+            </div>
+          )}
           <button
             onClick={() => {
               setEditSubject(d.subject || "");
@@ -28773,6 +28979,9 @@ function ProjectsTab({
                   Add category
                 </button>
               </div>
+              {/* Project files: the song, the press kit. Dropped here, they
+                  show as attach chips on every draft in this project. */}
+              <ProjectFilesStrip projectId={selected.id} />
 
             </div>
           )}

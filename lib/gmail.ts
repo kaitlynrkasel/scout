@@ -151,7 +151,7 @@ function buildRaw(
   to: string,
   subject: string,
   body: string,
-  attachment?: MailAttachment,
+  attachments?: MailAttachment[],
   listUnsubscribe?: string,
   html?: string, // when set (and no attachment), send text/html instead of plain
   cc?: string
@@ -175,7 +175,7 @@ function buildRaw(
 
   // No attachment: a single-part message — HTML when the caller supplied a
   // rendered body (e.g. Scout's own notification emails), plain text otherwise.
-  if (!attachment) {
+  if (!attachments || !attachments.length) {
     const msg =
       [
         ...baseHeaders,
@@ -186,11 +186,9 @@ function buildRaw(
     return Buffer.from(msg).toString("base64url");
   }
 
-  // With an attachment: a multipart/mixed message (text part + file part).
+  // With attachments: multipart/mixed, one file part per attachment (a song
+  // AND a press kit ride the same pitch).
   const boundary = "scout_boundary_" + Buffer.from(from + to).toString("hex").slice(0, 16);
-  const safeName = attachment.name.replace(/["\\\r\n]/g, "_") || "resume.pdf";
-  // Gmail wants base64 body lines wrapped at 76 chars.
-  const wrapped = attachment.dataBase64.replace(/[\r\n]/g, "").replace(/.{1,76}/g, "$&\r\n");
   const parts = [
     baseHeaders.join("\r\n"),
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
@@ -199,14 +197,21 @@ function buildRaw(
     'Content-Type: text/plain; charset="UTF-8"',
     "",
     body,
-    `--${boundary}`,
-    `Content-Type: ${attachment.mime || "application/octet-stream"}; name="${safeName}"`,
-    "Content-Transfer-Encoding: base64",
-    `Content-Disposition: attachment; filename="${safeName}"`,
-    "",
-    wrapped,
-    `--${boundary}--`,
   ];
+  for (const attachment of attachments) {
+    const safeName = attachment.name.replace(/["\\\r\n]/g, "_") || "file";
+    // Gmail wants base64 body lines wrapped at 76 chars.
+    const wrapped = attachment.dataBase64.replace(/[\r\n]/g, "").replace(/.{1,76}/g, "$&\r\n");
+    parts.push(
+      `--${boundary}`,
+      `Content-Type: ${attachment.mime || "application/octet-stream"}; name="${safeName}"`,
+      "Content-Transfer-Encoding: base64",
+      `Content-Disposition: attachment; filename="${safeName}"`,
+      "",
+      wrapped
+    );
+  }
+  parts.push(`--${boundary}--`);
   return Buffer.from(parts.join("\r\n")).toString("base64url");
 }
 
@@ -220,7 +225,8 @@ export async function gmailSendOrDraft(opts: {
   body: string;
   mode: "send" | "draft";
   threadId?: string; // when set, the message is placed in that existing thread
-  attachment?: MailAttachment; // optional file (e.g. the user's resume)
+  attachment?: MailAttachment; // legacy single file (kept for stored queue rows)
+  attachments?: MailAttachment[]; // any set of files (song, press kit, resume)
   listUnsubscribe?: string; // RFC 2369 List-Unsubscribe value for cold outreach
   html?: string; // rendered HTML body (notifications); body stays the text fallback
   cc?: string; // optional CC list, comma-separated addresses
@@ -231,7 +237,11 @@ export async function gmailSendOrDraft(opts: {
     opts.to,
     opts.subject,
     opts.body,
-    opts.attachment,
+    opts.attachments && opts.attachments.length
+      ? opts.attachments
+      : opts.attachment
+        ? [opts.attachment]
+        : undefined,
     opts.listUnsubscribe,
     opts.html,
     opts.cc

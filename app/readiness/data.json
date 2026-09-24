@@ -2924,6 +2924,18 @@
                 "Press Not now: nothing connects.",
                 "Press I agree: the Google consent screen opens with the described permissions."
               ]
+            },
+            {
+              "sev": "should",
+              "title": "Project files ride the email",
+              "good": "A file dropped on a project (a song, a press kit) shows as an attach chip on every email drafted in that project; ticked files arrive as real attachments on Gmail and Outlook sends and on scheduled sends, and oversized sets are refused with a clear message instead of a broken email.",
+              "steps": [
+                "On Projects, open a project and use + Drop or pick a file to add an MP3 or PDF (under 18MB).",
+                "Draft an email on a find in that project: the file appears as an Attach chip under the draft; tick it.",
+                "Send to an inbox you own and confirm the attachment arrives and opens.",
+                "Schedule a send with a file ticked and confirm the attachment is still there when it fires.",
+                "Tick files totalling over 18MB: the send is refused with the size message."
+              ]
             }
           ]
         },

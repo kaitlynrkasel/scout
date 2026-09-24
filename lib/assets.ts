@@ -9,6 +9,7 @@ export interface StoredAsset {
   size: number;
   addedAt: number;
   blob: Blob;
+  projectId?: string; // when dropped into a specific project (its song, its press kit)
 }
 
 const DB = "scout-assets";
@@ -38,13 +39,14 @@ function tx<T>(mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest)
   );
 }
 
-export async function saveAsset(file: File): Promise<void> {
+export async function saveAsset(file: File, projectId?: string): Promise<void> {
   const rec: StoredAsset = {
     name: file.name,
     type: file.type || "application/octet-stream",
     size: file.size,
     addedAt: Date.now(),
     blob: file,
+    ...(projectId ? { projectId } : {}),
   };
   await tx("readwrite", (s) => s.put(rec));
 }

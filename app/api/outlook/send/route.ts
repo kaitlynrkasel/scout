@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   if (!uid || !supabaseAdmin) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
-  const { to, subject, body, cc, mode: modeOverride } = await req.json();
+  const { to, subject, body, cc, mode: modeOverride, attachment, attachments } = await req.json();
   if (!to || !EMAIL_RE.test(String(to))) {
     return NextResponse.json(
       { error: "This draft has no email address to send to." },
@@ -47,6 +47,30 @@ export async function POST(req: NextRequest) {
   const unsubUrl = `${reqOrigin(req)}/api/unsubscribe?t=${encodeURIComponent(token)}`;
   const listUnsubscribe = `<${unsubUrl}>, <mailto:${data.email || "me"}?subject=unsubscribe>`;
 
+  const rawList = (
+    Array.isArray(attachments) ? attachments : attachment ? [attachment] : []
+  ).slice(0, 8);
+  const atts: { name: string; mime: string; dataBase64: string }[] = [];
+  let attTotal = 0;
+  for (const a of rawList) {
+    if (!a || !a.dataUrl) continue;
+    const m2 = String(a.dataUrl).match(/^data:([^;]+);base64,(.*)$/s);
+    const base64 = m2 ? m2[2] : String(a.dataUrl).replace(/^data:[^,]*,/, "");
+    if (!base64) continue;
+    attTotal += base64.length;
+    if (attTotal > 24_000_000) {
+      return NextResponse.json(
+        { error: "Attachments are too big together (about 18MB max). Drop one and try again." },
+        { status: 400 }
+      );
+    }
+    atts.push({
+      name: String(a.name || "file"),
+      mime: (m2 && m2[1]) || a.mime || "application/octet-stream",
+      dataBase64: base64,
+    });
+  }
+
   try {
     const result = await outlookSendOrDraft({
       refreshToken: data.refresh_token,
@@ -57,6 +81,7 @@ export async function POST(req: NextRequest) {
       html: needsHtml(String(body || "")) ? humanHtml(String(body || "")) : undefined,
       mode,
       listUnsubscribe,
+      attachments: atts.length ? atts : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {

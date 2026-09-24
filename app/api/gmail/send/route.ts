@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   if (!uid || !supabaseAdmin) {
     return NextResponse.json({ error: "Please sign in first." }, { status: 401 });
   }
-  const { to, subject, body, cc, mode: modeOverride, threadId, attachment } = await req.json();
+  const { to, subject, body, cc, mode: modeOverride, threadId, attachment, attachments } = await req.json();
   // CC is optional; when present every address must parse, or the whole send
   // aborts (a silently dropped CC would lie about who saw the message).
   const ccStr = String(cc || "")
@@ -32,19 +32,31 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Optional attachment (e.g. the resume). Accept a data: URL or raw base64.
-  let att: { name: string; mime: string; dataBase64: string } | undefined;
-  if (attachment && attachment.dataUrl) {
-    const m = String(attachment.dataUrl).match(/^data:([^;]+);base64,(.*)$/s);
-    const base64 = m ? m[2] : String(attachment.dataUrl).replace(/^data:[^,]*,/, "");
-    // ~7MB base64 cap so we never build an oversized message.
-    if (base64 && base64.length < 7_000_000) {
-      att = {
-        name: String(attachment.name || "resume.pdf"),
-        mime: (m && m[1]) || attachment.mime || "application/pdf",
-        dataBase64: base64,
-      };
+  // Optional attachments (song, press kit, resume). Accept data: URLs or raw
+  // base64; legacy callers still send a single `attachment`. A combined
+  // ~24MB base64 cap keeps the built message inside Gmail's limit.
+  const rawList = (
+    Array.isArray(attachments) ? attachments : attachment ? [attachment] : []
+  ).slice(0, 8);
+  const atts: { name: string; mime: string; dataBase64: string }[] = [];
+  let attTotal = 0;
+  for (const a of rawList) {
+    if (!a || !a.dataUrl) continue;
+    const m = String(a.dataUrl).match(/^data:([^;]+);base64,(.*)$/s);
+    const base64 = m ? m[2] : String(a.dataUrl).replace(/^data:[^,]*,/, "");
+    if (!base64) continue;
+    attTotal += base64.length;
+    if (attTotal > 24_000_000) {
+      return NextResponse.json(
+        { error: "Attachments are too big together (about 18MB max). Drop one and try again." },
+        { status: 400 }
+      );
     }
+    atts.push({
+      name: String(a.name || "file"),
+      mime: (m && m[1]) || a.mime || "application/octet-stream",
+      dataBase64: base64,
+    });
   }
 
   const { data } = await supabaseAdmin
@@ -113,11 +125,11 @@ export async function POST(req: NextRequest) {
       body: outBody,
       mode,
       threadId: threadId ? String(threadId) : undefined,
-      attachment: att,
+      attachments: atts.length ? atts : undefined,
       listUnsubscribe,
       // Links in the note become real hyperlinks; attachments keep the plain
       // part (the multipart builder has no HTML branch).
-      html: !att && needsHtml(outBody) ? humanHtml(outBody) : undefined,
+      html: !atts.length && needsHtml(outBody) ? humanHtml(outBody) : undefined,
     });
     return NextResponse.json({ ok: true, ...result });
   } catch (e: any) {

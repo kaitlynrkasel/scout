@@ -169,7 +169,8 @@ function buildMessage(
   body: string,
   html?: string,
   cc?: string,
-  listUnsubscribe?: string
+  listUnsubscribe?: string,
+  attachments?: { name: string; mime: string; dataBase64: string }[]
 ) {
   return {
     subject,
@@ -195,6 +196,16 @@ function buildMessage(
           ],
         }
       : {}),
+    ...(attachments && attachments.length
+      ? {
+          attachments: attachments.map((a) => ({
+            "@odata.type": "#microsoft.graph.fileAttachment",
+            name: a.name,
+            contentType: a.mime || "application/octet-stream",
+            contentBytes: a.dataBase64,
+          })),
+        }
+      : {}),
   };
 }
 
@@ -209,6 +220,7 @@ export async function outlookSendOrDraft(opts: {
   html?: string; // rendered HTML body (notifications); body stays the text fallback
   cc?: string; // optional CC list, comma/space separated
   listUnsubscribe?: string; // RFC 2369 value for cold outreach (see gmail.ts)
+  attachments?: { name: string; mime: string; dataBase64: string }[];
 }): Promise<{ id: string; threadId: string; mode: "send" | "draft" }> {
   const at = await accessTokenFromRefresh(opts.refreshToken);
   // Always create the draft first (gives us id + conversationId), then send it
@@ -216,7 +228,7 @@ export async function outlookSendOrDraft(opts: {
   const create = await fetch(`${GRAPH}/me/messages`, {
     method: "POST",
     headers: { authorization: `Bearer ${at}`, "content-type": "application/json" },
-    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html, opts.cc, opts.listUnsubscribe)),
+    body: JSON.stringify(buildMessage(opts.to, opts.subject, opts.body, opts.html, opts.cc, opts.listUnsubscribe, opts.attachments)),
   });
   if (!create.ok) throw new Error("graph draft failed: " + (await create.text()));
   const msg = await create.json();

@@ -115,19 +115,23 @@ export async function GET(req: NextRequest) {
       }
 
       // Attachment stored as { name, mime, dataUrl }, unpack to base64 for
-      // the provider send helpers, same shape as the /api/gmail/send route.
-      let att: { name: string; mime: string; dataBase64: string } | undefined;
       const raw = row.attachment as any;
-      if (raw?.dataUrl) {
-        const m = String(raw.dataUrl).match(/^data:([^;]+);base64,(.*)$/s);
-        const base64 = m ? m[2] : String(raw.dataUrl).replace(/^data:[^,]*,/, "");
-        if (base64 && base64.length < 7_000_000) {
-          att = {
-            name: String(raw.name || "attachment"),
-            mime: (m && m[1]) || raw.mime || "application/octet-stream",
-            dataBase64: base64,
-          };
-        }
+      // The column holds a legacy single object or an array of files.
+      const rawList = Array.isArray(raw) ? raw : raw ? [raw] : [];
+      const atts: { name: string; mime: string; dataBase64: string }[] = [];
+      let attTotal = 0;
+      for (const a of rawList.slice(0, 8)) {
+        if (!a?.dataUrl) continue;
+        const m = String(a.dataUrl).match(/^data:([^;]+);base64,(.*)$/s);
+        const base64 = m ? m[2] : String(a.dataUrl).replace(/^data:[^,]*,/, "");
+        if (!base64) continue;
+        attTotal += base64.length;
+        if (attTotal > 24_000_000) break; // send what fits, never a broken message
+        atts.push({
+          name: String(a.name || "attachment"),
+          mime: (m && m[1]) || a.mime || "application/octet-stream",
+          dataBase64: base64,
+        });
       }
 
       const recipient = String(row.to_addr || "").trim().toLowerCase();
@@ -174,8 +178,8 @@ export async function GET(req: NextRequest) {
         subject: (row.subject as string) || "",
         body: outBody,
         mode: "send" as const,
-        attachment: att,
-        html: !att && needsHtml(outBody) ? humanHtml(outBody) : undefined,
+        attachments: atts.length ? atts : undefined,
+        html: !atts.length && needsHtml(outBody) ? humanHtml(outBody) : undefined,
       };
       if (provider === "gmail") await gmailSendOrDraft({ ...opts, listUnsubscribe });
       else await outlookSendOrDraft(opts);

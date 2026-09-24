@@ -21,6 +21,7 @@ export async function POST(req: NextRequest) {
     findId,
     opportunityId,
     attachment,
+    attachments,
     isFollowup,
     threadId,
   } = body || {};
@@ -73,7 +74,13 @@ export async function POST(req: NextRequest) {
       send_at: sendAtDate.toISOString(),
       find_id: findId ? String(findId) : null,
       opportunity_id: opportunityId ? String(opportunityId) : null,
-      attachment: attachment && attachment.dataUrl ? attachment : null,
+      // The jsonb column holds either the legacy single object or an array.
+      attachment:
+        Array.isArray(attachments) && attachments.length
+          ? attachments.filter((a: any) => a && a.dataUrl).slice(0, 8)
+          : attachment && attachment.dataUrl
+            ? attachment
+            : null,
       is_followup: !!isFollowup,
       thread_id: threadId ? String(threadId) : null,
     })
