@@ -8316,7 +8316,7 @@ function ScoutTool({
           </button>
         </div>
       )}
-      <div className="flex min-w-0 flex-1 flex-col pt-[calc(52px+env(safe-area-inset-top))] pb-[calc(52px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0">
+      <div className="flex min-w-0 flex-1 flex-col pt-[env(safe-area-inset-top)] pb-[calc(52px+env(safe-area-inset-bottom))] md:pt-0 md:pb-0">
       {/* One-time nudge to install to the home screen (phones only, and only
           where the browser can actually do it). */}
       <InstallBanner />
@@ -11313,26 +11313,16 @@ function SideNav({
 
   return (
     <>
-      {/* Mobile top bar (hamburger + logo + search). Fixed, so it spans the
-          full width above the content; the content column adds top padding. */}
-      <div className="fixed inset-x-0 top-0 z-40 flex items-center gap-2 border-b border-warm-border bg-surface-2/95 px-3 py-2 pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur md:hidden">
-        <a href="/" aria-label="Scout home" className="flex items-center gap-2">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {tab === "outreach" ? (
-            <img src="/scout-dog.png" alt="Scout" width={24} height={24} className="h-5 w-auto" />
-          ) : (
-            <img src="/scout-logo.png" alt="Scout" width={20} height={20} className="h-5 w-5" />
-          )}
-          <span className="text-[15px] font-semibold tracking-tight text-ink">Scout</span>
-        </a>
-        <button
-          onClick={openCommand}
-          aria-label="Search"
-          className="ml-auto flex h-11 w-11 items-center justify-center rounded-lg text-muted transition hover:bg-warm-bg"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7" /><path d="m21 21-4.3-4.3" /></svg>
-        </button>
-      </div>
+      {/* No mobile top bar: a phone screen is short, and a logo plus a search
+          icon bought nothing the bottom bar and its "More" drawer (which still
+          carries both the logo and Search) don't already give. All that's left
+          is a scrim exactly as tall as the status-bar inset, so scrolled
+          content doesn't run under the clock in standalone. That inset is 0 in
+          a browser tab, where it collapses to nothing. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-x-0 top-0 z-40 h-[env(safe-area-inset-top)] bg-surface-2/95 backdrop-blur md:hidden"
+      />
 
       {/* Mobile drawer */}
       {mobileOpen && (
