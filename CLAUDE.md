@@ -11,21 +11,22 @@ UI in `app/app/page.tsx`. Optional Supabase auth + per-user state, Gmail OAuth.
 - Project is a 50/50 collaboration.
 
 ## Design direction (in progress)
-Rebrand to a **warm-brown + cream** palette with a **dusty-blue denim** counterpoint
-(leather + denim), clean and inviting, not overwhelming.
+**Warm or white ONLY** (Kaitlyn's call, 2026-10-15): every cool tone (denim,
+navy, teal, slate blue) is retired app-wide. The palette is warm browns,
+creams, caramel, and white; the old blue/sage token names still exist but now
+resolve to warm values, so never reintroduce cool hexes.
 - The **app UI shares the landing page's editorial voice**: Bricolage Grotesque
   display headings (`--font-display`, applied to h1/h2/h3 + `.font-display`), Inter
   body, and uppercase dusty-blue **`.kicker`** eyebrows above section headers.
-- Left **sidebar** is a **dusty-blue denim rail** (`.rail` — light periwinkle
-  #D7E1EE / dark slate #232C34); active nav item is a solid slate pill
-  (`.nav-active`). Blue is a co-lead in the chrome; browns/tans stay on the
-  content canvas + brand CTAs.
-- **Dusty slate-blue** is the secondary accent (linen-and-denim palette): tokens
-  `blue`/#8DA0BC, `blue-deep`/#536872, `blue-tint`/#C5CFE1, `slate`/#A5B0B6. The
-  old sage green is retired — `sage`/`sage-deep` now alias the blue vars, so all
-  existing `sage` classNames render dusty blue.
+- Left **sidebar** is warm white paper with mixed-case labels, sentence-case
+  group headers, tree-indented children, and a soft warm active pill
+  (reference: Brainwave-style sidebar); the tab's idea colour lives on the
+  icon only.
+- The secondary accent is **warm chestnut/stone**: `blue`/`blue-deep`/
+  `blue-tint`/`slate`/`sage` token NAMES remain for compatibility but resolve
+  to warm values (chestnut #8A5A34 family), set in globals.css.
 - Design tokens live in `tailwind.config.ts` + `app/globals.css`; older names
-  (`coral`/`blush`/`accent`/`warm-*`) are remapped to browns, and `sage` to blue,
+  (`coral`/`blush`/`accent`/`warm-*`/`blue`/`sage`) all remap to warm browns,
   so the whole app shifts palette centrally.
 - The Scout **logo** is the owner's brushed dog-nose mark at `public/scout-logo.png`
   (also the favicon at `app/icon.png`). Every logo spot (sidebar, footer, landing
