@@ -921,7 +921,7 @@ select.scout-kind-picker option {
    a box, and wide enough to read as a choice rather than a form field. */
 .stage-toggle {
   border-radius: 9999px;
-  border: 1px solid rgb(var(--c-ink) / 0.28);
+  border: 2px solid rgb(var(--c-ink) / 0.35);
   background: rgb(255 255 255 / 0.85);
   color: rgb(var(--c-ink));
   transition: background-color 0.2s ease, border-color 0.2s ease;

@@ -8365,12 +8365,14 @@ function ScoutTool({
                 className={`w-full max-w-[1400px] ${
                   stageHasWorkBelow
                     ? ""
-                    : "my-auto flex flex-col items-center gap-8 text-center"
+                    : // Left-skewed editorial hero (her call): the composer
+                      // hangs on the left two-thirds, nothing centers.
+                      "my-auto flex max-w-[880px] flex-col items-start gap-8 pl-0 sm:pl-6 xl:pl-10"
                 }`}
               >
                 <div
                   className={`flex flex-wrap items-center gap-2 ${
-                    stageHasWorkBelow ? "" : "order-2 justify-center"
+                    stageHasWorkBelow ? "" : "order-2 justify-start"
                   }`}
                 >
                   {/* On a phone the label takes its own line so the two
@@ -28590,7 +28592,9 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
 
   return (
     <div data-guide="goal">
-      <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 [.text-center_&]:justify-center">
+      {/* Bold editorial rule anchoring the block to the left edge. */}
+      <div aria-hidden className="mb-3 h-[3px] w-12 rounded-full bg-cream/85" />
+      <div className="flex items-center gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/55">
         This search finds
         {distilling && (
           <span className="scout-fade-in font-normal normal-case tracking-normal text-white/40">
@@ -28633,7 +28637,7 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
               className="group/b flex items-start gap-2.5 text-left"
             >
               <span aria-hidden className="mt-[11px] h-2 w-2 shrink-0 rounded-full bg-cream/80" />
-              <span className="text-lg font-semibold leading-snug text-white/90 underline-offset-4 group-hover/b:underline sm:text-xl">
+              <span className="text-lg font-bold leading-snug text-white/95 underline-offset-4 group-hover/b:underline sm:text-xl">
                 {b}
               </span>
             </button>
