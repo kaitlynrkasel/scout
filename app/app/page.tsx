@@ -856,12 +856,12 @@ function contactNameAddsInfo(o: Opportunity): boolean {
 // The same rainbow the tiles snap to, so a list of monogram squares reads as
 // part of one system instead of six shades of mud.
 const FIND_AVATAR_COLORS = [
-  "#377ec0", // blue
-  "#5460ac", // indigo
-  "#7a5aa8", // purple
-  "#12baaa", // teal
-  "#f7891f", // orange
-  "#f04f52", // red
+  "#8a5a34", // chestnut
+  "#b07d4a", // caramel
+  "#a0564b", // clay red
+  "#6e4828", // saddle
+  "#c99b62", // honey
+  "#7a5230", // walnut
 ];
 function FindAvatar({ opp, size = 34 }: { opp: Opportunity; size?: number }) {
   const [logoFailed, setLogoFailed] = useState(false);
@@ -1988,12 +1988,12 @@ function ScoutTool({
     // that used to sit in this deck are the two the stage no longer deals — a
     // plum stage read as a different product from a teal one.
     const deeps = [
-      "#1b4d3e", // pine green
-      "#11504b", // deep teal
-      "#0f3f4f", // petrol
-      "#19455e", // deep sea blue
-      "#2c4a63", // slate blue
-      "#232d55", // navy
+      "#5b3a1f", // espresso
+      "#6e4828", // chestnut
+      "#7a5230", // saddle
+      "#4a3728", // dark walnut
+      "#8a5a34", // warm clay
+      "#3f3024", // roasted umber
     ];
     // Guaranteed different from the LAST visit, not merely random: with six
     // options a plain draw repeats one time in six, which reads as "it didn't
@@ -10502,11 +10502,13 @@ const ACCENT_COLORS: {
   light?: boolean;
 }[] = [
   { key: "", label: "None", color: "", on: "", rgb: "", deep: "" },
-  { key: "deep-ocean", label: "Deep ocean", color: "#0D2B45", on: "#ffffff", rgb: "13 43 69", deep: "8 27 44" },
-  { key: "ocean-teal", label: "Ocean teal", color: "#1E5A6E", on: "#ffffff", rgb: "30 90 110", deep: "22 68 81" },
-  { key: "seafoam", label: "Seafoam", color: "#6BA7A0", on: "#0D2B45", rgb: "53 112 106", deep: "44 92 87", light: true },
-  { key: "sandy", label: "Sandy beige", color: "#DCC8AA", on: "#0D2B45", rgb: "122 95 57", deep: "99 77 46", light: true },
-  { key: "sky", label: "Light sky", color: "#B7D4E6", on: "#0D2B45", rgb: "61 110 140", deep: "46 86 112", light: true },
+  // All warm or white, per the house palette; keys are stable so accounts
+  // that picked the old cool names now resolve to their warm replacements.
+  { key: "deep-ocean", label: "Espresso", color: "#4A3728", on: "#ffffff", rgb: "74 55 40", deep: "52 38 27" },
+  { key: "ocean-teal", label: "Chestnut", color: "#6E4828", on: "#ffffff", rgb: "110 72 40", deep: "85 55 30" },
+  { key: "seafoam", label: "Caramel", color: "#B07D4A", on: "#2b1f14", rgb: "176 125 74", deep: "140 99 58", light: true },
+  { key: "sandy", label: "Sandy beige", color: "#DCC8AA", on: "#2b1f14", rgb: "122 95 57", deep: "99 77 46", light: true },
+  { key: "sky", label: "Warm linen", color: "#EFE3D0", on: "#2b1f14", rgb: "150 122 90", deep: "117 94 68", light: true },
 ];
 function accentColor(
   key: string
@@ -10997,23 +10999,22 @@ function SideNav({
     </button>
   );
 
-  // Colour by meaning: each tab's active pill wears the colour of the IDEA
-  // that tab is about — searching cobalt, people teal, your-voice magenta,
-  // company denim. There is deliberately no single main accent.
+  // Colour by meaning, all within the warm family now: searching chestnut,
+  // people amber, your-voice terracotta. No cool tones anywhere.
   const TAB_IDEA: Record<string, string> = {
-    dashboard: "#19455e",
-    outreach: "#19455e",
-    manual: "#4e9c9c",
-    finds: "#4e9c9c",
-    applications: "#19455e",
-    spreadsheet: "#4e9c9c",
-    projects: "#19455e",
-    templates: "#aa2377",
-    profile: "#aa2377",
-    team: "#5b4aa8",
-    account: "#19455e",
-    billing: "#19455e",
-    settings: "#19455e",
+    dashboard: "#6e4828",
+    outreach: "#6e4828",
+    manual: "#a07846",
+    finds: "#a07846",
+    applications: "#6e4828",
+    spreadsheet: "#a07846",
+    projects: "#6e4828",
+    templates: "#8a4a3a",
+    profile: "#8a4a3a",
+    team: "#7a5230",
+    account: "#6e4828",
+    billing: "#6e4828",
+    settings: "#6e4828",
   };
   // Rail nav row. Renders one uppercase item with icon, optional
   // count badge / signal dot, and the idea-coloured active pill.
@@ -11045,11 +11046,6 @@ function SideNav({
       className={`su-navitem ${opts.active ? "su-active" : ""} ${
         opts.draggable ? "cursor-grab select-none active:cursor-grabbing" : ""
       }`}
-      style={
-        opts.active && TAB_IDEA[key]
-          ? { backgroundColor: TAB_IDEA[key], color: "#ffffff" }
-          : undefined
-      }
     >
       <svg
         width="15"
@@ -11060,7 +11056,8 @@ function SideNav({
         strokeWidth="1.8"
         strokeLinecap="round"
         strokeLinejoin="round"
-      >
+      
+        style={opts.active && TAB_IDEA[key] ? { stroke: TAB_IDEA[key] } : undefined}>
         {icon}
       </svg>
       {label}
@@ -11145,7 +11142,7 @@ function SideNav({
                   <div key={g.key} className="mt-1.5">
                     <button
                       onClick={() => toggleGroup(g.key)}
-                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[color:var(--su-rail-muted)] transition hover:text-[color:var(--su-rail-fg-strong)]"
+                      className="flex w-full items-center gap-1.5 px-2.5 py-1.5 text-[12px] font-semibold text-[color:var(--su-rail-muted)] transition hover:text-[color:var(--su-rail-fg-strong)]"
                     >
                       <svg
                         width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"
@@ -11157,7 +11154,9 @@ function SideNav({
                       <span>{g.label}</span>
                     </button>
                     {open && (
-                      <div className="flex flex-col gap-0.5">
+                      // Tree-indented children with a faint connector rail,
+                      // per the reference sidebar.
+                      <div className="ml-[13px] flex flex-col gap-0.5 border-l border-[color:var(--su-rail-line)] pl-2">
                         {groupItems.map((it) => render(it, g))}
                       </div>
                     )}
@@ -11209,7 +11208,7 @@ function SideNav({
                     type="checkbox"
                     checked={activeCompanyId === "personal"}
                     onChange={(e) => onTogglePersonal(e.target.checked)}
-                    className="mt-0.5 h-3.5 w-3.5 accent-[#19455e]"
+                    className="mt-0.5 h-3.5 w-3.5 accent-[#8a5a34]"
                   />
                   <span className="min-w-0">
                     <span className="block text-xs font-bold">Personal use</span>
@@ -15744,10 +15743,10 @@ function SiteTile({
   // brand color; the mark, dog, and chip carry the color itself, deepened
   // toward ink so they read on the pastel. No color at all: deal a pastel
   // from the same deck as the dashboard field, by the tile's own hash.
-  const DECK = ["186 205 172", "147 174 203", "217 161 180", "224 180 138", "169 156 196", "176 209 201"];
+  const DECK = ["214 186 150", "224 180 138", "199 160 118", "228 203 170", "209 174 142", "236 220 198"];
   const brand = color || `rgb(${DECK[h % DECK.length]})`;
   const ground = `color-mix(in srgb, ${brand} 30%, #ffffff)`;
-  const mark = `color-mix(in srgb, ${brand} 72%, #22303f)`;
+  const mark = `color-mix(in srgb, ${brand} 72%, #241c13)`;
 
   // What goes on the tile, in descending order of "this is actually them":
   // the platform mark for a profile page, then the company's own logo, then
@@ -20300,10 +20299,10 @@ function DashboardTab({
   @page { margin: 20mm; }
   * { box-sizing: border-box; }
   body { font: 13px/1.55 -apple-system, "Segoe UI", Inter, sans-serif; color: #2b2723; margin: 0; }
-  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 3px solid #3a41d9; padding-bottom: 12px; }
-  header h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0; color: #3a41d9; }
+  header { display: flex; align-items: baseline; gap: 12px; border-bottom: 3px solid #8a5a34; padding-bottom: 12px; }
+  header h1 { font-size: 24px; letter-spacing: -0.02em; margin: 0; color: #8a5a34; }
   header .date { margin-left: auto; color: #8a8073; font-size: 12px; }
-  h2 { font-size: 15px; color: #3a41d9; margin: 26px 0 10px; border-bottom: 1px solid #e6e0d6; padding-bottom: 5px; }
+  h2 { font-size: 15px; color: #8a5a34; margin: 26px 0 10px; border-bottom: 1px solid #e6e0d6; padding-bottom: 5px; }
   .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
   .stat { border: 1px solid #e6e0d6; border-radius: 10px; padding: 12px 14px; }
   .stat .v { font-size: 22px; font-weight: 800; }
@@ -23512,7 +23511,7 @@ function SharedFindRow({
 type NavTab =
   | "outreach" | "finds" | "dashboard" | "team" | "templates" | "profile" | "account" | "settings" | "billing";
 
-const MONO_PALETTE = ["#7c5837", "#7d8a6a", "#a9761f", "#5d4026", "#3f7a52", "#3f6a8c"];
+const MONO_PALETTE = ["#7c5837", "#a08a5f", "#a9761f", "#5d4026", "#8a5a34", "#b07d4a"];
 function monogram(name: string) {
   const initials =
     (name || "")
@@ -26751,7 +26750,7 @@ function CompanyDetailsEditor({
                 checked={allowPersonal}
                 onChange={(e) => togglePersonal(e.target.checked)}
                 disabled={!isOwner || savingPersonal}
-                className="mt-0.5 h-4 w-4 accent-[#19455e]"
+                className="mt-0.5 h-4 w-4 accent-[#8a5a34]"
               />
               <span>
                 <span className="block text-sm font-bold text-ink">
