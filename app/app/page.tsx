@@ -8634,11 +8634,16 @@ function ScoutTool({
                   {/* Always the bullet-point style she picked: a defined search shows
                       its points, an empty one shows an inviting empty state with
                       Add a point. The old full-width textarea front door is gone. */}
-                  {/* Which way round this search runs. Only on job-shaped
-                      projects: on a music-PR or networking project there is no
-                      second direction to pick, and the control would be a
-                      question about nothing. */}
-                  {isJobUseCaseClient(activeUseCase) && (
+                  {/* Which way round this search runs. Only when the SEARCH
+                      itself is job-shaped: a project's use case alone isn't
+                      enough (a playlist-curators search inside a loosely
+                      job-tagged project got the toggle and read as nonsense),
+                      so the current category's name and goal must talk about
+                      jobs/hiring too. */}
+                  {isJobUseCaseClient(activeUseCase) &&
+                    isJobUseCaseClient(
+                      `${myCats.find((c) => c.id === catId)?.name || ""} ${goal}`
+                    ) && (
                     <div className="mb-5 flex flex-wrap items-center gap-2 [.text-center_&]:justify-center">
                       <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
                         I&apos;m
