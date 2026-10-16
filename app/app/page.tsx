@@ -6073,7 +6073,7 @@ function ScoutTool({
             // Use each find's own template scope where possible; fall back to
             // the active project's templates for the batch.
             templates: templatesFor(activeId, catId),
-            coaching,
+            coaching: [...coaching, ...voiceDialLines()],
             dismissedAdvice,
             editPairs,
             signature: signatureFor(activeId),
@@ -6485,7 +6485,7 @@ function ScoutTool({
           outlet: find.opp.outlet,
           about: aboutText,
           useCase: activeUseCase,
-          coaching,
+          coaching: [...coaching, ...voiceDialLines()],
           dismissedAdvice,
           editPairs,
         }),
@@ -6607,7 +6607,7 @@ function ScoutTool({
               : [];
             return chosen.length ? chosen : pool;
           })(),
-          coaching,
+          coaching: [...coaching, ...voiceDialLines()],
           dismissedAdvice,
           editPairs,
           signature: signatureFor(f.projectId),
@@ -7750,7 +7750,7 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
-          coaching,
+          coaching: [...coaching, ...voiceDialLines()],
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
@@ -7890,7 +7890,7 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
-          coaching,
+          coaching: [...coaching, ...voiceDialLines()],
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
@@ -15770,6 +15770,129 @@ function ListingPaste({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ---------------- Voice dials ----------------
+ * The brand-spectrum pattern she liked, made functional: four dials between
+ * word pairs set the drafting voice. Each off-center dial becomes a coaching
+ * line the draft engine already honors, so the dots change real output. */
+const VOICE_DIALS: { key: string; left: string; right: string; lines: [string, string] }[] = [
+  { key: "warmth", left: "Warm", right: "Direct", lines: ["Lean warm and friendly in tone.", "Be direct and to the point; skip pleasantries."] },
+  { key: "length", left: "Brief", right: "Detailed", lines: ["Keep messages extra short, a few sentences.", "Give a little more context and detail than usual."] },
+  { key: "register", left: "Casual", right: "Formal", lines: ["Write casually, like texting a friendly colleague.", "Keep the register polished and professional."] },
+  { key: "confidence", left: "Humble", right: "Confident", lines: ["Stay humble and low-pressure in the ask.", "Be confident and specific about the value offered."] },
+];
+const VOICE_DIALS_KEY = "scout_voice_dials";
+function loadVoiceDials(): Record<string, number> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(VOICE_DIALS_KEY) || "{}");
+    return typeof raw === "object" && raw ? raw : {};
+  } catch {
+    return {};
+  }
+}
+// The dials' current coaching lines (center = silent). Read at draft time.
+function voiceDialLines(): string[] {
+  const v = loadVoiceDials();
+  const out: string[] = [];
+  for (const d of VOICE_DIALS) {
+    const x = typeof v[d.key] === "number" ? v[d.key] : 2;
+    if (x <= 1) out.push((x === 0 ? "Strongly: " : "") + d.lines[0]);
+    if (x >= 3) out.push((x === 4 ? "Strongly: " : "") + d.lines[1]);
+  }
+  return out;
+}
+function VoiceDials() {
+  const [vals, setVals] = useState<Record<string, number>>({});
+  useEffect(() => {
+    setVals(loadVoiceDials());
+  }, []);
+  const set = (k: string, x: number) => {
+    const next = { ...vals, [k]: x };
+    setVals(next);
+    try {
+      localStorage.setItem(VOICE_DIALS_KEY, JSON.stringify(next));
+    } catch {}
+  };
+  const ROW_H = 56;
+  const PAD_X = 10; // percent inset for the first/last stop
+  const xPct = (stop: number) => PAD_X + (stop * (100 - 2 * PAD_X)) / 4;
+  const val = (k: string) => (typeof vals[k] === "number" ? vals[k] : 2);
+  return (
+    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+      <h2 className="text-base font-extrabold tracking-tight text-ink">Voice dials</h2>
+      <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body">
+        Where your outreach sits between each pair. The dots steer every draft;
+        center means no push either way.
+      </p>
+      <div className="relative mt-5" style={{ height: VOICE_DIALS.length * ROW_H }}>
+        {/* The glow path through the chosen dots, drawn behind the rows. */}
+        <svg
+          aria-hidden
+          className="pointer-events-none absolute inset-0 h-full w-full"
+          preserveAspectRatio="none"
+          viewBox={`0 0 100 ${VOICE_DIALS.length * ROW_H}`}
+        >
+          <polyline
+            points={VOICE_DIALS.map((d, i) => `${xPct(val(d.key))},${i * ROW_H + ROW_H / 2}`).join(" ")}
+            fill="none"
+            stroke="rgb(199 160 118 / 0.5)"
+            strokeWidth="14"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ filter: "blur(7px)" }}
+          />
+        </svg>
+        {VOICE_DIALS.map((d, i) => (
+          <div
+            key={d.key}
+            className="absolute inset-x-0 flex items-center gap-3"
+            style={{ top: i * ROW_H, height: ROW_H }}
+          >
+            <span
+              className={`w-24 shrink-0 text-right text-[11px] font-bold uppercase tracking-wider ${
+                val(d.key) <= 1 ? "text-brown-deep" : "text-body/45"
+              }`}
+            >
+              {d.left}
+            </span>
+            <div className="relative h-full min-w-0 flex-1">
+              <div className="absolute left-0 right-0 top-1/2 h-px bg-ink/25" />
+              {[0, 1, 2, 3, 4].map((stop) => {
+                const on = val(d.key) === stop;
+                return (
+                  <button
+                    key={stop}
+                    onClick={() => set(d.key, stop)}
+                    aria-label={`${d.left} to ${d.right}, position ${stop + 1} of 5`}
+                    aria-pressed={on}
+                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all"
+                    style={{
+                      left: `${xPct(stop)}%`,
+                      width: on ? 22 : 10,
+                      height: on ? 22 : 10,
+                      background: on ? "rgb(var(--c-ink))" : "rgb(var(--c-ink) / 0.3)",
+                      boxShadow: on ? "0 0 0 6px rgb(199 160 118 / 0.45)" : "none",
+                    }}
+                  />
+                );
+              })}
+            </div>
+            <span
+              className={`w-24 shrink-0 text-[11px] font-bold uppercase tracking-wider ${
+                val(d.key) >= 3 ? "text-brown-deep" : "text-body/45"
+              }`}
+            >
+              {d.right}
+            </span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[11px] text-body/50">
+        Saved on this device and applied to every new draft.
+      </p>
+    </section>
   );
 }
 
@@ -25618,6 +25741,10 @@ function TemplatesTab({
       <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
         Your <span className="text-brown">templates</span>
       </h1>
+
+      {/* Voice dials: the whole-voice controls sit above the per-template
+          builder, since they steer every draft regardless of template. */}
+      <VoiceDials />
 
       {/* Team lens: templates are a communal library, same treatment as Finds. */}
       {teamName && (
