@@ -915,6 +915,17 @@ select.scout-kind-picker option {
   border-top-right-radius: 28px;
   box-shadow: 0 -12px 34px rgb(31 37 48 / 0.07);
 }
+/* Side-by-side mode (results column to the RIGHT of the composer): the shelf
+   docks against the stage with a left seam instead of a top one. */
+@media (min-width: 1280px) {
+  .scout-results {
+    border-top: 0;
+    border-left: 1px solid rgb(255 255 255 / 0.8);
+    border-top-right-radius: 0;
+    border-bottom-left-radius: 28px;
+    box-shadow: -12px 0 34px rgb(31 37 48 / 0.07);
+  }
+}
 .dark .scout-results { background: rgb(var(--c-surface)); }
 
 /* The two toggles. Rounded, translucent, sitting on the ground rather than in

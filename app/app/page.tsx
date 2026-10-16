@@ -8343,7 +8343,15 @@ function ScoutTool({
       <div ref={contentRef} className="flex flex-1 flex-col">
 
       {tab === "outreach" && (
-          <main className="scout-field flex w-full flex-1 flex-col">
+          <main
+            className={`scout-field w-full flex-1 ${
+              stageHasWorkBelow
+                ? // Results live at the SIDE on wide screens: composer column
+                  // left, work column right, both full height. Stacked below xl.
+                  "flex flex-col xl:grid xl:grid-cols-[minmax(400px,560px)_1fr] xl:items-start"
+                : "flex flex-col"
+            }`}
+          >
 
             {/* ---------------- The stage (gated behind a completed profile) ----------------
                 Not a card of inputs. The whole band is the composer: choose the
@@ -8353,7 +8361,9 @@ function ScoutTool({
             <section
               onMouseMove={handleFieldGlow}
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow ? "" : "flex flex-1"
+                stageHasWorkBelow
+                  ? "xl:sticky xl:top-0 xl:h-auto xl:min-h-screen xl:pr-8"
+                  : "flex flex-1"
               }`}
             >
               {/* Two shapes for one composer. Alone on the screen it sits as a
@@ -8365,9 +8375,10 @@ function ScoutTool({
                 className={`w-full max-w-[1400px] ${
                   stageHasWorkBelow
                     ? ""
-                    : // Left-skewed editorial hero (her call): the composer
-                      // hangs on the left two-thirds, nothing centers.
-                      "my-auto flex max-w-[880px] flex-col items-start gap-8 pl-0 sm:pl-6 xl:pl-10"
+                    : // Left-skewed editorial hero on the FULL screen: content
+                      // starts at the left edge and large type carries the
+                      // width; nothing centers, nothing is boxed in.
+                      "my-auto flex w-full flex-col items-start gap-8 pl-0 sm:pl-6 xl:pl-10"
                 }`}
               >
                 <div
@@ -8961,7 +8972,7 @@ function ScoutTool({
                 min-height transition above is what makes it fold up to reveal
                 this section the moment a search starts. */}
             {stageHasWorkBelow && (
-            <div className="scout-results scout-reveal flex-1 px-5 pb-16 sm:px-8 xl:px-12">
+            <div className="scout-results scout-reveal min-w-0 flex-1 px-5 pb-16 sm:px-8 xl:min-h-screen xl:px-8">
 
             {error &&
               (apiReason ? (
