@@ -8377,8 +8377,9 @@ function ScoutTool({
                     ? ""
                     : // Left-skewed editorial hero on the FULL screen: content
                       // starts at the left edge and large type carries the
-                      // width; nothing centers, nothing is boxed in.
-                      "my-auto flex w-full flex-col items-start gap-8 pl-0 sm:pl-6 xl:pl-10"
+                      // width; stage-hero scales everything up so the screen
+                      // feels owned, not floated in.
+                      "stage-hero my-auto flex w-full flex-col items-start gap-9 pl-0 sm:pl-6 xl:pl-10"
                 }`}
               >
                 <div
@@ -8390,7 +8391,7 @@ function ScoutTool({
                       choosers can share one — "Work Opportunities" and "Work
                       Search" are a single thought and reading them on separate
                       lines makes the project look like a heading. */}
-                  <span className="w-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 sm:w-auto">
+                  <span className="w-full text-[11px] font-bold uppercase tracking-[0.14em] text-white/50 sm:w-auto [.stage-hero_&]:text-[14px]">
                     Scouting for
                   </span>
                   <div className="flex w-full min-w-0 items-center gap-2 sm:w-auto">
@@ -8753,7 +8754,7 @@ function ScoutTool({
                   data-guide="start"
                   onClick={startScout}
                   disabled={discovering || gating || !goal.trim()}
-                  className="rounded-full bg-cream px-14 py-4 text-lg font-bold text-brown-deep shadow-soft transition hover:bg-white hover:shadow-lg disabled:opacity-50"
+                  className="rounded-full bg-cream px-14 py-4 text-lg font-bold text-brown-deep shadow-soft transition hover:bg-white hover:shadow-lg disabled:opacity-50 [.stage-hero_&]:px-20 [.stage-hero_&]:py-6 [.stage-hero_&]:text-2xl"
                 >
                   {discovering ? "Scouting…" : gating ? "Understanding…" : "Scout"}
                 </button>
@@ -28647,8 +28648,8 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
               title="Edit this point"
               className="group/b flex items-start gap-2.5 text-left"
             >
-              <span aria-hidden className="mt-[11px] h-2 w-2 shrink-0 rounded-full bg-cream/80" />
-              <span className="text-lg font-bold leading-snug text-white/95 underline-offset-4 group-hover/b:underline sm:text-xl">
+              <span aria-hidden className="stage-bullet-dot mt-[11px] h-2 w-2 shrink-0 rounded-full bg-cream/80" />
+              <span className="stage-bullet-text text-lg font-bold leading-snug text-white/95 underline-offset-4 group-hover/b:underline sm:text-xl">
                 {b}
               </span>
             </button>
