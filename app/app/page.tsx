@@ -15270,6 +15270,52 @@ function AddContactModal({
     const err = onAdd({ name, outlet, email, phone, handle, url, location, notes, projectId: pid });
     if (err) setError(err);
   };
+    // ---- Smart paste (option A) ----
+  // One field takes anything (a name, "name, role at company, email", a whole
+  // bio); it parses live into the classic fields, and the card on the right
+  // builds in real time. Opening Edit details freezes live parsing so manual
+  // fixes stick.
+  const [smart, setSmart] = useState("");
+  const [showDetails, setShowDetails] = useState(false);
+  const enrichTimer = useRef<number | null>(null);
+  useEffect(() => {
+    if (showDetails) return; // manual mode owns the fields now
+    const t = smart.trim();
+    const emailM = t.match(/[\w.+-]+@[\w-]+\.[\w.]+/);
+    const phoneM = t.match(/\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/);
+    const urlM = t.match(/https?:\/\/\S+|\b(?:www\.)?[\w-]+\.(?:com|org|net|io|co|media|fm|tv)\b\S*/i);
+    const handleM = t.match(/(^|\s)@([\w.]+)/);
+    let rest = t
+      .replace(emailM?.[0] || "", "")
+      .replace(phoneM?.[0] || "", "")
+      .replace(urlM?.[0] || "", "")
+      .replace(handleM ? handleM[0] : "", "");
+    const firstLine = rest.split(/\n/)[0] || "";
+    const segs = firstLine.split(",").map((x) => x.trim()).filter(Boolean);
+    const nm = (segs[0] || "").replace(/\s+/g, " ").slice(0, 60);
+    // "A&R at Big Loud" style: role before "at", company after.
+    const atM = (segs[1] || "").match(/^(.*?)\s+at\s+(.+)$/i);
+    const company = atM ? atM[2] : segs[1] && segs[1].split(" ").length <= 6 ? segs[1] : "";
+    const noteRest = [rest.split(/\n/).slice(1).join("\n"), segs.slice(2).join(", ")]
+      .filter(Boolean)
+      .join("\n")
+      .trim();
+    setName(nm);
+    setEmail(emailM?.[0] || "");
+    setPhone(phoneM?.[0] || "");
+    setUrl(urlM && !/@/.test(urlM[0]) ? urlM[0] : "");
+    setHandle(handleM ? "@" + handleM[2] : "");
+    setOutlet(company);
+    setNotes(noteRest);
+    // The slow magic: once a name settles, the existing autofill fills what
+    // the paste didn't say (role, org, site, location), blanks only.
+    if (enrichTimer.current) window.clearTimeout(enrichTimer.current);
+    if (nm && nm.split(" ").length >= 2) {
+      enrichTimer.current = window.setTimeout(() => void autofill(), 1200);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [smart, showDetails]);
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
@@ -15277,7 +15323,7 @@ function AddContactModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-lg overflow-auto rounded-3xl border border-warm-border bg-surface p-6 shadow-xl"
+        className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-3xl border border-warm-border bg-surface p-6 shadow-xl"
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -15296,6 +15342,91 @@ function AddContactModal({
           </button>
         </div>
 
+        <div className="mt-4 grid gap-5 sm:grid-cols-[1fr_270px]">
+          <div className="min-w-0">
+            <Label>Paste anything about them</Label>
+            <textarea
+              value={smart}
+              onChange={(e) => setSmart(e.target.value)}
+              autoFocus
+              rows={5}
+              placeholder={"A name, an email, a profile link, or a whole bio:\nMaren Doyle, A&R at Big Loud, maren@bigloud.com, met at the showcase"}
+              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm leading-relaxed text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+            />
+            <div className="mt-3">
+              <Label>Project</Label>
+              <select
+                value={projectId}
+                onChange={(e) => setProjectId(e.target.value)}
+                className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3 py-2.5 text-sm font-semibold text-ink outline-none focus:border-brown"
+              >
+                {projects.map((p2) => (
+                  <option key={p2.id} value={p2.id}>
+                    {p2.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <button
+              onClick={() => setShowDetails((v) => !v)}
+              className="mt-3 text-xs font-semibold text-accent underline-offset-2 hover:underline"
+            >
+              {showDetails ? "Hide the details" : "Edit details"}
+            </button>
+          </div>
+
+          {/* The card, building itself as they type. Real parsed data only;
+              empty slots stay invisible so it grows rather than sits blank. */}
+          <aside aria-live="polite" className="rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
+            <div className="flex items-center gap-3">
+              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brown-tint font-display text-xl font-bold text-brown-deep">
+                {(name.trim() || "?").charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <div className="truncate text-sm font-extrabold text-ink">
+                  {name.trim() || "New contact"}
+                </div>
+                <div className="truncate text-xs text-body/60">
+                  {outlet.trim() || (enriching ? "Scout is filling this in…" : "")}
+                </div>
+              </div>
+            </div>
+            <div className="mt-3 space-y-1.5 text-xs">
+              {[
+                ["Email", email],
+                ["Phone", phone],
+                ["Handle", handle],
+                ["Site", url],
+                ["Location", location],
+              ]
+                .filter(([, v]) => v && v.trim())
+                .map(([k2, v]) => (
+                  <div key={k2 as string} className="scout-fade-in flex items-baseline gap-2">
+                    <span className="w-14 shrink-0 text-[9px] font-bold uppercase tracking-wider text-body/45">
+                      {k2}
+                    </span>
+                    <span className="min-w-0 truncate font-semibold text-ink">{v}</span>
+                  </div>
+                ))}
+              {notes.trim() && (
+                <p className="scout-fade-in border-t border-warm-border pt-2 text-[11px] leading-relaxed text-body/70">
+                  {notes.trim().slice(0, 140)}
+                </p>
+              )}
+              {enriching && (
+                <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-brown">
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-brown" />
+                  Searching the public web…
+                </div>
+              )}
+              {enrichNote && !enriching && (
+                <p className="pt-1 text-[11px] text-body/50">{enrichNote}</p>
+              )}
+            </div>
+          </aside>
+        </div>
+
+        {showDetails && (
         <div className="mt-4 grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label>Name (required)</Label>
@@ -15372,6 +15503,7 @@ function AddContactModal({
             )}
           </div>
         </div>
+        )}
 
         {error && (
           <div className="mt-3 rounded-xl border border-amber-300 bg-amber-50 px-3.5 py-2 text-xs text-amber-800">
