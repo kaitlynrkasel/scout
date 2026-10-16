@@ -14872,31 +14872,37 @@ function ManualPostingBox({
   const pbCats = categories.filter((c) => c.projectId === pbProj);
   const [pbCat, setPbCat] = useState("");
   return (
-    <div className="mt-4">
+    <div>
+      {/* One clear order: the posting first (hero field, instruction lives in
+          the placeholder), a quiet filing line, one strong button. */}
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={4}
-        placeholder="Paste the full job description or program details"
-        className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+        rows={8}
+        autoFocus
+        placeholder={"Paste the whole posting here.\nScout reads it, researches the organization, and files the prospect in Finds and Applications with its kit ready."}
+        className="w-full resize-y rounded-2xl border-2 border-warm-border bg-warm-bg/30 px-4 py-3.5 text-[15px] leading-relaxed text-ink outline-none transition focus:border-brown focus:bg-surface focus:ring-4 focus:ring-brown/10"
       />
       {projects.length > 0 && (
-        <div className="mt-3 grid gap-3 sm:max-w-xl sm:grid-cols-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-body/60">
+          <span className="font-semibold uppercase tracking-wider text-[10px] text-body/45">
+            Files into
+          </span>
           <PrettySelect
             ariaLabel="Project it belongs to"
+            small
             value={pbProj}
             onChange={(v) => {
               setPbProj(v);
               setPbCat("");
             }}
-            className="w-full"
             options={projects.map((pr) => ({ value: pr.id, label: pr.name }))}
           />
           <PrettySelect
             ariaLabel="Category it belongs to"
+            small
             value={pbCat}
             onChange={setPbCat}
-            className="w-full"
             options={[
               { value: "", label: "No category (solo)" },
               ...pbCats.map((c) => ({ value: c.id, label: c.name })),
@@ -15088,10 +15094,6 @@ function ManualTab({
 
       {openCard === "paste" && (
         <section className="scout-fade-in mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
-          <p className="text-sm leading-relaxed text-body/70">
-            Scout reads the posting, researches the organization, and the
-            prospect lands in Finds and Applications with its kit ready.
-          </p>
           <ManualPostingBox
             onBuild={onBuildFromPosting}
             building={buildingApplication}
