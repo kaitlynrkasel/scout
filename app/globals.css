@@ -13,14 +13,14 @@
   /* Clean, functional system: near-white surfaces and soft neutral browns at low
      chroma. Whites dominate; brown is the single restrained accent; contrast is
      kept gentle (no dark chrome). A muted olive marks positive signals only. */
-  --c-ink: 31 37 48; /* cool near-navy ink */
-  --c-body: 77 85 99;
-  --c-muted: 112 120 134; /* holds 4.5:1 on white */
-  --c-brown: 25 69 94; /* navy — the primary accent */
-  --c-brown-deep: 16 44 60; /* hover / links */
-  --c-brown-tint: 223 233 240;
-  --c-clay: 199 203 232;
-  --c-coffee: 30 34 44;
+  --c-ink: 36 28 19; /* warm espresso ink */
+  --c-body: 87 80 63;
+  --c-muted: 122 112 96; /* warm grey, holds 4.5:1 on white */
+  --c-brown: 138 90 52; /* chestnut, the primary accent */
+  --c-brown-deep: 91 58 31; /* hover / links */
+  --c-brown-tint: 240 231 218;
+  --c-clay: 228 214 195;
+  --c-coffee: 42 33 25;
   --c-success: 111 122 91; /* muted olive — positive signals only */
   --c-success-deep: 85 96 63;
   --c-attention: 169 118 31;
@@ -33,11 +33,11 @@
   --c-slate: 158 145 128; /* warm stone */
   --c-sage: 160 120 70; /* warm amber: the person colour */
   --c-sage-deep: 110 72 40; /* deep amber */
-  --c-cream: 255 255 255; /* page canvas — white */
+  --c-cream: 253 251 247; /* page canvas, warm white */
   --c-surface: 255 255 255; /* cards — white */
-  --c-surface-2: 247 248 250; /* light sidebar / inset */
-  --c-warm-bg: 245 246 249; /* hover fill */
-  --c-warm-border: 229 231 238; /* soft hairline */
+  --c-surface-2: 250 247 242; /* light sidebar / inset */
+  --c-warm-bg: 247 243 236; /* hover fill */
+  --c-warm-border: 233 226 214; /* soft hairline */
   --brand-a: #8a5a34;
   --brand-b: #5b3a1f;
 }
@@ -46,14 +46,14 @@ html.dark {
   color-scheme: dark;
   /* Warm dark theme, deep espresso grounds, cream text, the brown accent
      lifted a touch so it reads on dark surfaces. */
-  --c-ink: 235 239 245;
-  --c-body: 178 186 198;
-  --c-muted: 138 146 158;
-  --c-brown: 122 164 196;
-  --c-brown-deep: 168 200 224;
-  --c-brown-tint: 26 43 56;
-  --c-clay: 84 92 118;
-  --c-coffee: 235 239 245;
+  --c-ink: 244 237 226;
+  --c-body: 193 183 167;
+  --c-muted: 150 139 122;
+  --c-brown: 199 160 118;
+  --c-brown-deep: 224 198 165;
+  --c-brown-tint: 52 42 32;
+  --c-clay: 92 76 60;
+  --c-coffee: 244 237 226;
   --c-success: 150 160 120;
   --c-success-deep: 180 190 150;
   --c-attention: 208 162 78;
@@ -65,12 +65,12 @@ html.dark {
   --c-slate: 164 150 132;
   --c-sage: 206 166 118;
   --c-sage-deep: 224 198 165; /* warm amber, dark mode */
-  --c-cream: 16 18 24;
-  --c-surface: 26 29 37;
-  --c-surface-2: 30 33 42;
-  --c-warm-bg: 36 40 50;
-  --c-warm-border: 53 58 71;
-  --brand-a: #4a7ea0;
+  --c-cream: 22 18 14;
+  --c-surface: 32 27 21;
+  --c-surface-2: 38 32 25;
+  --c-warm-bg: 46 39 31;
+  --c-warm-border: 62 53 42;
+  --brand-a: #a97c4f;
   --brand-b: #8a5a34;
 }
 
@@ -801,7 +801,7 @@ select.scout-kind-picker option {
 /* Pale accents (Seafoam, Sandy beige, Light sky): the select's chevron is baked
    into a data URI, so it needs its own navy copy rather than a color token. */
 [data-accent-light] select.scout-select-light {
-  color: var(--accent-on, #0d2b45) !important;
+  color: var(--accent-on, #2b1f14) !important;
   background-repeat: no-repeat, no-repeat !important;
   background-position: right 0.5rem center, center !important;
   background-size: 16px 16px, cover !important;

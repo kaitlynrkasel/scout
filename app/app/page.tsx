@@ -14971,6 +14971,9 @@ function ManualTab({
 }) {
   const [addOpen, setAddOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]); // names added this session
+  // One card open at a time; the page leads with three big doors, not three
+  // walls of text, so the eye lands on an ACTION first.
+  const [openCard, setOpenCard] = useState<"" | "paste" | "import">("");
   return (
     <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Do it yourself</div>
@@ -14978,109 +14981,143 @@ function ManualTab({
         Manual <span className="text-brown">outreach</span>
       </h1>
 
-      {/* Add one contact you already know */}
-      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="text-base font-extrabold text-ink">Add a contact</h2>
-            <p className="mt-0.5 text-sm leading-relaxed text-body/80">
-              A name, an email, a handle, whatever you have. Scout drafts to them
-              in your voice with your templates.
-            </p>
-          </div>
-          <button
-            data-guide="add-contact"
-            onClick={() => setAddOpen(true)}
-            className="shrink-0 rounded-xl bg-brand-gradient px-4 py-2.5 text-sm font-bold text-white shadow-soft transition hover:opacity-95"
-          >
-            Add a contact
+      {/* Three doors. The primary one is unmistakable; each carries a big
+          glyph, a short name, and ONE line. Detail lives behind the click. */}
+      <div className="mt-7 grid gap-4 sm:grid-cols-3">
+        <button
+          data-guide="add-contact"
+          onClick={() => setAddOpen(true)}
+          className="group rounded-3xl bg-brand-gradient p-6 text-left text-white shadow-soft transition hover:opacity-95 sm:p-7"
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="opacity-90">
+            <circle cx="10" cy="8" r="3.5" />
+            <path d="M3 20a7 7 0 0 1 14 0" />
+            <path d="M19 8v6M16 11h6" />
+          </svg>
+          <div className="mt-4 font-display text-xl font-bold">Add a contact</div>
+          <p className="mt-1 text-sm text-white/80">Someone you already know.</p>
+        </button>
+        <button
+          data-guide="paste-posting"
+          onClick={() => setOpenCard(openCard === "paste" ? "" : "paste")}
+          aria-expanded={openCard === "paste"}
+          className={`group rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-7 ${
+            openCard === "paste"
+              ? "border-brown bg-brown-tint/40"
+              : "border-warm-border bg-surface hover:border-brown/40"
+          }`}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
+            <path d="M9 3h6a2 2 0 0 1 2 2v0h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1v0a2 2 0 0 1 2-2z" />
+            <path d="M9 12h6M9 16h4" />
+          </svg>
+          <div className="mt-4 font-display text-xl font-bold text-ink">Paste a posting</div>
+          <p className="mt-1 text-sm text-body/70">A job or program page.</p>
+        </button>
+        <button
+          data-guide="import"
+          onClick={() => setOpenCard(openCard === "import" ? "" : "import")}
+          aria-expanded={openCard === "import"}
+          className={`group rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-7 ${
+            openCard === "import"
+              ? "border-brown bg-brown-tint/40"
+              : "border-warm-border bg-surface hover:border-brown/40"
+          }`}
+        >
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
+            <path d="M12 3v12" />
+            <path d="m7 10 5 5 5-5" />
+            <path d="M4 21h16" />
+          </svg>
+          <div className="mt-4 font-display text-xl font-bold text-ink">Import a sheet</div>
+          <p className="mt-1 text-sm text-body/70">Your existing tracker.</p>
+        </button>
+      </div>
+
+      {added.length > 0 && (
+        <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3 text-sm">
+          <span className="font-semibold text-ink">
+            Added {added.length}: {added.slice(0, 4).join(", ")}
+            {added.length > 4 ? "…" : ""}
+          </span>{" "}
+          <button onClick={goFinds} className="font-bold text-accent hover:underline">
+            Draft &amp; send in Finds →
           </button>
         </div>
-        {added.length > 0 && (
-          <div className="mt-4 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3 text-sm">
-            <span className="font-semibold text-ink">
-              Added {added.length}: {added.slice(0, 4).join(", ")}
-              {added.length > 4 ? "…" : ""}
-            </span>{" "}
-            <button onClick={goFinds} className="font-bold text-accent hover:underline">
-              Draft &amp; send in Finds →
-            </button>
-          </div>
-        )}
-      </section>
+      )}
 
-      {/* Import a sheet of existing outreach */}
-      <section data-guide="paste-posting" className="mt-6 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
-        <h2 className="text-base font-extrabold tracking-tight text-ink">Paste a posting</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-body">
-          Drop in a whole job description or program page. Scout reads it,
-          researches the organization, and the prospect lands in Finds and
-          Applications with its kit ready.
-        </p>
-        <ManualPostingBox
-          onBuild={onBuildFromPosting}
-          building={buildingApplication}
-          projects={projects}
-          categories={categories}
-          defaultProjectId={activeProjectId}
-        />
-      </section>
+      {openCard === "paste" && (
+        <section className="scout-fade-in mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+          <p className="text-sm leading-relaxed text-body/70">
+            Scout reads the posting, researches the organization, and the
+            prospect lands in Finds and Applications with its kit ready.
+          </p>
+          <ManualPostingBox
+            onBuild={onBuildFromPosting}
+            building={buildingApplication}
+            projects={projects}
+            categories={categories}
+            defaultProjectId={activeProjectId}
+          />
+        </section>
+      )}
 
-      <section data-guide="import" className="mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
-        <h2 className="text-base font-extrabold text-ink">Import your outreach</h2>
-        <p className="mt-0.5 text-sm leading-relaxed text-body/80">
-          Drop in a tracking sheet, CSV, Excel, Numbers, or a Google Sheet link.
-          Scout imports the contacts (and won&apos;t resurface them in searches).
-        </p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <button
-            data-guide="import-file"
-            onClick={onImportFile}
-            className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
-          >
-            Import a file
-          </button>
-          <button
-            onClick={onImportFile}
-            className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
-          >
-            Paste a sheet link
-          </button>
-          {!sheetsConnected && (
+      {openCard === "import" && (
+        <section className="scout-fade-in mt-5 rounded-3xl border border-warm-border bg-surface p-6 shadow-soft">
+          <p className="text-sm leading-relaxed text-body/70">
+            CSV, Excel, Numbers, or a Google Sheet link. Imported contacts
+            won&apos;t resurface in searches.
+          </p>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
-              onClick={onConnectSheets}
-              title="Link-shared sheets import without this. Connect your Google account so Scout can also read sheets that are private to you."
+              data-guide="import-file"
+              onClick={onImportFile}
+              className="rounded-xl bg-brand-gradient px-4 py-2 text-xs font-bold text-white shadow-soft transition hover:opacity-90"
+            >
+              Import a file
+            </button>
+            <button
+              onClick={onImportFile}
               className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
             >
-              Connect Google (reads private sheets)
+              Paste a sheet link
             </button>
-          )}
-          {sheetsConnected && (
-            <span className="rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
-              Google Sheets connected
-            </span>
-          )}
-        </div>
-        {syncedSheets.length > 0 && (
-          <div className="mt-4 border-t border-warm-border pt-3">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
-              Synced sheets
-            </div>
-            <div className="mt-2 space-y-1.5">
-              {syncedSheets.map((s) => (
-                <SyncedSheetRow
-                  key={s.id}
-                  s={s}
-                  sheetsConnected={sheetsConnected}
-                  onPreviewWrite={onPreviewWrite}
-                  onSetSheetWrite={onSetSheetWrite}
-                  onRemoveSync={onRemoveSync}
-                />
-              ))}
-            </div>
+            {!sheetsConnected && (
+              <button
+                onClick={onConnectSheets}
+                title="Link-shared sheets import without this. Connect your Google account so Scout can also read sheets that are private to you."
+                className="rounded-xl border border-warm-border px-4 py-2 text-xs font-bold text-ink transition hover:bg-warm-bg"
+              >
+                Connect Google (reads private sheets)
+              </button>
+            )}
+            {sheetsConnected && (
+              <span className="rounded-full bg-sage/20 px-2 py-0.5 text-[10px] font-bold text-sage-deep">
+                Google Sheets connected
+              </span>
+            )}
           </div>
-        )}
-      </section>
+          {syncedSheets.length > 0 && (
+            <div className="mt-4 border-t border-warm-border pt-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-body/50">
+                Synced sheets
+              </div>
+              <div className="mt-2 space-y-1.5">
+                {syncedSheets.map((s) => (
+                  <SyncedSheetRow
+                    key={s.id}
+                    s={s}
+                    sheetsConnected={sheetsConnected}
+                    onPreviewWrite={onPreviewWrite}
+                    onSetSheetWrite={onSetSheetWrite}
+                    onRemoveSync={onRemoveSync}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </section>
+      )}
 
       {addOpen && (
         <AddContactModal
