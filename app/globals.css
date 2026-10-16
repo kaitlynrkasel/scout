@@ -820,13 +820,13 @@ select.scout-kind-picker option {
    ========================================================================== */
 .scout-field {
   background:
-    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
-    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
-    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 217 161 180) / 0.16) 0%, transparent 85%),
-    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 143 188 180) / 0.14) 0%, transparent 85%),
+    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 228 203 170) / 0.55) 0%, rgb(var(--dash-tint, 228 203 170) / 0.26) 42%, transparent 82%),
+    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 224 180 138) / 0.48) 0%, rgb(var(--dash-tint2, 224 180 138) / 0.18) 50%, transparent 82%),
+    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 224 180 138) / 0.16) 0%, transparent 85%),
+    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 228 203 170) / 0.14) 0%, transparent 85%),
     radial-gradient(60% 44% at 48% 50%, rgb(255 255 255 / 0.38) 0%, transparent 75%),
-    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
-    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
+    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 214 186 138) / 0.5) 0%, rgb(var(--dash-tint2, 224 180 138) / 0.14) 55%, transparent 84%),
+    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 228 203 170) / 0.42) 0%, transparent 80%),
     #f8f4ea;
   background-attachment: fixed;
   
@@ -850,10 +850,10 @@ select.scout-kind-picker option {
   pointer-events: none;
   background: radial-gradient(
     240px 210px at var(--mx, 50%) var(--my, 35%),
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.5) 0%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.32) 30%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.14) 55%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.04) 75%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.5) 0%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.32) 30%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.14) 55%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.04) 75%,
     transparent 92%
   );
   opacity: var(--glow, 0);
@@ -1105,13 +1105,13 @@ select.scout-kind-picker option {
      fresh each visit), kept subtle: low alphas over warm cream so the colour
      reads as atmosphere behind the text, never a wall of one hue. */
   background:
-    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 143 188 180) / 0.55) 0%, rgb(var(--dash-tint, 143 188 180) / 0.26) 42%, transparent 82%),
-    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 217 161 180) / 0.48) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.18) 50%, transparent 82%),
-    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 217 161 180) / 0.16) 0%, transparent 85%),
-    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 143 188 180) / 0.14) 0%, transparent 85%),
+    radial-gradient(95% 65% at 28% 6%, rgb(var(--dash-tint, 228 203 170) / 0.55) 0%, rgb(var(--dash-tint, 228 203 170) / 0.26) 42%, transparent 82%),
+    radial-gradient(90% 70% at 90% 34%, rgb(var(--dash-tint2, 224 180 138) / 0.48) 0%, rgb(var(--dash-tint2, 224 180 138) / 0.18) 50%, transparent 82%),
+    radial-gradient(110% 80% at 60% 20%, rgb(var(--dash-tint2, 224 180 138) / 0.16) 0%, transparent 85%),
+    radial-gradient(110% 80% at 30% 70%, rgb(var(--dash-tint, 228 203 170) / 0.14) 0%, transparent 85%),
     radial-gradient(60% 44% at 48% 50%, rgb(255 255 255 / 0.38) 0%, transparent 75%),
-    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 224 180 138) / 0.5) 0%, rgb(var(--dash-tint2, 217 161 180) / 0.14) 55%, transparent 84%),
-    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 143 188 180) / 0.42) 0%, transparent 80%),
+    radial-gradient(100% 65% at 8% 96%, rgb(var(--dash-tint3, 214 186 138) / 0.5) 0%, rgb(var(--dash-tint2, 224 180 138) / 0.14) 55%, transparent 84%),
+    radial-gradient(85% 60% at 94% 98%, rgb(var(--dash-tint, 228 203 170) / 0.42) 0%, transparent 80%),
     #f8f4ea;
   background-attachment: fixed;
 }
@@ -1139,10 +1139,10 @@ select.scout-kind-picker option {
   pointer-events: none;
   background: radial-gradient(
     240px 210px at var(--mx, 50%) var(--my, 35%),
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.5) 0%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.32) 30%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.14) 55%,
-    rgb(var(--glow-tint, var(--dash-tint, 143 188 180)) / 0.04) 75%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.5) 0%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.32) 30%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.14) 55%,
+    rgb(var(--glow-tint, var(--dash-tint, 228 203 170)) / 0.04) 75%,
     transparent 92%
   );
   opacity: var(--glow, 0);

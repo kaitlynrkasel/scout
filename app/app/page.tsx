@@ -229,9 +229,9 @@ function handleFieldGlow(e: React.MouseEvent<HTMLElement>) {
   const trip = (name: string, fb: string) =>
     (cs.getPropertyValue(name).trim() || fb).split(/\s+/).map(Number);
   const tintsRGB = [
-    trip("--dash-tint", "143 188 180"),
-    trip("--dash-tint2", "217 161 180"),
-    trip("--dash-tint3", "224 180 138"),
+    trip("--dash-tint", "228 203 170"),
+    trip("--dash-tint2", "224 180 138"),
+    trip("--dash-tint3", "214 186 150"),
   ];
   const anchors = [
     [0.28, 0.06],
@@ -2026,37 +2026,38 @@ function ScoutTool({
   useEffect(() => {
     if (tab !== "dashboard" && tab !== "outreach") return;
     const DASH_TINTS = [
-      "186 205 172", // soft sage
-      "147 174 203", // sky
-      "217 161 180", // blush
+      "236 220 198", // linen
+      "228 203 170", // sand
       "224 180 138", // apricot
-      "169 156 196", // lilac
-      "176 209 201", // soft seafoam
+      "217 176 150", // peach tan
+      "214 186 150", // caramel milk
+      "209 160 140", // soft clay blush
     ];
-    // The Scout stage is cool-only, so its ground is too — a blush-and-apricot
-    // field under a teal stage was the warm half of the page fighting the cold
-    // half. Same six-deep deck, walked green to blue with nothing warm and
+    // The whole app is warm-only now; the stage deals from a warm-only deck
+    // too, pale half against deep half for visible variety. Same six-deep deck, walked green to blue with nothing warm and
     // nothing violet in it. The dashboard keeps the full range: it is a look
     // back at finished work, not the screen the stage colours.
-    const COOL_TINTS = [
-      "186 205 172", // soft sage
-      "150 196 186", // mint
-      "176 209 201", // soft seafoam
-      "158 199 210", // pale cyan
-      "147 174 203", // sky
-      "168 186 214", // periwinkle blue
+    const WARM_TINTS = [
+      "238 224 204", // warm linen
+      "230 206 176", // sand
+      "224 186 148", // honey
+      "216 176 142", // caramel
+      "209 162 132", // clay
+      "199 160 118", // amber
     ];
     const onStage = tab === "outreach";
-    const tints = onStage ? COOL_TINTS : DASH_TINTS;
+    const tints = onStage ? WARM_TINTS : DASH_TINTS;
     // Three tints per visit, fading into one field — and deliberately diverse,
     // so the alternation is visible in the FIRST viewport instead of three
     // near-identical shades blurring into one. On the dashboard that means
     // pairing across temperature; on the cool-only stage there is no warm half
     // to pair against, so it pairs across the green and blue ends instead.
+    // Everything is warm now; diversity comes from pairing the pale half
+    // against the deep half instead of across temperature.
     const SECOND_GROUP = new Set(
       onStage
-        ? ["186 205 172", "150 196 186", "176 209 201"] // the green end
-        : ["217 161 180", "224 180 138"] // the warm ones
+        ? ["216 176 142", "209 162 132", "199 160 118"] // the deep half
+        : ["217 176 150", "214 186 150", "209 160 140"]
     );
     const storeKey = onStage ? "scout_stage_ground_last" : "scout_dash_last";
     let lastT = -1;
