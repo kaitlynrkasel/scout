@@ -1271,3 +1271,11 @@ select.scout-kind-picker option {
   column-gap: 72px;
   row-gap: 18px;
 }
+
+
+/* Warm focus ring app-wide: the browser default blue outline was the last
+   cool tone standing. Keyboard focus stays clearly visible, just on-palette. */
+:focus-visible {
+  outline: 2px solid rgb(138 90 52 / 0.85);
+  outline-offset: 2px;
+}

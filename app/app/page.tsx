@@ -9563,6 +9563,12 @@ function ScoutTool({
 
       {tab === "manual" && (
         <ManualTab
+          recentManual={visibleFinds.filter(
+            (f) =>
+              f.foundVia === "manual" ||
+              f.foundVia === "import" ||
+              String(f.opp?.id || "").startsWith("import-")
+          )}
           onBuildFromPosting={buildApplicationFromPosting}
           buildingApplication={appBuilding}
           onCreateProject={addProject}
@@ -14940,9 +14946,11 @@ function ManualTab({
   onSetSheetWrite,
   onRemoveSync,
   goFinds,
+  recentManual = [],
 }: {
   onCreateProject?: (name: string) => string;
   categories?: Category[];
+  recentManual?: Find[];
   onBuildFromPosting: (jobText: string, projectId?: string, categoryId?: string) => Promise<string>;
   buildingApplication?: boolean;
   projects: Project[];
@@ -14987,9 +14995,9 @@ function ManualTab({
         <button
           data-guide="add-contact"
           onClick={() => setAddOpen(true)}
-          className="group rounded-3xl bg-brand-gradient p-6 text-left text-white shadow-soft transition hover:opacity-95 sm:p-7"
+          className="group min-h-[220px] rounded-3xl bg-brand-gradient p-6 text-left text-white shadow-soft transition hover:opacity-95 sm:p-8"
         >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="opacity-90">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-90">
             <circle cx="10" cy="8" r="3.5" />
             <path d="M3 20a7 7 0 0 1 14 0" />
             <path d="M19 8v6M16 11h6" />
@@ -15001,13 +15009,13 @@ function ManualTab({
           data-guide="paste-posting"
           onClick={() => setOpenCard(openCard === "paste" ? "" : "paste")}
           aria-expanded={openCard === "paste"}
-          className={`group rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-7 ${
+          className={`group min-h-[220px] rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-8 ${
             openCard === "paste"
               ? "border-brown bg-brown-tint/40"
               : "border-warm-border bg-surface hover:border-brown/40"
           }`}
         >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
             <path d="M9 3h6a2 2 0 0 1 2 2v0h1a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h1v0a2 2 0 0 1 2-2z" />
             <path d="M9 12h6M9 16h4" />
           </svg>
@@ -15018,13 +15026,13 @@ function ManualTab({
           data-guide="import"
           onClick={() => setOpenCard(openCard === "import" ? "" : "import")}
           aria-expanded={openCard === "import"}
-          className={`group rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-7 ${
+          className={`group min-h-[220px] rounded-3xl border-2 p-6 text-left shadow-soft transition sm:p-8 ${
             openCard === "import"
               ? "border-brown bg-brown-tint/40"
               : "border-warm-border bg-surface hover:border-brown/40"
           }`}
         >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
+          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-brown">
             <path d="M12 3v12" />
             <path d="m7 10 5 5 5-5" />
             <path d="M4 21h16" />
@@ -15044,6 +15052,38 @@ function ManualTab({
             Draft &amp; send in Finds →
           </button>
         </div>
+      )}
+
+      {/* The page isn't empty below the doors: your latest hand-added and
+          imported people live here, one click from drafting. Real data only;
+          nothing renders until something exists. */}
+      {recentManual.length > 0 && openCard === "" && (
+        <section className="mt-8">
+          <div className="flex items-baseline justify-between gap-3">
+            <h2 className="text-base font-extrabold text-ink">Recently added by hand</h2>
+            <button onClick={goFinds} className="text-xs font-bold text-accent hover:underline">
+              All finds →
+            </button>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {recentManual.slice(0, 8).map((f) => (
+              <button
+                key={f.id}
+                onClick={goFinds}
+                className="rounded-2xl border border-warm-border bg-surface p-4 text-left shadow-card transition hover:border-brown/40"
+              >
+                <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
+                <div className="mt-0.5 truncate text-xs text-body/60">
+                  {[f.opp.outlet, f.opp.contactEmail].filter(Boolean).join(" · ") ||
+                    (f.foundVia === "import" ? "From your sheet import" : "Added by you")}
+                </div>
+                <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-body/40">
+                  {FIND_STATUS[f.status]?.label || f.status}
+                </div>
+              </button>
+            ))}
+          </div>
+        </section>
       )}
 
       {openCard === "paste" && (
