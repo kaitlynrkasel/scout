@@ -1,0 +1,25 @@
+{
+  "about": "Kaitlyn Kasel, music business student at Belmont University in Nashville; co-founder of Cue Creative, a music marketing consultancy; manages indie folk artist Anna Belt.",
+  "goals": [
+    { "id": "curators-folk", "useCase": "music PR and playlisting", "goal": "playlist curators accepting submissions; genres indie folk, alternative, singer-songwriter", "expect": ["playlist", "submi"] },
+    { "id": "curators-pop", "useCase": "music PR and playlisting", "goal": "independent Spotify playlist curators for bedroom pop who accept artist submissions", "expect": ["playlist"] },
+    { "id": "blogs-folk", "useCase": "music PR and playlisting", "goal": "music blogs that review indie folk releases and take press submissions", "expect": ["blog", "review"] },
+    { "id": "college-radio", "useCase": "music PR and playlisting", "goal": "college radio stations that play indie folk and accept music submissions", "expect": ["radio"] },
+    { "id": "podcasts-music", "useCase": "music PR and playlisting", "goal": "podcasts that interview independent singer-songwriters", "expect": ["podcast"] },
+    { "id": "venues-nashville", "useCase": "music booking", "goal": "small music venues in Nashville that book indie folk acts", "expect": ["venue", "nashville"] },
+    { "id": "sync-supervisors", "useCase": "music licensing", "goal": "music supervisors placing indie folk in TV and film", "expect": ["supervisor", "sync"] },
+    { "id": "ar-labels", "useCase": "music industry networking", "goal": "A&R reps at independent labels signing folk and Americana artists", "expect": ["a&r", "label"] },
+    { "id": "intern-music-biz", "useCase": "job and internship search", "goal": "summer internships at record labels or music marketing companies for college students", "expect": ["intern"] },
+    { "id": "intern-swe", "useCase": "job and internship search", "goal": "software engineering internships at startups for summer", "expect": ["intern", "engineer"] },
+    { "id": "jobs-marketing-remote", "useCase": "job and internship search", "goal": "remote entry level marketing coordinator jobs", "expect": ["marketing"] },
+    { "id": "consulting-clients", "useCase": "consulting outreach", "goal": "independent music artists who need marketing help launching a release", "expect": ["artist"] },
+    { "id": "alumni-mentors", "useCase": "networking", "goal": "Belmont University alumni working in music marketing open to a coffee chat", "expect": ["belmont"] },
+    { "id": "founders-austin", "useCase": "networking", "goal": "early stage music tech founders in Austin", "expect": ["founder"] },
+    { "id": "sponsors-5k", "useCase": "nonprofit fundraising", "goal": "local Nashville businesses that sponsor charity 5K races", "expect": ["sponsor"] },
+    { "id": "press-tech", "useCase": "PR outreach", "goal": "journalists who cover music technology startups", "expect": ["journalist", "writer", "editor"] },
+    { "id": "youtube-reviewers", "useCase": "music PR and playlisting", "goal": "YouTube channels that review indie folk albums", "expect": ["youtube"] },
+    { "id": "tiktok-creators", "useCase": "influencer marketing", "goal": "TikTok creators who feature emerging folk musicians", "expect": ["tiktok"] },
+    { "id": "festivals-folk", "useCase": "music booking", "goal": "folk music festivals accepting artist applications for next season", "expect": ["festival", "appl"] },
+    { "id": "grants-musicians", "useCase": "grants and funding", "goal": "grants and funding programs for independent musicians in the US", "expect": ["grant"] }
+  ]
+}

@@ -22,3 +22,10 @@ In the Application kit: take the stored resume + this posting, produce an
 ATS-shaped variant (job-description keywords mirrored, clean single-column
 format), downloadable per find. Closes the biggest real gap to Perplexity
 Computer's job agent.
+
+## Deep search mode (2026-10-17, parked by Kaitlyn as a potential option)
+A slow, multi-step "Deep search" for big list-building asks ("50 folk
+curators with contact info"), on Exa's Agent API (/agent: async, polled,
+structured output). Too slow for the main Scout button; would be a premium
+option that delivers results later (digest or notification). Reference:
+.claude/skills/build-with-exa/references/agent.md.

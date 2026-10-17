@@ -5,7 +5,8 @@
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { tavilySearch, type TavilyResult } from "./tavily";
-import { webSearch } from "./webSearch";
+import { webSearch, exaFindSimilar } from "./webSearch";
+import { contactHop } from "./contactHop";
 import { detectBoard, fetchBoardPostings, matchPostings, type BoardRef } from "./jobBoards";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
@@ -99,6 +100,9 @@ export interface DiscoverFeedback {
   // replies." Fed to query planning + fit scoring so ranking chases outcomes,
   // not just approvals.
   outcomes?: string[];
+  // Finds the user moved forward in this search category (title + page), best
+  // outcomes first. Seeds the taste-driven lookalike pass.
+  seeds?: { title: string; url: string }[];
 }
 
 // Compact "learned from your feedback" block for the Claude prompts.
@@ -1881,22 +1885,34 @@ export async function discover(
     // industry) dominate the front and the later, deliberately-diverse industry
     // queries never got reached. Round-robin guarantees every query — and so every
     // industry angle — lands near the front and makes it into the results.
+    // Queries run concurrently (4 at a time): the old one-by-one loop spent
+    // most of a run waiting on network. Results are then filtered strictly in
+    // query order, so dedupe and the round-robin below behave exactly as before.
+    const fetched: TavilyResult[][] = new Array(passQueries.length);
+    let nextQ = 0;
+    async function worker() {
+      while (nextQ < passQueries.length && !aborted()) {
+        const qi = nextQ++;
+        const q = passQueries[qi];
+        // The first query is the raw goal plus every clarifying answer, a full
+        // paragraph; echoing it verbatim made the progress log an unreadable
+        // wall. Show a clipped label and never repeat it on the result line.
+        const qLabel = q.length > 72 ? `${q.slice(0, 72).trim()}…` : q;
+        emit(`Searching: ${qLabel}`);
+        // Multi-net: Tavily first; thin results fan out to Exa/Brave when their
+        // keys are configured (see lib/webSearch), merged and deduped.
+        fetched[qi] = await webSearch(q, perQuery, {
+          depth,
+          ...(scope?.includeDomains ? { includeDomains: scope.includeDomains } : {}),
+        });
+        emit(`Found ${fetched[qi].length} result${fetched[qi].length === 1 ? "" : "s"}`);
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(4, passQueries.length) }, worker));
     const buckets: TavilyResult[][] = [];
-    for (const q of passQueries) {
-      if (aborted()) break; // user cancelled — stop spending searches
+    for (let qi = 0; qi < passQueries.length; qi++) {
+      const results = fetched[qi] || [];
       const bucket: TavilyResult[] = [];
-      // The first query is the raw goal plus every clarifying answer, a full
-      // paragraph; echoing it verbatim made the progress log an unreadable
-      // wall. Show a clipped label and never repeat it on the result line.
-      const qLabel = q.length > 72 ? `${q.slice(0, 72).trim()}…` : q;
-      emit(`Searching: ${qLabel}`);
-      // Multi-net: Tavily first; thin results fan out to Exa/Brave when their
-      // keys are configured (see lib/webSearch), merged and deduped.
-      const results = await webSearch(q, perQuery, {
-        depth,
-        ...(scope?.includeDomains ? { includeDomains: scope.includeDomains } : {}),
-      });
-      emit(`Found ${results.length} result${results.length === 1 ? "" : "s"}`);
       for (const r of results) {
         if (looksLikeAdvice(r.title, useCase, goal)) {
           logSkip(r.title, r.url, "title looks like advice / how-to");
@@ -1983,6 +1999,34 @@ export async function discover(
       }
     } catch {
       /* boards are a bonus net, never break the run */
+    }
+  }
+
+  // ---- Taste lookalikes ------------------------------------------------
+  // The finds you moved forward in this category are the best description of
+  // what you want, better than any query. Hunt pages LIKE them on sites not
+  // already found (seed domains excluded), then let the matches re-earn
+  // their place through the same extraction and caps.
+  const seeds = (feedback?.seeds || []).filter((x) => x && x.url && x.title).slice(0, 3);
+  if (seeds.length && !aborted()) {
+    try {
+      const lists = await Promise.all(seeds.map((sd) => exaFindSimilar(sd.title, sd.url, 6)));
+      let added = 0;
+      for (const list of lists) {
+        for (const r of list) {
+          if (!r.url) continue;
+          const k = canonicalLink(r.url) || urlHost(r.url);
+          if (!k || seenLinks.has(k)) continue;
+          if (looksLikeAdvice(r.title, useCase, goal) || looksLikePodcastOrVideoClip(r.url)) continue;
+          seenLinks.add(k);
+          emit(`@site ${urlHost(r.url)}|${(r.title || "").slice(0, 80)}`);
+          candidates.push(r);
+          added++;
+        }
+      }
+      if (added) emit(`Found ${added} more like the ones you kept`);
+    } catch {
+      /* lookalikes are a bonus net */
     }
   }
 
@@ -2658,6 +2702,33 @@ export async function discover(
   // reachable contact get targeted follow-up searches to find one (a personal
   // email, LinkedIn, or the right gatekeeper). Runs for EVERY search, not just
   // jobs, and is bounded to the top few so we stay within the time budget.
+  // One-hop site scan first: the cheapest contact route is usually one click
+  // past the page the search ranked (a submit or contact page). No model
+  // call, just fetch + parse; whoever it reaches skips the costlier
+  // search-based chase below.
+  if (!aborted()) {
+    const hopTargets = opps
+      .filter((o) => !hasAnyContact(o) && o.url && !/(instagram|facebook|tiktok|twitter|x|youtube|spotify|linkedin)\.com/i.test(urlHost(o.url)))
+      .sort((a, b) => (b.fitScore ?? 0) - (a.fitScore ?? 0))
+      .slice(0, 8);
+    if (hopTargets.length) {
+      emit(`Checking ${hopTargets.length} ${hopTargets.length === 1 ? "site" : "sites"} one page deeper for a contact…`);
+      const hops = await Promise.all(hopTargets.map((o) => contactHop(o.url).catch(() => null)));
+      hopTargets.forEach((o, i) => {
+        const h = hops[i];
+        if (!h) return;
+        if (h.email && !o.contactEmail) {
+          o.contactEmail = h.email;
+          if (o.channel === "Company Portal" || o.channel === "Unknown" || !o.channel) o.channel = "Email";
+        }
+        if (h.handle && !o.contactHandle) o.contactHandle = h.handle;
+        if ((h.email || h.handle) && h.page && !o.contactSource)
+          o.contactSource = { title: "Their own site", url: h.page };
+        if (h.email || h.handle) emit(`Found a way to reach ${o.name} on their site`);
+      });
+    }
+  }
+
   const jobSearch = isJobSearch(useCase, goal);
   let enrichSearches = 0;
   if (!aborted()) {

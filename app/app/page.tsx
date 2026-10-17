@@ -6969,6 +6969,24 @@ function ScoutTool({
             .map((f) => ({ name: f.opp.name, why: f.opp.whyItFits || "" })),
         ].slice(0, 15),
         outcomes: outcomePatterns(finds), // learn across ALL projects: replies are scarce
+        // Lookalike seeds: the finds you actually moved forward in THIS
+        // search category, best outcomes first; the engine hunts pages like
+        // them on sites you haven't found yet.
+        seeds: projFinds
+          .filter(
+            (f) =>
+              f.opp.url &&
+              f.status !== "denied" &&
+              f.status !== "new" &&
+              (!runCatId || f.categoryId === runCatId)
+          )
+          .sort(
+            (a, b) =>
+              ({ replied: 0, sent: 1, drafted: 2, undecided: 3 } as Record<string, number>)[a.status] -
+              ({ replied: 0, sent: 1, drafted: 2, undecided: 3 } as Record<string, number>)[b.status]
+          )
+          .slice(0, 3)
+          .map((f) => ({ title: f.opp.name, url: f.opp.url })),
       };
       // For job/internship searches, layer in the competitiveness + company-size
       // directives so the LLM narrows to the right tier of opportunity. The
