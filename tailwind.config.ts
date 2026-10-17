@@ -74,7 +74,9 @@ const config: Config = {
         // Warm-brown primary action (Mocha → Espresso Bar). Brown leads
         // interaction across the app; warm olive is the accent, the tan ramp the
         // identity.
-        "brand-gradient": "linear-gradient(120deg, #8a5a34 0%, #5b3a1f 100%)",
+        // Flat chestnut. Kept as a (one-colour) gradient image so the class
+        // name and the chevron layering on select.scout-select-light still work.
+        "brand-gradient": "linear-gradient(#8a5a34, #8a5a34)",
         "warm-fade": "linear-gradient(180deg, #f6f4f1 0%, #ffffff 60%)",
       },
     },
