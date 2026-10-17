@@ -29642,6 +29642,14 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
  * stamp in the corner sends it. */
 function ScoutPostcard(p: StageLayoutProps) {
   const g = useGoalPoints(p.goal, p.onGoal);
+  // Left-half design under comparison on the canvas: ?front=tabs | label |
+  // postmark. Default is the current picker + pill + round stamp.
+  const [front, setFront] = useState("");
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get("front");
+    if (v === "tabs" || v === "label" || v === "postmark") setFront(v);
+  }, []);
+  if (front) return <ScoutPostcardShell p={p} g={g} left={<PostcardFront variant={front} p={p} />} />;
   return (
     <div className="flex w-full justify-center">
       <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
@@ -29697,6 +29705,178 @@ function ScoutPostcard(p: StageLayoutProps) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* The postcard with a swappable left half (for ?front= comparisons); the
+ * right half, who to find, is the same in every version. */
+function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType<typeof useGoalPoints>; left: React.ReactNode }) {
+  return (
+    <div className="flex w-full justify-center">
+      <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
+        <div className="flex flex-col justify-between gap-8 border-b-2 border-dashed border-[rgb(var(--v-line))] p-7 sm:p-10 md:border-b-0 md:border-r-2">
+          {left}
+        </div>
+        {/* Nudged in from the dashed divider so the address block floats in
+            its half instead of hugging the fold. */}
+        <div className="flex flex-col gap-8 p-7 sm:py-10 sm:pl-14 sm:pr-10">
+          {p.extra && <div>{p.extra}</div>}
+          <div className="mt-auto">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
+            <ul data-guide="goal" className="mt-2">
+              {g.points.map((pt, i) => (
+                <li key={i} className="border-b border-[rgb(var(--v-line))] py-2">
+                  {g.editing === i ? (
+                    <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys}
+                      className="w-full bg-transparent text-[16px] font-medium text-ink outline-none" />
+                  ) : (
+                    <button onClick={() => g.start(i)} className="text-left text-[16px] font-medium leading-snug text-ink hover:text-brown">{pt}</button>
+                  )}
+                </li>
+              ))}
+              <li className="border-b border-[rgb(var(--v-line))] py-2">
+                {g.editing === -1 ? (
+                  <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys} placeholder="who else?"
+                    className="w-full bg-transparent text-[16px] font-medium text-ink outline-none placeholder:text-body/30" />
+                ) : (
+                  <button onClick={() => g.start(-1)} className="text-[16px] font-medium text-body/30 hover:text-body/60">+</button>
+                )}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Left-half designs for the postcard. Every one keeps the same jobs: pick the
+// project, pick the search, send Scout, and reach Templates / Projects.
+function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps }) {
+  const searches = p.searchOptions.filter((o) => !o.value.startsWith("__"));
+  const links = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-body/40">
+      <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
+      <button onClick={p.onManage} className="hover:text-ink">Projects</button>
+      {p.showProfileNudge && (
+        <button onClick={p.onProfile} className="hover:text-ink">Add your profile so drafts sound like you →</button>
+      )}
+    </div>
+  );
+
+  if (variant === "tabs")
+    return (
+      <>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+        <div>
+          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+            className="font-display text-[40px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[54px]" />
+          <div data-tour="category-switcher" className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
+            {searches.map((o) => {
+              const on = o.value === p.catId;
+              return (
+                <button
+                  key={o.value}
+                  onClick={() => p.onSearch(o.value)}
+                  aria-pressed={on}
+                  className={`border-b-2 pb-1 text-[16px] font-semibold transition ${
+                    on ? "border-brown text-ink" : "border-transparent text-body/45 hover:text-ink"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+            <button onClick={() => p.onSearch("__newcat__")} className="pb-1 text-[16px] font-semibold text-body/30 hover:text-ink">
+              + New
+            </button>
+          </div>
+          <button
+            data-guide="start"
+            onClick={p.onRun}
+            disabled={p.runDisabled}
+            className="group/go mt-9 inline-flex items-center gap-3 border-2 border-dashed border-[rgb(var(--v-accent2))] bg-[rgb(var(--v-tint))] py-2.5 pl-3 pr-5 transition hover:border-solid hover:border-brown disabled:opacity-50"
+          >
+            <img src="/scout-logo.png" alt="" className="h-7 w-7 transition group-hover/go:-rotate-6" />
+            <span className="font-display text-[17px] font-bold tracking-tight text-ink">
+              {p.runLabel === "Scout" ? "Send Scout" : p.runLabel}
+            </span>
+          </button>
+        </div>
+        {links}
+      </>
+    );
+
+  if (variant === "label")
+    return (
+      <>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Postcard</div>
+        <div className="space-y-1">
+          <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3">
+            <span className="w-10 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">From</span>
+            <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+              className="font-display text-[34px] font-extrabold leading-tight tracking-tight text-ink sm:text-[44px]" />
+          </div>
+          <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3 pt-2">
+            <span className="w-10 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Re</span>
+            <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
+              className="font-display text-[24px] font-bold tracking-tight text-brown sm:text-[28px]" />
+          </div>
+        </div>
+        <div className="flex items-end justify-between gap-6">
+          {links}
+          <button
+            data-guide="start"
+            onClick={p.onRun}
+            disabled={p.runDisabled}
+            className="group/go -rotate-3 rounded-[6px] border-[3px] border-double border-brown px-4 py-2 text-brown transition hover:rotate-0 hover:bg-brown hover:text-[rgb(var(--v-ontab))] disabled:opacity-50"
+          >
+            <span className="flex items-center gap-2 font-display text-[18px] font-extrabold uppercase tracking-[0.12em]">
+              {p.runLabel === "Scout" ? "Scout it" : p.runLabel}
+            </span>
+          </button>
+        </div>
+      </>
+    );
+
+  // postmark
+  return (
+    <>
+      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+      <div className="flex items-center justify-between gap-6">
+        <div className="min-w-0">
+          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+            className="font-display text-[40px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[54px]" />
+          <div className="mt-2">
+            <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
+              className="text-[22px] font-light tracking-tight text-body/70 sm:text-[26px]" />
+          </div>
+        </div>
+        <button
+          data-guide="start"
+          onClick={p.onRun}
+          disabled={p.runDisabled}
+          aria-label={p.runLabel}
+          title={p.runLabel}
+          className="group/go relative grid h-32 w-32 shrink-0 place-items-center disabled:opacity-50"
+        >
+          <svg viewBox="0 0 128 128" aria-hidden className="absolute inset-0 h-full w-full transition-transform duration-700 group-hover/go:rotate-[30deg]">
+            <defs>
+              <path id="postmark-ring" d="M64 64m-46 0a46 46 0 1 1 92 0a46 46 0 1 1-92 0" />
+            </defs>
+            <circle cx="64" cy="64" r="60" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.5" />
+            <circle cx="64" cy="64" r="34" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.6" />
+            <text fontSize="11" fontWeight="700" letterSpacing="3.2" fill="rgb(var(--c-brown))" style={{ fontFamily: "var(--font-sans), sans-serif" }}>
+              <textPath href="#postmark-ring">
+                {(p.runLabel === "Scout" ? "SEND SCOUT · SEND SCOUT ·" : `${p.runLabel.toUpperCase()} · `)}
+              </textPath>
+            </text>
+          </svg>
+          <img src="/scout-logo.png" alt="" className="relative h-10 w-10 transition group-active/go:scale-90" />
+        </button>
+      </div>
+      {links}
+    </>
   );
 }
 
@@ -30189,11 +30369,11 @@ function FindsTray({
                   x="20"
                   y="33"
                   textAnchor="middle"
-                  fontSize="24"
-                  fontWeight="800"
+                  fontSize="26"
+                  fontWeight="200"
                   fill="rgb(var(--c-brown))"
-                  opacity="0.8"
-                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif" }}
+                  opacity="0.85"
+                  style={{ fontFamily: "var(--font-sans), sans-serif" }}
                 >
                   S
                 </text>
