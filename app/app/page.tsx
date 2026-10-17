@@ -29613,7 +29613,7 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
           style={{ width: size }}
           className="truncate text-center text-[11px] font-bold uppercase tracking-[0.14em] text-brown"
         >
-          {p.runLabel === "Scout" ? "Send" : p.runLabel}
+          {p.runLabel}
         </span>
       )}
     </button>
@@ -29687,6 +29687,28 @@ function ScoutPostcard(p: StageLayoutProps) {
  * zone beside them. Drag a find onto it (or press Draft on the card) to have
  * Scout draft it. The whole tray collapses, and remembers that. */
 const TRAY_KEY = "scout.findsTray.collapsed";
+
+// Sample finds for previewing layouts on the canvas (?demo=finds). Invented
+// people; display only.
+function demoFinds(catId: string): Find[] {
+  const rows: [string, string, string, string, string, number][] = [
+    ["Maren Doyle", "A&R", "Big Loud", "Email", "Nashville, TN", 0.92],
+    ["dailyfreshfinds", "Playlist Curator", "Daily Fresh Finds", "Website Form", "Online", 0.88],
+    ["Theo Lindqvist", "Playlist Curator", "Golden Hour Records", "Email", "Stockholm", 0.84],
+    ["Porch Light Sessions", "Curator", "Indie Folk Central", "Instagram", "Portland, OR", 0.81],
+    ["Ruth Abara", "Music Editor", "Americana Weekly", "Email", "Austin, TX", 0.77],
+    ["Cal Mendez", "Founder", "Backroads Radio", "LinkedIn", "Denver, CO", 0.73],
+    ["Wren & Co.", "Booking", "Wren & Co. Presents", "Email", "Chicago, IL", 0.69],
+  ];
+  return rows.map(([n, role, outlet, channel, location, fit], i) => ({
+    id: `demo-${i}`,
+    projectId: "demo",
+    categoryId: catId,
+    status: "new",
+    addedAt: Date.now() - i * 60000,
+    opp: { id: `demo-${i}`, name: n, contactName: n, contactRole: role, outlet, channel, location, fitScore: fit } as unknown as Opportunity,
+  }));
+}
 function FindsTray({
   finds,
   catId,
@@ -29728,9 +29750,21 @@ function FindsTray({
       return !c;
     });
   };
-  const fresh = finds
+  // Layout preview flags for the canvas: ?finds=cards | ledger | stamps | deck,
+  // and ?demo=finds fills an empty search with sample finds (display only:
+  // never saved, never draggable to Drafts).
+  const [findsStyle, setFindsStyle] = useState<"cards" | "ledger" | "stamps" | "deck">("cards");
+  const [demo, setDemo] = useState(false);
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const v = q.get("finds");
+    if (v === "ledger" || v === "stamps" || v === "deck") setFindsStyle(v);
+    setDemo(q.get("demo") === "finds");
+  }, []);
+  const realFresh = finds
     .filter((f) => f.categoryId === catId && (f.status === "new" || f.status === "undecided"))
     .sort((a, b) => b.addedAt - a.addedAt);
+  const fresh = realFresh.length || !demo ? realFresh : demoFinds(catId);
   // Everything drafted for this search, newest first: each opens into its letter.
   const drafted = finds
     .filter((f) => f.categoryId === catId && f.status === "drafted" && f.draft)
@@ -29759,42 +29793,121 @@ function FindsTray({
 
       {!collapsed && (
         <div id="finds-tray-body" className="mt-5 grid items-stretch gap-6 md:min-h-[440px] md:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="grid content-start gap-2.5 pb-10 sm:grid-cols-2">
+          <div
+            className={`min-w-0 content-start pb-10 ${
+              findsStyle === "cards"
+                ? "grid gap-2.5 sm:grid-cols-2"
+                : findsStyle === "stamps"
+                ? "grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4"
+                : findsStyle === "deck"
+                ? "flex gap-5 overflow-x-auto px-1 pb-12 pt-3"
+                : "flex flex-col"
+            }`}
+          >
             {fresh.length === 0 && (
               <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-5 py-10 text-center text-sm text-body/45 sm:col-span-2">
                 Send Scout and the finds for this search land here.
               </div>
             )}
-            {fresh.map((f) => (
-              <div
-                key={f.id}
-                data-find-id={f.id}
-                draggable={!!onDraft}
-                onDragStart={(e) => {
+            {fresh.map((f, i) => {
+              const isDemo = f.id.startsWith("demo-");
+              const canDrag = !!onDraft && !isDemo;
+              const name = f.opp.contactName || f.opp.name;
+              const sub = [f.opp.contactRole, f.opp.outlet].filter(Boolean).join(" · ") || f.opp.channel;
+              const fit = typeof f.opp.fitScore === "number" ? Math.round(f.opp.fitScore * 100) : null;
+              const drag = {
+                "data-find-id": f.id,
+                draggable: canDrag,
+                onDragStart: (e: React.DragEvent) => {
                   e.dataTransfer.setData("text/scout-find", f.id);
                   e.dataTransfer.effectAllowed = "move";
-                }}
-                className="group/card flex cursor-grab items-center gap-3 rounded-2xl border border-[rgb(var(--v-line))] bg-surface px-3.5 py-3 transition hover:shadow-soft active:cursor-grabbing"
-              >
-                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[rgb(var(--v-chip))] font-display text-sm font-bold text-ink">
-                  {(f.opp.contactName || f.opp.name || "?").trim().charAt(0).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[14px] font-semibold text-ink">{f.opp.contactName || f.opp.name}</span>
-                  <span className="block truncate text-[12px] text-body/55">
-                    {[f.opp.contactRole, f.opp.outlet].filter(Boolean).join(" · ") || f.opp.channel}
-                  </span>
-                </span>
-                {onDraft && (
-                  <button
-                    onClick={() => draft(f)}
-                    className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold text-body/50 opacity-0 transition hover:bg-[rgb(var(--v-chip))] hover:text-ink focus-visible:opacity-100 group-hover/card:opacity-100"
+                },
+              };
+              const draftBtn = canDrag && (
+                <button
+                  onClick={() => draft(f)}
+                  className="shrink-0 rounded-full px-2.5 py-1 text-[12px] font-semibold text-body/50 opacity-0 transition hover:bg-[rgb(var(--v-chip))] hover:text-ink focus-visible:opacity-100 group-hover/card:opacity-100"
+                >
+                  Draft
+                </button>
+              );
+
+              if (findsStyle === "ledger")
+                return (
+                  <div key={f.id} {...drag} className="group/card flex cursor-grab items-baseline gap-4 border-b border-[rgb(var(--v-line))] px-1 py-3.5 active:cursor-grabbing">
+                    <span className="w-6 shrink-0 font-display text-[12px] font-bold tabular-nums text-body/35">{String(i + 1).padStart(2, "0")}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
+                      <span className="block truncate text-[12px] text-body/55">{sub}</span>
+                    </span>
+                    <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{f.opp.channel}</span>
+                    {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
+                    {draftBtn}
+                  </div>
+                );
+
+              if (findsStyle === "stamps")
+                return (
+                  <div
+                    key={f.id}
+                    {...drag}
+                    className="group/card relative flex aspect-[4/5] cursor-grab flex-col justify-between rounded-[4px] border-2 border-dashed border-[rgb(var(--v-dash))] bg-[rgb(var(--v-sheet))] p-1.5 transition hover:-translate-y-0.5 hover:shadow-soft active:cursor-grabbing"
                   >
-                    Draft
-                  </button>
-                )}
-              </div>
-            ))}
+                    <div className="flex flex-1 flex-col justify-between rounded-[2px] bg-[rgb(var(--v-tint))] p-3">
+                      <span className="font-display text-[44px] font-extrabold leading-none text-ink/80">
+                        {(name || "?").trim().charAt(0).toUpperCase()}
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block truncate font-display text-[14px] font-bold leading-tight text-ink">{name}</span>
+                        <span className="mt-0.5 block truncate text-[11px] text-body/55">{f.opp.outlet || f.opp.contactRole}</span>
+                      </span>
+                    </div>
+                    {fit !== null && (
+                      <span className="absolute -right-2 -top-2 grid h-11 w-11 rotate-12 place-items-center rounded-full border border-brown/50 bg-[rgb(var(--v-sheet))] text-[11px] font-bold text-brown">
+                        {fit}%
+                      </span>
+                    )}
+                    {draftBtn && <span className="absolute bottom-2 right-2">{draftBtn}</span>}
+                  </div>
+                );
+
+              if (findsStyle === "deck")
+                return (
+                  <div
+                    key={f.id}
+                    {...drag}
+                    style={{ transform: `rotate(${i % 2 ? 1.5 : -1.5}deg)` }}
+                    className="group/card grid aspect-[3/2] w-64 shrink-0 cursor-grab grid-cols-[1.2fr_1fr] rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_14px_28px_-16px_rgba(40,30,20,0.45)] transition hover:!rotate-0 hover:-translate-y-1 active:cursor-grabbing"
+                  >
+                    <div className="flex min-w-0 flex-col justify-end border-r border-dashed border-[rgb(var(--v-line))] p-3">
+                      <span className="font-display text-[17px] font-extrabold leading-tight tracking-tight text-ink line-clamp-2">{name}</span>
+                      <span className="mt-1 truncate text-[11px] text-body/55">{f.opp.contactRole || f.opp.channel}</span>
+                    </div>
+                    <div className="flex min-w-0 flex-col p-3">
+                      <span className="ml-auto h-8 w-7 rounded-[2px] border border-dashed border-[rgb(var(--v-dash))]" />
+                      <span className="mt-auto truncate border-b border-[rgb(var(--v-line))] pb-0.5 text-[10px] font-semibold text-ink">{f.opp.outlet || "—"}</span>
+                      <span className="mt-1.5 truncate border-b border-[rgb(var(--v-line))] pb-0.5 text-[10px] text-body/55">{f.opp.location || f.opp.channel}</span>
+                    </div>
+                  </div>
+                );
+
+              return (
+                <div
+                  key={f.id}
+                  {...drag}
+                  className="group/card flex cursor-grab items-center gap-3 rounded-2xl border border-[rgb(var(--v-line))] bg-surface px-3.5 py-3 transition hover:shadow-soft active:cursor-grabbing"
+                >
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-[rgb(var(--v-chip))] font-display text-sm font-bold text-ink">
+                    {(name || "?").trim().charAt(0).toUpperCase()}
+                  </span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[14px] font-semibold text-ink">{name}</span>
+                    <span className="block truncate text-[12px] text-body/55">{sub}</span>
+                  </span>
+                  {draftBtn}
+                </div>
+              );
+            })}
           </div>
 
           {/* The Drafts column: a tall postcard panel on the board's right,
@@ -29819,7 +29932,7 @@ function FindsTray({
             }}
             aria-label="Drafts column. Drop a find anywhere on it to draft"
             style={{ height: draftsOpen ? "100%" : 64 }}
-            className={`flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-22px_44px_-26px_rgba(40,30,20,0.4)] transition-all duration-500 ease-in-out ${
+            className={`flex flex-col overflow-hidden rounded-t-[4px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-22px_44px_-26px_rgba(40,30,20,0.4)] transition-all duration-500 ease-in-out ${
               over ? "border-brown" : "border-[rgb(var(--v-line))]"
             }`}
           >
@@ -29850,25 +29963,59 @@ function FindsTray({
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 aria-hidden
-                className={`ml-auto shrink-0 text-body/45 transition-transform ${draftsOpen ? "" : "rotate-180"}`}
+                className={`shrink-0 text-body/45 transition-transform ${draftsOpen ? "" : "rotate-180"}`}
               >
                 <polyline points="6 9 12 15 18 9" />
+              </svg>
+              {/* A postage stamp, top right of the card's back: perforated
+                  edge, inner frame, and a wavy postmark running over it. */}
+              <svg
+                aria-hidden
+                viewBox="0 0 40 48"
+                className={`ml-auto h-12 w-10 shrink-0 transition ${over ? "-rotate-6 scale-110" : "rotate-3"}`}
+              >
+                <path
+                  d="M2 2h36v44H2z"
+                  fill="rgb(var(--v-tint))"
+                  stroke="rgb(var(--v-dash))"
+                  strokeWidth="3"
+                  strokeDasharray="2.2 2.2"
+                />
+                <rect x="6.5" y="6.5" width="27" height="35" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.55" />
+                <path d="M12 30c3-6 7-12 9-16 2 4 5 9 8 16" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
+                <circle cx="27" cy="14" r="2.4" fill="rgb(var(--c-brown))" opacity="0.6" />
+                <g fill="none" stroke="rgb(var(--c-ink))" strokeWidth="0.9" opacity="0.35" strokeLinecap="round">
+                  <path d="M-4 20c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
+                  <path d="M-4 25c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
+                  <path d="M-4 30c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
+                </g>
               </svg>
             </button>
             {draftsOpen && (
             <div className="flex min-h-0 flex-1 flex-col px-5 pb-16">
+            {/* Address block: the drop target, written like a postcard's
+                "To" lines. Dragging a find over it inks the lines. */}
             <div
-              className={`grid h-28 shrink-0 place-items-center rounded-xl border-2 border-dashed text-[12px] font-semibold transition ${
-                over
-                  ? "border-brown bg-brown-tint/30 text-brown-deep"
-                  : "border-[rgb(var(--v-dash))] text-body/45"
-              }`}
+              className={`shrink-0 rounded-[3px] px-1 pb-1 pt-2 transition ${over ? "bg-brown-tint/30" : ""}`}
             >
-              {over ? "Let go to draft" : "Drop a find here to draft it"}
+              <div className="flex items-end gap-3">
+                <span className="pb-1 font-display text-[13px] font-bold text-body/45">To</span>
+                <span
+                  className={`flex-1 border-b pb-1 text-[13px] font-semibold transition ${
+                    over ? "border-brown text-brown-deep" : "border-[rgb(var(--v-line))] text-body/45"
+                  }`}
+                >
+                  {over ? "Let go to draft" : "Drop a find here to draft it"}
+                </span>
+              </div>
+              <div className={`ml-8 mt-4 border-b transition ${over ? "border-brown" : "border-[rgb(var(--v-line))]"}`} />
+              <div className={`ml-8 mt-4 border-b transition ${over ? "border-brown" : "border-[rgb(var(--v-line))]"}`} />
             </div>
+            {/* The message side, below a dashed rule like a postcard's divide. */}
+            <div className="mt-5 border-t-2 border-dashed border-[rgb(var(--v-line))]" />
             <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
             {draftingId && !drafted.some((f) => f.id === draftingId) && (
-              <div className="flex items-center gap-2 rounded-2xl border border-[rgb(var(--v-line))] px-4 py-3 text-[12px] font-semibold text-body/60">
+              <div className="flex items-center gap-2 border-b border-[rgb(var(--v-line))] px-1 py-3 text-[12px] font-semibold text-body/60">
                 <span className="h-3 w-3 animate-spin rounded-full border-2 border-[rgb(var(--v-line))] border-t-brown" />
                 Drafting…
               </div>
@@ -29879,16 +30026,16 @@ function FindsTray({
               </div>
             )}
             {drafted.length > 0 && (
-              <div className="w-full space-y-2">
+              <div className="w-full">
                 {drafted.map((f) => {
                   const d = f.draft!;
                   const open = openDraft === f.id;
                   return (
-                    <div key={f.id} data-draft-id={f.id} className="rounded-2xl border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))]">
+                    <div key={f.id} data-draft-id={f.id} className="border-b border-[rgb(var(--v-line))]">
                       <button
                         onClick={() => setOpenDraft(open ? "" : f.id)}
                         aria-expanded={open}
-                        className="flex w-full items-center gap-2 px-4 py-3 text-left"
+                        className="flex w-full items-center gap-2 px-1 py-3 text-left"
                       >
                         <span className="min-w-0 flex-1">
                           <span className="block truncate text-[13px] font-semibold text-ink">
@@ -29899,7 +30046,7 @@ function FindsTray({
                         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className={`shrink-0 text-body/40 transition-transform ${open ? "rotate-180" : ""}`} aria-hidden><polyline points="6 9 12 15 18 9" /></svg>
                       </button>
                       {open && (
-                        <div className="border-t border-dashed border-[rgb(var(--v-line))] px-4 pb-4 pt-3">
+                        <div className="px-1 pb-4 pt-1">
                           {d.to && <div className="text-[11px] text-body/50">To {d.to}</div>}
                           <p className="mt-2 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">{d.body}</p>
                           <div className="mt-4 flex flex-wrap items-center gap-2">
