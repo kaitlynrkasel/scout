@@ -2253,6 +2253,7 @@ function ScoutTool({
   }
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
+  const [mtTitle, setMtTitle] = useState("");
   const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
   const [mtCategoryId, setMtCategoryId] = useState(""); // "" = all categories in project
   const [profile, setProfile] = useState<Profile>(initialProfile);
@@ -4459,10 +4460,21 @@ function ScoutTool({
 
   function addTemplate() {
     if (!mtText.trim()) return;
+    // Default name "Template N": one past the highest default-numbered one,
+    // so deletes never cause two templates to share a number.
+    const nextN =
+      Math.max(
+        0,
+        ...myTemplates.map((t) => {
+          const m = /^Template (\d+)$/.exec(t.title || "");
+          return m ? Number(m[1]) : 0;
+        })
+      ) + 1;
     saveTpls([
       {
         id: `${Date.now()}`,
         channel: mtChannel,
+        title: mtTitle.trim() || `Template ${nextN}`,
         text: mtText.trim(),
         // Only record a scope when one was chosen; a category implies its project.
         ...(mtProjectId ? { projectId: mtProjectId } : {}),
@@ -4471,6 +4483,7 @@ function ScoutTool({
       ...myTemplates,
     ]);
     setMtText("");
+    setMtTitle("");
   }
 
   // Edit an existing template in place (channel, text, and where it applies).
@@ -9903,6 +9916,8 @@ function ScoutTool({
           channel={mtChannel}
           setChannel={setMtChannel}
           text={mtText}
+          title={mtTitle}
+          setTitle={setMtTitle}
           setText={setMtText}
           add={addTemplate}
           list={visibleTemplates}
@@ -19115,7 +19130,9 @@ function FindWorkflow({
   const [draftKind, setDraftKind] = useState(smartKind);
   // Which template to draft from; "" lets the drafter pick the best match and
   // "__own__" opens the write-it-yourself composer.
-  const [tplId, setTplId] = useState("");
+  // With exactly ONE template scoped to this find, there is nothing for
+  // "Scout picks" to pick: preselect it.
+  const [tplId, setTplId] = useState(() => (templates.length === 1 ? templates[0].id : ""));
   const [ownSubject, setOwnSubject] = useState("");
   const [ownBody, setOwnBody] = useState("");
   const [ownTo, setOwnTo] = useState("");
@@ -19563,7 +19580,9 @@ function FindWorkflow({
                       const w = t.text.trim().replace(/\s+/g, " ");
                       return {
                         value: t.id,
-                        label: `${t.channel}: ${w.slice(0, 30)}${w.length > 30 ? "…" : ""}`,
+                        label: t.title
+                          ? `${t.title} · ${t.channel}`
+                          : `${t.channel}: ${w.slice(0, 30)}${w.length > 30 ? "…" : ""}`,
                       };
                     }),
                     ...(onWriteOwn ? [{ value: "__own__", label: "Write my own message" }] : []),
@@ -26002,6 +26021,8 @@ function TemplatesTab({
   setChannel,
   text,
   setText,
+  title,
+  setTitle,
   add,
   list,
   remove,
@@ -26037,6 +26058,8 @@ function TemplatesTab({
   setChannel: (v: string) => void;
   text: string;
   setText: (v: string) => void;
+  title: string;
+  setTitle: (v: string) => void;
   add: () => void;
   list: OutreachTemplate[];
   remove: (id: string) => void;
@@ -26319,6 +26342,15 @@ function TemplatesTab({
             <p className="mt-2.5 text-xs leading-relaxed text-body/80">
               Scout drafts this kind of message in the style you show it here.
             </p>
+            <div className="mt-4">
+              <Label>Name (optional)</Label>
+              <input
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder={`Template ${(list?.length || 0) + 1}`}
+                className="w-full rounded-xl border border-warm-border bg-white px-3.5 py-2.5 text-sm text-ink outline-none transition focus:border-coral"
+              />
+            </div>
           </div>
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
@@ -26681,6 +26713,9 @@ function TemplatesTab({
                 }`}
               >
                 <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                  <span className="text-sm font-extrabold text-ink">
+                    {s.title || "Template"}
+                  </span>
                   <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
                     {s.channel}
                   </span>
