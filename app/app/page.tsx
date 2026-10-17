@@ -8377,10 +8377,11 @@ function ScoutTool({
                   stageHasWorkBelow
                     ? ""
                     : // Left-skewed editorial hero on the FULL screen: content
+                      // pins to the UPPER-left corner (no vertical centering),
                       // starts at the left edge and large type carries the
                       // width; stage-hero scales everything up so the screen
                       // feels owned, not floated in.
-                      "stage-hero my-auto flex w-full flex-col items-start gap-9 pl-0 sm:pl-6 xl:pl-10"
+                      "stage-hero mb-auto flex w-full flex-col items-start gap-9 pl-0 sm:pl-6 xl:pl-10"
                 }`}
               >
                 <div
