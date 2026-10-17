@@ -29990,6 +29990,54 @@ function demoFinds(catId: string): Find[] {
     } as unknown as Opportunity,
   }));
 }
+/* Why-it-fits, condensed: two lines by default, More unfolds. The chips cap
+ * at three short ones with a +N that unfolds the rest, so an expanded find
+ * reads at a glance instead of as a wall of sentences. */
+function FitNote({ text }: { text: string }) {
+  const [openT, setOpenT] = useState(false);
+  const long = text.length > 170;
+  return (
+    <div className="max-w-2xl">
+      <p className={`text-[13px] leading-relaxed text-body/80 ${openT || !long ? "" : "line-clamp-2"}`}>
+        {text}
+      </p>
+      {long && (
+        <button
+          onClick={() => setOpenT((v) => !v)}
+          className="mt-0.5 text-[11px] font-semibold text-brown hover:underline"
+        >
+          {openT ? "Less" : "More"}
+        </button>
+      )}
+    </div>
+  );
+}
+function SignalChips({ signals }: { signals: string[] }) {
+  const [all, setAll] = useState(false);
+  const list = all ? signals : signals.slice(0, 3);
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-1.5">
+      {list.map((sig) => (
+        <span
+          key={sig}
+          title={sig}
+          className="max-w-[240px] truncate rounded-full bg-[rgb(var(--v-chip))] px-2.5 py-1 text-[11px] font-medium text-body/75"
+        >
+          {sig}
+        </span>
+      ))}
+      {signals.length > 3 && (
+        <button
+          onClick={() => setAll((v) => !v)}
+          className="rounded-full border border-[rgb(var(--v-line))] px-2.5 py-1 text-[11px] font-semibold text-body/55 transition hover:text-ink"
+        >
+          {all ? "Fewer" : `+${signals.length - 3} more`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 function FindsTray({
   finds,
   catId,
@@ -30179,14 +30227,8 @@ function FindsTray({
                           </a>
                         )}
                         <div className="min-w-0 flex-1">
-                        {o.whyItFits && <p className="max-w-2xl text-[13px] leading-relaxed text-body/80">{o.whyItFits}</p>}
-                        {!!o.signals?.length && (
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {o.signals.slice(0, 5).map((sig) => (
-                              <span key={sig} className="rounded-full bg-[rgb(var(--v-chip))] px-2.5 py-1 text-[11px] font-medium text-body/75">{sig}</span>
-                            ))}
-                          </div>
-                        )}
+                        {o.whyItFits && <FitNote text={o.whyItFits} />}
+                        {!!o.signals?.length && <SignalChips signals={o.signals} />}
                         <dl className="mt-4 grid max-w-2xl grid-cols-[90px_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[12px]">
                           {contact.length > 0 && (
                             <>
