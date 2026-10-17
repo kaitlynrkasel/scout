@@ -15,10 +15,18 @@ const SYS = `You fill in the adaptable parts of an outreach template for one rec
 
 You get the template's ADAPTABLE SPANS (numbered) and facts about the recipient. For each
 span, write the replacement that fits THIS recipient precisely: use their real names
-(the playlist's actual title, the outlet's name, the specific show), keep roughly the
+(the curator or account name, the outlet's name), keep roughly the
 same length and grammatical role so it drops into the sentence cleanly, and keep the
 sender's casual or formal register. Use only facts given; if nothing specific is known
 for a span, return it unchanged.
+
+NAME THE CURATOR, NOT ONE OF THEIR THINGS: when the recipient runs several playlists,
+shows, channels or publications (a curator account, a Spotify profile, an Instagram page,
+a label), refer to the ACCOUNT or brand that owns them all ("Daily Fresh Finds",
+"your playlists", "@dailyfreshfinds"), never a single playlist title, so the pitch fits
+anything they might place the song on. A recipient with a social handle or curator name
+is an account, even if the source happened to mention one of their playlists. Use one
+specific playlist or show name only when the recipient clearly runs just that one.
 
 Return ONLY JSON: {"spans": ["replacement for span 1", "replacement for span 2", ...]}`;
 
@@ -40,6 +48,7 @@ export async function POST(req: NextRequest) {
     const facts = [
       f.name && `Name: ${f.name}`,
       f.outlet && `Organization: ${f.outlet}`,
+      f.handle && `Handle: ${f.handle}`,
       f.role && `Role: ${f.role}`,
       f.why && `Why they fit: ${String(f.why).slice(0, 900)}`,
       Array.isArray(f.criteria) &&

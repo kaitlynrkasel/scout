@@ -72,7 +72,10 @@ function templateBlock(
       "Rewrite each «…» span to fit THIS recipient precisely (e.g. «this playlist» becomes the " +
       "playlist's actual name, «this song» the specific track that fits them). Everything OUTSIDE " +
       "«…» must stay in the sender's own words, apart from bracketed placeholders. Never print the " +
-      "« » marks in the final message.\n"
+      "« » marks in the final message. When the recipient runs several playlists, shows, channels or " +
+      "publications (a curator account, Spotify profile, Instagram page, label), a span about their " +
+      "work names the ACCOUNT or brand that owns them all, never one playlist title, so the pitch fits " +
+      "anything they might place it on; name a single playlist or show only when they clearly run just one.\n"
     : "";
   return (
     header +

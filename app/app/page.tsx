@@ -29886,6 +29886,7 @@ function FlexTemplatePreview({
             find: {
               name: find.opp.name,
               outlet: find.opp.outlet,
+              handle: find.opp.contactHandle,
               role: find.opp.contactRole,
               why: find.opp.whyItFits,
               criteria: find.opp.criteria || [],
