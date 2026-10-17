@@ -5111,10 +5111,13 @@ function ScoutTool({
     !!error ||
     !!teamShareNote ||
     noResults;
-  // The empty Scout stage is the postcard + pipeline board (Kaitlyn's pick
-  // from the Onlook exploration, 2026-10-17). Other layouts stay reachable
-  // for comparison: /app?stage=classic (the old bullet stage) | brief |
-  // split | letter | focus | note | postcard | envelope.
+  // The Scout stage is the postcard + pipeline board (Kaitlyn's pick from
+  // the Onlook exploration, 2026-10-17) and it owns the screen through the
+  // WHOLE flow: searching renders progress and the reading deck under the
+  // postcard, and finds stream into its tray, so the look never reverts to
+  // the classic band mid-run. Other layouts stay reachable for comparison:
+  // /app?stage=classic (the old bullet stage) | brief | split | letter |
+  // focus | note | postcard | envelope.
   const [stageVariant, setStageVariant] = useState<string>("postcard-board");
   useEffect(() => {
     try {
@@ -5125,9 +5128,7 @@ function ScoutTool({
       /* no window/search, ignore */
     }
   }, []);
-  // The brief + preview layout only owns the EMPTY stage; once work exists
-  // the stage folds into the usual compact band.
-  const briefLayout = stageVariant !== "default" && !stageHasWorkBelow;
+  const postcardStage = stageVariant !== "default";
 
   const goalPlaceholder = dynExample
     ? `e.g. ${dynExample}`
@@ -8363,7 +8364,7 @@ function ScoutTool({
       {tab === "outreach" && (
           <main
             className={`scout-field w-full flex-1 ${
-              stageHasWorkBelow
+              stageHasWorkBelow && !postcardStage
                 ? // Results live at the SIDE on wide screens: composer column
                   // left, work column right, both full height. Stacked below xl.
                   "flex flex-col xl:grid xl:grid-cols-[minmax(400px,560px)_1fr] xl:items-start"
@@ -8379,7 +8380,7 @@ function ScoutTool({
             <section
               onMouseMove={handleFieldGlow}
               className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
-                stageHasWorkBelow
+                stageHasWorkBelow && !postcardStage
                   ? "xl:sticky xl:top-0 xl:h-auto xl:min-h-screen xl:pr-8"
                   : "flex flex-1"
               }`}
@@ -8391,15 +8392,10 @@ function ScoutTool({
                   in underneath. Same DOM both ways; only the grid changes. */}
               <div
                 className={`w-full max-w-[1400px] ${
-                  stageHasWorkBelow
+                  stageHasWorkBelow && !postcardStage
                     ? ""
-                    : briefLayout && stageVariant === "split"
-                    ? // Full bleed: cancel the stage's own padding.
-                      "!max-w-none -mx-5 -mb-10 -mt-8 flex flex-1 self-stretch sm:-mx-8 sm:-mt-10 xl:-mx-12"
-                    : briefLayout && ["focus", "note", "postcard", "postcard-board", "envelope"].includes(stageVariant)
-                    ? "flex flex-1 self-stretch pl-0 sm:pl-6 xl:pl-10"
-                    : briefLayout
-                    ? "mb-auto w-full pl-0 sm:pl-6 xl:pl-10"
+                    : postcardStage
+                    ? "flex flex-1 flex-col self-stretch pl-0 sm:pl-6 xl:pl-10"
                     : // Left-skewed editorial hero on the FULL screen: content
                       // pins to the UPPER-left corner (no vertical centering),
                       // starts at the left edge and large type carries the
@@ -8408,9 +8404,8 @@ function ScoutTool({
                       "stage-hero mb-auto flex w-full flex-col items-start gap-9 pl-0 sm:pl-6 xl:pl-10"
                 }`}
               >
-                {briefLayout && (
-                  <StageLayout
-                    variant={stageVariant}
+                {postcardStage && (
+                  <ScoutPostcardBoard
                     projectOptions={[
                       ...visibleProjects.map((p) => ({ value: p.id, label: p.name })),
                       { value: "__newproj__", label: "+ New project…" },
@@ -8441,14 +8436,12 @@ function ScoutTool({
                       selectCategory(v);
                     }}
                     searchName={myCats.find((c) => c.id === catId)?.name || ""}
-                    projectName={activeProject?.name || ""}
                     goal={goal}
                     onGoal={setGoal}
                     onRun={startScout}
                     runLabel={gating ? "Understanding…" : "Scout"}
                     runDisabled={discovering || gating || !goal.trim()}
                     finds={finds.filter((f) => f.projectId === activeProject?.id)}
-                    searches={myCats.map((c) => ({ id: c.id, name: c.name }))}
                     showProfileNudge={!aboutText}
                     onProfile={() => setTab("profile")}
                     onTemplates={() => {
@@ -8460,11 +8453,150 @@ function ScoutTool({
                     onOpenFinds={() => setTab("finds")}
                     onDraft={(f) => draftFind(f)}
                     draftingId={findDraftingId}
+                    extra={
+                      <>
+                  {isJobUseCaseClient(activeUseCase) &&
+                    isJobUseCaseClient(
+                      `${myCats.find((c) => c.id === catId)?.name || ""} ${goal}`
+                    ) && (
+                    <div className="mb-5 flex flex-wrap items-center gap-2 [.text-center_&]:justify-center">
+                      <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-white/50">
+                        I&apos;m
+                      </span>
+                      {(
+                        [
+                          ["seeking", "looking for a job"],
+                          ["hiring", "hiring for a role"],
+                        ] as const
+                      ).map(([v, label]) => (
+                        <button
+                          key={v}
+                          onClick={() => setDirection(v)}
+                          aria-pressed={direction === v}
+                          className={`rounded-full px-3.5 py-1.5 text-[13px] font-semibold transition ${
+                            direction === v
+                              ? "bg-cream text-brown-deep"
+                              : "border border-white/25 text-white/70 hover:border-white/50 hover:text-white"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                      {direction === "hiring" && (
+                        <span className="text-[12px] text-white/45">
+                          Scout looks for people, not postings.
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {isJobUseCaseClient(activeUseCase) && direction === "hiring" && (
+                    <div className="mt-4 [.text-center_&]:flex [.text-center_&]:justify-center">
+                      {listing ? (
+                        <div className="flex max-w-xl flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-white/20 bg-white/5 px-3.5 py-2.5 text-left">
+                          <span className="text-[13px] font-semibold text-white/85">
+                            Listing attached
+                          </span>
+                          <span className="min-w-0 flex-1 truncate text-[12px] text-white/50">
+                            {listing.replace(/\s+/g, " ").slice(0, 70)}…
+                          </span>
+                          <button
+                            onClick={() => setListingOpen(true)}
+                            className="text-[12px] font-semibold text-white/70 underline-offset-2 hover:text-white hover:underline"
+                          >
+                            View
+                          </button>
+                          <button
+                            onClick={() => setListing("")}
+                            className="text-[12px] font-semibold text-white/45 transition hover:text-white"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => setListingOpen(true)}
+                          className="flex items-center gap-2 text-[13px] font-semibold text-white/45 transition hover:text-white"
+                        >
+                          <span
+                            aria-hidden
+                            className="grid h-4 w-4 place-items-center rounded-full border border-white/35 text-[11px] leading-none"
+                          >
+                            +
+                          </span>
+                          Paste the job listing
+                        </button>
+                      )}
+                    </div>
+                  )}
+
+                      </>
+                    }
                     onSend={(f) => sendFindViaGmail(f)}
                     sendingId={gmailBusyId}
                   />
                 )}
-                {!briefLayout && (
+                {/* The postcard keeps the screen during a run: errors and
+                    notes surface as banners, and the search itself is a dark
+                    espresso band with the live progress and the deck of
+                    sites Scout is reading, right under the postcard. */}
+                {postcardStage && (error || teamShareNote || (noResults && !discovering)) && (
+                  <div className="mx-auto mt-6 w-full max-w-[1100px] space-y-3">
+                    {error && (
+                      <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-danger">
+                        {error}
+                      </div>
+                    )}
+                    {teamShareNote && (
+                      <div className="flex items-start gap-3 rounded-2xl border border-attention/30 bg-attention/10 px-4 py-3 text-sm text-ink">
+                        <span className="flex-1">{teamShareNote} Your own finds are saved.</span>
+                        <button
+                          onClick={() => setTeamShareNote("")}
+                          className="shrink-0 text-xs font-semibold text-body/60 transition hover:text-ink"
+                        >
+                          Dismiss
+                        </button>
+                      </div>
+                    )}
+                    {noResults && !discovering && !error && (
+                      <div className="rounded-2xl border border-warm-border bg-surface px-4 py-3 text-sm text-body">
+                        Nothing new matched this run. Sharpen a point above (genres,
+                        region, size) and send the postcard again.
+                      </div>
+                    )}
+                  </div>
+                )}
+                {postcardStage && (gating || discovering) && (
+                  <div className="scout-fade-in mx-auto mt-8 w-full max-w-[1100px] rounded-3xl bg-[#432D1A] p-6 shadow-[0_26px_54px_-26px_rgba(40,28,16,0.55)] sm:p-8">
+                    {gating && !discovering ? (
+                      <div className="flex items-center gap-3">
+                        <div className="h-1.5 w-40 overflow-hidden rounded-full bg-white/15">
+                          <div className="scout-indeterminate h-full w-1/2 rounded-full bg-cream" />
+                        </div>
+                        <span className="text-sm font-medium text-white/75">
+                          Reading your goal before searching…
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex flex-wrap items-start gap-8">
+                        <div className="min-w-[260px] flex-1">
+                          <SearchProgress active={discovering} startedAt={discoverStartedAt} dark />
+                          <button
+                            onClick={stopDiscover}
+                            title="Stop this run. Scout keeps whatever it has already found."
+                            className="mt-5 rounded-full border border-white/25 px-4 py-2 text-xs font-semibold text-white/80 transition hover:border-white/50 hover:text-white"
+                          >
+                            {liveCount > 0
+                              ? `Cancel · keep ${liveCount} ${liveCount === 1 ? "find" : "finds"}`
+                              : "Cancel run"}
+                          </button>
+                        </div>
+                        <SiteDeck log={searchLog} deckStartedAt={discoverStartedAt} />
+                      </div>
+                    )}
+                  </div>
+                )}
+                {!postcardStage && (
                 <div
                   className={`flex flex-wrap items-center gap-2 ${
                     stageHasWorkBelow ? "" : "order-2 justify-start"
@@ -8736,7 +8868,7 @@ function ScoutTool({
                   </p>
                 )}
 
-                {!briefLayout && (
+                {!postcardStage && (
                 <div
                   className={
                     stageHasWorkBelow
@@ -8844,7 +8976,7 @@ function ScoutTool({
                 </div>
                 )}
 
-              {!briefLayout && (
+              {!postcardStage && (
               <div
                 className={`flex flex-wrap items-center gap-3 ${
                   stageHasWorkBelow ? "mt-7" : "order-3 mt-0 justify-center"
@@ -9074,7 +9206,7 @@ function ScoutTool({
                 until the first run, the stage owns the whole screen, and the
                 min-height transition above is what makes it fold up to reveal
                 this section the moment a search starts. */}
-            {stageHasWorkBelow && (
+            {stageHasWorkBelow && !postcardStage && (
             <div className="scout-results scout-reveal min-w-0 flex-1 px-5 pb-16 sm:px-8 xl:min-h-screen xl:px-8">
 
             {error &&
@@ -29295,42 +29427,14 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
   );
 }
 
-/* ---------------- Scout brief (stage layout: ?stage=brief) ----------------
- * The empty Scout stage as two halves: a compact brief on the left (project,
- * search, and who it finds as editable chips, with the run button attached),
- * and a preview on the right of what the search brings back, real recent
- * finds for this project, or an example card until there are any. Once a run
- * starts the stage folds into the usual compact band, same as the default. */
-const BRIEF_STATUS: Record<FindStatus, string> = {
-  new: "New",
-  undecided: "Undecided",
-  drafted: "Drafted",
-  sent: "Sent",
-  replied: "Replied",
-  denied: "Not a fit",
-};
-function ScoutBrief({
-  projectOptions,
-  activeId,
-  onProject,
-  searchOptions,
-  catId,
-  onSearch,
-  searchName,
-  projectName,
-  goal,
-  onGoal,
-  onRun,
-  runLabel,
-  runDisabled,
-  finds,
-  searches,
-  showProfileNudge,
-  onProfile,
-  onTemplates,
-  onManage,
-  onOpenFinds,
-}: {
+/* ---------------- Scout stage: the postcard ----------------
+ * The empty Scout tab. A full-width postcard asks (project and search set big,
+ * who to find on the address lines, the logo stamp sends it); a Drafts
+ * postcard comes out of its bottom-right corner to drop finds on; and this
+ * search's finds sit underneath, ready to drag. Colours come from the --v-*
+ * tokens in globals.css (arbitrary rgb(var()) classes, which `.scout-stage`
+ * does not remap the way it remaps white/cream utilities). */
+type StageLayoutProps = {
   projectOptions: { value: string; label: string }[];
   activeId: string;
   onProject: (v: string) => void;
@@ -29338,294 +29442,22 @@ function ScoutBrief({
   catId: string;
   onSearch: (v: string) => void;
   searchName: string;
-  projectName: string;
   goal: string;
   onGoal: (g: string) => void;
   onRun: () => void;
   runLabel: string;
   runDisabled: boolean;
-  finds: Find[];
-  searches: { id: string; name: string }[];
+  finds: Find[]; // this project's finds
   showProfileNudge: boolean;
   onProfile: () => void;
   onTemplates: () => void;
   onManage: () => void;
   onOpenFinds: () => void;
-}) {
-  const points = splitGoalBullets(goal);
-  const [editing, setEditing] = useState<number | null>(null); // index, or -1 = new
-  const [draft, setDraft] = useState("");
-  const commit = () => {
-    const t = draft.trim();
-    const next = [...points];
-    if (editing === -1) {
-      if (t) next.push(t);
-    } else if (editing !== null) {
-      if (t) next[editing] = t;
-      else next.splice(editing, 1);
-    }
-    onGoal(next.join("; "));
-    setEditing(null);
-    setDraft("");
-  };
-  const remove = (i: number) => onGoal(points.filter((_, j) => j !== i).join("; "));
-
-  const live = finds.filter((f) => f.status !== "denied");
-  const recent = [...live].sort((a, b) => b.addedAt - a.addedAt).slice(0, 4);
-  const count = (s: FindStatus[]) => live.filter((f) => s.includes(f.status)).length;
-  const stats = [
-    { label: "Finds", value: live.length },
-    { label: "Drafted", value: count(["drafted"]) },
-    { label: "Sent", value: count(["sent", "replied"]) },
-    { label: "Replied", value: count(["replied"]) },
-  ];
-
-  const pill =
-    "flex min-w-0 items-center rounded-full border border-warm-border bg-surface px-4 py-2 text-[15px] font-semibold text-ink transition hover:border-brown/40";
-
-  return (
-    <div className="grid w-full max-w-[1240px] items-start gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] xl:gap-8">
-      {/* ---- The brief ---- */}
-      <div className="rounded-[28px] border border-warm-border bg-surface p-6 shadow-soft sm:p-8">
-        <div className="kicker">Your search</div>
-        <h2 className="mt-1.5 font-display text-3xl font-bold tracking-tight text-ink sm:text-[34px]">
-          {searchName || "New search"}
-        </h2>
-        <p className="mt-1 text-sm text-body/60">in {projectName || "your project"}</p>
-
-        <div className="mt-6 grid gap-3 sm:grid-cols-2">
-          <label className="block min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">Project</span>
-            <div data-tour="project-switcher" className={`${pill} mt-1`}>
-              <PrettySelect ariaLabel="Project" bare value={activeId} onChange={onProject} options={projectOptions} className="min-w-0 flex-1" />
-            </div>
-          </label>
-          <label className="block min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-body/50">Search</span>
-            <div data-tour="category-switcher" className={`${pill} mt-1`}>
-              <PrettySelect ariaLabel="Category of search" bare value={catId} onChange={onSearch} options={searchOptions} className="min-w-0 flex-1" />
-            </div>
-          </label>
-        </div>
-
-        <div data-guide="goal" className="mt-7">
-          <div className="text-[10px] font-bold uppercase tracking-wider text-body/50">Who it finds</div>
-          {points.length === 0 && editing === null && (
-            <p className="mt-2 text-sm text-body/60">
-              Nothing yet. Add a point or two, e.g. brand managers at mid-size consumer goods companies.
-            </p>
-          )}
-          <div className="mt-2.5 flex flex-wrap gap-2">
-            {points.map((p, i) =>
-              editing === i ? (
-                <input
-                  key={i}
-                  autoFocus
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={commit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commit();
-                    if (e.key === "Escape") {
-                      setEditing(null);
-                      setDraft("");
-                    }
-                  }}
-                  className="min-w-[240px] flex-1 rounded-2xl border border-brown/40 bg-surface px-3.5 py-2 text-[15px] font-medium text-ink outline-none"
-                />
-              ) : (
-                <span
-                  key={i}
-                  className="group/chip inline-flex max-w-full items-start gap-1.5 rounded-2xl bg-brown-tint/60 py-2 pl-3.5 pr-2 text-[15px] font-medium leading-snug text-ink"
-                >
-                  <button
-                    onClick={() => {
-                      setEditing(i);
-                      setDraft(p);
-                    }}
-                    title="Edit this point"
-                    className="text-left"
-                  >
-                    {p}
-                  </button>
-                  <button
-                    onClick={() => remove(i)}
-                    aria-label={`Remove "${p}"`}
-                    className="mt-px grid h-5 w-5 shrink-0 place-items-center rounded-full text-body/40 transition hover:bg-brown/10 hover:text-ink"
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
-                  </button>
-                </span>
-              )
-            )}
-            {editing === -1 ? (
-              <div className="flex min-w-[240px] flex-1 items-center gap-2">
-                <input
-                  autoFocus
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  onBlur={commit}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commit();
-                    if (e.key === "Escape") {
-                      setEditing(null);
-                      setDraft("");
-                    }
-                  }}
-                  placeholder={points.length ? "Add a point…" : "Who are you looking for?"}
-                  className="w-full rounded-2xl border border-brown/40 bg-surface px-3.5 py-2 text-[15px] font-medium text-ink outline-none"
-                />
-                <MicButton value={draft} onChange={setDraft} />
-              </div>
-            ) : (
-              <button
-                onClick={() => {
-                  setEditing(-1);
-                  setDraft("");
-                }}
-                className="inline-flex items-center gap-1.5 rounded-2xl border border-dashed border-warm-border px-3.5 py-2 text-[14px] font-semibold text-body/60 transition hover:border-brown/40 hover:text-ink"
-              >
-                <span aria-hidden className="text-base leading-none">+</span>
-                Add a point
-              </button>
-            )}
-          </div>
-        </div>
-
-        {showProfileNudge && (
-          <button
-            onClick={onProfile}
-            className="mt-5 text-xs font-semibold text-body/60 underline-offset-2 hover:text-ink hover:underline"
-          >
-            Add your info in Profile to personalize your messages →
-          </button>
-        )}
-
-        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 border-t border-warm-border pt-6">
-          <button
-            data-guide="start"
-            onClick={onRun}
-            disabled={runDisabled}
-            className="flex-1 rounded-full bg-brand-gradient px-10 py-4 text-lg font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50 sm:flex-none"
-          >
-            {runLabel}
-          </button>
-          <div className="flex items-center gap-4">
-            <button onClick={onTemplates} className="text-xs font-semibold text-body/60 transition hover:text-ink">
-              Templates for this
-            </button>
-            <button onClick={onManage} className="text-xs font-semibold text-body/60 transition hover:text-ink">
-              Manage projects
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ---- The preview ---- */}
-      <div className="lg:pt-2">
-        <div className="kicker">What you&apos;ll get</div>
-        <h3 className="mt-1.5 font-display text-xl font-bold tracking-tight text-ink">
-          {recent.length ? `Latest finds in ${projectName || "this project"}` : "Each find arrives like this"}
-        </h3>
-
-        <div className="mt-4 grid grid-cols-4 gap-2">
-          {stats.map((s) => (
-            <div key={s.label} className="rounded-2xl border border-warm-border bg-surface/70 px-3 py-2.5">
-              <div className="font-display text-xl font-bold tabular-nums text-ink">{s.value}</div>
-              <div className="text-[11px] font-medium text-body/55">{s.label}</div>
-            </div>
-          ))}
-        </div>
-
-        <div className="mt-4 space-y-2.5">
-          {recent.length > 0 ? (
-            recent.map((f) => (
-              <button
-                key={f.id}
-                onClick={onOpenFinds}
-                className="flex w-full items-center gap-3 rounded-2xl border border-warm-border bg-surface px-4 py-3 text-left transition hover:border-brown/40 hover:shadow-soft"
-              >
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brown-tint font-display text-base font-bold text-brown-deep">
-                  {(f.opp.contactName || f.opp.name || "?").trim().charAt(0).toUpperCase()}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[15px] font-semibold text-ink">
-                    {f.opp.contactName || f.opp.name}
-                  </span>
-                  <span className="block truncate text-xs text-body/60">
-                    {[f.opp.contactRole, f.opp.outlet].filter(Boolean).join(" · ") || f.opp.channel}
-                  </span>
-                </span>
-                <span className="shrink-0 rounded-full bg-brown-tint/60 px-2.5 py-1 text-[11px] font-semibold text-brown-deep">
-                  {BRIEF_STATUS[f.status]}
-                </span>
-              </button>
-            ))
-          ) : (
-            <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-4">
-              <div className="flex items-center gap-3">
-                <span className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-brown-tint font-display text-base font-bold text-brown-deep">
-                  M
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block text-[15px] font-semibold text-ink">Maren Doyle</span>
-                  <span className="block text-xs text-body/60">A&amp;R · Big Loud</span>
-                </span>
-                <span className="shrink-0 rounded-full border border-warm-border px-2.5 py-1 text-[11px] font-semibold text-body/55">
-                  Example
-                </span>
-              </div>
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {["Matches your goal", "Public email", "Active this month"].map((s) => (
-                  <span key={s} className="rounded-full bg-brown-tint/50 px-2.5 py-1 text-[11px] font-medium text-brown-deep">
-                    {s}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-3 rounded-xl bg-surface-2 px-3 py-2.5 text-[13px] leading-relaxed text-body/75">
-                “Hi Maren, I loved how you championed… ” <span className="text-body/45">A first draft, in your voice.</span>
-              </p>
-              <p className="mt-3 text-xs text-body/55">
-                Run this search and real people land here, each with why they fit and a draft ready to edit.
-              </p>
-            </div>
-          )}
-        </div>
-
-        {searches.length > 1 && (
-          <div className="mt-6">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-body/50">
-              Other searches in this project
-            </div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {searches
-                .filter((s) => s.id !== catId)
-                .map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => onSearch(s.id)}
-                    className="rounded-full border border-warm-border bg-surface px-3 py-1.5 text-xs font-semibold text-body/70 transition hover:border-brown/40 hover:text-ink"
-                  >
-                    {s.name}
-                  </button>
-                ))}
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* ---------------- Radical stage layouts (?stage=split | ?stage=letter) ----
- * Two whole-page rethinks of the empty Scout stage, sharing ScoutBrief's
- * props. Text on dark ground uses arbitrary hexes rather than white/cream
- * utilities, which `.scout-stage` remaps to ink. */
-type StageLayoutProps = Parameters<typeof ScoutBrief>[0] & {
-  onDraft?: (f: Find) => void; // draft one find (drag-to-draft tray)
+  onDraft?: (f: Find) => void; // draft one find (drag onto Drafts)
   draftingId?: string; // the find being drafted right now
   onSend?: (f: Find) => void; // send a drafted find from its mailbox
   sendingId?: string;
+  extra?: React.ReactNode; // search-specific controls (job direction, listing)
 };
 
 // Click-to-edit list of goal points, shared by the layouts below.
@@ -29658,435 +29490,6 @@ function useGoalPoints(goal: string, onGoal: (g: string) => void) {
     }
   };
   return { points, editing, draft, setDraft, commit, start, keys };
-}
-
-const PIPE_COLUMNS: { label: string; statuses: FindStatus[] }[] = [
-  { label: "New", statuses: ["new", "undecided"] },
-  { label: "Drafted", statuses: ["drafted"] },
-  { label: "Sent", statuses: ["sent"] },
-  { label: "Replied", statuses: ["replied"] },
-];
-
-/* The pipeline as a board (New / Drafted / Sent / Replied) for one project,
- * shared by the split and postcard + board layouts. */
-function PipelineBoard({ finds, onOpenFinds }: { finds: Find[]; onOpenFinds: () => void }) {
-  const live = finds.filter((f) => f.status !== "denied");
-  const p = { onOpenFinds };
-  return (
-    <>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <div className="kicker">Your pipeline</div>
-          <h2 className="mt-1 font-display text-3xl font-bold tracking-tight text-ink">
-            {live.length ? `${live.length} ${live.length === 1 ? "find" : "finds"} so far` : "Nothing fetched yet"}
-          </h2>
-        </div>
-        <button onClick={p.onOpenFinds} className="text-sm font-semibold text-body/60 hover:text-ink">
-          Open Finds →
-        </button>
-      </div>
-      <div className="mt-8 grid flex-1 grid-cols-2 gap-3 xl:grid-cols-4">
-        {PIPE_COLUMNS.map((col) => {
-          const items = live.filter((f) => col.statuses.includes(f.status)).sort((a, b) => b.addedAt - a.addedAt);
-          return (
-            <div key={col.label} className="flex min-h-[220px] flex-col rounded-2xl bg-[rgb(var(--v-chip))] p-2.5">
-              <div className="flex items-center justify-between px-1.5 pb-2.5 pt-1">
-                <span className="text-[12px] font-bold uppercase tracking-wider text-body/60">{col.label}</span>
-                <span className="font-display text-sm font-bold tabular-nums text-body/45">{items.length}</span>
-              </div>
-              <div className="space-y-2">
-                {items.slice(0, 4).map((f) => (
-                  <button key={f.id} onClick={p.onOpenFinds} className="block w-full rounded-xl bg-surface px-3 py-2.5 text-left shadow-sm transition hover:shadow-soft">
-                    <span className="block truncate text-[13px] font-semibold text-ink">{f.opp.contactName || f.opp.name}</span>
-                    <span className="block truncate text-[11px] text-body/55">{f.opp.outlet || f.opp.contactRole}</span>
-                  </button>
-                ))}
-                {items.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-[rgb(var(--v-dash))] px-3 py-5 text-center text-[11px] text-body/40">
-                    {col.label === "New" ? "Finds land here" : "Empty"}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </>
-  );
-}
-
-/* Espresso split: the left half is a dark room where you ask, set in huge
- * display type; the right half is your pipeline as a board, so the page is
- * both the question and where the answers go. */
-function ScoutSplit(p: StageLayoutProps) {
-  const g = useGoalPoints(p.goal, p.onGoal);
-  return (
-    <div className="grid min-h-full w-full flex-1 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)]">
-      <div className="flex flex-col justify-between gap-10 bg-[rgb(var(--v-night))] px-8 py-10 text-[rgb(var(--v-paper))] sm:px-12 sm:py-14">
-        <div>
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[13px] font-semibold text-[rgb(var(--v-paper)/0.60)]">
-            <div data-tour="project-switcher" className="rounded-full border border-[rgb(var(--v-paper)/0.20)] px-3 py-1 text-[rgb(var(--v-paper))] hover:border-[rgb(var(--v-paper)/0.50)]">
-              <PrettySelect ariaLabel="Project" bare value={p.activeId} onChange={p.onProject} options={p.projectOptions} />
-            </div>
-            <span aria-hidden>/</span>
-            <div data-tour="category-switcher" className="rounded-full border border-[rgb(var(--v-paper)/0.20)] px-3 py-1 text-[rgb(var(--v-paper))] hover:border-[rgb(var(--v-paper)/0.50)]">
-              <PrettySelect ariaLabel="Category of search" bare value={p.catId} onChange={p.onSearch} options={p.searchOptions} />
-            </div>
-          </div>
-
-          <h1 className="mt-12 font-display text-[56px] font-extrabold leading-[0.95] tracking-tight text-[rgb(var(--v-paper))] sm:text-[76px]">
-            Who should
-            <br />
-            Scout fetch?
-          </h1>
-
-          <ol data-guide="goal" className="mt-10 space-y-1">
-            {g.points.map((pt, i) => (
-              <li key={i} className="group/pt flex items-baseline gap-4 border-b border-[rgb(var(--v-paper)/0.12)] py-3">
-                <span className="w-7 shrink-0 font-display text-sm font-bold tabular-nums text-[rgb(var(--v-accent2))]">
-                  {String(i + 1).padStart(2, "0")}
-                </span>
-                {g.editing === i ? (
-                  <input
-                    autoFocus
-                    value={g.draft}
-                    onChange={(e) => g.setDraft(e.target.value)}
-                    onBlur={g.commit}
-                    onKeyDown={g.keys}
-                    className="w-full bg-transparent text-2xl font-semibold text-[rgb(var(--v-paper))] outline-none"
-                  />
-                ) : (
-                  <button onClick={() => g.start(i)} title="Edit this point" className="text-left text-2xl font-semibold leading-snug text-[rgb(var(--v-paper))] hover:text-[rgb(var(--v-glow))]">
-                    {pt}
-                  </button>
-                )}
-              </li>
-            ))}
-            <li className="flex items-baseline gap-4 py-3">
-              <span className="w-7 shrink-0 font-display text-sm font-bold tabular-nums text-[rgb(var(--v-accent2)/0.50)]">
-                {String(g.points.length + 1).padStart(2, "0")}
-              </span>
-              {g.editing === -1 ? (
-                <div className="flex w-full items-center gap-2">
-                  <input
-                    autoFocus
-                    value={g.draft}
-                    onChange={(e) => g.setDraft(e.target.value)}
-                    onBlur={g.commit}
-                    onKeyDown={g.keys}
-                    placeholder={g.points.length ? "Another detail…" : "Who are you looking for?"}
-                    className="w-full bg-transparent text-2xl font-semibold text-[rgb(var(--v-paper))] outline-none placeholder:text-[rgb(var(--v-paper)/0.30)]"
-                  />
-                  <MicButton value={g.draft} onChange={g.setDraft} light />
-                </div>
-              ) : (
-                <button onClick={() => g.start(-1)} className="text-left text-2xl font-semibold text-[rgb(var(--v-paper)/0.30)] transition hover:text-[rgb(var(--v-paper)/0.70)]">
-                  Add a detail…
-                </button>
-              )}
-            </li>
-          </ol>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-          <button
-            data-guide="start"
-            onClick={p.onRun}
-            disabled={p.runDisabled}
-            aria-label="Scout"
-            title="Scout"
-            className="group/go inline-flex items-center gap-5 disabled:opacity-40"
-          >
-            <span className="grid h-24 w-24 place-items-center rounded-full bg-[rgb(var(--v-glow))] shadow-[0_12px_30px_-10px_rgba(0,0,0,0.6)] transition group-hover/go:scale-105 group-hover/go:bg-[rgb(var(--v-paper))] group-active/go:scale-95">
-              <img src="/scout-logo.png" alt="" className="h-12 w-12 transition group-hover/go:-rotate-6" />
-            </span>
-            <span className="text-xl font-bold text-[rgb(var(--v-paper))]">
-              {p.runLabel === "Scout" ? "Go fetch" : p.runLabel}
-              <span aria-hidden className="ml-2 inline-block transition group-hover/go:translate-x-1">→</span>
-            </span>
-          </button>
-          <div className="flex items-center gap-5 text-[13px] font-semibold text-[rgb(var(--v-paper)/0.50)]">
-            <button onClick={p.onTemplates} className="hover:text-[rgb(var(--v-paper))]">Templates</button>
-            <button onClick={p.onManage} className="hover:text-[rgb(var(--v-paper))]">Manage projects</button>
-            {p.showProfileNudge && (
-              <button onClick={p.onProfile} className="hover:text-[rgb(var(--v-paper))]">Add your profile →</button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      <div className="flex flex-col bg-[rgb(var(--v-field))] px-6 py-10 sm:px-10 sm:py-14">
-        <PipelineBoard finds={p.finds} onOpenFinds={p.onOpenFinds} />
-      </div>
-    </div>
-  );
-}
-
-/* Letter to Scout: the search is a note you hand your dog. The project and
- * search are words in the sentence, the criteria are the list in the middle,
- * and the run button is the stamp. */
-function ScoutLetter(p: StageLayoutProps) {
-  const g = useGoalPoints(p.goal, p.onGoal);
-  const live = p.finds.filter((f) => f.status !== "denied");
-  const inline = "inline-flex rounded-md border-b-2 border-[rgb(var(--v-accent2))] px-1 font-bold text-ink hover:bg-[rgb(var(--v-tint))]";
-  return (
-    <div className="flex w-full flex-1 flex-col items-center py-6 sm:py-10">
-      <div className="relative w-full max-w-[760px] rounded-[6px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] px-8 pb-12 pt-14 shadow-[0_30px_60px_-30px_rgba(60,40,20,0.35),0_2px_0_#EDE2CF] sm:px-16">
-        <div className="kicker">A note for Scout</div>
-        <p className="mt-6 font-display text-[34px] font-bold tracking-tight text-ink">Dear Scout,</p>
-
-        <div className="mt-5 max-w-[560px] text-[20px] leading-[1.9] text-body/80">
-          I&apos;m working on{" "}
-          <span data-tour="project-switcher" className={inline}>
-            <PrettySelect ariaLabel="Project" bare value={p.activeId} onChange={p.onProject} options={p.projectOptions} />
-          </span>{" "}
-          and I&apos;m after{" "}
-          <span data-tour="category-switcher" className={inline}>
-            <PrettySelect ariaLabel="Category of search" bare value={p.catId} onChange={p.onSearch} options={p.searchOptions} />
-          </span>
-          . Please go find me:
-        </div>
-
-        <ul data-guide="goal" className="mt-6">
-          {g.points.map((pt, i) => (
-            <li key={i} className="flex items-baseline gap-3 border-b border-[rgb(var(--v-line))] py-2.5">
-              <span aria-hidden className="text-[rgb(var(--v-accent2))]">—</span>
-              {g.editing === i ? (
-                <input
-                  autoFocus
-                  value={g.draft}
-                  onChange={(e) => g.setDraft(e.target.value)}
-                  onBlur={g.commit}
-                  onKeyDown={g.keys}
-                  className="w-full bg-transparent text-[20px] font-medium text-ink outline-none"
-                />
-              ) : (
-                <button onClick={() => g.start(i)} title="Edit this line" className="text-left text-[20px] font-medium leading-snug text-ink hover:text-brown">
-                  {pt}
-                </button>
-              )}
-            </li>
-          ))}
-          <li className="flex items-baseline gap-3 border-b border-[rgb(var(--v-line))] py-2.5">
-            <span aria-hidden className="text-[rgb(var(--v-accent2)/0.50)]">—</span>
-            {g.editing === -1 ? (
-              <div className="flex w-full items-center gap-2">
-                <input
-                  autoFocus
-                  value={g.draft}
-                  onChange={(e) => g.setDraft(e.target.value)}
-                  onBlur={g.commit}
-                  onKeyDown={g.keys}
-                  placeholder={g.points.length ? "and also…" : "who you're looking for"}
-                  className="w-full bg-transparent text-[20px] font-medium text-ink outline-none placeholder:text-body/30"
-                />
-                <MicButton value={g.draft} onChange={g.setDraft} />
-              </div>
-            ) : (
-              <button onClick={() => g.start(-1)} className="text-left text-[20px] font-medium text-body/30 transition hover:text-body/60">
-                and also…
-              </button>
-            )}
-          </li>
-        </ul>
-
-        <div className="mt-12 flex flex-wrap items-end justify-between gap-6">
-          <div>
-            <p className="font-display text-[22px] font-bold text-ink">Thanks, good dog.</p>
-            {p.showProfileNudge ? (
-              <button onClick={p.onProfile} className="mt-1 text-sm text-body/55 underline-offset-2 hover:text-ink hover:underline">
-                Sign it with your profile so drafts sound like you →
-              </button>
-            ) : (
-              <p className="mt-1 text-sm text-body/55">— you</p>
-            )}
-          </div>
-          <button
-            data-guide="start"
-            onClick={p.onRun}
-            disabled={p.runDisabled}
-            aria-label="Send Scout"
-            title="Send Scout"
-            className="group/go flex flex-col items-center gap-2 disabled:opacity-50"
-          >
-            <span className="grid h-28 w-28 -rotate-6 place-items-center rounded-full border-2 border-dashed border-[rgb(var(--v-accent2))] bg-[rgb(var(--v-tint))] transition group-hover/go:rotate-0 group-hover/go:scale-105 group-hover/go:border-solid group-hover/go:bg-[rgb(var(--v-tint))] group-active/go:scale-95">
-              <img src="/scout-logo.png" alt="" className="h-14 w-14" />
-            </span>
-            <span className="text-[12px] font-bold uppercase tracking-[0.14em] text-brown">
-              {p.runLabel === "Scout" ? "Send Scout" : p.runLabel}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[13px] font-semibold text-body/55">
-        <button onClick={p.onOpenFinds} className="hover:text-ink">
-          {live.length ? `${live.length} ${live.length === 1 ? "find" : "finds"} fetched so far →` : "Nothing fetched yet"}
-        </button>
-        <span aria-hidden>·</span>
-        <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
-        <span aria-hidden>·</span>
-        <button onClick={p.onManage} className="hover:text-ink">Manage projects</button>
-      </div>
-    </div>
-  );
-}
-
-/* Project first: almost no words. The project is the headline (click to
- * switch), every search in it is a big tab you can see at once, and the
- * criteria shrink to quiet chips under them. The logo is the run button. */
-function ScoutFocus(p: StageLayoutProps) {
-  const g = useGoalPoints(p.goal, p.onGoal);
-  const [projOpen, setProjOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!projOpen) return;
-    const onDoc = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setProjOpen(false);
-    };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [projOpen]);
-
-  return (
-    <div className="flex w-full flex-1 flex-col justify-between gap-12 py-4 sm:py-8">
-      <div>
-        {/* Project */}
-        <div ref={menuRef} data-tour="project-switcher" className="relative inline-block">
-          <button
-            onClick={() => setProjOpen((v) => !v)}
-            aria-haspopup="listbox"
-            aria-expanded={projOpen}
-            aria-label="Project"
-            className="group/proj flex items-center gap-4 text-left"
-          >
-            <span className="font-display text-[64px] font-extrabold leading-[0.95] tracking-tight text-ink sm:text-[96px]">
-              {p.projectName || "Pick a project"}
-            </span>
-            <span className="grid h-12 w-12 shrink-0 place-items-center rounded-full border-2 border-ink/15 text-ink/50 transition group-hover/proj:border-ink/40 group-hover/proj:text-ink">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" className={`transition-transform ${projOpen ? "rotate-180" : ""}`}><polyline points="6 9 12 15 18 9" /></svg>
-            </span>
-          </button>
-          {projOpen && (
-            <div role="listbox" className="absolute left-0 z-30 mt-3 min-w-[300px] rounded-2xl border border-warm-border bg-surface p-1.5 shadow-xl">
-              {p.projectOptions.map((o) => (
-                <button
-                  key={o.value}
-                  role="option"
-                  aria-selected={o.value === p.activeId}
-                  onClick={() => {
-                    setProjOpen(false);
-                    p.onProject(o.value);
-                  }}
-                  className={`flex w-full items-center rounded-xl px-3.5 py-2.5 text-left text-[15px] font-semibold transition hover:bg-warm-bg ${
-                    o.value === p.activeId ? "text-ink" : "text-body/70"
-                  }`}
-                >
-                  {o.label}
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Searches in this project, all visible */}
-        <div data-tour="category-switcher" className="mt-10 flex flex-wrap items-center gap-3">
-          {p.searches.map((s) => {
-            const on = s.id === p.catId;
-            return (
-              <button
-                key={s.id}
-                onClick={() => p.onSearch(s.id)}
-                aria-pressed={on}
-                className={`rounded-full px-7 py-3.5 font-display text-[22px] font-bold tracking-tight transition ${
-                  on
-                    ? "bg-[rgb(var(--v-tabon))] text-[rgb(var(--v-sheet))] shadow-[0_10px_24px_-12px_rgba(80,50,25,0.7)]"
-                    : "border-2 border-ink/12 text-ink/55 hover:border-ink/30 hover:text-ink"
-                }`}
-              >
-                {s.name}
-              </button>
-            );
-          })}
-          <button
-            onClick={() => p.onSearch("__newcat__")}
-            aria-label="New search"
-            title="New search"
-            className="grid h-[58px] w-[58px] place-items-center rounded-full border-2 border-dashed border-ink/20 text-2xl text-ink/40 transition hover:border-ink/40 hover:text-ink"
-          >
-            +
-          </button>
-        </div>
-
-        {/* Criteria: present, but quiet */}
-        <div data-guide="goal" className="mt-8 flex max-w-3xl flex-wrap items-center gap-2">
-          {g.points.map((pt, i) =>
-            g.editing === i ? (
-              <input
-                key={i}
-                autoFocus
-                value={g.draft}
-                onChange={(e) => g.setDraft(e.target.value)}
-                onBlur={g.commit}
-                onKeyDown={g.keys}
-                className="min-w-[260px] rounded-full border border-ink/25 bg-surface px-4 py-1.5 text-sm text-ink outline-none"
-              />
-            ) : (
-              <button
-                key={i}
-                onClick={() => g.start(i)}
-                title="Edit"
-                className="rounded-full bg-[rgb(var(--v-chip))] px-4 py-1.5 text-sm text-body/75 transition hover:bg-[rgb(var(--v-chiphover))] hover:text-ink"
-              >
-                {pt}
-              </button>
-            )
-          )}
-          {g.editing === -1 ? (
-            <div className="flex items-center gap-1.5">
-              <input
-                autoFocus
-                value={g.draft}
-                onChange={(e) => g.setDraft(e.target.value)}
-                onBlur={g.commit}
-                onKeyDown={g.keys}
-                placeholder="Who?"
-                className="min-w-[220px] rounded-full border border-ink/25 bg-surface px-4 py-1.5 text-sm text-ink outline-none"
-              />
-              <MicButton value={g.draft} onChange={g.setDraft} />
-            </div>
-          ) : (
-            <button
-              onClick={() => g.start(-1)}
-              aria-label="Add a detail"
-              className="grid h-8 w-8 place-items-center rounded-full text-lg text-body/40 transition hover:bg-[rgb(var(--v-chip))] hover:text-ink"
-            >
-              +
-            </button>
-          )}
-        </div>
-      </div>
-
-      <div className="flex items-end justify-between gap-6">
-        <div className="flex items-center gap-5 text-[13px] font-semibold text-body/45">
-          <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
-          <button onClick={p.onManage} className="hover:text-ink">Projects</button>
-        </div>
-        <button
-          data-guide="start"
-          onClick={p.onRun}
-          disabled={p.runDisabled}
-          aria-label={p.runLabel}
-          title={p.runLabel}
-          className="group/go grid h-36 w-36 place-items-center rounded-full bg-[rgb(var(--v-night))] shadow-[0_24px_48px_-20px_rgba(43,33,25,0.8)] transition hover:scale-105 active:scale-95 disabled:opacity-40"
-        >
-          <span className="grid h-[104px] w-[104px] place-items-center rounded-full bg-[rgb(var(--v-paper))]">
-            <img src="/scout-logo.png" alt="" className="h-14 w-14 transition group-hover/go:-rotate-6" />
-          </span>
-        </button>
-      </div>
-    </div>
-  );
 }
 
 /* A choice set in display type: the label IS the trigger, with a light
@@ -30153,40 +29556,6 @@ function BigPicker({
   );
 }
 
-// Criteria as small editable chips, shared by the light letters below.
-function GoalChips({ g, tone = "chip" }: { g: ReturnType<typeof useGoalPoints>; tone?: "chip" | "line" }) {
-  const chip =
-    tone === "chip"
-      ? "rounded-full bg-[rgb(var(--v-chip))] px-3.5 py-1.5 text-sm text-body/80 hover:bg-[rgb(var(--v-chiphover))] hover:text-ink"
-      : "border-b border-dashed border-[rgb(var(--v-accent2))] px-0.5 pb-0.5 text-[15px] text-body/80 hover:text-ink";
-  return (
-    <div data-guide="goal" className="flex flex-wrap items-center gap-2">
-      {g.points.map((pt, i) =>
-        g.editing === i ? (
-          <input key={i} autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys}
-            className="min-w-[240px] rounded-full border border-ink/25 bg-surface px-3.5 py-1.5 text-sm text-ink outline-none" />
-        ) : (
-          <button key={i} onClick={() => g.start(i)} title="Edit" className={`text-left transition ${chip}`}>
-            {pt}
-          </button>
-        )
-      )}
-      {g.editing === -1 ? (
-        <span className="flex items-center gap-1.5">
-          <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys} placeholder="Who?"
-            className="min-w-[200px] rounded-full border border-ink/25 bg-surface px-3.5 py-1.5 text-sm text-ink outline-none" />
-          <MicButton value={g.draft} onChange={g.setDraft} />
-        </span>
-      ) : (
-        <button onClick={() => g.start(-1)} aria-label="Add a detail" title="Add a detail"
-          className="grid h-8 w-8 place-items-center rounded-full text-lg text-body/40 transition hover:bg-[rgb(var(--v-chip))] hover:text-ink">
-          +
-        </button>
-      )}
-    </div>
-  );
-}
-
 // The logo as a postage stamp: the run button for every letter.
 function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; size?: number; label?: boolean }) {
   return (
@@ -30200,12 +29569,17 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
     >
       <span
         style={{ width: size, height: size }}
-        className="stamp-disc grid -rotate-6 place-items-center rounded-full border-2 border-dashed border-[rgb(var(--v-accent2))] bg-[rgb(var(--v-tint))] transition group-hover/go:rotate-0 group-hover/go:scale-105 group-hover/go:border-solid group-active/go:scale-95"
+        className="grid -rotate-6 place-items-center rounded-full border-2 border-dashed border-[rgb(var(--v-accent2))] bg-[rgb(var(--v-tint))] transition group-hover/go:rotate-0 group-hover/go:scale-105 group-hover/go:border-solid group-active/go:scale-95"
       >
         <img src="/scout-logo.png" alt="" style={{ width: size / 2, height: size / 2 }} />
       </span>
       {label && (
-        <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-brown">
+        // Pinned to the stamp's width: a long status ("Understanding…") must
+        // not widen the button, or the centered stamp lurches sideways.
+        <span
+          style={{ width: size }}
+          className="truncate text-center text-[11px] font-bold uppercase tracking-[0.14em] text-brown"
+        >
           {p.runLabel === "Scout" ? "Send" : p.runLabel}
         </span>
       )}
@@ -30213,53 +29587,14 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
   );
 }
 
-/* Letter · note card: "Dear Scout," and then only the two choices, huge.
- * Criteria are chips; the stamp sends it. Three words of prose in total. */
-function ScoutNoteCard(p: StageLayoutProps) {
-  const g = useGoalPoints(p.goal, p.onGoal);
-  return (
-    <div className="flex w-full flex-1 flex-col items-center justify-center py-6">
-      <div className="relative w-full max-w-[820px] rounded-[6px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] px-6 pb-8 pt-10 shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] sm:px-16 sm:pb-10 sm:pt-12">
-        <div className="absolute right-5 top-6 scale-75 sm:right-14 sm:top-10 sm:scale-100">
-          <StampButton p={p} size={104} />
-        </div>
-        <p className="font-display text-[22px] font-bold text-body/45">Dear Scout,</p>
-        <div className="mt-6 pr-24 sm:pr-32">
-          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
-            className="font-display text-[40px] font-extrabold leading-[1] tracking-tight text-ink sm:text-[68px]" />
-        </div>
-        <div className="mt-3">
-          <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
-            className="font-display text-[26px] font-bold leading-tight tracking-tight text-brown sm:text-[40px]" />
-        </div>
-        <div className="mt-8 border-t sm:mt-10 border-[rgb(var(--v-line))] pt-6">
-          <GoalChips g={g} />
-        </div>
-      </div>
-      <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[12px] font-semibold text-body/45">
-        <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
-        <button onClick={p.onManage} className="hover:text-ink">Projects</button>
-        {p.showProfileNudge && (
-          <button onClick={p.onProfile} className="hover:text-ink">Add your profile →</button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* Letter · postcard: landscape card split by a rule. Left, the message is the
  * project and search; right, the "address lines" are who to find, and the
  * stamp in the corner sends it. */
-function ScoutPostcard({
-  compact = false,
-  wide = false,
-  navy = false,
-  ...p
-}: StageLayoutProps & { compact?: boolean; wide?: boolean; navy?: boolean }) {
+function ScoutPostcard(p: StageLayoutProps) {
   const g = useGoalPoints(p.goal, p.onGoal);
   return (
-    <div className={`flex w-full justify-center ${compact ? "" : "flex-1 items-center py-6"}`}>
-      <div className={`grid w-full grid-cols-1 rounded-[6px] md:grid-cols-[1.15fr_1fr] ${wide ? "max-w-none rounded-none border-x-0 md:min-h-[420px]" : compact ? "max-w-[1100px] md:min-h-[400px]" : "max-w-[980px] md:aspect-[3/2]"} ${navy ? "tone-navy" : ""} border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)]`}>
+    <div className="flex w-full justify-center">
+      <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
         <div className="flex flex-col justify-between gap-8 border-b-2 border-dashed border-[rgb(var(--v-line))] p-7 sm:p-10 md:border-b-0 md:border-r-2">
           <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
           <div>
@@ -30274,12 +29609,16 @@ function ScoutPostcard({
               <StampButton p={p} size={88} />
             </div>
           </div>
-          <div className="flex gap-4 text-[12px] font-semibold text-body/40">
+          <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-body/40">
             <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
             <button onClick={p.onManage} className="hover:text-ink">Projects</button>
+            {p.showProfileNudge && (
+              <button onClick={p.onProfile} className="hover:text-ink">Add your profile so drafts sound like you →</button>
+            )}
           </div>
         </div>
-        <div className="flex flex-col gap-8 p-7 sm:p-10">
+        <div className="flex flex-col gap-8 p-7 sm:p-10 md:pb-40">
+          {p.extra && <div>{p.extra}</div>}
           <div className="mt-auto">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
             <ul data-guide="goal" className="mt-2">
@@ -30309,35 +29648,6 @@ function ScoutPostcard({
   );
 }
 
-/* Letter · envelope: no letter at all, just the outside. Addressed TO the
- * project, the search is the second line, and the stamp is the button. */
-function ScoutEnvelope(p: StageLayoutProps) {
-  const g = useGoalPoints(p.goal, p.onGoal);
-  return (
-    <div className="flex w-full flex-1 flex-col items-center justify-center gap-6 py-6">
-      <div className="relative aspect-[16/9] w-full max-w-[920px] overflow-hidden rounded-[8px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)]">
-        {/* Envelope flap */}
-        <svg aria-hidden viewBox="0 0 100 30" preserveAspectRatio="none" className="absolute inset-x-0 top-0 h-[30%] w-full">
-          <polyline points="0,0 50,28 100,0" fill="none" stroke="rgb(var(--v-line))" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <div className="absolute right-8 top-8">
-          <StampButton p={p} size={100} />
-        </div>
-        <div className="absolute inset-x-0 bottom-0 flex flex-col items-start px-14 pb-12 sm:pl-[30%]">
-          <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">To</div>
-          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
-            className="mt-1 font-display text-[52px] font-extrabold leading-[1] tracking-tight text-ink" />
-          <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
-            className="mt-2 font-display text-[30px] font-bold tracking-tight text-brown" />
-        </div>
-      </div>
-      <div className="w-full max-w-[920px]">
-        <GoalChips g={g} />
-      </div>
-    </div>
-  );
-}
-
 /* Finds tray: this search's finds that haven't been worked yet, and a drop
  * zone beside them. Drag a find onto it (or press Draft on the card) to have
  * Scout draft it. The whole tray collapses, and remembers that. */
@@ -30349,7 +29659,6 @@ function FindsTray({
   onDraft,
   draftingId,
   onOpenFinds,
-  navy = false,
   onSend,
   sendingId,
 }: {
@@ -30359,7 +29668,6 @@ function FindsTray({
   onDraft?: (f: Find) => void;
   draftingId?: string;
   onOpenFinds: () => void;
-  navy?: boolean;
   onSend?: (f: Find) => void;
   sendingId?: string;
 }) {
@@ -30382,27 +29690,17 @@ function FindsTray({
       return !c;
     });
   };
-  const [over, setOver] = useState(false);
-  const [sentToDraft, setSentToDraft] = useState<string[]>([]);
   const fresh = finds
     .filter((f) => f.categoryId === catId && (f.status === "new" || f.status === "undecided"))
     .sort((a, b) => b.addedAt - a.addedAt);
-  const queued = finds.filter((f) => sentToDraft.includes(f.id));
   // Everything drafted for this search, newest first: each opens into its letter.
   const drafted = finds
     .filter((f) => f.categoryId === catId && f.status === "drafted" && f.draft)
     .sort((a, b) => (b.draftedAt || b.addedAt) - (a.draftedAt || a.addedAt));
-  const draft = (f: Find) => {
-    if (!onDraft) return;
-    setSentToDraft((ids) => (ids.includes(f.id) ? ids : [f.id, ...ids]));
-    onDraft(f);
-  };
+  const draft = (f: Find) => onDraft?.(f);
 
   return (
-    <section
-      id="finds-tray"
-      className={`w-full ${navy ? "tone-navy rounded-[28px] bg-[rgb(var(--v-sheet))] px-6 pb-7 pt-5 sm:px-9" : ""}`}
-    >
+    <section id="finds-tray" className="w-full">
       <button
         onClick={toggle}
         aria-expanded={!collapsed}
@@ -30461,55 +29759,15 @@ function FindsTray({
             ))}
           </div>
 
-          {/* The reply: a small postcard answering the big one. Drag a find
-              onto it and it's addressed to them; Scout drafts the message. */}
-          <div className="flex flex-col items-center md:items-stretch">
-            <div
-              onDragOver={(e) => {
-                if (!onDraft) return;
-                e.preventDefault();
-                setOver(true);
-              }}
-              onDragLeave={() => setOver(false)}
-              onDrop={(e) => {
-                e.preventDefault();
-                setOver(false);
-                const id = e.dataTransfer.getData("text/scout-find");
-                const f = finds.find((x) => x.id === id);
-                if (f) draft(f);
-              }}
-              aria-label="Drop a find on the reply postcard to draft it"
-              className={`grid aspect-[3/2] w-full max-w-[260px] rotate-[-2deg] grid-cols-2 self-center rounded-[6px] border bg-[rgb(var(--v-sheet))] shadow-[0_14px_30px_-16px_rgba(40,30,20,0.45)] transition ${
-                over ? "rotate-0 scale-[1.04] border-brown" : "border-[rgb(var(--v-line))]"
-              }`}
-            >
-              <div className="flex flex-col justify-between border-r border-dashed border-[rgb(var(--v-line))] p-3">
-                <div className="font-display text-[22px] font-extrabold leading-none tracking-tight text-ink">Drafts</div>
-                <div className="text-[10px] leading-snug text-body/55">
-                  {over ? "Let go to draft" : "Drag and drop here to draft your message"}
-                </div>
-              </div>
-              <div className="flex flex-col p-3">
-                <div className="ml-auto h-7 w-6 rounded-[3px] border border-dashed border-[rgb(var(--v-dash))]" />
-                <div className="mt-auto space-y-1.5">
-                  {[0, 1, 2].map((i) => {
-                    const f = queued[i];
-                    return (
-                      <div key={i} className="h-4 truncate border-b border-[rgb(var(--v-line))] text-[9px] font-semibold leading-4 text-ink">
-                        {f ? `${draftingId === f.id ? "… " : f.status === "drafted" ? "✓ " : ""}${f.opp.contactName || f.opp.name}` : ""}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-            {queued.some((f) => draftingId === f.id) && (
-              <div className="mt-3 text-center text-[12px] text-body/50">Drafting…</div>
-            )}
-
+          <div className="flex flex-col">
             {/* Drafted letters: the title collapses; open it to read and send. */}
+            {drafted.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-4 py-6 text-center text-[12px] text-body/45">
+                Drafted messages show up here.
+              </div>
+            )}
             {drafted.length > 0 && (
-              <div className="mt-6 w-full space-y-2">
+              <div className="w-full space-y-2">
                 {drafted.map((f) => {
                   const d = f.draft!;
                   const open = openDraft === f.id;
@@ -30568,25 +29826,84 @@ function FindsTray({
   );
 }
 
-/* Postcard + finds: the postcard asks; the finds for this search sit under
- * it, ready to drag into drafting. */
+/* The reply: a postcard coming out of the big one's bottom-right corner.
+ * Drag a find onto it and it's addressed to them while Scout drafts. */
+function ReplyCard({
+  finds,
+  onDraft,
+  draftingId,
+}: {
+  finds: Find[];
+  onDraft?: (f: Find) => void;
+  draftingId?: string;
+}) {
+  const [over, setOver] = useState(false);
+  const [sent, setSent] = useState<string[]>([]);
+  const queued = sent.map((id) => finds.find((f) => f.id === id)).filter(Boolean) as Find[];
+  return (
+    <div
+      id="reply-postcard"
+      onDragOver={(e) => {
+        if (!onDraft) return;
+        e.preventDefault();
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        const f = finds.find((x) => x.id === e.dataTransfer.getData("text/scout-find"));
+        if (!f || !onDraft) return;
+        setSent((ids) => (ids.includes(f.id) ? ids : [f.id, ...ids]));
+        onDraft(f);
+      }}
+      aria-label="Drop a find on the Drafts postcard to draft it"
+      className={`grid aspect-[3/2] w-full max-w-[380px] grid-cols-2 rounded-[6px] border bg-[rgb(var(--v-sheet))] shadow-[0_20px_40px_-18px_rgba(40,30,20,0.45)] transition ${
+        over ? "scale-[1.03] border-brown" : "border-[rgb(var(--v-line))]"
+      }`}
+    >
+      <div className="flex flex-col justify-between border-r border-dashed border-[rgb(var(--v-line))] p-5">
+        <div className="font-display text-[30px] font-extrabold leading-none tracking-tight text-ink">Drafts</div>
+        <div className="text-[12px] leading-snug text-body/55">
+          {over
+            ? "Let go to draft"
+            : queued.some((f) => draftingId === f.id)
+            ? "Drafting…"
+            : "Drag and drop here to draft your message"}
+        </div>
+      </div>
+      <div className="flex flex-col p-5">
+        <div className="ml-auto h-10 w-8 rounded-[3px] border border-dashed border-[rgb(var(--v-dash))]" />
+        <div className="mt-auto space-y-2">
+          {[0, 1, 2].map((i) => {
+            const f = queued[i];
+            return (
+              <div key={i} className="h-5 truncate border-b border-[rgb(var(--v-line))] text-[11px] font-semibold leading-5 text-ink">
+                {f ? `${draftingId === f.id ? "… " : f.status === "drafted" ? "✓ " : ""}${f.opp.contactName || f.opp.name}` : ""}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Postcard + finds: the postcard asks, the Drafts postcard comes out of its
+ * corner, and the finds for this search sit under both, ready to drag. */
 function ScoutPostcardBoard(p: StageLayoutProps) {
-  // Options being compared on the canvas: ?cardtone=navy, ?traytone=navy.
-  const [opt, setOpt] = useState({ cardNavy: false, trayNavy: false });
-  useEffect(() => {
-    const q = new URLSearchParams(window.location.search);
-    setOpt({ cardNavy: q.get("cardtone") === "navy", trayNavy: q.get("traytone") === "navy" });
-  }, []);
   return (
     <div className="flex w-full flex-1 flex-col items-center gap-10 pb-4">
       {/* Edge to edge: cancel the stage's side padding (section px + hero pl)
           and its top padding so the paper runs the full width of the page. */}
-      <div className="-mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
-        <ScoutPostcard {...p} compact wide navy={opt.cardNavy} />
+      <div className="relative -mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
+        <ScoutPostcard {...p} />
+        <div className="mt-6 flex justify-center px-5 md:absolute md:bottom-0 md:right-10 md:mt-0 md:w-[380px] md:translate-y-1/2 md:px-0">
+          <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
+        </div>
       </div>
-      <div className="w-full">
+      <div className="w-full md:pt-24">
         <FindsTray
-          navy={opt.trayNavy}
           finds={p.finds}
           catId={p.catId}
           searchName={p.searchName}
@@ -30599,17 +29916,6 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
       </div>
     </div>
   );
-}
-
-function StageLayout({ variant, ...p }: StageLayoutProps & { variant: string }) {
-  if (variant === "note") return <ScoutNoteCard {...p} />;
-  if (variant === "postcard") return <ScoutPostcard {...p} />;
-  if (variant === "postcard-board") return <ScoutPostcardBoard {...p} />;
-  if (variant === "envelope") return <ScoutEnvelope {...p} />;
-  if (variant === "focus") return <ScoutFocus {...p} />;
-  if (variant === "split") return <ScoutSplit {...p} />;
-  if (variant === "letter") return <ScoutLetter {...p} />;
-  return <ScoutBrief {...p} />;
 }
 
 /* ---------------- Projects tab ----------------

@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, Fraunces, Instrument_Serif, DM_Serif_Display, Space_Grotesk } from "next/font/google";
+import { Inter } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
 import { Pwa } from "./pwa";
@@ -34,14 +34,6 @@ const poster = localFont({
   display: "swap",
   src: [{ path: "./fonts/anton.woff2", weight: "400", style: "normal" }],
 });
-
-// Heading-font preview (?font=fraunces | instrument | dmserif | space |
-// bricolage, see app/pwa.tsx + globals.css). Not preloaded, so pages that
-// don't ask for one never fetch them.
-const fraunces = Fraunces({ subsets: ["latin"], variable: "--font-fraunces", display: "swap", preload: false });
-const instrument = Instrument_Serif({ subsets: ["latin"], weight: "400", variable: "--font-instrument", display: "swap", preload: false });
-const dmSerif = DM_Serif_Display({ subsets: ["latin"], weight: "400", variable: "--font-dmserif", display: "swap", preload: false });
-const spaceGrotesk = Space_Grotesk({ subsets: ["latin"], variable: "--font-space", display: "swap", preload: false });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://scout-source.com"),
@@ -93,7 +85,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html
       lang="en"
-      className={`${sans.variable} ${display.variable} ${poster.variable} ${fraunces.variable} ${instrument.variable} ${dmSerif.variable} ${spaceGrotesk.variable}`}
+      className={`${sans.variable} ${display.variable} ${poster.variable}`}
       suppressHydrationWarning
     >
       <head>
