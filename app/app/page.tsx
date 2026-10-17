@@ -29867,15 +29867,26 @@ function ReplyCard({
   draftingId?: string;
 }) {
   const [over, setOver] = useState(false);
+  const [open, setOpen] = useState(true);
   const [sent, setSent] = useState<string[]>([]);
-  const queued = sent.map((id) => finds.find((f) => f.id === id)).filter(Boolean) as Find[];
+  // The drawer's list is every draft that exists: what you dropped this
+  // session first, then anything already sitting at drafted.
+  const queuedIds = [
+    ...sent,
+    ...finds.filter((f) => f.status === "drafted" && !sent.includes(f.id)).map((f) => f.id),
+  ];
+  const queued = queuedIds.map((id) => finds.find((f) => f.id === id)).filter(Boolean) as Find[];
   return (
-    <div
+    // Not a floating card: a drawer rising out of the bottom bar, its lower
+    // edge off-screen, reading as its own section. The title row collapses it
+    // to just "Drafts" and brings it back up.
+    <section
       id="reply-postcard"
       onDragOver={(e) => {
         if (!onDraft) return;
         e.preventDefault();
         setOver(true);
+        setOpen(true);
       }}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => {
@@ -29886,35 +29897,85 @@ function ReplyCard({
         setSent((ids) => (ids.includes(f.id) ? ids : [f.id, ...ids]));
         onDraft(f);
       }}
-      aria-label="Drop a find on the Drafts postcard to draft it"
-      className={`grid aspect-[3/2] w-full max-w-[380px] grid-cols-2 rounded-[6px] border bg-[rgb(var(--v-sheet))] shadow-[0_20px_40px_-18px_rgba(40,30,20,0.45)] transition ${
-        over ? "scale-[1.03] border-brown" : "border-[rgb(var(--v-line))]"
+      aria-label="Drafts drawer. Drop a find anywhere on it to draft"
+      className={`mx-auto w-full max-w-[1160px] overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-26px_52px_-26px_rgba(40,30,20,0.45)] transition-all duration-500 ease-in-out ${
+        over ? "border-brown" : "border-[rgb(var(--v-line))]"
       }`}
+      style={{ height: open ? "min(56vh, 500px)" : 64 }}
     >
-      <div className="flex flex-col justify-between border-r border-dashed border-[rgb(var(--v-line))] p-5">
-        <div className="font-display text-[30px] font-extrabold leading-none tracking-tight text-ink">Drafts</div>
-        <div className="text-[12px] leading-snug text-body/55">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        className="flex h-16 w-full items-center gap-4 px-6 text-left sm:px-8"
+      >
+        <span className="font-display text-[28px] font-extrabold leading-none tracking-tight text-ink">
+          Drafts
+        </span>
+        <span className="min-w-0 truncate text-[12px] text-body/55">
           {over
             ? "Let go to draft"
             : queued.some((f) => draftingId === f.id)
             ? "Drafting…"
-            : "Drag and drop here to draft your message"}
+            : open
+            ? "Drag a find anywhere on this card"
+            : `${queued.length ? `${queued.length} queued · ` : ""}Click to open`}
+        </span>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden
+          className={`ml-auto shrink-0 text-body/50 transition-transform duration-500 ${open ? "" : "rotate-180"}`}
+        >
+          <path d="m6 9 6 6 6-6" />
+        </svg>
+      </button>
+      <div
+        className={`grid h-[calc(100%-4rem)] grid-cols-1 transition-opacity duration-300 md:grid-cols-2 ${
+          open ? "" : "pointer-events-none opacity-0"
+        }`}
+      >
+        <div className="hidden border-r border-dashed border-[rgb(var(--v-line))] p-6 sm:p-8 md:flex md:flex-col">
+          <div
+            className={`grid flex-1 place-items-center rounded-xl border-2 border-dashed text-sm font-semibold transition ${
+              over
+                ? "border-brown bg-brown-tint/30 text-brown-deep"
+                : "border-[rgb(var(--v-dash))] text-body/45"
+            }`}
+          >
+            Drop a find here
+          </div>
         </div>
-      </div>
-      <div className="flex flex-col p-5">
-        <div className="ml-auto h-10 w-8 rounded-[3px] border border-dashed border-[rgb(var(--v-dash))]" />
-        <div className="mt-auto space-y-2">
-          {[0, 1, 2].map((i) => {
-            const f = queued[i];
-            return (
-              <div key={i} className="h-5 truncate border-b border-[rgb(var(--v-line))] text-[11px] font-semibold leading-5 text-ink">
-                {f ? `${draftingId === f.id ? "… " : f.status === "drafted" ? "✓ " : ""}${f.opp.contactName || f.opp.name}` : ""}
+        <div className="flex min-h-0 flex-col p-6 sm:p-8">
+          <div className="ml-auto h-12 w-10 shrink-0 rounded-[3px] border border-dashed border-[rgb(var(--v-dash))]" />
+          <div className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto">
+            {queued.length === 0 && (
+              <div className="text-[12px] text-body/45">
+                Names land on these lines as you drop finds.
               </div>
-            );
-          })}
+            )}
+            {queued.map((f) => (
+              <div
+                key={f.id}
+                className="truncate border-b border-[rgb(var(--v-line))] pb-1.5 text-[13px] font-semibold text-ink"
+              >
+                {draftingId === f.id
+                  ? "… "
+                  : f.status === "drafted" || f.status === "sent"
+                  ? "✓ "
+                  : ""}
+                {f.opp.contactName || f.opp.name}
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -29940,8 +30001,9 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
           sendingId={p.sendingId}
         />
       </div>
-      {/* Bottom-right corner of the page, just above the footer. */}
-      <div className="mt-auto flex w-full justify-center md:justify-end">
+      {/* Pinned to the viewport bottom while the stage is on screen, rising
+          out of the bottom bar as its own section. */}
+      <div className="sticky bottom-0 z-30 mt-auto w-full px-2 sm:px-6">
         <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
       </div>
     </div>
