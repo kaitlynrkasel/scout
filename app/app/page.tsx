@@ -13547,7 +13547,14 @@ function FindDetailModal({
   };
   // Grid-areas string for the stacked layout, honoring `order`. While editing a
   // draft only info + work are shown, so preview drops out.
-  const stackedAreas = (editingDraft ? order.filter((k) => k !== "preview") : order)
+  // With no preview to show (blocked embed), the pane leaves the layout
+  // entirely and the side sections stretch across the whole page: showing a
+  // card that repeats the rail was pure redundancy.
+  const noPreviewPane = previewFailed && !editingDraft;
+  const stackedAreas = (editingDraft || noPreviewPane
+    ? order.filter((k) => k !== "preview")
+    : order
+  )
     .map((k) => `'${k}'`)
     .join(" ");
   // Drop-target props for a panel (only active in the stacked layout), plus the
@@ -13949,16 +13956,22 @@ function FindDetailModal({
                   gridTemplateAreas: stackedAreas,
                 }
               : {
-                  gridTemplateColumns: "minmax(280px, 340px) 1fr",
-                  gridTemplateRows: editingDraft
-                    ? "minmax(0,1fr)"
-                    : // Contact gets the bigger share: the outreach block below
-                      // is a few buttons until a draft is being edited (which
-                      // takes the whole column anyway).
-                      "minmax(0,1.4fr) minmax(0,0.6fr)",
-                  gridTemplateAreas: editingDraft
-                    ? "'info work'"
-                    : "'info preview' 'work preview'",
+                  gridTemplateColumns: noPreviewPane
+                    ? // No preview pane: the side sections stretch across the
+                      // whole page, contact left, outreach right.
+                      "minmax(320px, 1fr) 1.3fr"
+                    : "minmax(280px, 340px) 1fr",
+                  gridTemplateRows:
+                    editingDraft || noPreviewPane
+                      ? "minmax(0,1fr)"
+                      : // Contact gets the bigger share: the outreach block below
+                        // is a few buttons until a draft is being edited (which
+                        // takes the whole column anyway).
+                        "minmax(0,1.4fr) minmax(0,0.6fr)",
+                  gridTemplateAreas:
+                    editingDraft || noPreviewPane
+                      ? "'info work'"
+                      : "'info preview' 'work preview'",
                 }
           }
         >
@@ -14223,7 +14236,7 @@ function FindDetailModal({
           <div
             style={{ gridArea: "preview", ...(narrow ? { height: "80vh" } : {}) }}
             {...dropProps("preview")}
-            className={`${editingDraft ? "hidden" : "flex"} ${
+            className={`${editingDraft || noPreviewPane ? "hidden" : "flex"} ${
               narrow ? "border-t border-warm-border" : "h-full"
             } min-h-0 flex-col p-5`}
           >
