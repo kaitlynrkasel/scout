@@ -29642,12 +29642,14 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
  * stamp in the corner sends it. */
 function ScoutPostcard(p: StageLayoutProps) {
   const g = useGoalPoints(p.goal, p.onGoal);
-  // Left-half design under comparison on the canvas: ?front=tabs | label |
-  // postmark. Default is the current picker + pill + round stamp.
-  const [front, setFront] = useState("");
+  // The left half is the ruled "label" front (Project / Search on lines, the
+  // logo stamp to send). Other fronts stay comparable on the canvas:
+  // ?front=classic (picker + pill) | tabs | postmark.
+  const [front, setFront] = useState("label");
   useEffect(() => {
     const v = new URLSearchParams(window.location.search).get("front");
-    if (v === "tabs" || v === "label" || v === "postmark") setFront(v);
+    if (v === "classic") setFront("");
+    else if (v === "tabs" || v === "label" || v === "postmark") setFront(v);
   }, []);
   if (front) return <ScoutPostcardShell p={p} g={g} left={<PostcardFront variant={front} p={p} />} />;
   return (
@@ -29810,31 +29812,22 @@ function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps })
   if (variant === "label")
     return (
       <>
-        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Postcard</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
         <div className="space-y-1">
           <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3">
-            <span className="w-10 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">From</span>
+            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Project</span>
             <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
               className="font-display text-[34px] font-extrabold leading-tight tracking-tight text-ink sm:text-[44px]" />
           </div>
           <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3 pt-2">
-            <span className="w-10 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Re</span>
+            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Search</span>
             <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
               className="font-display text-[24px] font-bold tracking-tight text-brown sm:text-[28px]" />
           </div>
         </div>
         <div className="flex items-end justify-between gap-6">
           {links}
-          <button
-            data-guide="start"
-            onClick={p.onRun}
-            disabled={p.runDisabled}
-            className="group/go -rotate-3 rounded-[6px] border-[3px] border-double border-brown px-4 py-2 text-brown transition hover:rotate-0 hover:bg-brown hover:text-[rgb(var(--v-ontab))] disabled:opacity-50"
-          >
-            <span className="flex items-center gap-2 font-display text-[18px] font-extrabold uppercase tracking-[0.12em]">
-              {p.runLabel === "Scout" ? "Scout it" : p.runLabel}
-            </span>
-          </button>
+          <StampButton p={p} size={88} />
         </div>
       </>
     );
