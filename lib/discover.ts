@@ -1393,7 +1393,14 @@ async function extract(
     `set is_relevant false. ` +
     `PRIVATE INDIVIDUALS: never extract a private person in a personal-life moment (a bride/engaged couple, new parent, ` +
     `patient, homebuyer) found via social groups, forums, or personal posts — that is not a legitimate outreach target; ` +
-    `set is_relevant false. Professionals, businesses, organizations, and public-facing creators are valid targets. `;
+    `set is_relevant false. Professionals, businesses, organizations, and public-facing creators are valid targets. ` +
+    `SCAM SCREEN: set is_relevant false with deny reason "scam signals" when the source shows classic scam or predatory ` +
+    `patterns: asking the APPLICANT/ARTIST to pay anything (application fee, training or equipment cost, submission fee ` +
+    `beyond a disclosed standard platform fee, "pay to play"), recruiting framed around buying in or recruiting others ` +
+    `(MLM), pay wildly out of line with the role ("$8k/week from home, no experience"), payment via crypto/wire/gift ` +
+    `cards, a corporation whose only contact is a personal gmail/outlook address, or a "company" with no findable site ` +
+    `or identity beyond the posting itself. Note the specific red flag in the reason. Ordinary unpaid internships, ` +
+    `volunteer roles, and sites that are merely sparse are NOT scams; flag only concrete signals, never vibes. `;
 
   // Fit / alignment section, this is the part that differs by mode.
   const jobsRules =
