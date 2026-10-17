@@ -26136,6 +26136,26 @@ function TemplatesTab({
   // out the recipient-specific details, leaving a reusable skeleton in the box.
   const [cleaning, setCleaning] = useState(false);
   const [cleanErr, setCleanErr] = useState("");
+  // Flex spans: highlight part of the template and mark it «free for Scout
+  // to adapt» per find; everything unmarked stays the sender's exact words.
+  const taRef = useRef<HTMLTextAreaElement | null>(null);
+  const [flexHint, setFlexHint] = useState("");
+  const markFlex = () => {
+    const ta = taRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart ?? 0;
+    const e2 = ta.selectionEnd ?? 0;
+    if (s === e2) {
+      setFlexHint("Select the words Scout may adapt, then press the highlighter.");
+      return;
+    }
+    const sel = text.slice(s, e2);
+    const next = /[«»]/.test(sel)
+      ? text.slice(0, s) + sel.replace(/[«»]/g, "") + text.slice(e2)
+      : text.slice(0, s) + "«" + sel + "»" + text.slice(e2);
+    setText(next);
+    setFlexHint("");
+  };
   async function templatize() {
     const raw = text.trim();
     if (!raw || cleaning) return;
@@ -26306,6 +26326,7 @@ function TemplatesTab({
               <MicButton value={text} onChange={setText} />
             </div>
             <textarea
+              ref={taRef}
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
@@ -26356,11 +26377,48 @@ function TemplatesTab({
                 </svg>
                 {cleaning ? "Cleaning up…" : "Clean into a template"}
               </button>
+              <button
+                type="button"
+                onClick={markFlex}
+                title="Select words in the box, then press this: Scout may rewrite ONLY the highlighted parts per find (like turning 'this playlist' into its real name). Press again on a marked part to unmark it."
+                className="inline-flex items-center gap-1.5 rounded-lg border border-brown/40 bg-brown-tint/40 px-3 py-1.5 text-xs font-bold text-brown-deep transition hover:bg-brown-tint"
+              >
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <path d="m9 11-6 6v3h3l6-6" />
+                  <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+                </svg>
+                Scout may edit
+              </button>
               <span className="text-[11px] leading-snug text-body/70">
                 Pasted a real email? Scout strips the recipient&apos;s name, company, and
                 one-off details, leaving reusable placeholders.
               </span>
             </div>
+            {flexHint && (
+              <p className="mt-2 text-xs font-semibold text-brown">{flexHint}</p>
+            )}
+            {text.includes("«") && (
+              <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-3">
+                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-body/45">
+                  What Scout may adapt per find
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+                  {text.split(/(«[^»]*»)/g).map((part, i) =>
+                    part.startsWith("«") ? (
+                      <span key={i} className="rounded bg-[#EFD9A7] px-0.5 text-brown-deep">
+                        {part.slice(1, -1)}
+                      </span>
+                    ) : (
+                      <span key={i}>{part}</span>
+                    )
+                  )}
+                </p>
+                <p className="mt-1.5 text-[11px] text-body/55">
+                  Highlighted parts are rewritten to fit each find; everything else
+                  stays your exact words.
+                </p>
+              </div>
+            )}
             {cleanErr && (
               <p className="mt-2 text-xs font-semibold text-accent">{cleanErr}</p>
             )}

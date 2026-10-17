@@ -65,8 +65,18 @@ function templateBlock(
       "one that fits this channel closely, its tone, warmth, structure, and rough length, and fill " +
       "every placeholder / example slot with specifics for THIS recipient (never leave 'a) b) c)' " +
       "or '[insert ...]'). Adapt every detail to THIS recipient:\n";
+  // Flex spans: the sender highlighted exactly which parts Scout may adapt.
+  const hasFlex = use.some((s) => /«[^»]*»/.test(s.text));
+  const flexRule = hasFlex
+    ? "\nFLEX SPANS: text wrapped in «…» is the ONLY part the sender marked as freely adaptable. " +
+      "Rewrite each «…» span to fit THIS recipient precisely (e.g. «this playlist» becomes the " +
+      "playlist's actual name, «this song» the specific track that fits them). Everything OUTSIDE " +
+      "«…» must stay in the sender's own words, apart from bracketed placeholders. Never print the " +
+      "« » marks in the final message.\n"
+    : "";
   return (
     header +
+    flexRule +
     use
       .map((s, i) => `${i + 1}. [${s.channel}] ${s.text.replace(/\s+/g, " ").trim()}`)
       .join("\n\n")
