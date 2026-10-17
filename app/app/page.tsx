@@ -8379,10 +8379,14 @@ function ScoutTool({
             {profileComplete || guest ? (
             <section
               onMouseMove={handleFieldGlow}
-              className={`scout-stage px-5 pb-10 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
+              className={`scout-stage px-5 pt-8 sm:px-8 sm:pt-10 xl:px-12 ${
                 stageHasWorkBelow && !postcardStage
-                  ? "xl:sticky xl:top-0 xl:h-auto xl:min-h-screen xl:pr-8"
-                  : "flex flex-1"
+                  ? "pb-10 xl:sticky xl:top-0 xl:h-auto xl:min-h-screen xl:pr-8"
+                  : postcardStage
+                  ? // No bottom padding: the Drafts column's lower edge must
+                    // run straight into the footer bar.
+                    "flex flex-1 pb-0"
+                  : "flex flex-1 pb-10"
               }`}
             >
               {/* Two shapes for one composer. Alone on the screen it sits as a
@@ -29754,8 +29758,8 @@ function FindsTray({
       </button>
 
       {!collapsed && (
-        <div id="finds-tray-body" className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="grid content-start gap-2.5 sm:grid-cols-2">
+        <div id="finds-tray-body" className="mt-5 grid items-stretch gap-6 md:min-h-[440px] md:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="grid content-start gap-2.5 pb-10 sm:grid-cols-2">
             {fresh.length === 0 && (
               <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-5 py-10 text-center text-sm text-body/45 sm:col-span-2">
                 Send Scout and the finds for this search land here.
@@ -29794,9 +29798,10 @@ function FindsTray({
           </div>
 
           {/* The Drafts column: a tall postcard panel on the board's right,
-              per the sketch. Its bottom edge runs past the section padding
-              into the footer bar, so the card never shows a bottom edge; the
-              title row collapses it to just the header. */}
+              per the sketch. It is anchored to the BOTTOM of its lane, so its
+              lower edge sits on the footer bar and collapsing slides it DOWN
+              into the bar, leaving just the title; opening grows it upward. */}
+          <div className="flex flex-col justify-end">
           <aside
             id="reply-postcard"
             onDragOver={(e) => {
@@ -29813,9 +29818,10 @@ function FindsTray({
               if (f && onDraft) onDraft(f);
             }}
             aria-label="Drafts column. Drop a find anywhere on it to draft"
-            className={`-mb-14 flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-22px_44px_-26px_rgba(40,30,20,0.4)] transition ${
+            style={{ height: draftsOpen ? "100%" : 64 }}
+            className={`flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-22px_44px_-26px_rgba(40,30,20,0.4)] transition-all duration-500 ease-in-out ${
               over ? "border-brown" : "border-[rgb(var(--v-line))]"
-            } ${draftsOpen ? "" : "self-start"}`}
+            }`}
           >
             <button
               onClick={() => setDraftsOpen((v) => !v)}
@@ -29929,6 +29935,7 @@ function FindsTray({
             </div>
             )}
           </aside>
+          </div>
         </div>
       )}
     </section>
@@ -29937,7 +29944,7 @@ function FindsTray({
 
 function ScoutPostcardBoard(p: StageLayoutProps) {
   return (
-    <div className="flex w-full flex-1 flex-col items-center gap-10 pb-4">
+    <div className="flex w-full flex-1 flex-col items-center gap-10 pb-0">
       {/* Edge to edge: cancel the stage's side padding (section px + hero pl)
           and its top padding so the paper runs the full width of the page. */}
       <div className="relative -mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
