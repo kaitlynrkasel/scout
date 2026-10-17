@@ -26231,7 +26231,22 @@ function TemplatesTab({
     new Set(teamRows.map((r: any) => String(r.added_email || "")).filter(Boolean))
   );
   const emShort = (e: string) => (e || "").split("@")[0] || e;
-  const myShown = list
+  // ?demo=templates shows sample templates on an empty account so layouts can
+  // be judged on the canvas. Display only: never saved.
+  const [demoTpls, setDemoTpls] = useState(false);
+  useEffect(() => {
+    setDemoTpls(new URLSearchParams(window.location.search).get("demo") === "templates");
+  }, []);
+  const listShown: OutreachTemplate[] =
+    demoTpls && list.length === 0
+      ? [
+          { id: "demo-t1", channel: "Email", text: "Hi «first name»,\n\nI've been listening to «their playlist» on repeat. I make warm, slow-burning folk, and I think «my new single» would sit right beside «a song they featured».\n\nWould you be open to a listen? No pressure either way.\n\nThanks so much,\nSam" } as OutreachTemplate,
+          { id: "demo-t2", channel: "Email", text: "Hi «first name», quick one: «why them in one line». I'd love 15 minutes to ask how you got started. Coffee's on me.\n\nSam" } as OutreachTemplate,
+          { id: "demo-t3", channel: "Instagram DM", text: "hey! been loving «their recent post» 🤍 I just put out «my song», think it might be your vibe. totally fine if not!" } as OutreachTemplate,
+          { id: "demo-t4", channel: "LinkedIn message", text: "Hi «first name», I admire the work «their team» is doing on «project». I'm exploring roles in «field» and would value 15 minutes of your perspective." } as OutreachTemplate,
+        ]
+      : list;
+  const myShown = listShown
     .filter((t) => !fltChannel || t.channel === fltChannel)
     .filter(() => !fltPerson || fltPerson === (accountEmail || ""));
   // The tab reads in two halves: outreach, then application materials
@@ -26251,58 +26266,33 @@ function TemplatesTab({
     const cat = categories.find((c) => c.id === t.categoryId);
     return `${projName} · ${cat?.name || "a category"}`;
   };
-  return (
-    <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
-      <div className="kicker mb-2">Your voice</div>
-      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
-        Your <span className="text-brown">templates</span>
-      </h1>
+  // Outreach layout under comparison on the canvas: ?tpl=drawer | desk.
+  const [tplLayout, setTplLayout] = useState("");
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get("tpl");
+    if (v === "drawer" || v === "desk") setTplLayout(v);
+  }, []);
+  const outreachKinds = kinds.filter((k) => k !== "Cover letter");
+  const kindTpls = (k: string) => myOutreach.filter((t) => t.channel === k);
+  // Pick a kind: open its first saved template, or a blank one to write.
+  const openKind = (k: string) => {
+    const first = kindTpls(k)[0];
+    if (first) startEdit(first);
+    else {
+      setEditingId("");
+      setText("");
+      setChannel(k);
+    }
+  };
 
-      {/* Voice dials: the whole-voice controls sit above the per-template
-          builder, since they steer every draft regardless of template. */}
-      <VoiceDials />
-
-      {/* Team lens: templates are a communal library, same treatment as Finds. */}
-      {teamName && (
-        <div className="mt-5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <span className="font-extrabold text-ink">Shared templates</span>
-            <span className="text-body/80">
-              You&apos;re on the <span className="font-semibold">{teamName}</span> lens:
-              templates you save here are published to the team&apos;s library, and
-              teammates&apos; templates appear below with their name on them.
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Page toggle: three rooms, no scrolling between them. */}
-      <div data-guide="tpl-pages" className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
-        {(
-          [
-            ["outreach", "Outreach"],
-            ["materials", "Application materials"],
-            ["signatures", "Email signatures"],
-          ] as const
-        ).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => setTView(v)}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-              tView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tView === "outreach" && (<>
-      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
-        <div className="grid gap-5 sm:grid-cols-[210px_1fr] [&>*]:min-w-0">
+  // Pieces shared by the default layout and the ?tpl= layouts below.
+  const renderComposer = (
+    hideKind = false,
+    sectionClass = "mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8"
+  ) => (
+      <section className={sectionClass}>
+        <div className={hideKind ? "grid gap-5" : "grid gap-5 sm:grid-cols-[210px_1fr] [&>*]:min-w-0"}>
+          {!hideKind && (
           <div>
             <Label>Kind of outreach</Label>
             <select
@@ -26320,6 +26310,7 @@ function TemplatesTab({
               Scout drafts this kind of message in the style you show it here.
             </p>
           </div>
+          )}
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
               <Label className="mb-0">Show us how you write it</Label>
@@ -26578,7 +26569,206 @@ function TemplatesTab({
           )}
         </div>
       </section>
+  );
+  const renderTplCard = (s: OutreachTemplate) => (
+              <div
+                key={s.id}
+                className={`rounded-2xl border p-5 shadow-card transition ${
+                  editingId === s.id
+                    ? "border-coral/50 bg-warm-bg/40"
+                    : "border-warm-border bg-surface"
+                }`}
+              >
+                <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                  <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
+                    {s.channel}
+                  </span>
+                  <span
+                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
+                      s.projectId
+                        ? "border-sage/50 bg-sage/10 text-sage"
+                        : "border-warm-border bg-warm-bg text-body/70"
+                    }`}
+                  >
+                    {scopeLabel(s)}
+                  </span>
+                  <span className="ml-auto flex items-center gap-3">
+                    <button
+                      onClick={() => startEdit(s)}
+                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
+                    >
+                      {editingId === s.id ? "Editing…" : "Edit"}
+                    </button>
+                    <button
+                      onClick={() => remove(s.id)}
+                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
+                    >
+                      Remove
+                    </button>
+                  </span>
+                </div>
+                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
+                  {s.text}
+                </pre>
+              </div>
+  );
 
+  return (
+    <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
+      <div className="kicker mb-2">Your voice</div>
+      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+        Your <span className="text-brown">templates</span>
+      </h1>
+
+      {/* Voice dials: the whole-voice controls sit above the per-template
+          builder, since they steer every draft regardless of template. */}
+      {!(tplLayout && tView === "outreach") && <VoiceDials />}
+
+      {/* Team lens: templates are a communal library, same treatment as Finds. */}
+      {teamName && (
+        <div className="mt-5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+            </svg>
+            <span className="font-extrabold text-ink">Shared templates</span>
+            <span className="text-body/80">
+              You&apos;re on the <span className="font-semibold">{teamName}</span> lens:
+              templates you save here are published to the team&apos;s library, and
+              teammates&apos; templates appear below with their name on them.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Page toggle: three rooms, no scrolling between them. */}
+      <div data-guide="tpl-pages" className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
+        {(
+          [
+            ["outreach", "Outreach"],
+            ["materials", "Application materials"],
+            ["signatures", "Email signatures"],
+          ] as const
+        ).map(([v, label]) => (
+          <button
+            key={v}
+            onClick={() => setTView(v)}
+            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
+              tView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tView === "outreach" && tplLayout === "drawer" && (
+        <>
+          {/* Stationery drawer: one paper card per kind of message, yours on
+              top; empty kinds are blank cards waiting to be written. */}
+          <div className="flex gap-4 overflow-x-auto px-1 pb-6 pt-2">
+            {outreachKinds.map((k, i) => {
+              const tpls = kindTpls(k);
+              const on = channel === k;
+              return (
+                <button
+                  key={k}
+                  onClick={() => openKind(k)}
+                  style={{ transform: on ? "translateY(-8px)" : `rotate(${i % 2 ? 1 : -1}deg)` }}
+                  className={`flex aspect-[3/4] w-44 shrink-0 flex-col rounded-[4px] border bg-[rgb(var(--v-sheet))] p-4 text-left transition hover:-translate-y-1 ${
+                    on
+                      ? "border-brown shadow-[0_18px_34px_-18px_rgba(40,30,20,0.55)]"
+                      : tpls.length
+                      ? "border-[rgb(var(--v-line))] shadow-[0_10px_24px_-16px_rgba(40,30,20,0.45)]"
+                      : "border-dashed border-[rgb(var(--v-dash))]"
+                  }`}
+                >
+                  <span className="font-display text-[17px] font-bold leading-tight tracking-tight text-ink">{k}</span>
+                  <span className="mt-0.5 text-[11px] font-semibold text-body/45">
+                    {tpls.length ? `${tpls.length} ${tpls.length === 1 ? "template" : "templates"}` : "None yet"}
+                  </span>
+                  {tpls.length ? (
+                    <span className="mt-3 line-clamp-6 text-[11px] leading-relaxed text-body/70">{tpls[0].text}</span>
+                  ) : (
+                    <span className="mt-auto space-y-2">
+                      <span className="block border-b border-[rgb(var(--v-line))]" />
+                      <span className="block border-b border-[rgb(var(--v-line))]" />
+                      <span className="block pt-1 text-[12px] font-semibold text-brown">Write one →</span>
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+            <div className="min-w-0">
+              <div className="flex items-baseline gap-3">
+                <h2 className="font-display text-2xl font-bold tracking-tight text-ink">{channel}</h2>
+                <span className="text-sm text-body/50">{editingId ? "Editing a saved template" : "New template"}</span>
+              </div>
+              {renderComposer(true, "mt-4 rounded-[6px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] p-5 shadow-soft sm:p-8")}
+              {kindTpls(channel).length > 1 && (
+                <div className="mt-6 space-y-3">
+                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">All {channel} templates</div>
+                  {kindTpls(channel).map((t) => renderTplCard(t))}
+                </div>
+              )}
+            </div>
+            <div className="xl:sticky xl:top-6 [&>section]:mt-0">
+              <VoiceDials />
+            </div>
+          </div>
+        </>
+      )}
+
+      {tView === "outreach" && tplLayout === "desk" && (
+        <div className="grid items-start gap-8 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_340px]">
+          {/* Writing desk: an index of kinds down the left ... */}
+          <nav aria-label="Kinds of message" className="lg:sticky lg:top-6">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Kinds</div>
+            {outreachKinds.map((k) => {
+              const n = kindTpls(k).length;
+              const on = channel === k;
+              return (
+                <button
+                  key={k}
+                  onClick={() => openKind(k)}
+                  className={`flex w-full items-baseline justify-between border-l-2 py-2 pl-3 pr-1 text-left text-[14px] transition ${
+                    on ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+                  }`}
+                >
+                  <span className="truncate">{k}</span>
+                  <span className="text-[11px] tabular-nums text-body/40">{n || ""}</span>
+                </button>
+              );
+            })}
+          </nav>
+          {/* ... one letter sheet in the middle ... */}
+          <div className="min-w-0">
+            <div className="rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] px-6 pb-8 pt-7 shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] sm:px-10">
+              <div className="flex items-baseline justify-between gap-3 border-b-2 border-dashed border-[rgb(var(--v-line))] pb-4">
+                <h2 className="font-display text-[34px] font-extrabold leading-none tracking-tight text-ink">{channel}</h2>
+                <span className="text-[12px] text-body/45">{editingId ? "Editing" : "New"}</span>
+              </div>
+              {renderComposer(true, "mt-5 [&_textarea]:min-h-[220px] [&_textarea]:border-0 [&_textarea]:bg-transparent [&_textarea]:px-0 [&_textarea]:text-[15px] [&_textarea]:leading-[1.9] [&_textarea]:shadow-none [&_textarea]:focus:ring-0")}
+            </div>
+            {kindTpls(channel).length > 0 && (
+              <div className="mt-6 space-y-3">
+                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Saved {channel} templates</div>
+                {kindTpls(channel).map((t) => renderTplCard(t))}
+              </div>
+            )}
+          </div>
+          {/* ... and the voice dials in the margin, like editing notes. */}
+          <aside className="lg:col-span-2 xl:sticky xl:top-6 xl:col-span-1 [&>section]:mt-0 [&>section]:bg-transparent [&>section]:shadow-none">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Margin notes</div>
+            <VoiceDials />
+          </aside>
+        </div>
+      )}
+
+      {tView === "outreach" && !tplLayout && (<>
+      {renderComposer()}
       <section className="mt-8">
         <div className="mb-4 flex flex-wrap items-center gap-2">
           <h2 className="text-lg font-bold text-ink">
@@ -26671,48 +26861,7 @@ function TemplatesTab({
                 No templates match your filters.
               </div>
             )}
-            {myOutreach.map((s) => (
-              <div
-                key={s.id}
-                className={`rounded-2xl border p-5 shadow-card transition ${
-                  editingId === s.id
-                    ? "border-coral/50 bg-warm-bg/40"
-                    : "border-warm-border bg-surface"
-                }`}
-              >
-                <div className="mb-2.5 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                    {s.channel}
-                  </span>
-                  <span
-                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                      s.projectId
-                        ? "border-sage/50 bg-sage/10 text-sage"
-                        : "border-warm-border bg-warm-bg text-body/70"
-                    }`}
-                  >
-                    {scopeLabel(s)}
-                  </span>
-                  <span className="ml-auto flex items-center gap-3">
-                    <button
-                      onClick={() => startEdit(s)}
-                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
-                    >
-                      {editingId === s.id ? "Editing…" : "Edit"}
-                    </button>
-                    <button
-                      onClick={() => remove(s.id)}
-                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
-                    >
-                      Remove
-                    </button>
-                  </span>
-                </div>
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
-                  {s.text}
-                </pre>
-              </div>
-            ))}
+            {myOutreach.map((s) => renderTplCard(s))}
           </Reveal>
         )}
       </section>
