@@ -19477,9 +19477,7 @@ function FindWorkflow({
                     Draft personalizes it for {find.opp.name}
                   </span>
                 </div>
-                <pre className="max-h-44 overflow-y-auto whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
-                  {t.text}
-                </pre>
+                <FlexTemplatePreview text={t.text} find={find} />
               </div>
             );
           })()}
@@ -29820,6 +29818,84 @@ function demoFinds(catId: string): Find[] {
     } as unknown as Opportunity,
   }));
 }
+/* A template as it will read for THIS find: every «flex span» is swapped for
+ * the version Scout would write for them (fetched once per find+template) and
+ * highlighted, so the change is visible before drafting. Unmarked text is the
+ * sender's exact words and never leaves the page. */
+function FlexTemplatePreview({ text, find }: { text: string; find: Find }) {
+  const parts = text.split(/(«[^»]*»)/g);
+  const hasFlex = parts.some((p) => p.startsWith("«"));
+  const [fills, setFills] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!hasFlex) return;
+    let live = true;
+    setFills(null);
+    setBusy(true);
+    (async () => {
+      try {
+        const token = supabase ? (await supabase.auth.getSession()).data.session?.access_token : "";
+        const r = await fetch("/api/flex-preview", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...(token ? { authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            template: text,
+            find: {
+              name: find.opp.name,
+              outlet: find.opp.outlet,
+              role: find.opp.contactRole,
+              why: find.opp.whyItFits,
+              criteria: find.opp.criteria || [],
+            },
+          }),
+        });
+        const j = await r.json().catch(() => ({}));
+        if (live && Array.isArray(j.spans)) setFills(j.spans);
+      } catch {
+        /* preview is a nicety; the raw highlighted template still shows */
+      } finally {
+        if (live) setBusy(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [text, find.id]);
+  let k = 0;
+  return (
+    <div>
+      <p className="max-h-44 overflow-y-auto whitespace-pre-wrap text-sm leading-relaxed text-body">
+        {parts.map((p, i) => {
+          if (!p.startsWith("«")) return <span key={i}>{p}</span>;
+          const idx = k++;
+          const orig = p.slice(1, -1);
+          const swapped = fills?.[idx];
+          return (
+            <span
+              key={i}
+              title={swapped && swapped !== orig ? `Your template says: ${orig}` : "Scout adapts this part"}
+              className={`rounded px-0.5 ${busy ? "animate-pulse" : ""} bg-[#EFD9A7] text-brown-deep`}
+            >
+              {swapped || orig}
+            </span>
+          );
+        })}
+      </p>
+      {hasFlex && (
+        <p className="mt-1.5 text-[11px] text-body/55">
+          {busy
+            ? "Fitting the highlighted parts to this find…"
+            : "Highlighted parts are fitted to this find; hover one to see your original wording."}
+        </p>
+      )}
+    </div>
+  );
+}
+
 /* Why-it-fits, condensed: two lines by default, More unfolds. The chips cap
  * at three short ones with a +N that unfolds the rest, so an expanded find
  * reads at a glance instead of as a wall of sentences. */
