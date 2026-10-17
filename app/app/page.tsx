@@ -6091,7 +6091,7 @@ function ScoutTool({
             // Use each find's own template scope where possible; fall back to
             // the active project's templates for the batch.
             templates: templatesFor(activeId, catId),
-            coaching: [...coaching, ...voiceDialLines()],
+            coaching,
             dismissedAdvice,
             editPairs,
             signature: signatureFor(activeId),
@@ -6503,7 +6503,7 @@ function ScoutTool({
           outlet: find.opp.outlet,
           about: aboutText,
           useCase: activeUseCase,
-          coaching: [...coaching, ...voiceDialLines()],
+          coaching,
           dismissedAdvice,
           editPairs,
         }),
@@ -6625,7 +6625,7 @@ function ScoutTool({
               : [];
             return chosen.length ? chosen : pool;
           })(),
-          coaching: [...coaching, ...voiceDialLines()],
+          coaching,
           dismissedAdvice,
           editPairs,
           signature: signatureFor(f.projectId),
@@ -7768,7 +7768,7 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
-          coaching: [...coaching, ...voiceDialLines()],
+          coaching,
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
@@ -7908,7 +7908,7 @@ function ScoutTool({
           about: aboutText,
           useCase: activeUseCase,
           templates: templatesFor(activeId, catId),
-          coaching: [...coaching, ...voiceDialLines()],
+          coaching,
           dismissedAdvice,
           editPairs,
           signature: signatureFor(activeId),
@@ -16083,181 +16083,6 @@ function ListingPaste({
         </div>
       </div>
     </div>
-  );
-}
-
-/* ---------------- Voice dials ----------------
- * The brand-spectrum pattern she liked, made functional: four dials between
- * word pairs set the drafting voice. Each off-center dial becomes a coaching
- * line the draft engine already honors, so the dots change real output. */
-const VOICE_DIALS: { key: string; left: string; right: string; lines: [string, string] }[] = [
-  { key: "warmth", left: "Warm", right: "Direct", lines: ["Lean warm and friendly in tone.", "Be direct and to the point; skip pleasantries."] },
-  { key: "length", left: "Brief", right: "Detailed", lines: ["Keep messages extra short, a few sentences.", "Give a little more context and detail than usual."] },
-  { key: "register", left: "Casual", right: "Formal", lines: ["Write casually, like texting a friendly colleague.", "Keep the register polished and professional."] },
-  { key: "confidence", left: "Humble", right: "Confident", lines: ["Stay humble and low-pressure in the ask.", "Be confident and specific about the value offered."] },
-];
-const VOICE_DIALS_KEY = "scout_voice_dials";
-function loadVoiceDials(): Record<string, number> {
-  try {
-    const raw = JSON.parse(localStorage.getItem(VOICE_DIALS_KEY) || "{}");
-    return typeof raw === "object" && raw ? raw : {};
-  } catch {
-    return {};
-  }
-}
-// The dials' current coaching lines (center = silent). Read at draft time.
-function voiceDialLines(): string[] {
-  const v = loadVoiceDials();
-  const out: string[] = [];
-  for (const d of VOICE_DIALS) {
-    const x = typeof v[d.key] === "number" ? v[d.key] : 2;
-    if (x <= 1) out.push((x === 0 ? "Strongly: " : "") + d.lines[0]);
-    if (x >= 3) out.push((x === 4 ? "Strongly: " : "") + d.lines[1]);
-  }
-  return out;
-}
-function VoiceDials() {
-  const [vals, setVals] = useState<Record<string, number>>({});
-  // Live drag position (float 0..4) so the dot and glow follow the pointer
-  // smoothly; it snaps to the nearest stop and saves on release.
-  const [drag, setDrag] = useState<{ key: string; x: number } | null>(null);
-  useEffect(() => {
-    setVals(loadVoiceDials());
-  }, []);
-  const set = (k: string, x: number) => {
-    const next = { ...vals, [k]: x };
-    setVals(next);
-    try {
-      localStorage.setItem(VOICE_DIALS_KEY, JSON.stringify(next));
-    } catch {}
-  };
-  const ROW_H = 56;
-  const PAD_X = 10; // percent inset for the first/last stop
-  const xPct = (stop: number) => PAD_X + (stop * (100 - 2 * PAD_X)) / 4;
-  const val = (k: string) => (typeof vals[k] === "number" ? vals[k] : 2);
-  // What the row currently SHOWS: the drag float while dragging, else the stop.
-  const shown = (k: string) => (drag && drag.key === k ? drag.x : val(k));
-  const floatFromPointer = (clientX: number, el: HTMLElement) => {
-    const r = el.getBoundingClientRect();
-    const pct = ((clientX - r.left) / Math.max(1, r.width)) * 100;
-    return Math.min(4, Math.max(0, ((pct - PAD_X) / (100 - 2 * PAD_X)) * 4));
-  };
-  return (
-    <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
-      <h2 className="text-base font-extrabold tracking-tight text-ink">Voice dials</h2>
-      <p className="mt-1 max-w-[62ch] text-sm leading-relaxed text-body">
-        Where your outreach sits between each pair. The dots steer every draft;
-        center means no push either way.
-      </p>
-      <div className="relative mt-5" style={{ height: VOICE_DIALS.length * ROW_H }}>
-        {/* The glow path through the dots, drawn behind the rows. Two layered
-            strokes (one wide and faint, one tighter) read as one soft wash
-            instead of a hard blurred rope. Follows the drag live. */}
-        <svg
-          aria-hidden
-          className="pointer-events-none absolute inset-0 h-full w-full"
-          preserveAspectRatio="none"
-          viewBox={`0 0 100 ${VOICE_DIALS.length * ROW_H}`}
-        >
-          {([
-            [30, 0.18, 18],
-            [14, 0.3, 9],
-          ] as const).map(([w, o, blur], li) => (
-            <polyline
-              key={li}
-              points={VOICE_DIALS.map((d, i) => `${xPct(0) + (shown(d.key) * (100 - 2 * PAD_X)) / 4},${i * ROW_H + ROW_H / 2}`).join(" ")}
-              fill="none"
-              stroke={`rgb(199 160 118 / ${o})`}
-              strokeWidth={w}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ filter: `blur(${blur}px)` }}
-            />
-          ))}
-        </svg>
-        {VOICE_DIALS.map((d, i) => {
-          const x = shown(d.key);
-          const dragging = drag?.key === d.key;
-          return (
-          <div
-            key={d.key}
-            className="absolute inset-x-0 flex items-center gap-3"
-            style={{ top: i * ROW_H, height: ROW_H }}
-          >
-            <span
-              className={`w-24 shrink-0 text-right text-[11px] font-bold uppercase tracking-wider ${
-                val(d.key) <= 1 ? "text-brown-deep" : "text-body/45"
-              }`}
-            >
-              {d.left}
-            </span>
-            {/* The whole track is the control: press anywhere and the dot
-                comes to you; drag and it follows; release and it snaps to
-                the nearest stop. Arrow keys nudge it too. */}
-            <div
-              role="slider"
-              tabIndex={0}
-              aria-label={`${d.left} to ${d.right}`}
-              aria-valuemin={0}
-              aria-valuemax={4}
-              aria-valuenow={val(d.key)}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowLeft") set(d.key, Math.max(0, val(d.key) - 1));
-                if (e.key === "ArrowRight") set(d.key, Math.min(4, val(d.key) + 1));
-              }}
-              onPointerDown={(e) => {
-                e.currentTarget.setPointerCapture(e.pointerId);
-                setDrag({ key: d.key, x: floatFromPointer(e.clientX, e.currentTarget) });
-              }}
-              onPointerMove={(e) => {
-                if (drag?.key === d.key)
-                  setDrag({ key: d.key, x: floatFromPointer(e.clientX, e.currentTarget) });
-              }}
-              onPointerUp={(e) => {
-                const x2 = floatFromPointer(e.clientX, e.currentTarget);
-                set(d.key, Math.round(x2));
-                setDrag(null);
-              }}
-              onPointerCancel={() => setDrag(null)}
-              className="relative h-full min-w-0 flex-1 cursor-grab touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brown/40 active:cursor-grabbing"
-            >
-              <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-ink/25" />
-              {[0, 1, 2, 3, 4].map((stop) => (
-                <span
-                  key={stop}
-                  aria-hidden
-                  className="pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                  style={{ left: `${xPct(stop)}%`, background: "rgb(var(--c-ink) / 0.3)" }}
-                />
-              ))}
-              {/* The thumb, riding the float while dragging. */}
-              <span
-                aria-hidden
-                className={`pointer-events-none absolute top-1/2 h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full ${
-                  dragging ? "" : "transition-all duration-200"
-                }`}
-                style={{
-                  left: `${PAD_X + (x * (100 - 2 * PAD_X)) / 4}%`,
-                  background: "rgb(var(--c-ink))",
-                  boxShadow: "0 0 0 6px rgb(199 160 118 / 0.45)",
-                }}
-              />
-            </div>
-            <span
-              className={`w-24 shrink-0 text-[11px] font-bold uppercase tracking-wider ${
-                val(d.key) >= 3 ? "text-brown-deep" : "text-body/45"
-              }`}
-            >
-              {d.right}
-            </span>
-          </div>
-          );
-        })}
-      </div>
-      <p className="mt-3 text-[11px] text-body/50">
-        Saved on this device and applied to every new draft.
-      </p>
-    </section>
   );
 }
 
@@ -26075,7 +25900,7 @@ function TemplatesTab({
   const [newTplCat, setNewTplCat] = useState("");
   // Three pages behind one top toggle: outreach templates, application
   // materials (resume + cover letters + tailoring), and email signatures.
-  const [tView, setTView] = useState<"outreach" | "materials" | "signatures">("outreach");
+  const [tView, setTView] = useState<"outreach" | "materials" | "signatures" | "team">("outreach");
   // The links you paste into every application: portfolio site, LinkedIn,
   // the email you apply from. Kept on this device; the application kit
   // surfaces them with one-tap copy.
@@ -26266,12 +26091,6 @@ function TemplatesTab({
     const cat = categories.find((c) => c.id === t.categoryId);
     return `${projName} · ${cat?.name || "a category"}`;
   };
-  // Outreach layout under comparison on the canvas: ?tpl=drawer | desk.
-  const [tplLayout, setTplLayout] = useState("");
-  useEffect(() => {
-    const v = new URLSearchParams(window.location.search).get("tpl");
-    if (v === "drawer" || v === "desk") setTplLayout(v);
-  }, []);
   const outreachKinds = kinds.filter((k) => k !== "Cover letter");
   const kindTpls = (k: string) => myOutreach.filter((t) => t.channel === k);
   // Pick a kind: open its first saved template, or a blank one to write.
@@ -26285,138 +26104,123 @@ function TemplatesTab({
     }
   };
 
-  // Pieces shared by the default layout and the ?tpl= layouts below.
-  const renderComposer = (
-    hideKind = false,
-    sectionClass = "mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8"
-  ) => (
-      <section className={sectionClass}>
-        <div className={hideKind ? "grid gap-5" : "grid gap-5 sm:grid-cols-[210px_1fr] [&>*]:min-w-0"}>
-          {!hideKind && (
-          <div>
-            <Label>Kind of outreach</Label>
-            <select
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-              className="scout-select w-full rounded-xl border border-warm-border bg-surface px-3.5 py-3 text-sm font-semibold text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            >
-              {kinds.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <p className="mt-2.5 text-xs leading-relaxed text-body/80">
-              Scout drafts this kind of message in the style you show it here.
-            </p>
-          </div>
-          )}
-          <div>
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <Label className="mb-0">Show us how you write it</Label>
-              <MicButton value={text} onChange={setText} />
-            </div>
-            <textarea
-              ref={taRef}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={5}
-              placeholder="Paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
-              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
-            />
-            {/* The file drop plays second fiddle to just typing, and its
-                suggestion follows what this template is scoped to: a pitch
-                for music searches, a cover letter for job hunts. */}
-            {(() => {
-              const ctx = `${projects.find((p) => p.id === scopeProjectId)?.useCase || ""} ${
-                (categories || []).find((c) => c.id === scopeCategoryId)?.name || ""
-              } ${channel}`.toLowerCase();
-              const musicish = /playlist|music|curator|song|radio|press|band|artist|sync/.test(ctx);
-              const jobish = /job|intern|career|apply|recruit/.test(ctx);
-              return (
-                <div className="mt-3">
-                  <FileDrop
-                    label={
-                      musicish
-                        ? "…or drop a pitch you've sent before (PDF, Word, or text)"
-                        : jobish
-                        ? "…or drop a cover letter or example file"
-                        : "…or drop an example message or file"
-                    }
-                    onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
-                  />
-                  {musicish && (
-                    <p className="mt-1.5 text-[11px] leading-snug text-body/55">
-                      The song or press kit itself lives in the project&apos;s files
-                      (Projects tab); drafts for this search can attach it from there.
-                    </p>
-                  )}
-                </div>
-              );
-            })()}
-            <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
-              <button
-                type="button"
-                onClick={templatize}
-                data-guide="tpl-clean"
-                disabled={cleaning || !text.trim()}
-                title="Paste a real email you sent someone. Scout removes the names, company, and one-off details and leaves reusable placeholders."
-                className="inline-flex items-center gap-1.5 rounded-lg border border-sage/50 bg-sage/10 px-3 py-1.5 text-xs font-bold text-ink transition hover:bg-sage/20 disabled:opacity-50"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
-                  <path d="m3 21 3-3m0 0 9-9m-9 9L3 15m3 3 6-6" /><path d="M15 4h.01M18 2v4M20 4h-4" /><path d="m14 10 4 4" />
-                </svg>
-                {cleaning ? "Cleaning up…" : "Clean into a template"}
-              </button>
-              <button
-                type="button"
-                onClick={markFlex}
-                title="Select words in the box, then press this: Scout may rewrite ONLY the highlighted parts per find (like turning 'this playlist' into its real name). Press again on a marked part to unmark it."
-                className="inline-flex items-center gap-1.5 rounded-lg border border-brown/40 bg-brown-tint/40 px-3 py-1.5 text-xs font-bold text-brown-deep transition hover:bg-brown-tint"
-              >
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <path d="m9 11-6 6v3h3l6-6" />
-                  <path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
-                </svg>
-                Scout may edit
-              </button>
-              <span className="text-[11px] leading-snug text-body/70">
-                Pasted a real email? Scout strips the recipient&apos;s name, company, and
-                one-off details, leaving reusable placeholders.
-              </span>
-            </div>
-            {flexHint && (
-              <p className="mt-2 text-xs font-semibold text-brown">{flexHint}</p>
-            )}
-            {text.includes("«") && (
-              <div className="mt-3 rounded-xl border border-warm-border bg-warm-bg/40 px-3.5 py-3">
-                <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-body/45">
-                  What Scout may adapt per find
-                </div>
-                <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
-                  {text.split(/(«[^»]*»)/g).map((part, i) =>
-                    part.startsWith("«") ? (
-                      <span key={i} className="rounded bg-[#EFD9A7] px-0.5 text-brown-deep">
-                        {part.slice(1, -1)}
-                      </span>
-                    ) : (
-                      <span key={i}>{part}</span>
-                    )
-                  )}
-                </p>
-                <p className="mt-1.5 text-[11px] text-body/55">
-                  Highlighted parts are rewritten to fit each find; everything else
-                  stays your exact words.
-                </p>
-              </div>
-            )}
-            {cleanErr && (
-              <p className="mt-2 text-xs font-semibold text-accent">{cleanErr}</p>
-            )}
-          </div>
+  return (
+    <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
+      <div className="kicker mb-2">Your voice</div>
+      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
+        Your <span className="text-brown">templates</span>
+      </h1>
+
+      {/* Voice dials: the whole-voice controls sit above the per-template
+          builder, since they steer every draft regardless of template. */}
+      {/* Team lens: templates are a communal library, same treatment as Finds. */}
+      {teamName && (
+        <div className="mt-5 rounded-2xl border border-[rgb(var(--v-line))] bg-[rgb(var(--v-tint))] px-4 py-3 text-sm text-body/80">
+          <span className="font-bold text-ink">Shared templates.</span> You&apos;re on the{" "}
+          <span className="font-semibold">{teamName}</span> lens: templates you save here are published to
+          the team&apos;s library, and teammates&apos; show under From your team.
         </div>
-        <div data-guide="tpl-scope" className="mt-6 border-t border-warm-border pt-5">
-          <Label>Where it applies</Label>
+      )}
+
+      {/* The writing desk: an index of everything on the left, and one wide
+          sheet for whatever is open. */}
+      <div className="mt-8 grid items-start gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
+        <nav aria-label="Templates index" className="lg:sticky lg:top-6">
+          <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Outreach</div>
+          {outreachKinds.map((k) => {
+            const n = kindTpls(k).length;
+            const on = tView === "outreach" && channel === k;
+            return (
+              <button
+                key={k}
+                onClick={() => {
+                  setTView("outreach");
+                  openKind(k);
+                }}
+                className={`flex w-full items-baseline justify-between border-l-2 py-1.5 pl-3 pr-1 text-left text-[14px] transition ${
+                  on ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+                }`}
+              >
+                <span className="truncate">{k}</span>
+                <span className="text-[11px] tabular-nums text-body/40">{n || ""}</span>
+              </button>
+            );
+          })}
+          {teamName && (
+            <button
+              onClick={() => setTView("team")}
+              className={`mt-1 flex w-full items-baseline justify-between border-l-2 py-1.5 pl-3 pr-1 text-left text-[14px] transition ${
+                tView === "team" ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+              }`}
+            >
+              <span className="truncate">From your team</span>
+              <span className="text-[11px] tabular-nums text-body/40">{teamShown.length || ""}</span>
+            </button>
+          )}
+          <div className="mb-1.5 mt-6 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Applications</div>
+          <button
+            onClick={() => setTView("materials")}
+            className={`flex w-full items-baseline justify-between border-l-2 py-1.5 pl-3 pr-1 text-left text-[14px] transition ${
+              tView === "materials" ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+            }`}
+          >
+            <span className="truncate">Resume &amp; cover letters</span>
+            <span className="text-[11px] tabular-nums text-body/40">{coverLetters.length || ""}</span>
+          </button>
+          <div className="mb-1.5 mt-6 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Sign-off</div>
+          <button
+            onClick={() => setTView("signatures")}
+            className={`flex w-full items-baseline justify-between border-l-2 py-1.5 pl-3 pr-1 text-left text-[14px] transition ${
+              tView === "signatures" ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+            }`}
+          >
+            <span className="truncate">Email signatures</span>
+          </button>
+        </nav>
+
+        <div className="min-w-0">
+          {tView === "outreach" && (
+            <div className="rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)]">
+              <div className="flex flex-wrap items-end justify-between gap-3 px-6 pt-7 sm:px-10">
+                <h2 className="font-display text-[34px] font-extrabold leading-none tracking-tight text-ink">{channel}</h2>
+                <span className="text-[12px] text-body/45">{kindTpls(channel).length} saved</span>
+              </div>
+              {/* Versions of this kind, each named by where it applies. */}
+              <div className="mt-5 flex flex-wrap gap-2 border-b-2 border-dashed border-[rgb(var(--v-line))] px-6 pb-4 sm:px-10">
+                {kindTpls(channel).map((t, ti, all) => (
+                  <button
+                    key={t.id}
+                    onClick={() => startEdit(t)}
+                    title={t.text.slice(0, 140)}
+                    className={`max-w-[260px] truncate rounded-full border px-3.5 py-1.5 text-[12px] font-semibold transition ${
+                      editingId === t.id
+                        ? "border-brown bg-brown text-[rgb(var(--v-ontab))]"
+                        : "border-[rgb(var(--v-line))] text-body/70 hover:border-brown/50 hover:text-ink"
+                    }`}
+                  >
+                    {scopeLabel(t)}
+                    {/* Two for the same place: number them so they read apart. */}
+                    {all.filter((x) => scopeLabel(x) === scopeLabel(t)).length > 1 &&
+                      ` · ${all.filter((x) => scopeLabel(x) === scopeLabel(t)).indexOf(t) + 1}`}
+                  </button>
+                ))}
+                <button
+                  onClick={() => {
+                    setEditingId("");
+                    setText("");
+                  }}
+                  className={`rounded-full border border-dashed px-3.5 py-1.5 text-[12px] font-semibold transition ${
+                    !editingId ? "border-brown text-brown" : "border-[rgb(var(--v-dash))] text-body/50 hover:text-ink"
+                  }`}
+                >
+                  + New {channel.toLowerCase()} template
+                </button>
+              </div>
+
+              <div className="px-6 pb-8 pt-6 sm:px-10">
+                {/* Where it applies comes first: it decides which drafts use it. */}
+        <div data-guide="tpl-scope">
+          <Label>Use it for</Label>
           <div className="mt-1 grid gap-3 sm:grid-cols-2">
             <PrettySelect
               ariaLabel="Which project this template applies to"
@@ -26551,328 +26355,159 @@ function TemplatesTab({
             </div>
           )}
         </div>
-        <div className="mt-5 flex items-center gap-3">
-          <button
-            onClick={submit}
-            disabled={!text.trim()}
-            className="rounded-xl bg-brand-gradient px-6 py-3 text-sm font-bold text-white shadow-soft transition hover:opacity-95 disabled:opacity-50"
-          >
-            {editingId ? "Update template" : "Save template"}
-          </button>
-          {editingId && (
-            <button
-              onClick={cancelEdit}
-              className="text-sm font-semibold text-body/60 transition hover:text-accent"
-            >
-              Cancel edit
-            </button>
-          )}
-        </div>
-      </section>
-  );
-  const renderTplCard = (s: OutreachTemplate) => (
-              <div
-                key={s.id}
-                className={`rounded-2xl border p-5 shadow-card transition ${
-                  editingId === s.id
-                    ? "border-coral/50 bg-warm-bg/40"
-                    : "border-warm-border bg-surface"
-                }`}
-              >
-                <div className="mb-2.5 flex flex-wrap items-center gap-2">
-                  <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                    {s.channel}
-                  </span>
-                  <span
-                    className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
-                      s.projectId
-                        ? "border-sage/50 bg-sage/10 text-sage"
-                        : "border-warm-border bg-warm-bg text-body/70"
-                    }`}
-                  >
-                    {scopeLabel(s)}
-                  </span>
-                  <span className="ml-auto flex items-center gap-3">
-                    <button
-                      onClick={() => startEdit(s)}
-                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
-                    >
-                      {editingId === s.id ? "Editing…" : "Edit"}
-                    </button>
-                    <button
-                      onClick={() => remove(s.id)}
-                      className="text-xs font-semibold text-body/60 transition hover:text-accent"
-                    >
-                      Remove
-                    </button>
-                  </span>
+
+                <div className="mt-7 flex items-center justify-between gap-2">
+                  <Label className="mb-0">How you write it</Label>
+                  <MicButton value={text} onChange={setText} />
                 </div>
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
-                  {s.text}
-                </pre>
-              </div>
-  );
-
-  return (
-    <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
-      <div className="kicker mb-2">Your voice</div>
-      <h1 className="font-display text-[30px] font-bold leading-[1.05] tracking-[-0.02em] text-ink">
-        Your <span className="text-brown">templates</span>
-      </h1>
-
-      {/* Voice dials: the whole-voice controls sit above the per-template
-          builder, since they steer every draft regardless of template. */}
-      {!(tplLayout && tView === "outreach") && <VoiceDials />}
-
-      {/* Team lens: templates are a communal library, same treatment as Finds. */}
-      {teamName && (
-        <div className="mt-5 rounded-2xl border border-sage/40 bg-sage/10 px-4 py-3">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-sage" aria-hidden>
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
-            </svg>
-            <span className="font-extrabold text-ink">Shared templates</span>
-            <span className="text-body/80">
-              You&apos;re on the <span className="font-semibold">{teamName}</span> lens:
-              templates you save here are published to the team&apos;s library, and
-              teammates&apos; templates appear below with their name on them.
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Page toggle: three rooms, no scrolling between them. */}
-      <div data-guide="tpl-pages" className="mb-8 mt-6 inline-flex gap-1 rounded-xl border border-warm-border bg-warm-bg/40 p-1">
-        {(
-          [
-            ["outreach", "Outreach"],
-            ["materials", "Application materials"],
-            ["signatures", "Email signatures"],
-          ] as const
-        ).map(([v, label]) => (
-          <button
-            key={v}
-            onClick={() => setTView(v)}
-            className={`rounded-lg px-3.5 py-1.5 text-xs font-bold transition ${
-              tView === v ? "bg-surface text-ink shadow-card" : "text-body/70 hover:text-ink"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
-      {tView === "outreach" && tplLayout === "drawer" && (
-        <>
-          {/* Stationery drawer: one paper card per kind of message, yours on
-              top; empty kinds are blank cards waiting to be written. */}
-          <div className="flex gap-4 overflow-x-auto px-1 pb-6 pt-2">
-            {outreachKinds.map((k, i) => {
-              const tpls = kindTpls(k);
-              const on = channel === k;
-              return (
-                <button
-                  key={k}
-                  onClick={() => openKind(k)}
-                  style={{ transform: on ? "translateY(-8px)" : `rotate(${i % 2 ? 1 : -1}deg)` }}
-                  className={`flex aspect-[3/4] w-44 shrink-0 flex-col rounded-[4px] border bg-[rgb(var(--v-sheet))] p-4 text-left transition hover:-translate-y-1 ${
-                    on
-                      ? "border-brown shadow-[0_18px_34px_-18px_rgba(40,30,20,0.55)]"
-                      : tpls.length
-                      ? "border-[rgb(var(--v-line))] shadow-[0_10px_24px_-16px_rgba(40,30,20,0.45)]"
-                      : "border-dashed border-[rgb(var(--v-dash))]"
-                  }`}
-                >
-                  <span className="font-display text-[17px] font-bold leading-tight tracking-tight text-ink">{k}</span>
-                  <span className="mt-0.5 text-[11px] font-semibold text-body/45">
-                    {tpls.length ? `${tpls.length} ${tpls.length === 1 ? "template" : "templates"}` : "None yet"}
-                  </span>
-                  {tpls.length ? (
-                    <span className="mt-3 line-clamp-6 text-[11px] leading-relaxed text-body/70">{tpls[0].text}</span>
-                  ) : (
-                    <span className="mt-auto space-y-2">
-                      <span className="block border-b border-[rgb(var(--v-line))]" />
-                      <span className="block border-b border-[rgb(var(--v-line))]" />
-                      <span className="block pt-1 text-[12px] font-semibold text-brown">Write one →</span>
-                    </span>
+                <textarea
+                  ref={taRef}
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={9}
+                  placeholder={`Paste a real ${channel.toLowerCase()} you've sent, or write how you want this kind of message to sound.`}
+                  className="mt-1 w-full resize-y border-0 border-b border-[rgb(var(--v-line))] bg-transparent px-0 py-2 text-[15px] leading-[1.9] text-ink outline-none placeholder:text-body/35 focus:border-brown"
+                />
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={templatize}
+                    data-guide="tpl-clean"
+                    disabled={cleaning || !text.trim()}
+                    title="Paste a real email you sent someone. Scout removes the names, company, and one-off details and leaves reusable placeholders."
+                    className="rounded-full border border-[rgb(var(--v-line))] px-3.5 py-1.5 text-[12px] font-semibold text-body/75 transition hover:border-brown/50 hover:text-ink disabled:opacity-40"
+                  >
+                    {cleaning ? "Cleaning up…" : "Clean into a template"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={markFlex}
+                    title="Select words in the box, then press this: Scout may rewrite ONLY the highlighted parts per find. Press again on a marked part to unmark it."
+                    className="rounded-full border border-[rgb(var(--v-line))] px-3.5 py-1.5 text-[12px] font-semibold text-body/75 transition hover:border-brown/50 hover:text-ink"
+                  >
+                    Scout may edit this part
+                  </button>
+                </div>
+                {flexHint && <p className="mt-2 text-xs font-semibold text-brown">{flexHint}</p>}
+                {cleanErr && <p className="mt-2 text-xs font-semibold text-accent">{cleanErr}</p>}
+                {text.includes("«") && (
+                  <div className="mt-4 rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-tint))] px-4 py-3">
+                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-body/45">
+                      What Scout may adapt for each person
+                    </div>
+                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
+                      {text.split(/(«[^»]*»)/g).map((part, i) =>
+                        part.startsWith("«") ? (
+                          <span key={i} className="rounded bg-[#EFD9A7] px-0.5 text-brown-deep">
+                            {part.slice(1, -1)}
+                          </span>
+                        ) : (
+                          <span key={i}>{part}</span>
+                        )
+                      )}
+                    </p>
+                  </div>
+                )}
+                <div className="mt-4">
+                  <FileDrop
+                    label="…or drop an example you've sent (PDF, Word, or text)"
+                    onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
+                  />
+                </div>
+                <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-[rgb(var(--v-line))] pt-5">
+                  <button
+                    onClick={submit}
+                    disabled={!text.trim()}
+                    className="rounded-full bg-brand-gradient px-6 py-2.5 text-sm font-bold text-white transition hover:opacity-95 disabled:opacity-50"
+                  >
+                    {editingId ? "Save changes" : "Save template"}
+                  </button>
+                  {editingId && (
+                    <>
+                      <button onClick={cancelEdit} className="text-sm font-semibold text-body/60 transition hover:text-ink">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => {
+                          remove(editingId);
+                          cancelEdit();
+                        }}
+                        className="ml-auto text-sm font-semibold text-body/50 transition hover:text-danger"
+                      >
+                        Delete this template
+                      </button>
+                    </>
                   )}
-                </button>
-              );
-            })}
-          </div>
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
-            <div className="min-w-0">
-              <div className="flex items-baseline gap-3">
-                <h2 className="font-display text-2xl font-bold tracking-tight text-ink">{channel}</h2>
-                <span className="text-sm text-body/50">{editingId ? "Editing a saved template" : "New template"}</span>
-              </div>
-              {renderComposer(true, "mt-4 rounded-[6px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] p-5 shadow-soft sm:p-8")}
-              {kindTpls(channel).length > 1 && (
-                <div className="mt-6 space-y-3">
-                  <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">All {channel} templates</div>
-                  {kindTpls(channel).map((t) => renderTplCard(t))}
                 </div>
-              )}
-            </div>
-            <div className="xl:sticky xl:top-6 [&>section]:mt-0">
-              <VoiceDials />
-            </div>
-          </div>
-        </>
-      )}
-
-      {tView === "outreach" && tplLayout === "desk" && (
-        <div className="grid items-start gap-8 lg:grid-cols-[200px_minmax(0,1fr)] xl:grid-cols-[200px_minmax(0,1fr)_340px]">
-          {/* Writing desk: an index of kinds down the left ... */}
-          <nav aria-label="Kinds of message" className="lg:sticky lg:top-6">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Kinds</div>
-            {outreachKinds.map((k) => {
-              const n = kindTpls(k).length;
-              const on = channel === k;
-              return (
-                <button
-                  key={k}
-                  onClick={() => openKind(k)}
-                  className={`flex w-full items-baseline justify-between border-l-2 py-2 pl-3 pr-1 text-left text-[14px] transition ${
-                    on ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
-                  }`}
-                >
-                  <span className="truncate">{k}</span>
-                  <span className="text-[11px] tabular-nums text-body/40">{n || ""}</span>
-                </button>
-              );
-            })}
-          </nav>
-          {/* ... one letter sheet in the middle ... */}
-          <div className="min-w-0">
-            <div className="rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] px-6 pb-8 pt-7 shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] sm:px-10">
-              <div className="flex items-baseline justify-between gap-3 border-b-2 border-dashed border-[rgb(var(--v-line))] pb-4">
-                <h2 className="font-display text-[34px] font-extrabold leading-none tracking-tight text-ink">{channel}</h2>
-                <span className="text-[12px] text-body/45">{editingId ? "Editing" : "New"}</span>
               </div>
-              {renderComposer(true, "mt-5 [&_textarea]:min-h-[220px] [&_textarea]:border-0 [&_textarea]:bg-transparent [&_textarea]:px-0 [&_textarea]:text-[15px] [&_textarea]:leading-[1.9] [&_textarea]:shadow-none [&_textarea]:focus:ring-0")}
-            </div>
-            {kindTpls(channel).length > 0 && (
-              <div className="mt-6 space-y-3">
-                <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Saved {channel} templates</div>
-                {kindTpls(channel).map((t) => renderTplCard(t))}
-              </div>
-            )}
-          </div>
-          {/* ... and the voice dials in the margin, like editing notes. */}
-          <aside className="lg:col-span-2 xl:sticky xl:top-6 xl:col-span-1 [&>section]:mt-0 [&>section]:bg-transparent [&>section]:shadow-none">
-            <div className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Margin notes</div>
-            <VoiceDials />
-          </aside>
-        </div>
-      )}
-
-      {tView === "outreach" && !tplLayout && (<>
-      {renderComposer()}
-      <section className="mt-8">
-        <div className="mb-4 flex flex-wrap items-center gap-2">
-          <h2 className="text-lg font-bold text-ink">
-            Outreach templates ({myOutreach.length})
-          </h2>
-          {/* Toggleable filters: by format, and (on a team) by person. */}
-          {(channelOptions.length > 1 || personOptions.length > 0) && (
-            <div className="ml-auto flex flex-wrap items-center gap-1.5">
-              {channelOptions.length > 1 && (
-                <>
-                  <span className="text-[11px] font-bold text-body/60">Format:</span>
-                  <button
-                    onClick={() => setFltChannel("")}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                      !fltChannel
-                        ? "border-brown bg-brown text-white"
-                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-                    }`}
-                  >
-                    All
-                  </button>
-                  {channelOptions.map((c) => (
-                    <button
-                      key={c}
-                      onClick={() => setFltChannel(fltChannel === c ? "" : c)}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                        fltChannel === c
-                          ? "border-brown bg-brown text-white"
-                          : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-                      }`}
-                    >
-                      {c}
-                    </button>
-                  ))}
-                </>
-              )}
-              {personOptions.length > 0 && (
-                <>
-                  <span className="ml-2 text-[11px] font-bold text-body/60">By:</span>
-                  <button
-                    onClick={() => setFltPerson("")}
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                      !fltPerson
-                        ? "border-sage bg-sage text-white"
-                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-                    }`}
-                  >
-                    Everyone
-                  </button>
-                  <button
-                    onClick={() =>
-                      setFltPerson(fltPerson === (accountEmail || "") ? "" : accountEmail || "")
-                    }
-                    className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                      fltPerson === (accountEmail || "")
-                        ? "border-sage bg-sage text-white"
-                        : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-                    }`}
-                  >
-                    You
-                  </button>
-                  {personOptions.map((em) => (
-                    <button
-                      key={em}
-                      onClick={() => setFltPerson(fltPerson === em ? "" : em)}
-                      title={em}
-                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold transition ${
-                        fltPerson === em
-                          ? "border-sage bg-sage text-white"
-                          : "border-warm-border bg-surface text-body hover:bg-warm-bg"
-                      }`}
-                    >
-                      {emShort(em)}
-                    </button>
-                  ))}
-                </>
-              )}
             </div>
           )}
-        </div>
-        {list.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-10 text-center text-sm text-body/70">
-            No templates yet. Add one for email, a LinkedIn message, or an Instagram
-            DM, and every draft will match that style.
-          </div>
-        ) : (
-          <Reveal className="space-y-3" stagger={0.05}>
-            {myOutreach.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-warm-border bg-surface/60 p-6 text-center text-sm text-body/70">
-                No templates match your filters.
-              </div>
-            )}
-            {myOutreach.map((s) => renderTplCard(s))}
-          </Reveal>
-        )}
-      </section>
 
-      </>)}
+          {tView === "team" && (
+            <>
+              <h2 className="font-display text-[28px] font-extrabold tracking-tight text-ink">From your team</h2>
+              <p className="mb-4 mt-1 text-[13px] text-body/60">Shared by teammates at {teamName}. Add one to make it yours.</p>
+              {teamShown.length === 0 ? (
+                <p className="text-sm text-body/55">No shared templates yet.</p>
+              ) : (
+          <div className="space-y-3">
+            {teamShown.map((r: any) => {
+              const t = r.template || {};
+              return (
+                <div key={r.id} className="rounded-2xl border border-sage/40 bg-sage/5 p-5 shadow-card">
+                  <div className="mb-2.5 flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
+                      {t.channel || "Email"}
+                    </span>
+                    {t.projectName && (
+                      <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-xs font-semibold text-body/70">
+                        {t.projectName}
+                        {t.categoryName ? ` · ${t.categoryName}` : ""}
+                      </span>
+                    )}
+                    <span className="rounded-full border border-sage/50 bg-sage/10 px-2.5 py-0.5 text-xs font-semibold text-sage" title={r.added_email}>
+                      by {emShort(r.added_email)}
+                    </span>
+                    {onCopyTeamTemplate && (
+                      <button
+                        onClick={() => onCopyTeamTemplate(r)}
+                        title="Copy this into your own templates so Scout drafts with it for you. Sign-offs are always rewritten to YOUR name."
+                        className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
+                      >
+                        Add to my templates
+                      </button>
+                    )}
+                    {onDeleteTeamTemplate && (
+                      <button
+                        onClick={() => onDeleteTeamTemplate(r)}
+                        title={
+                          r.added_email === accountEmail
+                            ? "Delete this template from the team library"
+                            : "Delete from the team library (admins, or its owner)"
+                        }
+                        className="rounded-lg px-2 py-1.5 text-xs font-semibold text-body/50 transition hover:text-danger"
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
+                    {t.text}
+                  </pre>
+                </div>
+              );
+            })}
+          </div>
+
+              )}
+            </>
+          )}
 
       {tView === "materials" && (<>
       {/* ---------------- Application materials ----------------
           The other half of the tab: the resume file Scout attaches to
           applications, saved cover letters, and the tailoring walkthrough. */}
-      <section className="mt-10">
+      <section>
         <div className="mb-1 flex flex-wrap items-baseline gap-2">
           <h2 className="text-lg font-bold text-ink">Application materials</h2>
           <span className="text-[12px] text-body/60">
@@ -27018,72 +26653,10 @@ function TemplatesTab({
 
       </>)}
 
-      {tView === "outreach" && (<>
-      {/* Teammates' shared templates, with attribution + one-tap copy. */}
-      {teamName && teamShown.length > 0 && (
-        <section className="mt-8">
-          <div className="mb-3 flex flex-wrap items-baseline gap-2">
-            <h2 className="text-lg font-bold text-ink">From your team ({teamShown.length})</h2>
-            <span className="text-[12px] text-body/60">
-              shared by teammates at {teamName}
-            </span>
-          </div>
-          <div className="space-y-3">
-            {teamShown.map((r: any) => {
-              const t = r.template || {};
-              return (
-                <div key={r.id} className="rounded-2xl border border-sage/40 bg-sage/5 p-5 shadow-card">
-                  <div className="mb-2.5 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-brand-gradient px-2.5 py-0.5 text-xs font-semibold text-white">
-                      {t.channel || "Email"}
-                    </span>
-                    {t.projectName && (
-                      <span className="rounded-full border border-warm-border bg-warm-bg px-2.5 py-0.5 text-xs font-semibold text-body/70">
-                        {t.projectName}
-                        {t.categoryName ? ` · ${t.categoryName}` : ""}
-                      </span>
-                    )}
-                    <span className="rounded-full border border-sage/50 bg-sage/10 px-2.5 py-0.5 text-xs font-semibold text-sage" title={r.added_email}>
-                      by {emShort(r.added_email)}
-                    </span>
-                    {onCopyTeamTemplate && (
-                      <button
-                        onClick={() => onCopyTeamTemplate(r)}
-                        title="Copy this into your own templates so Scout drafts with it for you. Sign-offs are always rewritten to YOUR name."
-                        className="ml-auto rounded-lg border border-warm-border px-3 py-1.5 text-xs font-semibold text-body transition hover:bg-warm-bg"
-                      >
-                        Add to my templates
-                      </button>
-                    )}
-                    {onDeleteTeamTemplate && (
-                      <button
-                        onClick={() => onDeleteTeamTemplate(r)}
-                        title={
-                          r.added_email === accountEmail
-                            ? "Delete this template from the team library"
-                            : "Delete from the team library (admins, or its owner)"
-                        }
-                        className="rounded-lg px-2 py-1.5 text-xs font-semibold text-body/50 transition hover:text-danger"
-                      >
-                        Delete
-                      </button>
-                    )}
-                  </div>
-                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-body">
-                    {t.text}
-                  </pre>
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      </>)}
 
       {tView === "signatures" && (<>
       {/* -------- Email signatures -------- */}
-      <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
+      <section className="rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] p-6 shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] sm:p-10">
         <h2 className="text-base font-extrabold tracking-tight text-ink">Email signatures</h2>
         <p className="mt-1 text-sm leading-relaxed text-body">
           Signed onto the end of every email Scout drafts (not DMs). Set a default,
@@ -27168,6 +26741,10 @@ function TemplatesTab({
         )}
       </section>
     </>)}
+
+        </div>
+
+      </div>
     </main>
   );
 }
