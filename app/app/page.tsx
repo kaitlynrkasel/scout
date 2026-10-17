@@ -19765,6 +19765,48 @@ function FindWorkflow({
             );
           })()}
 
+        {/* Instagram has no API for starting a DM from a personal account, so
+            the closest honest path is: copy the message, open the DM thread
+            with them, then confirm it went out. */}
+        {d &&
+          !done &&
+          !denied &&
+          (() => {
+            const raw =
+              [o.contactHandle, d.to].find((h) => /^@?[A-Za-z0-9._]{2,30}$/.test(String(h || "").trim())) ||
+              (/instagram\.com\/([A-Za-z0-9._]{2,30})/i.exec(
+                [o.url, ...(o.socials || [])].join(" ")
+              )?.[1] ?? "");
+            const igHandle = String(raw || "").replace(/^@/, "");
+            const isIg =
+              igHandle &&
+              (/instagram/i.test(d.channelType === "message" ? draftKind : "") ||
+                /instagram/i.test(o.channel || "") ||
+                (o.socials || []).some((s2) => /instagram\.com/i.test(s2)) ||
+                (o.criteria || []).some((c) => /instagram/i.test(c.answer)));
+            if (!isIg) return null;
+            return (
+              <button
+                onClick={async () => {
+                  const text = d.subject ? `${d.subject}\n\n${d.body}` : d.body;
+                  await copyToClipboard(text);
+                  window.open(`https://ig.me/m/${igHandle}`, "_blank", "noopener");
+                  if (
+                    onMarkSent &&
+                    (await scoutConfirm(
+                      `Your message is copied and your DM with @${igHandle} is open in a new tab. Paste it there and send. Mark this find as sent once it's out?`,
+                      { title: "Send on Instagram", confirmLabel: "Yes, it's sent" }
+                    ))
+                  )
+                    onMarkSent();
+                }}
+                title={`Copies the message and opens your Instagram DM with @${igHandle}`}
+                className="rounded-lg bg-brand-gradient px-3 py-1.5 text-xs font-bold text-white shadow-card transition hover:opacity-95"
+              >
+                Send on Instagram
+              </button>
+            );
+          })()}
         {d && !done && !denied && onMarkSent && (
           <button
             onClick={onMarkSent}
