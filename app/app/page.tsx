@@ -29898,7 +29898,7 @@ function ReplyCard({
         onDraft(f);
       }}
       aria-label="Drafts drawer. Drop a find anywhere on it to draft"
-      className={`mx-auto w-full max-w-[1160px] overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-26px_52px_-26px_rgba(40,30,20,0.45)] transition-all duration-500 ease-in-out ${
+      className={`w-full overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-26px_52px_-26px_rgba(40,30,20,0.45)] transition-all duration-500 ease-in-out ${
         over ? "border-brown" : "border-[rgb(var(--v-line))]"
       }`}
       style={{ height: open ? "min(56vh, 500px)" : 64 }}
@@ -30001,10 +30001,14 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
           sendingId={p.sendingId}
         />
       </div>
-      {/* Pinned to the viewport bottom while the stage is on screen, rising
-          out of the bottom bar as its own section. */}
-      <div className="sticky bottom-0 z-30 mt-auto w-full px-2 sm:px-6">
-        <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
+      {/* Far right corner, in flow at the very end of the page: the card's
+          bottom edge runs straight into the footer bar (negative margin eats
+          the section's bottom padding), and because it scrolls WITH the page
+          it can never cover the finds above it. */}
+      <div className="-mb-14 mt-auto flex w-full justify-end">
+        <div className="w-full max-w-[560px]">
+          <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
+        </div>
       </div>
     </div>
   );
