@@ -30343,39 +30343,6 @@ function FindsTray({
               >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
-              {/* A postage stamp, top right of the card's back: perforated
-                  edge, inner frame, Scout's S, and a wavy postmark over it. */}
-              <svg
-                aria-hidden
-                viewBox="0 0 40 48"
-                className={`ml-auto h-12 w-10 shrink-0 transition ${over ? "-rotate-6 scale-110" : "rotate-3"}`}
-              >
-                <path
-                  d="M2 2h36v44H2z"
-                  fill="rgb(var(--v-tint))"
-                  stroke="rgb(var(--v-dash))"
-                  strokeWidth="3"
-                  strokeDasharray="2.2 2.2"
-                />
-                <rect x="6.5" y="6.5" width="27" height="35" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.55" />
-                <text
-                  x="20"
-                  y="33"
-                  textAnchor="middle"
-                  fontSize="26"
-                  fontWeight="200"
-                  fill="rgb(var(--c-brown))"
-                  opacity="0.85"
-                  style={{ fontFamily: "var(--font-sans), sans-serif" }}
-                >
-                  S
-                </text>
-                <g fill="none" stroke="rgb(var(--c-ink))" strokeWidth="0.9" opacity="0.35" strokeLinecap="round">
-                  <path d="M-4 20c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                  <path d="M-4 25c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                  <path d="M-4 30c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                </g>
-              </svg>
             </button>
             {draftsOpen && (
             <div className="flex min-h-0 flex-1 flex-col px-5 pb-16">
