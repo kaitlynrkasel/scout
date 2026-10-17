@@ -29646,7 +29646,9 @@ function ScoutPostcard(p: StageLayoutProps) {
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-8 p-7 sm:p-10">
+        {/* Nudged in from the dashed divider so the address block floats in
+            its half instead of hugging the fold. */}
+        <div className="flex flex-col gap-8 p-7 sm:py-10 sm:pl-14 sm:pr-10">
           {p.extra && <div>{p.extra}</div>}
           <div className="mt-auto">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
@@ -29702,6 +29704,9 @@ function FindsTray({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [openDraft, setOpenDraft] = useState<string>("");
+  // Drafts column: drag-over highlight + its own collapse (title row toggles).
+  const [over, setOver] = useState(false);
+  const [draftsOpen, setDraftsOpen] = useState(true);
   useEffect(() => {
     try {
       setCollapsed(localStorage.getItem(TRAY_KEY) === "1");
@@ -29749,7 +29754,7 @@ function FindsTray({
       </button>
 
       {!collapsed && (
-        <div id="finds-tray-body" className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_320px]">
+        <div id="finds-tray-body" className="mt-5 grid gap-6 md:grid-cols-[minmax(0,1fr)_380px]">
           <div className="grid content-start gap-2.5 sm:grid-cols-2">
             {fresh.length === 0 && (
               <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-5 py-10 text-center text-sm text-body/45 sm:col-span-2">
@@ -29788,10 +29793,82 @@ function FindsTray({
             ))}
           </div>
 
-          <div className="flex flex-col">
-            {/* Drafted letters: the title collapses; open it to read and send. */}
-            {drafted.length === 0 && (
-              <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-4 py-6 text-center text-[12px] text-body/45">
+          {/* The Drafts column: a tall postcard panel on the board's right,
+              per the sketch. Its bottom edge runs past the section padding
+              into the footer bar, so the card never shows a bottom edge; the
+              title row collapses it to just the header. */}
+          <aside
+            id="reply-postcard"
+            onDragOver={(e) => {
+              if (!onDraft) return;
+              e.preventDefault();
+              setOver(true);
+              setDraftsOpen(true);
+            }}
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(false);
+              const f = finds.find((x) => x.id === e.dataTransfer.getData("text/scout-find"));
+              if (f && onDraft) onDraft(f);
+            }}
+            aria-label="Drafts column. Drop a find anywhere on it to draft"
+            className={`-mb-14 flex flex-col overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-22px_44px_-26px_rgba(40,30,20,0.4)] transition ${
+              over ? "border-brown" : "border-[rgb(var(--v-line))]"
+            } ${draftsOpen ? "" : "self-start"}`}
+          >
+            <button
+              onClick={() => setDraftsOpen((v) => !v)}
+              aria-expanded={draftsOpen}
+              className="flex w-full items-center gap-3 px-5 py-4 text-left"
+            >
+              <span className="font-display text-[26px] font-extrabold leading-none tracking-tight text-ink">
+                Drafts
+              </span>
+              <span className="min-w-0 truncate text-[11px] text-body/50">
+                {over
+                  ? "Let go to draft"
+                  : draftingId
+                  ? "Drafting…"
+                  : drafted.length
+                  ? `${drafted.length}`
+                  : ""}
+              </span>
+              <svg
+                width="15"
+                height="15"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.6"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden
+                className={`ml-auto shrink-0 text-body/45 transition-transform ${draftsOpen ? "" : "rotate-180"}`}
+              >
+                <polyline points="6 9 12 15 18 9" />
+              </svg>
+            </button>
+            {draftsOpen && (
+            <div className="flex min-h-0 flex-1 flex-col px-5 pb-16">
+            <div
+              className={`grid h-28 shrink-0 place-items-center rounded-xl border-2 border-dashed text-[12px] font-semibold transition ${
+                over
+                  ? "border-brown bg-brown-tint/30 text-brown-deep"
+                  : "border-[rgb(var(--v-dash))] text-body/45"
+              }`}
+            >
+              {over ? "Let go to draft" : "Drop a find here to draft it"}
+            </div>
+            <div className="mt-4 min-h-0 flex-1 space-y-2 overflow-y-auto">
+            {draftingId && !drafted.some((f) => f.id === draftingId) && (
+              <div className="flex items-center gap-2 rounded-2xl border border-[rgb(var(--v-line))] px-4 py-3 text-[12px] font-semibold text-body/60">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-[rgb(var(--v-line))] border-t-brown" />
+                Drafting…
+              </div>
+            )}
+            {drafted.length === 0 && !draftingId && (
+              <div className="px-1 py-4 text-[12px] text-body/45">
                 Drafted messages show up here.
               </div>
             )}
@@ -29848,139 +29925,16 @@ function FindsTray({
                 })}
               </div>
             )}
-          </div>
+            </div>
+            </div>
+            )}
+          </aside>
         </div>
       )}
     </section>
   );
 }
 
-/* The reply: a Drafts postcard in the page's bottom-right corner.
- * Drag a find onto it and it's addressed to them while Scout drafts. */
-function ReplyCard({
-  finds,
-  onDraft,
-  draftingId,
-}: {
-  finds: Find[];
-  onDraft?: (f: Find) => void;
-  draftingId?: string;
-}) {
-  const [over, setOver] = useState(false);
-  const [open, setOpen] = useState(true);
-  const [sent, setSent] = useState<string[]>([]);
-  // The drawer's list is every draft that exists: what you dropped this
-  // session first, then anything already sitting at drafted.
-  const queuedIds = [
-    ...sent,
-    ...finds.filter((f) => f.status === "drafted" && !sent.includes(f.id)).map((f) => f.id),
-  ];
-  const queued = queuedIds.map((id) => finds.find((f) => f.id === id)).filter(Boolean) as Find[];
-  return (
-    // Not a floating card: a drawer rising out of the bottom bar, its lower
-    // edge off-screen, reading as its own section. The title row collapses it
-    // to just "Drafts" and brings it back up.
-    <section
-      id="reply-postcard"
-      onDragOver={(e) => {
-        if (!onDraft) return;
-        e.preventDefault();
-        setOver(true);
-        setOpen(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        const f = finds.find((x) => x.id === e.dataTransfer.getData("text/scout-find"));
-        if (!f || !onDraft) return;
-        setSent((ids) => (ids.includes(f.id) ? ids : [f.id, ...ids]));
-        onDraft(f);
-      }}
-      aria-label="Drafts drawer. Drop a find anywhere on it to draft"
-      className={`w-full overflow-hidden rounded-t-[14px] border border-b-0 bg-[rgb(var(--v-sheet))] shadow-[0_-26px_52px_-26px_rgba(40,30,20,0.45)] transition-all duration-500 ease-in-out ${
-        over ? "border-brown" : "border-[rgb(var(--v-line))]"
-      }`}
-      style={{ height: open ? "min(56vh, 500px)" : 64 }}
-    >
-      <button
-        onClick={() => setOpen((v) => !v)}
-        aria-expanded={open}
-        className="flex h-16 w-full items-center gap-4 px-6 text-left sm:px-8"
-      >
-        <span className="font-display text-[28px] font-extrabold leading-none tracking-tight text-ink">
-          Drafts
-        </span>
-        <span className="min-w-0 truncate text-[12px] text-body/55">
-          {over
-            ? "Let go to draft"
-            : queued.some((f) => draftingId === f.id)
-            ? "Drafting…"
-            : open
-            ? "Drag a find anywhere on this card"
-            : `${queued.length ? `${queued.length} queued · ` : ""}Click to open`}
-        </span>
-        <svg
-          width="16"
-          height="16"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden
-          className={`ml-auto shrink-0 text-body/50 transition-transform duration-500 ${open ? "" : "rotate-180"}`}
-        >
-          <path d="m6 9 6 6 6-6" />
-        </svg>
-      </button>
-      <div
-        className={`grid h-[calc(100%-4rem)] grid-cols-1 transition-opacity duration-300 md:grid-cols-2 ${
-          open ? "" : "pointer-events-none opacity-0"
-        }`}
-      >
-        <div className="hidden border-r border-dashed border-[rgb(var(--v-line))] p-6 sm:p-8 md:flex md:flex-col">
-          <div
-            className={`grid flex-1 place-items-center rounded-xl border-2 border-dashed text-sm font-semibold transition ${
-              over
-                ? "border-brown bg-brown-tint/30 text-brown-deep"
-                : "border-[rgb(var(--v-dash))] text-body/45"
-            }`}
-          >
-            Drop a find here
-          </div>
-        </div>
-        <div className="flex min-h-0 flex-col p-6 sm:p-8">
-          <div className="ml-auto h-12 w-10 shrink-0 rounded-[3px] border border-dashed border-[rgb(var(--v-dash))]" />
-          <div className="mt-4 min-h-0 flex-1 space-y-2.5 overflow-y-auto">
-            {queued.length === 0 && (
-              <div className="text-[12px] text-body/45">
-                Names land on these lines as you drop finds.
-              </div>
-            )}
-            {queued.map((f) => (
-              <div
-                key={f.id}
-                className="truncate border-b border-[rgb(var(--v-line))] pb-1.5 text-[13px] font-semibold text-ink"
-              >
-                {draftingId === f.id
-                  ? "… "
-                  : f.status === "drafted" || f.status === "sent"
-                  ? "✓ "
-                  : ""}
-                {f.opp.contactName || f.opp.name}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-/* Postcard + finds: the postcard asks, this search's finds sit under it, and
- * the Drafts postcard waits in the page's bottom-right corner to drop on. */
 function ScoutPostcardBoard(p: StageLayoutProps) {
   return (
     <div className="flex w-full flex-1 flex-col items-center gap-10 pb-4">
@@ -30001,15 +29955,9 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
           sendingId={p.sendingId}
         />
       </div>
-      {/* Far right corner, in flow at the very end of the page: the card's
-          bottom edge runs straight into the footer bar (negative margin eats
-          the section's bottom padding), and because it scrolls WITH the page
-          it can never cover the finds above it. */}
-      <div className="-mb-14 mt-auto flex w-full justify-end">
-        <div className="w-full max-w-[560px]">
-          <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
-        </div>
-      </div>
+      {/* The Drafts column now lives INSIDE the finds board (right-hand
+          column of FindsTray), per Kaitlyn's sketch: tall, far right, bottom
+          edge running into the footer bar. */}
     </div>
   );
 }
