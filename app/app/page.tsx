@@ -14987,10 +14987,11 @@ function ManualTab({
   goFinds: () => void;
 }) {
   const [added, setAdded] = useState<string[]>([]); // names added this session
-  // One card open at a time; the page leads with three big doors, not three
-  // walls of text, so the eye lands on an ACTION first. Every door, add
-  // included, expands in place below instead of throwing a pop-up.
-  const [openCard, setOpenCard] = useState<"" | "add" | "paste" | "import">("");
+  // One card open at a time; the page leads with three big doors, so the eye
+  // lands on an ACTION first. Every door expands in place below instead of
+  // throwing a pop-up, and the add-a-contact form sits open by default: the
+  // space under the doors IS the data entry, not a feed.
+  const [openCard, setOpenCard] = useState<"" | "add" | "paste" | "import">("add");
   // Paste-a-posting is a job-hunt tool. A consulting or PR company has no
   // postings to paste, so under a company lens the door only exists when some
   // project here is job-shaped. The personal lens is an individual, where a
@@ -15073,58 +15074,6 @@ function ManualTab({
           </button>
         </div>
       )}
-
-      {/* Below the doors: not a gallery of everyone, only the people who
-          still need something from you, each with its next move named. If
-          nobody is waiting, the whitespace is the good news. */}
-      {openCard === "" &&
-        (() => {
-          const waiting = recentManual.filter(
-            (f) => f.status === "new" || f.status === "undecided" || f.status === "drafted"
-          );
-          if (waiting.length === 0) return null;
-          return (
-            <section className="mt-9 max-w-3xl">
-              <div className="flex items-baseline justify-between gap-3 border-b-2 border-ink pb-2">
-                <h2 className="font-display text-lg font-bold text-ink">
-                  Next moves
-                  <span className="ml-2 align-middle text-xs font-bold text-body/50">
-                    {waiting.length} waiting
-                  </span>
-                </h2>
-                <button onClick={goFinds} className="text-xs font-bold text-accent hover:underline">
-                  All finds →
-                </button>
-              </div>
-              <div>
-                {waiting.slice(0, 6).map((f, i) => (
-                  <button
-                    key={f.id}
-                    onClick={goFinds}
-                    className="group grid w-full grid-cols-[2rem_1fr_auto] items-baseline gap-3 border-b border-warm-border py-3 text-left transition hover:bg-brown-tint/20"
-                  >
-                    <span className="font-display text-xs font-bold text-brown">
-                      {String(i + 1).padStart(2, "0")}
-                    </span>
-                    <span className="min-w-0">
-                      <span className="block truncate font-display text-[15px] font-bold text-ink">
-                        {f.opp.name}
-                      </span>
-                      {(f.opp.outlet || f.opp.contactEmail) && (
-                        <span className="block truncate text-xs text-body/60">
-                          {[f.opp.outlet, f.opp.contactEmail].filter(Boolean).join(" · ")}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-brown opacity-70 transition group-hover:opacity-100">
-                      {FIND_STATUS[f.status]?.action || "Open"} →
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          );
-        })()}
 
       {openCard === "paste" && (
         <section className="scout-fade-in mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
