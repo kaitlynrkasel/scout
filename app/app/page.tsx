@@ -16118,6 +16118,9 @@ function voiceDialLines(): string[] {
 }
 function VoiceDials() {
   const [vals, setVals] = useState<Record<string, number>>({});
+  // Live drag position (float 0..4) so the dot and glow follow the pointer
+  // smoothly; it snaps to the nearest stop and saves on release.
+  const [drag, setDrag] = useState<{ key: string; x: number } | null>(null);
   useEffect(() => {
     setVals(loadVoiceDials());
   }, []);
@@ -16132,6 +16135,13 @@ function VoiceDials() {
   const PAD_X = 10; // percent inset for the first/last stop
   const xPct = (stop: number) => PAD_X + (stop * (100 - 2 * PAD_X)) / 4;
   const val = (k: string) => (typeof vals[k] === "number" ? vals[k] : 2);
+  // What the row currently SHOWS: the drag float while dragging, else the stop.
+  const shown = (k: string) => (drag && drag.key === k ? drag.x : val(k));
+  const floatFromPointer = (clientX: number, el: HTMLElement) => {
+    const r = el.getBoundingClientRect();
+    const pct = ((clientX - r.left) / Math.max(1, r.width)) * 100;
+    return Math.min(4, Math.max(0, ((pct - PAD_X) / (100 - 2 * PAD_X)) * 4));
+  };
   return (
     <section className="mt-7 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
       <h2 className="text-base font-extrabold tracking-tight text-ink">Voice dials</h2>
@@ -16140,24 +16150,35 @@ function VoiceDials() {
         center means no push either way.
       </p>
       <div className="relative mt-5" style={{ height: VOICE_DIALS.length * ROW_H }}>
-        {/* The glow path through the chosen dots, drawn behind the rows. */}
+        {/* The glow path through the dots, drawn behind the rows. Two layered
+            strokes (one wide and faint, one tighter) read as one soft wash
+            instead of a hard blurred rope. Follows the drag live. */}
         <svg
           aria-hidden
           className="pointer-events-none absolute inset-0 h-full w-full"
           preserveAspectRatio="none"
           viewBox={`0 0 100 ${VOICE_DIALS.length * ROW_H}`}
         >
-          <polyline
-            points={VOICE_DIALS.map((d, i) => `${xPct(val(d.key))},${i * ROW_H + ROW_H / 2}`).join(" ")}
-            fill="none"
-            stroke="rgb(199 160 118 / 0.5)"
-            strokeWidth="14"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            style={{ filter: "blur(7px)" }}
-          />
+          {([
+            [30, 0.18, 18],
+            [14, 0.3, 9],
+          ] as const).map(([w, o, blur], li) => (
+            <polyline
+              key={li}
+              points={VOICE_DIALS.map((d, i) => `${xPct(0) + (shown(d.key) * (100 - 2 * PAD_X)) / 4},${i * ROW_H + ROW_H / 2}`).join(" ")}
+              fill="none"
+              stroke={`rgb(199 160 118 / ${o})`}
+              strokeWidth={w}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              style={{ filter: `blur(${blur}px)` }}
+            />
+          ))}
         </svg>
-        {VOICE_DIALS.map((d, i) => (
+        {VOICE_DIALS.map((d, i) => {
+          const x = shown(d.key);
+          const dragging = drag?.key === d.key;
+          return (
           <div
             key={d.key}
             className="absolute inset-x-0 flex items-center gap-3"
@@ -16170,27 +16191,57 @@ function VoiceDials() {
             >
               {d.left}
             </span>
-            <div className="relative h-full min-w-0 flex-1">
-              <div className="absolute left-0 right-0 top-1/2 h-px bg-ink/25" />
-              {[0, 1, 2, 3, 4].map((stop) => {
-                const on = val(d.key) === stop;
-                return (
-                  <button
-                    key={stop}
-                    onClick={() => set(d.key, stop)}
-                    aria-label={`${d.left} to ${d.right}, position ${stop + 1} of 5`}
-                    aria-pressed={on}
-                    className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full transition-all"
-                    style={{
-                      left: `${xPct(stop)}%`,
-                      width: on ? 22 : 10,
-                      height: on ? 22 : 10,
-                      background: on ? "rgb(var(--c-ink))" : "rgb(var(--c-ink) / 0.3)",
-                      boxShadow: on ? "0 0 0 6px rgb(199 160 118 / 0.45)" : "none",
-                    }}
-                  />
-                );
-              })}
+            {/* The whole track is the control: press anywhere and the dot
+                comes to you; drag and it follows; release and it snaps to
+                the nearest stop. Arrow keys nudge it too. */}
+            <div
+              role="slider"
+              tabIndex={0}
+              aria-label={`${d.left} to ${d.right}`}
+              aria-valuemin={0}
+              aria-valuemax={4}
+              aria-valuenow={val(d.key)}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") set(d.key, Math.max(0, val(d.key) - 1));
+                if (e.key === "ArrowRight") set(d.key, Math.min(4, val(d.key) + 1));
+              }}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                setDrag({ key: d.key, x: floatFromPointer(e.clientX, e.currentTarget) });
+              }}
+              onPointerMove={(e) => {
+                if (drag?.key === d.key)
+                  setDrag({ key: d.key, x: floatFromPointer(e.clientX, e.currentTarget) });
+              }}
+              onPointerUp={(e) => {
+                const x2 = floatFromPointer(e.clientX, e.currentTarget);
+                set(d.key, Math.round(x2));
+                setDrag(null);
+              }}
+              onPointerCancel={() => setDrag(null)}
+              className="relative h-full min-w-0 flex-1 cursor-grab touch-none rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-brown/40 active:cursor-grabbing"
+            >
+              <div className="pointer-events-none absolute left-0 right-0 top-1/2 h-px bg-ink/25" />
+              {[0, 1, 2, 3, 4].map((stop) => (
+                <span
+                  key={stop}
+                  aria-hidden
+                  className="pointer-events-none absolute top-1/2 h-2.5 w-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                  style={{ left: `${xPct(stop)}%`, background: "rgb(var(--c-ink) / 0.3)" }}
+                />
+              ))}
+              {/* The thumb, riding the float while dragging. */}
+              <span
+                aria-hidden
+                className={`pointer-events-none absolute top-1/2 h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full ${
+                  dragging ? "" : "transition-all duration-200"
+                }`}
+                style={{
+                  left: `${PAD_X + (x * (100 - 2 * PAD_X)) / 4}%`,
+                  background: "rgb(var(--c-ink))",
+                  boxShadow: "0 0 0 6px rgb(199 160 118 / 0.45)",
+                }}
+              />
             </div>
             <span
               className={`w-24 shrink-0 text-[11px] font-bold uppercase tracking-wider ${
@@ -16200,7 +16251,8 @@ function VoiceDials() {
               {d.right}
             </span>
           </div>
-        ))}
+          );
+        })}
       </div>
       <p className="mt-3 text-[11px] text-body/50">
         Saved on this device and applied to every new draft.
@@ -26253,17 +26305,43 @@ function TemplatesTab({
               <Label className="mb-0">Show us how you write it</Label>
               <MicButton value={text} onChange={setText} />
             </div>
-            <FileDrop
-              label="Drop a cover letter or example file, or click to upload"
-              onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
-            />
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               rows={5}
-              placeholder="…or paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
-              className="mt-3 w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
+              placeholder="Paste a real example, or write a sample of how you want this kind of message to sound. Hi! My name is... I came across your work and thought it was incredible. I would love to..."
+              className="w-full resize-y rounded-xl border border-warm-border px-3.5 py-3 text-sm text-ink outline-none transition focus:border-coral focus:ring-4 focus:ring-coral/15"
             />
+            {/* The file drop plays second fiddle to just typing, and its
+                suggestion follows what this template is scoped to: a pitch
+                for music searches, a cover letter for job hunts. */}
+            {(() => {
+              const ctx = `${projects.find((p) => p.id === scopeProjectId)?.useCase || ""} ${
+                (categories || []).find((c) => c.id === scopeCategoryId)?.name || ""
+              } ${channel}`.toLowerCase();
+              const musicish = /playlist|music|curator|song|radio|press|band|artist|sync/.test(ctx);
+              const jobish = /job|intern|career|apply|recruit/.test(ctx);
+              return (
+                <div className="mt-3">
+                  <FileDrop
+                    label={
+                      musicish
+                        ? "…or drop a pitch you've sent before (PDF, Word, or text)"
+                        : jobish
+                        ? "…or drop a cover letter or example file"
+                        : "…or drop an example message or file"
+                    }
+                    onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
+                  />
+                  {musicish && (
+                    <p className="mt-1.5 text-[11px] leading-snug text-body/55">
+                      The song or press kit itself lives in the project&apos;s files
+                      (Projects tab); drafts for this search can attach it from there.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
             <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
               <button
                 type="button"
