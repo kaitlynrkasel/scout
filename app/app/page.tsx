@@ -30171,7 +30171,7 @@ function FindsTray({
                 <polyline points="6 9 12 15 18 9" />
               </svg>
               {/* A postage stamp, top right of the card's back: perforated
-                  edge, inner frame, and a wavy postmark running over it. */}
+                  edge, inner frame, Scout's S, and a wavy postmark over it. */}
               <svg
                 aria-hidden
                 viewBox="0 0 40 48"
@@ -30185,8 +30185,18 @@ function FindsTray({
                   strokeDasharray="2.2 2.2"
                 />
                 <rect x="6.5" y="6.5" width="27" height="35" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.55" />
-                <path d="M12 30c3-6 7-12 9-16 2 4 5 9 8 16" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                <circle cx="27" cy="14" r="2.4" fill="rgb(var(--c-brown))" opacity="0.6" />
+                <text
+                  x="20"
+                  y="33"
+                  textAnchor="middle"
+                  fontSize="24"
+                  fontWeight="800"
+                  fill="rgb(var(--c-brown))"
+                  opacity="0.8"
+                  style={{ fontFamily: "var(--font-display), var(--font-sans), sans-serif" }}
+                >
+                  S
+                </text>
                 <g fill="none" stroke="rgb(var(--c-ink))" strokeWidth="0.9" opacity="0.35" strokeLinecap="round">
                   <path d="M-4 20c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
                   <path d="M-4 25c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
@@ -30300,7 +30310,10 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
       <div className="relative -mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
         <ScoutPostcard {...p} />
       </div>
-      <div className="w-full">
+      {/* Same edges as the postcard's own content: bleed out like the paper,
+          then pad back in by the postcard's column padding, so "Finds" sits
+          on the project title's left edge at every width. */}
+      <div className="-mx-5 w-[calc(100%+2.5rem)] px-7 sm:-ml-14 sm:-mr-8 sm:w-[calc(100%+5.5rem)] sm:px-10 xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
         <FindsTray
           finds={p.finds}
           catId={p.catId}
