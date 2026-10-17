@@ -26390,30 +26390,6 @@ function TemplatesTab({
                 </div>
                 {flexHint && <p className="mt-2 text-xs font-semibold text-brown">{flexHint}</p>}
                 {cleanErr && <p className="mt-2 text-xs font-semibold text-accent">{cleanErr}</p>}
-                {text.includes("«") && (
-                  <div className="mt-4 rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-tint))] px-4 py-3">
-                    <div className="text-[10px] font-bold uppercase tracking-[0.12em] text-body/45">
-                      What Scout may adapt for each person
-                    </div>
-                    <p className="mt-1.5 whitespace-pre-wrap text-[13px] leading-relaxed text-ink">
-                      {text.split(/(«[^»]*»)/g).map((part, i) =>
-                        part.startsWith("«") ? (
-                          <span key={i} className="rounded bg-[#EFD9A7] px-0.5 text-brown-deep">
-                            {part.slice(1, -1)}
-                          </span>
-                        ) : (
-                          <span key={i}>{part}</span>
-                        )
-                      )}
-                    </p>
-                  </div>
-                )}
-                <div className="mt-4">
-                  <FileDrop
-                    label="…or drop an example you've sent (PDF, Word, or text)"
-                    onText={(t) => setText(text.trim() ? text.trim() + "\n\n" + t : t)}
-                  />
-                </div>
                 <div className="mt-6 flex flex-wrap items-center gap-4 border-t border-[rgb(var(--v-line))] pt-5">
                   <button
                     onClick={submit}
