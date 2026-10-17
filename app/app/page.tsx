@@ -9573,6 +9573,7 @@ function ScoutTool({
           buildingApplication={appBuilding}
           onCreateProject={addProject}
           projects={visibleProjects}
+          personalLens={activeCompanyId === "personal"}
           activeProjectId={activeId}
           onAddManual={addManualFind}
           onImportFile={() => setImportOpen(true)}
@@ -14953,10 +14954,12 @@ function ManualTab({
   onRemoveSync,
   goFinds,
   recentManual = [],
+  personalLens = false,
 }: {
   onCreateProject?: (name: string) => string;
   categories?: Category[];
   recentManual?: Find[];
+  personalLens?: boolean;
   onBuildFromPosting: (jobText: string, projectId?: string, categoryId?: string) => Promise<string>;
   buildingApplication?: boolean;
   projects: Project[];
@@ -14988,10 +14991,12 @@ function ManualTab({
   // walls of text, so the eye lands on an ACTION first. Every door, add
   // included, expands in place below instead of throwing a pop-up.
   const [openCard, setOpenCard] = useState<"" | "add" | "paste" | "import">("");
-  // Paste-a-posting is a job-hunt tool. A consulting or PR account has no
-  // postings to paste, so the door only exists when some project here is
-  // actually job-shaped.
-  const hasJobProject = projects.some((p) => isJobUseCaseClient(p.useCase));
+  // Paste-a-posting is a job-hunt tool. A consulting or PR company has no
+  // postings to paste, so under a company lens the door only exists when some
+  // project here is job-shaped. The personal lens is an individual, where a
+  // posting is always plausible, so it always shows the door.
+  const hasJobProject =
+    personalLens || projects.some((p) => isJobUseCaseClient(p.useCase));
   return (
     <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Do it yourself</div>
