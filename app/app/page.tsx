@@ -14983,11 +14983,11 @@ function ManualTab({
   getToken?: () => Promise<string | null>;
   goFinds: () => void;
 }) {
-  const [addOpen, setAddOpen] = useState(false);
   const [added, setAdded] = useState<string[]>([]); // names added this session
   // One card open at a time; the page leads with three big doors, not three
-  // walls of text, so the eye lands on an ACTION first.
-  const [openCard, setOpenCard] = useState<"" | "paste" | "import">("");
+  // walls of text, so the eye lands on an ACTION first. Every door, add
+  // included, expands in place below instead of throwing a pop-up.
+  const [openCard, setOpenCard] = useState<"" | "add" | "paste" | "import">("");
   return (
     <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Do it yourself</div>
@@ -15000,8 +15000,11 @@ function ManualTab({
       <div className="mt-7 grid gap-4 sm:grid-cols-3">
         <button
           data-guide="add-contact"
-          onClick={() => setAddOpen(true)}
-          className="group min-h-[220px] rounded-3xl bg-brand-gradient p-6 text-left text-white shadow-soft transition hover:opacity-95 sm:p-8"
+          onClick={() => setOpenCard(openCard === "add" ? "" : "add")}
+          aria-expanded={openCard === "add"}
+          className={`group min-h-[220px] rounded-3xl bg-brand-gradient p-6 text-left text-white shadow-soft transition hover:opacity-95 sm:p-8 ${
+            openCard === "add" ? "ring-2 ring-brown ring-offset-2 ring-offset-warm-bg" : ""
+          }`}
         >
           <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="opacity-90">
             <circle cx="10" cy="8" r="3.5" />
@@ -15060,37 +15063,57 @@ function ManualTab({
         </div>
       )}
 
-      {/* The page isn't empty below the doors: your latest hand-added and
-          imported people live here, one click from drafting. Real data only;
-          nothing renders until something exists. */}
-      {recentManual.length > 0 && openCard === "" && (
-        <section className="mt-8">
-          <div className="flex items-baseline justify-between gap-3">
-            <h2 className="text-base font-extrabold text-ink">Recently added by hand</h2>
-            <button onClick={goFinds} className="text-xs font-bold text-accent hover:underline">
-              All finds →
-            </button>
-          </div>
-          <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {recentManual.slice(0, 8).map((f) => (
-              <button
-                key={f.id}
-                onClick={goFinds}
-                className="rounded-2xl border border-warm-border bg-surface p-4 text-left shadow-card transition hover:border-brown/40"
-              >
-                <div className="truncate text-sm font-bold text-ink">{f.opp.name}</div>
-                <div className="mt-0.5 truncate text-xs text-body/60">
-                  {[f.opp.outlet, f.opp.contactEmail].filter(Boolean).join(" · ") ||
-                    (f.foundVia === "import" ? "From your sheet import" : "Added by you")}
-                </div>
-                <div className="mt-2 text-[10px] font-bold uppercase tracking-wider text-body/40">
-                  {FIND_STATUS[f.status]?.label || f.status}
-                </div>
-              </button>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* Below the doors: not a gallery of everyone, only the people who
+          still need something from you, each with its next move named. If
+          nobody is waiting, the whitespace is the good news. */}
+      {openCard === "" &&
+        (() => {
+          const waiting = recentManual.filter(
+            (f) => f.status === "new" || f.status === "undecided" || f.status === "drafted"
+          );
+          if (waiting.length === 0) return null;
+          return (
+            <section className="mt-9 max-w-3xl">
+              <div className="flex items-baseline justify-between gap-3 border-b-2 border-ink pb-2">
+                <h2 className="font-display text-lg font-bold text-ink">
+                  Next moves
+                  <span className="ml-2 align-middle text-xs font-bold text-body/50">
+                    {waiting.length} waiting
+                  </span>
+                </h2>
+                <button onClick={goFinds} className="text-xs font-bold text-accent hover:underline">
+                  All finds →
+                </button>
+              </div>
+              <div>
+                {waiting.slice(0, 6).map((f, i) => (
+                  <button
+                    key={f.id}
+                    onClick={goFinds}
+                    className="group grid w-full grid-cols-[2rem_1fr_auto] items-baseline gap-3 border-b border-warm-border py-3 text-left transition hover:bg-brown-tint/20"
+                  >
+                    <span className="font-display text-xs font-bold text-brown">
+                      {String(i + 1).padStart(2, "0")}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-display text-[15px] font-bold text-ink">
+                        {f.opp.name}
+                      </span>
+                      {(f.opp.outlet || f.opp.contactEmail) && (
+                        <span className="block truncate text-xs text-body/60">
+                          {[f.opp.outlet, f.opp.contactEmail].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-brown opacity-70 transition group-hover:opacity-100">
+                      {FIND_STATUS[f.status]?.action || "Open"} →
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
 
       {openCard === "paste" && (
         <section className="scout-fade-in mt-5 rounded-3xl border border-warm-border bg-surface p-5 shadow-soft sm:p-8">
@@ -15161,17 +15184,18 @@ function ManualTab({
         </section>
       )}
 
-      {addOpen && (
+      {openCard === "add" && (
         <AddContactModal
+          inline
           projects={projects}
           onCreateProject={onCreateProject}
           defaultProjectId={activeProjectId}
-          onClose={() => setAddOpen(false)}
+          onClose={() => setOpenCard("")}
           onAdd={(input) => {
             const err = onAddManual(input);
             if (!err) {
               setAdded((a) => [input.name.trim(), ...a]);
-              setAddOpen(false);
+              setOpenCard("");
             }
             return err;
           }}
@@ -15190,7 +15214,9 @@ function AddContactModal({
   defaultProjectId,
   onClose,
   onAdd,
+  inline = false,
 }: {
+  inline?: boolean;
   onCreateProject?: (name: string) => string;
   projects: Project[];
   defaultProjectId: string;
@@ -15320,12 +15346,27 @@ function AddContactModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
-      onClick={onClose}
+      className={
+        inline
+          ? "scout-fade-in mt-5"
+          : "fixed inset-0 z-50 flex items-center justify-center bg-ink/40 p-4 backdrop-blur-sm"
+      }
+      onClick={inline ? undefined : onClose}
     >
       <div
+        className={
+          inline
+            ? "flex items-start gap-5"
+            : "flex w-full max-w-4xl items-start justify-center gap-5"
+        }
+      >
+      <div
         onClick={(e) => e.stopPropagation()}
-        className="max-h-[90vh] w-full max-w-3xl overflow-auto rounded-3xl border border-warm-border bg-surface p-6 shadow-xl"
+        className={
+          inline
+            ? "w-full max-w-xl rounded-3xl border border-warm-border bg-surface p-6 shadow-soft sm:p-8"
+            : "max-h-[90vh] w-full max-w-xl overflow-auto rounded-3xl border border-warm-border bg-surface p-6 shadow-xl"
+        }
       >
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -15344,7 +15385,7 @@ function AddContactModal({
           </button>
         </div>
 
-        <div className="mt-4 grid gap-5 sm:grid-cols-[1fr_270px]">
+        <div className="mt-4">
           <div className="min-w-0">
             <Label>Paste anything about them</Label>
             <textarea
@@ -15377,55 +15418,6 @@ function AddContactModal({
             </button>
           </div>
 
-          {/* The card, building itself as they type. Real parsed data only;
-              empty slots stay invisible so it grows rather than sits blank. */}
-          <aside aria-live="polite" className="rounded-2xl border border-warm-border bg-warm-bg/40 p-4">
-            <div className="flex items-center gap-3">
-              <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brown-tint font-display text-xl font-bold text-brown-deep">
-                {(name.trim() || "?").charAt(0).toUpperCase()}
-              </div>
-              <div className="min-w-0">
-                <div className="truncate text-sm font-extrabold text-ink">
-                  {name.trim() || "New contact"}
-                </div>
-                <div className="truncate text-xs text-body/60">
-                  {outlet.trim() || (enriching ? "Scout is filling this in…" : "")}
-                </div>
-              </div>
-            </div>
-            <div className="mt-3 space-y-1.5 text-xs">
-              {[
-                ["Email", email],
-                ["Phone", phone],
-                ["Handle", handle],
-                ["Site", url],
-                ["Location", location],
-              ]
-                .filter(([, v]) => v && v.trim())
-                .map(([k2, v]) => (
-                  <div key={k2 as string} className="scout-fade-in flex items-baseline gap-2">
-                    <span className="w-14 shrink-0 text-[9px] font-bold uppercase tracking-wider text-body/45">
-                      {k2}
-                    </span>
-                    <span className="min-w-0 truncate font-semibold text-ink">{v}</span>
-                  </div>
-                ))}
-              {notes.trim() && (
-                <p className="scout-fade-in border-t border-warm-border pt-2 text-[11px] leading-relaxed text-body/70">
-                  {notes.trim().slice(0, 140)}
-                </p>
-              )}
-              {enriching && (
-                <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-brown">
-                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-brown" />
-                  Searching the public web…
-                </div>
-              )}
-              {enrichNote && !enriching && (
-                <p className="pt-1 text-[11px] text-body/50">{enrichNote}</p>
-              )}
-            </div>
-          </aside>
         </div>
 
         {showDetails && (
@@ -15531,6 +15523,69 @@ function AddContactModal({
             Nothing is sent. Drafting stays up to you.
           </span>
         </div>
+      </div>
+
+      {/* Their card: a separate pop-up beside the form, read-only, so it never
+          reads as a second place to type. It only exists once the paste has
+          produced something. */}
+      {(name.trim() || email || phone || handle || url || notes.trim()) && (
+        <aside
+          aria-live="polite"
+          onClick={(e) => e.stopPropagation()}
+          className={`scout-fade-in hidden w-[280px] shrink-0 rounded-3xl border border-warm-border bg-surface p-5 lg:block ${
+            inline ? "shadow-soft" : "self-center shadow-xl"
+          }`}
+        >
+          <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-body/45">
+            Their card
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <div className="grid h-12 w-12 shrink-0 place-items-center rounded-xl bg-brown-tint font-display text-xl font-bold text-brown-deep">
+              {(name.trim() || "?").charAt(0).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-extrabold text-ink">
+                {name.trim() || "New contact"}
+              </div>
+              <div className="truncate text-xs text-body/60">
+                {outlet.trim() || (enriching ? "Scout is filling this in…" : "")}
+              </div>
+            </div>
+          </div>
+          <div className="mt-3 space-y-1.5 text-xs">
+            {[
+              ["Email", email],
+              ["Phone", phone],
+              ["Handle", handle],
+              ["Site", url],
+              ["Location", location],
+            ]
+              .filter(([, v]) => v && v.trim())
+              .map(([k2, v]) => (
+                <div key={k2 as string} className="scout-fade-in flex items-baseline gap-2">
+                  <span className="w-14 shrink-0 text-[9px] font-bold uppercase tracking-wider text-body/45">
+                    {k2}
+                  </span>
+                  <span className="min-w-0 truncate font-semibold text-ink">{v}</span>
+                </div>
+              ))}
+            {notes.trim() && (
+              <p className="scout-fade-in border-t border-warm-border pt-2 text-[11px] leading-relaxed text-body/70">
+                {notes.trim().slice(0, 140)}
+              </p>
+            )}
+            {enriching && (
+              <div className="flex items-center gap-2 pt-1 text-[11px] font-semibold text-brown">
+                <span className="h-3 w-3 animate-spin rounded-full border-2 border-warm-border border-t-brown" />
+                Searching the public web…
+              </div>
+            )}
+            {enrichNote && !enriching && (
+              <p className="pt-1 text-[11px] text-body/50">{enrichNote}</p>
+            )}
+          </div>
+        </aside>
+      )}
       </div>
     </div>
   );
