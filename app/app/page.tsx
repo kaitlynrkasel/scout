@@ -5111,11 +5111,11 @@ function ScoutTool({
     !!error ||
     !!teamShareNote ||
     noResults;
-  // The empty Scout stage is the note card (ScoutNoteCard). Other layouts from
-  // the redesign stay reachable for comparison: /app?stage=classic (the old
-  // bullet stage) | brief | split | letter | focus | postcard |
-  // postcard-board | envelope.
-  const [stageVariant, setStageVariant] = useState<string>("note");
+  // The empty Scout stage is the postcard + pipeline board (Kaitlyn's pick
+  // from the Onlook exploration, 2026-10-17). Other layouts stay reachable
+  // for comparison: /app?stage=classic (the old bullet stage) | brief |
+  // split | letter | focus | note | postcard | envelope.
+  const [stageVariant, setStageVariant] = useState<string>("postcard-board");
   useEffect(() => {
     try {
       const v = new URLSearchParams(window.location.search).get("stage");
