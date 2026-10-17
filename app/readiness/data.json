@@ -1562,6 +1562,36 @@
                   "tab": "finds"
                 }
               ]
+            },
+            {
+              "sev": "must",
+              "title": "Postcard stage carries the whole search",
+              "good": "The postcard stays on screen while Scout runs: an espresso band under it shows the progress bar and the flipping deck of websites being read, finds stream into the tray, and nothing reverts to the old layout mid-run.",
+              "steps": [
+                "Open the Scout tab on a project with a saved search.",
+                "Press the stamp to send Scout.",
+                "Watch the area under the postcard: a dark band should appear with Scout is searching, a percentage, Cancel, and site cards flipping through.",
+                "Let it finish; finds should appear in the Finds board below without the page switching to a different-looking composer."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Job search reads a whole company board",
+              "good": "On a job or internship search that surfaces a Greenhouse, Lever, Ashby, or Workable posting, the progress log shows a line like Reading (company)'s whole greenhouse board (N open roles), and several roles from that company appear among the finds.",
+              "steps": [
+                "Run a job-shaped search (e.g. software internships at startups).",
+                "Watch the progress steps for a Reading ... whole ... board line.",
+                "Check the finds for multiple roles from that same company."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Blocked sites skip the dead preview",
+              "good": "A find whose page is a Spotify playlist or social app page never shows a black preview box; it goes straight to the info card built from what Scout gathered.",
+              "steps": [
+                "Open a find whose website is open.spotify.com (or YouTube/Instagram).",
+                "The right pane should show the gathered-info card, not a black rectangle."
+              ]
             }
           ]
         },
@@ -1934,6 +1964,15 @@
                 "Open a real job application page, click the Scout icon, press Fill this page.",
                 "Check the highlighted fields match your profile, that a field you'd typed in was untouched, and that a Company name field did NOT get your name.",
                 "In the popup, Copy one experience role and paste it into a Workday-style repeater."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "No application panel when there is nothing to apply to",
+              "good": "A find tracked as an application whose page has no application process shows no APPLICATION box at all.",
+              "steps": [
+                "Track a non-posting page (like a playlist) as an application.",
+                "Open the find: the outreach rail should show drafting controls but no application panel claiming there is no process."
               ]
             }
           ]
@@ -2618,6 +2657,55 @@
                 "On a fresh account, the same walkthrough should start from running a search instead."
               ],
               "key": "writing::walkthroughs-adapt-to-the-account-state"
+            },
+            {
+              "sev": "must",
+              "title": "Highlight what Scout may edit in a template",
+              "good": "Marked spans show highlighted in the preview, drafts rewrite ONLY those spans (e.g. the playlist's real name), and the marks never appear in the message.",
+              "steps": [
+                "Templates tab: type a template including a phrase like I love your playlist.",
+                "Select your playlist and press Scout may edit.",
+                "A preview appears with that phrase highlighted.",
+                "Save, then draft a find scoped to that template; the phrase should become the find's actual playlist name and the rest should match your template word for word."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Templates have names and a lone template preselects",
+              "good": "A new template saves as Template 1 (or your custom name), the name leads the card and the picker, and a find with exactly one scoped template shows it preselected instead of Scout picks the best template.",
+              "steps": [
+                "Save a template without a name; the card should read Template 1.",
+                "Save another with a custom name; the picker in a find should list both by name.",
+                "On a project with exactly one template, open a find: the template dropdown should already show that template."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Known submission method preselects the draft format",
+              "good": "A find whose criteria say submissions are via Instagram DM defaults the draft button to Draft instagram dm, not LinkedIn or Email.",
+              "steps": [
+                "Open a find whose Submission method answer names a platform.",
+                "Check the draft button under Outreach matches that platform before touching anything."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Write-my-own expands in place",
+              "good": "The expand arrow grows the composer inside the outreach panel (with a Smaller button); no pop-up window covers the page.",
+              "steps": [
+                "Open a find, choose Write my own message.",
+                "Press the expand arrow; the composer should grow in place and the rest of the panel stay reachable."
+              ]
+            },
+            {
+              "sev": "could",
+              "title": "Voice dials drag and glow naturally",
+              "good": "Dots follow the pointer smoothly, snap to the nearest stop on release, arrow keys nudge them, and the glow reads as one soft wash.",
+              "steps": [
+                "Templates tab: drag a voice dial dot slowly across its track.",
+                "Release between stops; it should snap.",
+                "Tab to a track and press the arrow keys; the dot should move one stop."
+              ]
             }
           ]
         },
