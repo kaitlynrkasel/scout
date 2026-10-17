@@ -14988,6 +14988,10 @@ function ManualTab({
   // walls of text, so the eye lands on an ACTION first. Every door, add
   // included, expands in place below instead of throwing a pop-up.
   const [openCard, setOpenCard] = useState<"" | "add" | "paste" | "import">("");
+  // Paste-a-posting is a job-hunt tool. A consulting or PR account has no
+  // postings to paste, so the door only exists when some project here is
+  // actually job-shaped.
+  const hasJobProject = projects.some((p) => isJobUseCaseClient(p.useCase));
   return (
     <main className="w-full px-5 pb-16 pt-6 sm:px-8 sm:pt-8 xl:px-12">
       <div className="kicker mb-2">Do it yourself</div>
@@ -14997,7 +15001,7 @@ function ManualTab({
 
       {/* Three doors. The primary one is unmistakable; each carries a big
           glyph, a short name, and ONE line. Detail lives behind the click. */}
-      <div className="mt-7 grid gap-4 sm:grid-cols-3">
+      <div className={`mt-7 grid gap-4 ${hasJobProject ? "sm:grid-cols-3" : "sm:grid-cols-2"}`}>
         <button
           data-guide="add-contact"
           onClick={() => setOpenCard(openCard === "add" ? "" : "add")}
@@ -15014,6 +15018,7 @@ function ManualTab({
           <div className="mt-4 font-display text-xl font-bold">Add a contact</div>
           <p className="mt-1 text-sm text-white/80">Someone you already know.</p>
         </button>
+        {hasJobProject && (
         <button
           data-guide="paste-posting"
           onClick={() => setOpenCard(openCard === "paste" ? "" : "paste")}
@@ -15031,6 +15036,7 @@ function ManualTab({
           <div className="mt-4 font-display text-xl font-bold text-ink">Paste a posting</div>
           <p className="mt-1 text-sm text-body/70">A job or program page.</p>
         </button>
+        )}
         <button
           data-guide="import"
           onClick={() => setOpenCard(openCard === "import" ? "" : "import")}
