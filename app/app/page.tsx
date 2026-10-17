@@ -2253,6 +2253,7 @@ function ScoutTool({
   }
   const [mtChannel, setMtChannel] = useState(OUTREACH_KINDS[0]);
   const [mtText, setMtText] = useState("");
+  const [mtTitle, setMtTitle] = useState("");
   const [mtProjectId, setMtProjectId] = useState(""); // "" = all projects (global)
   const [mtCategoryId, setMtCategoryId] = useState(""); // "" = all categories in project
   const [profile, setProfile] = useState<Profile>(initialProfile);
@@ -4459,10 +4460,21 @@ function ScoutTool({
 
   function addTemplate() {
     if (!mtText.trim()) return;
+    // Default name "Template N": one past the highest default-numbered one,
+    // so deletes never cause two templates to share a number.
+    const nextN =
+      Math.max(
+        0,
+        ...myTemplates.map((t) => {
+          const m = /^Template (\d+)$/.exec(t.title || "");
+          return m ? Number(m[1]) : 0;
+        })
+      ) + 1;
     saveTpls([
       {
         id: `${Date.now()}`,
         channel: mtChannel,
+        title: mtTitle.trim() || `Template ${nextN}`,
         text: mtText.trim(),
         // Only record a scope when one was chosen; a category implies its project.
         ...(mtProjectId ? { projectId: mtProjectId } : {}),
@@ -4471,18 +4483,20 @@ function ScoutTool({
       ...myTemplates,
     ]);
     setMtText("");
+    setMtTitle("");
   }
 
   // Edit an existing template in place (channel, text, and where it applies).
   function updateTemplate(
     id: string,
-    patch: { channel: string; text: string; projectId?: string; categoryId?: string }
+    patch: { channel: string; text: string; projectId?: string; categoryId?: string; title?: string }
   ) {
     saveTpls(
       myTemplates.map((t) =>
         t.id === id
           ? {
               ...t,
+              title: patch.title !== undefined ? patch.title : t.title,
               channel: patch.channel,
               text: patch.text,
               projectId: patch.projectId,
@@ -9903,6 +9917,8 @@ function ScoutTool({
           channel={mtChannel}
           setChannel={setMtChannel}
           text={mtText}
+          title={mtTitle}
+          setTitle={setMtTitle}
           setText={setMtText}
           add={addTemplate}
           list={visibleTemplates}
@@ -13474,6 +13490,24 @@ function FindDetailModal({
       setPreviewFailed(true);
     }
   };
+  // Hosts whose pages never render usefully in a frame (app shells that come
+  // up as a black box). Skip the doomed embed and go straight to the
+  // everything-Scout-gathered card.
+  useEffect(() => {
+    let h = "";
+    try {
+      h = new URL(o.url || "").hostname.replace(/^www\./, "");
+    } catch {}
+    if (
+      /^(open\.spotify\.com|music\.apple\.com|soundcloud\.com|youtube\.com|m\.youtube\.com|instagram\.com|facebook\.com|m\.facebook\.com|tiktok\.com|x\.com|twitter\.com)$/.test(
+        h
+      )
+    ) {
+      triedCleanRef.current = true;
+      setPreviewFailed(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o.url]);
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
   // Deny reason popover in the header (Deny asks why, like the card does).
   const [denyingModal, setDenyingModal] = useState(false);
@@ -18140,6 +18174,15 @@ function ApplicationPacket({
     copy(all, "__all");
   };
 
+  // Nothing to apply WITH and nothing to apply TO: a panel that only says
+  // "no application process exists here" is noise, so it doesn't render.
+  if (
+    components.length === 0 &&
+    (!app.howToApply || /no application|no submission|not a job|no process/i.test(app.howToApply))
+  ) {
+    return null;
+  }
+
   return (
     <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -18940,7 +18983,9 @@ function FindWorkflow({
   const [draftKind, setDraftKind] = useState(smartKind);
   // Which template to draft from; "" lets the drafter pick the best match and
   // "__own__" opens the write-it-yourself composer.
-  const [tplId, setTplId] = useState("");
+  // With exactly ONE template scoped to this find, there is nothing for
+  // "Scout picks" to pick: preselect it.
+  const [tplId, setTplId] = useState(() => (templates.length === 1 ? templates[0].id : ""));
   const [ownSubject, setOwnSubject] = useState("");
   const [ownBody, setOwnBody] = useState("");
   const [ownTo, setOwnTo] = useState("");
@@ -19388,7 +19433,9 @@ function FindWorkflow({
                       const w = t.text.trim().replace(/\s+/g, " ");
                       return {
                         value: t.id,
-                        label: `${t.channel}: ${w.slice(0, 30)}${w.length > 30 ? "…" : ""}`,
+                        label: t.title
+                          ? `${t.title} · ${t.channel}`
+                          : `${t.channel}: ${w.slice(0, 30)}${w.length > 30 ? "…" : ""}`,
                       };
                     }),
                     ...(onWriteOwn ? [{ value: "__own__", label: "Write my own message" }] : []),
@@ -19652,34 +19699,25 @@ function FindWorkflow({
                 </div>
               </>
             );
-            if (ownExpanded)
-              return (
-                <div
-                  className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4"
-                  onClick={() => setOwnExpanded(false)}
-                >
-                  <div
-                    className="w-full max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <span className="text-sm font-bold text-ink">
-                        Your message to {find.opp.name}
-                      </span>
-                      <button
-                        onClick={() => setOwnExpanded(false)}
-                        className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
-                      >
-                        Close
-                      </button>
-                    </div>
-                    {composer(true)}
-                  </div>
-                </div>
-              );
+            // Expanded is still the SAME outreach panel, grown in place: no
+            // pop-up over the page, the edits and move-forward controls stay
+            // where they live.
             return (
               <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
-                {composer(false)}
+                {ownExpanded && (
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-ink">
+                      Your message to {find.opp.name}
+                    </span>
+                    <button
+                      onClick={() => setOwnExpanded(false)}
+                      className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+                    >
+                      Smaller
+                    </button>
+                  </div>
+                )}
+                {composer(ownExpanded)}
               </div>
             );
           })()}
@@ -25827,6 +25865,8 @@ function TemplatesTab({
   setChannel,
   text,
   setText,
+  title,
+  setTitle,
   add,
   list,
   remove,
@@ -25862,12 +25902,14 @@ function TemplatesTab({
   setChannel: (v: string) => void;
   text: string;
   setText: (v: string) => void;
+  title: string;
+  setTitle: (v: string) => void;
   add: () => void;
   list: OutreachTemplate[];
   remove: (id: string) => void;
   onUpdate: (
     id: string,
-    patch: { channel: string; text: string; projectId?: string; categoryId?: string }
+    patch: { channel: string; text: string; projectId?: string; categoryId?: string; title?: string }
   ) => void;
   projects: Project[];
   categories: Category[];
@@ -26012,17 +26054,20 @@ function TemplatesTab({
     setEditingId(t.id);
     setChannel(t.channel);
     setText(t.text);
+    setTitle(t.title || "");
     setScopeProjectId(t.projectId || "");
     setScopeCategoryId(t.categoryId || "");
   }
   function cancelEdit() {
     setEditingId("");
     setText("");
+    setTitle("");
   }
   function submit() {
     if (!text.trim()) return;
     if (editingId) {
       onUpdate(editingId, {
+        title: title.trim() || undefined,
         channel,
         text: text.trim(),
         projectId: scopeProjectId || undefined,
@@ -26100,6 +26145,7 @@ function TemplatesTab({
     else {
       setEditingId("");
       setText("");
+      setTitle("");
       setChannel(k);
     }
   };
@@ -26198,16 +26244,18 @@ function TemplatesTab({
                         : "border-[rgb(var(--v-line))] text-body/70 hover:border-brown/50 hover:text-ink"
                     }`}
                   >
-                    {scopeLabel(t)}
-                    {/* Two for the same place: number them so they read apart. */}
-                    {all.filter((x) => scopeLabel(x) === scopeLabel(t)).length > 1 &&
-                      ` · ${all.filter((x) => scopeLabel(x) === scopeLabel(t)).indexOf(t) + 1}`}
+                    {t.title ? `${t.title} · ${scopeLabel(t)}` : scopeLabel(t)}
+                    {/* Two unnamed for the same place: number them so they read apart. */}
+                    {!t.title &&
+                      all.filter((x) => !x.title && scopeLabel(x) === scopeLabel(t)).length > 1 &&
+                      ` · ${all.filter((x) => !x.title && scopeLabel(x) === scopeLabel(t)).indexOf(t) + 1}`}
                   </button>
                 ))}
                 <button
                   onClick={() => {
                     setEditingId("");
                     setText("");
+                    setTitle("");
                   }}
                   className={`rounded-full border border-dashed px-3.5 py-1.5 text-[12px] font-semibold transition ${
                     !editingId ? "border-brown text-brown" : "border-[rgb(var(--v-dash))] text-body/50 hover:text-ink"
@@ -26218,7 +26266,16 @@ function TemplatesTab({
               </div>
 
               <div className="px-6 pb-8 pt-6 sm:px-10">
-                {/* Where it applies comes first: it decides which drafts use it. */}
+                <label className="mb-6 block">
+                  <Label>Name</Label>
+                  <input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    placeholder={`Template ${(list?.length || 0) + 1}`}
+                    className="mt-1 w-full max-w-md border-0 border-b border-[rgb(var(--v-line))] bg-transparent px-0 py-1.5 font-display text-[18px] font-bold text-ink outline-none placeholder:font-normal placeholder:text-body/35 focus:border-brown"
+                  />
+                </label>
+                {/* Where it applies comes next: it decides which drafts use it. */}
         <div data-guide="tpl-scope">
           <Label>Use it for</Label>
           <div className="mt-1 grid gap-3 sm:grid-cols-2">

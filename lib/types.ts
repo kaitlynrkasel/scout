@@ -117,6 +117,9 @@ export interface Draft {
 export interface OutreachTemplate {
   id: string;
   channel: string; // "Email" | "LinkedIn message" | "Instagram DM" | ...
+  // Display name. Defaults to "Template 1/2/3…" at save; users can rename.
+  // Templates saved before this field existed have none; readers fall back.
+  title?: string;
   text: string;
   // Scope: which outreach this voice applies to. Empty projectId = every project
   // (global). projectId set = only that project. categoryId set (implies a
