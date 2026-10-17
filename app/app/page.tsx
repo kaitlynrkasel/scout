@@ -19495,7 +19495,21 @@ function FindWorkflow({
                     Draft personalizes it for {find.opp.name}
                   </span>
                 </div>
-                <FlexTemplatePreview text={t.text} find={find} />
+                <FlexTemplatePreview
+                  text={t.text}
+                  find={find}
+                  onEdit={
+                    onWriteOwn
+                      ? (filled) => {
+                          // Hand the exact text shown (fitted words in, marks
+                          // out) to the write-your-own composer to edit.
+                          setOwnBody(filled);
+                          if (!ownTo) setOwnTo(find.opp.contactEmail || find.opp.contactHandle || "");
+                          setTplId("__own__");
+                        }
+                      : undefined
+                  }
+                />
               </div>
             );
           })()}
@@ -29840,7 +29854,15 @@ function demoFinds(catId: string): Find[] {
  * the version Scout would write for them (fetched once per find+template) and
  * highlighted, so the change is visible before drafting. Unmarked text is the
  * sender's exact words and never leaves the page. */
-function FlexTemplatePreview({ text, find }: { text: string; find: Find }) {
+function FlexTemplatePreview({
+  text,
+  find,
+  onEdit,
+}: {
+  text: string;
+  find: Find;
+  onEdit?: (filled: string) => void;
+}) {
   const parts = text.split(/(«[^»]*»)/g);
   const hasFlex = parts.some((p) => p.startsWith("«"));
   const [fills, setFills] = useState<string[] | null>(null);
@@ -29903,13 +29925,31 @@ function FlexTemplatePreview({ text, find }: { text: string; find: Find }) {
           );
         })}
       </p>
-      {hasFlex && (
-        <p className="mt-1.5 text-[11px] text-body/55">
-          {busy
-            ? "Fitting the highlighted parts to this find…"
-            : "Highlighted parts are fitted to this find; hover one to see your original wording."}
-        </p>
-      )}
+      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+        {onEdit && (
+          <button
+            onClick={() => {
+              let j = 0;
+              onEdit(
+                parts
+                  .map((p) => (p.startsWith("«") ? fills?.[j++] || p.slice(1, -1) : p))
+                  .join("")
+              );
+            }}
+            disabled={busy}
+            className="rounded-lg border border-warm-border bg-surface px-3 py-1 text-xs font-semibold text-ink transition hover:bg-warm-bg disabled:opacity-50"
+          >
+            Edit this message
+          </button>
+        )}
+        {hasFlex && (
+          <span className="text-[11px] text-body/55">
+            {busy
+              ? "Fitting the highlighted parts to this find…"
+              : "Highlighted parts are fitted to this find; hover one to see your original wording."}
+          </span>
+        )}
+      </div>
     </div>
   );
 }
