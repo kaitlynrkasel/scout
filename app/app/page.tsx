@@ -13490,23 +13490,9 @@ function FindDetailModal({
     }
   };
   // Hosts whose pages never render usefully in a frame (app shells that come
-  // up as a black box). Skip the doomed embed and go straight to the
-  // everything-Scout-gathered card.
-  useEffect(() => {
-    let h = "";
-    try {
-      h = new URL(o.url || "").hostname.replace(/^www\./, "");
-    } catch {}
-    if (
-      /^(open\.spotify\.com|music\.apple\.com|soundcloud\.com|youtube\.com|m\.youtube\.com|instagram\.com|facebook\.com|m\.facebook\.com|tiktok\.com|x\.com|twitter\.com)$/.test(
-        h
-      )
-    ) {
-      triedCleanRef.current = true;
-      setPreviewFailed(true);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [o.url]);
+  // up as a black box). hardSkipRef pins the failed state so neither the
+  // per-url reset nor a live proxy bridge can un-fail it.
+  const hardSkipRef = useRef(false);
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
   // Deny reason popover in the header (Deny asks why, like the card does).
   const [denyingModal, setDenyingModal] = useState(false);
@@ -13615,7 +13601,7 @@ function FindDetailModal({
       if (typeof d.type === "string" && d.type.startsWith("scout-")) {
         // Our injected bridge is running, so the real page proxied through fine.
         bridgeAliveRef.current = true;
-        setPreviewFailed(false);
+        if (!hardSkipRef.current) setPreviewFailed(false);
         // The bridge phones home on DOMContentLoaded, so drop the "Loading…"
         // overlay now instead of waiting for the iframe's full load event (which
         // blocks on every image, e.g. a big hero photo). The page is already
@@ -13637,17 +13623,29 @@ function FindDetailModal({
     window.addEventListener("message", onMsg);
     return () => window.removeEventListener("message", onMsg);
   }, []);
-  // Reset per-find as the preview reloads.
+  // Reset per-find as the preview reloads; known black-box hosts (app shells
+  // like Spotify, YouTube, the socials) skip the doomed embed entirely and
+  // land on the everything-Scout-gathered card.
   useEffect(() => {
     setFormDetected(false);
     setFormQuestions([]);
     setShowQuestions(false);
     setFillNote("");
-    setPreviewFailed(false);
     setFrameLoaded(false);
     setCleanMode(false);
     triedCleanRef.current = false;
     bridgeAliveRef.current = false;
+    let h = "";
+    try {
+      h = new URL(o.url || "").hostname.replace(/^www\./, "");
+    } catch {}
+    const blackBox =
+      /^(open\.spotify\.com|music\.apple\.com|soundcloud\.com|youtube\.com|m\.youtube\.com|instagram\.com|facebook\.com|m\.facebook\.com|tiktok\.com|x\.com|twitter\.com)$/.test(
+        h
+      );
+    hardSkipRef.current = blackBox;
+    if (blackBox) triedCleanRef.current = true;
+    setPreviewFailed(blackBox);
   }, [o.url]);
   // Heavy application portals (Workday and friends) are full apps that can
   // spin for a minute through the proxy and often render blank anyway. Don't
@@ -14367,11 +14365,12 @@ function FindDetailModal({
                   minHeight: 240,
                 }}
               >
-                {!frameLoaded && (
+                {!frameLoaded && !previewFailed && (
                   <div className="absolute inset-0 flex items-center justify-center text-xs text-body/40">
                     Loading preview…
                   </div>
                 )}
+                {!previewFailed && (
                 <iframe
                   ref={frameRef}
                   // Routed through our own origin (see app/api/site-preview) so
@@ -14399,6 +14398,7 @@ function FindDetailModal({
                   sandbox="allow-scripts allow-popups allow-forms"
                   className="h-full w-full"
                 />
+                )}
                 {previewFailed && (
                   <div className="absolute inset-0 overflow-y-auto bg-warm-bg/95 p-6">
                     {/* No preview is not an empty pane: the whole width becomes
@@ -19294,7 +19294,7 @@ function FindWorkflow({
                 setTplId("__own__");
                 setOwnExpanded(true);
               }}
-              title="Pop the composer out into a bigger window"
+              title="Expand the composer in place"
               aria-label="Expand the composer"
               className="grid h-6 w-6 place-items-center rounded-lg text-body/50 transition hover:bg-warm-bg hover:text-ink"
             >

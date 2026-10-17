@@ -28,10 +28,13 @@ async function exaSearch(query: string, maxResults: number): Promise<TavilyResul
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key },
       body: JSON.stringify({
+        // Per Exa's build-with-exa skill: the recommended request is query +
+        // token-efficient highlights, nothing else; numResults is a
+        // deliberate cap here, not boilerplate.
         query,
         numResults: Math.min(10, maxResults),
         type: "auto",
-        contents: { text: { maxCharacters: 1500 } },
+        contents: { highlights: true },
       }),
     });
     if (!res.ok) return [];
@@ -39,28 +42,39 @@ async function exaSearch(query: string, maxResults: number): Promise<TavilyResul
     return ((data?.results || []) as any[]).map((r) => ({
       title: String(r.title || ""),
       url: String(r.url || ""),
-      content: String(r.text || r.summary || ""),
+      content: Array.isArray(r.highlights) ? r.highlights.join(" ") : String(r.text || ""),
     }));
   } catch {
     return [];
   }
 }
 
-// Exa's neural "find similar": hand it a page the user KEPT and it returns
-// lookalike pages. This is taste data turned into retrieval; exported for
-// the engine's rescue pass and future "more like this" affordances.
-export async function exaFindSimilar(url: string, maxResults = 6): Promise<TavilyResult[]> {
+// "More like this find you kept": taste data turned into retrieval. Exa's
+// /findSimilar is deprecated per its docs, so this derives a /search query
+// from the seed's title and excludes the seed's own domain (an intentional
+// blocklist of one, so the lookalikes are NEW places).
+export async function exaFindSimilar(
+  seedTitle: string,
+  seedUrl: string,
+  maxResults = 6
+): Promise<TavilyResult[]> {
   const key = process.env.EXA_API_KEY;
-  if (!key || !url) return [];
+  const title = (seedTitle || "").trim();
+  if (!key || !title) return [];
+  let hostX = "";
   try {
-    const res = await fetch("https://api.exa.ai/findSimilar", {
+    hostX = new URL(seedUrl || "").hostname.replace(/^www\./, "");
+  } catch {}
+  try {
+    const res = await fetch("https://api.exa.ai/search", {
       method: "POST",
       headers: { "content-type": "application/json", "x-api-key": key },
       body: JSON.stringify({
-        url,
+        query: `pages similar to: ${title}`,
         numResults: Math.min(10, maxResults),
-        excludeSourceDomain: true,
-        contents: { text: { maxCharacters: 1500 } },
+        type: "auto",
+        contents: { highlights: true },
+        ...(hostX ? { excludeDomains: [hostX] } : {}),
       }),
     });
     if (!res.ok) return [];
@@ -68,7 +82,7 @@ export async function exaFindSimilar(url: string, maxResults = 6): Promise<Tavil
     return ((data?.results || []) as any[]).map((r) => ({
       title: String(r.title || ""),
       url: String(r.url || ""),
-      content: String(r.text || ""),
+      content: Array.isArray(r.highlights) ? r.highlights.join(" ") : "",
     }));
   } catch {
     return [];
