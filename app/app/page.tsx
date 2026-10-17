@@ -19032,17 +19032,34 @@ function FindWorkflow({
       setRevising(false);
     }
   }
-  // Format for the FIRST draft — defaults to the smart channel for this contact
-  // (email if we have one, else the platform their handle points at), but the
-  // user can pick any format before drafting.
-  const smartKind =
-    /email/i.test(o.channel || "") || o.contactEmail
-      ? "Email"
-      : /linkedin/i.test(o.channel || "") || /linkedin/i.test(o.contactHandle || "")
-      ? "LinkedIn message"
-      : /instagram/i.test(o.contactHandle || "")
+  // Format for the FIRST draft. When Scout has established HOW they take
+  // submissions (a criteria answer like "Submission method? Instagram DM
+  // @dailyfreshfinds"), that known route wins; only then fall back to the
+  // generic guesses (email on file, then the handle's platform).
+  const kindFromText = (t: string) =>
+    /instagram/i.test(t)
       ? "Instagram DM"
-      : "Email";
+      : /tiktok/i.test(t)
+      ? "TikTok DM"
+      : /\btwitter\b|\bx dm\b|x \/ twitter/i.test(t)
+      ? "X / Twitter DM"
+      : /linkedin/i.test(t)
+      ? "LinkedIn message"
+      : /\b(text|sms)\b/i.test(t)
+      ? "Text message"
+      : /email/i.test(t)
+      ? "Email"
+      : "";
+  const methodAnswer = (o.criteria || [])
+    .filter((c) => /method|submit|submission|contact|outreach|apply|reach/i.test(c.ask))
+    .map((c) => c.answer)
+    .join(" ");
+  const smartKind =
+    kindFromText(methodAnswer) ||
+    kindFromText(o.channel || "") ||
+    (o.contactEmail ? "Email" : "") ||
+    kindFromText(o.contactHandle || "") ||
+    "Email";
   const [draftKind, setDraftKind] = useState(smartKind);
   // Which template to draft from; "" lets the drafter pick the best match and
   // "__own__" opens the write-it-yourself composer.
