@@ -1676,9 +1676,13 @@ function ScoutTool({
   // rather than the useState initializer so the server and the first client
   // render agree; the hash is only readable after hydration.
   const tabRestored = useRef(false);
+  const restoringTab = useRef<TabId | null>(null);
   useEffect(() => {
     const initial = tabFromHash(window.location.hash);
-    if (initial) setTab(initial);
+    if (initial) {
+      restoringTab.current = initial;
+      setTab(initial);
+    }
     tabRestored.current = true;
     // Keep the view honest if the hash changes under us — an in-page #link or
     // someone editing the address bar — instead of leaving it stranded.
@@ -1854,6 +1858,13 @@ function ScoutTool({
     // Skip until the restore above has run, or the default tab would overwrite
     // the hash we're about to read.
     if (!tabRestored.current) return;
+    // A restored tab is still landing: this pass holds the DEFAULT tab, and
+    // writing it would turn #templates into #outreach (which React's dev
+    // double-mount then re-reads and keeps). Wait until the restore lands.
+    if (restoringTab.current) {
+      if (tab !== restoringTab.current) return;
+      restoringTab.current = null;
+    }
     if (window.location.hash === `#${tab}`) return;
     try {
       // replaceState, not push: switching tabs shouldn't stack history entries
