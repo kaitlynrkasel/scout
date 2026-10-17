@@ -17626,6 +17626,35 @@ function FindsTab({
         </div>
       </div>
 
+      {/* Category (search) chips: first-class, not buried in Filters. Only
+          renders when the pipeline actually spans more than one search. */}
+      {catOptions.length > 1 && (
+        <div className="mt-2 flex min-w-0 items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <span className="shrink-0 text-[10px] font-bold uppercase tracking-[0.12em] text-body/45">
+            Search
+          </span>
+          {catOptions.map((nm) => {
+            const on = catSel.has(nm);
+            const n = finds.filter((f) => catNameOf(f) === nm).length;
+            return (
+              <button
+                key={nm}
+                onClick={() => toggleFrom(catSel, setCatSel, nm)}
+                aria-pressed={on}
+                className={`shrink-0 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
+                  on
+                    ? "border-brown bg-brown-tint text-brown-deep"
+                    : "border-warm-border bg-surface text-body hover:bg-warm-bg"
+                }`}
+              >
+                {nm}
+                <span className={on ? "text-brown-deep/70" : "text-body/50"}> {n}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       {/* ---- Comprehensive filters panel (toggled from the toolbar above) ---- */}
       <div className="mt-3">
         {activeFilterCount > 0 && !filtersOpen && (
