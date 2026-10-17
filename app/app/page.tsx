@@ -8482,12 +8482,26 @@ function ScoutTool({
                   {/* The separate "Solo Search" pill is gone: the category
                       picker's "New search" entry is the same action, and two
                       doors to one room read as two different features. */}
-                  <button
-                    onClick={() => setTab("projects")}
-                    className="ml-auto text-[11px] font-semibold text-white/50 transition hover:text-white"
-                  >
-                    Manage projects
-                  </button>
+                  <div className="ml-auto flex items-center gap-4">
+                    <button
+                      onClick={() => {
+                        // Land on Templates already scoped to what the stage
+                        // is pointed at, so "the template for this" is one click.
+                        setMtProjectId(activeId);
+                        setMtCategoryId(catId.startsWith("sug-") ? "" : catId);
+                        setTab("templates");
+                      }}
+                      className="text-[11px] font-semibold text-white/50 transition hover:text-white"
+                    >
+                      Templates for this
+                    </button>
+                    <button
+                      onClick={() => setTab("projects")}
+                      className="text-[11px] font-semibold text-white/50 transition hover:text-white"
+                    >
+                      Manage projects
+                    </button>
+                  </div>
                 </div>
 
                 {newCatOpen && (
