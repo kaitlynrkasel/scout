@@ -15485,10 +15485,10 @@ function AddContactModal({
         </div>
       </div>
 
-      {/* Their card: a separate pop-up beside the form, read-only, so it never
-          reads as a second place to type. It only exists once the paste has
-          produced something. */}
-      {(name.trim() || email || phone || handle || url || notes.trim()) && (
+      {/* Their card: a separate panel beside the form, read-only, so it never
+          reads as a second place to type. Inline it holds the space from the
+          start; as a pop-up it only exists once the paste produced something. */}
+      {(inline || name.trim() || email || phone || handle || url || notes.trim()) && (
         <aside
           aria-live="polite"
           onClick={(e) => e.stopPropagation()}
@@ -15508,7 +15508,12 @@ function AddContactModal({
                 {name.trim() || "New contact"}
               </div>
               <div className="truncate text-xs text-body/60">
-                {outlet.trim() || (enriching ? "Scout is filling this in…" : "")}
+                {outlet.trim() ||
+                  (enriching
+                    ? "Scout is filling this in…"
+                    : name.trim()
+                    ? ""
+                    : "Builds itself as you paste.")}
               </div>
             </div>
           </div>
