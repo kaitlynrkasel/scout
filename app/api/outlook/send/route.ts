@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { signUnsub } from "@/lib/unsubscribe";
 import { reqOrigin } from "@/lib/gmail";
-import { humanHtml, needsHtml } from "@/lib/emailHtml";
+import { humanHtml, needsHtml, plainLinks } from "@/lib/emailHtml";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { outlookSendOrDraft } from "@/lib/outlook";
 
@@ -77,7 +77,7 @@ export async function POST(req: NextRequest) {
       to: String(to),
       cc: String(cc || "") || undefined,
       subject: String(subject || ""),
-      body: String(body || ""),
+      body: plainLinks(String(body || "")),
       html: needsHtml(String(body || "")) ? humanHtml(String(body || "")) : undefined,
       mode,
       listUnsubscribe,

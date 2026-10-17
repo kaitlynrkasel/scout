@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { ucInfo, ucKey, USE_CASE_SUGGESTIONS } from "@/lib/templates";
+import { plainLinks } from "@/lib/emailHtml";
 import { normNameKey, urlHostKey, sharedFindKey } from "@/lib/findKeys";
 import type { Draft, Opportunity, OutreachTemplate, SourceRef } from "@/lib/types";
 import type { Session } from "@supabase/supabase-js";
@@ -184,7 +185,9 @@ function baselineUnderstanding(
 // certain in-app webviews); we fall back to the legacy execCommand path and,
 // only if BOTH fail, report false so callers can tell the user instead of
 // flashing a false "Copied!".
-async function copyToClipboard(text: string): Promise<boolean> {
+async function copyToClipboard(raw: string): Promise<boolean> {
+  // Named links ([label](url)) paste as "label: url" anywhere outside email.
+  const text = plainLinks(raw);
   try {
     if (typeof navigator !== "undefined" && navigator.clipboard?.writeText) {
       await navigator.clipboard.writeText(text);
@@ -19345,6 +19348,9 @@ function FindWorkflow({
           <textarea
             value={editBody}
             onChange={(e) => setEditBody(e.target.value)}
+            onPaste={(e) => {
+              pasteKeepingLinks(e, editBody, setEditBody);
+            }}
             rows={Math.min(16, Math.max(6, editBody.split("\n").length + 1))}
             className="w-full rounded-lg border border-warm-border px-2.5 py-2 font-sans text-xs leading-relaxed text-body outline-none focus:ring-2 focus:ring-coral/20"
           />
@@ -19579,6 +19585,9 @@ function FindWorkflow({
                 <textarea
                   value={ownBody}
                   onChange={(e) => setOwnBody(e.target.value)}
+                  onPaste={(e) => {
+                    pasteKeepingLinks(e, ownBody, setOwnBody);
+                  }}
                   rows={big ? 14 : 6}
                   autoFocus={big}
                   placeholder="Write the message exactly as you want it sent."
@@ -19799,7 +19808,7 @@ function FindWorkflow({
             return (
               <button
                 onClick={async () => {
-                  const text = d.subject ? `${d.subject}\n\n${d.body}` : d.body;
+                  const text = plainLinks(d.subject ? `${d.subject}\n\n${d.body}` : d.body);
                   await copyToClipboard(text);
                   window.open(`https://ig.me/m/${igHandle}`, "_blank", "noopener");
                   if (
@@ -26517,6 +26526,9 @@ function TemplatesTab({
                   ref={taRef}
                   value={text}
                   onChange={(e) => setText(e.target.value)}
+                  onPaste={(e) => {
+                    pasteKeepingLinks(e, text, setText);
+                  }}
                   rows={9}
                   placeholder={`Paste a real ${channel.toLowerCase()} you've sent, or write how you want this kind of message to sound.`}
                   className="mt-1 w-full resize-y border-0 border-b border-[rgb(var(--v-line))] bg-transparent px-0 py-2 text-[15px] leading-[1.9] text-ink outline-none placeholder:text-body/35 focus:border-brown"
@@ -29903,6 +29915,51 @@ function demoFinds(catId: string): Find[] {
     } as unknown as Opportunity,
   }));
 }
+/* Paste that keeps links. Copying "Listen on Spotify" out of Gmail or a doc
+ * puts HTML on the clipboard; a plain textarea would keep only the words.
+ * Anchors become [label](url), which sent email renders as the linked label
+ * (lib/emailHtml) and plain-text spots render as "label: url". Lists keep
+ * their bullets, paragraphs their breaks. Returns false when the clipboard
+ * has no links, so ordinary paste behavior is untouched. */
+function pasteKeepingLinks(
+  e: React.ClipboardEvent<HTMLTextAreaElement>,
+  value: string,
+  setValue: (v: string) => void
+): boolean {
+  const html = e.clipboardData.getData("text/html");
+  if (!html || !/<a\s[^>]*href=/i.test(html)) return false;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const walk = (n: Node): string => {
+    if (n.nodeType === Node.TEXT_NODE) return (n.textContent || "").replace(/\s+/g, " ");
+    if (n.nodeType !== Node.ELEMENT_NODE) return "";
+    const el = n as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    if (tag === "style" || tag === "script") return "";
+    const inner = Array.from(el.childNodes).map(walk).join("");
+    if (tag === "a") {
+      const href = el.getAttribute("href") || "";
+      const label = inner.trim();
+      if (!/^https?:\/\//i.test(href)) return inner;
+      return label && label !== href ? `[${label}](${href})` : href;
+    }
+    if (tag === "br") return "\n";
+    if (tag === "li") return `\n- ${inner.trim()}`;
+    if (/^(p|div|h[1-6]|ul|ol|tr|blockquote)$/.test(tag)) return `\n${inner}\n`;
+    return inner;
+  };
+  const text = walk(doc.body)
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (!text) return false;
+  e.preventDefault();
+  const ta = e.currentTarget;
+  const a = ta.selectionStart ?? value.length;
+  const b = ta.selectionEnd ?? value.length;
+  setValue(value.slice(0, a) + text + value.slice(b));
+  return true;
+}
+
 /* A template as it will read for THIS find: every «flex span» is swapped for
  * the version Scout would write for them (fetched once per find+template) and
  * highlighted, so the change is visible before drafting. Unmarked text is the
@@ -30552,7 +30609,7 @@ function FindsTray({
                             )}
                             <button
                               onClick={() => {
-                                navigator.clipboard?.writeText(d.subject ? `${d.subject}\n\n${d.body}` : d.body).catch(() => {});
+                                void copyToClipboard(d.subject ? `${d.subject}\n\n${d.body}` : d.body);
                               }}
                               className="rounded-full border border-[rgb(var(--v-line))] px-3.5 py-1.5 text-[12px] font-semibold text-body/70 transition hover:text-ink"
                             >

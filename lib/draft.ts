@@ -77,9 +77,16 @@ function templateBlock(
       "work names the ACCOUNT or brand that owns them all, never one playlist title, so the pitch fits " +
       "anything they might place it on; name a single playlist or show only when they clearly run just one.\n"
     : "";
+  // Named links ([label](url)) come from pasting rich links into a template;
+  // the sender's whole link list must survive word for word.
+  const linkRule = use.some((s) => /\[[^\]\n]+\]\(https?:\/\//.test(s.text))
+    ? "\nLINKS: keep every [label](url) link from the template EXACTLY as written, same label, same URL, " +
+      "same order and list formatting; never drop, shorten, reword or invent one.\n"
+    : "";
   return (
     header +
     flexRule +
+    linkRule +
     use
       .map((s, i) => `${i + 1}. [${s.channel}] ${s.text.replace(/\s+/g, " ").trim()}`)
       .join("\n\n")

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { humanHtml, needsHtml } from "@/lib/emailHtml";
+import { humanHtml, needsHtml, plainLinks } from "@/lib/emailHtml";
 import { supabaseAdmin, userIdFromReq } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, reqOrigin } from "@/lib/gmail";
 import { signUnsub } from "@/lib/unsubscribe";
@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
       to: String(to),
       cc: ccStr || undefined,
       subject: String(subject || ""),
-      body: outBody,
+      body: plainLinks(outBody),
       mode,
       threadId: threadId ? String(threadId) : undefined,
       attachments: atts.length ? atts : undefined,

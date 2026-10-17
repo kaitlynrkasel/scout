@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { humanHtml, needsHtml } from "@/lib/emailHtml";
+import { humanHtml, needsHtml, plainLinks } from "@/lib/emailHtml";
 import { supabaseAdmin } from "@/lib/supabaseAdmin";
 import { gmailSendOrDraft, gmailThreadsWithReplies } from "@/lib/gmail";
 import { outlookSendOrDraft, outlookConversationsWithReplies } from "@/lib/outlook";
@@ -176,7 +176,7 @@ export async function GET(req: NextRequest) {
         from: fromAddr,
         to: row.to_addr as string,
         subject: (row.subject as string) || "",
-        body: outBody,
+        body: plainLinks(outBody),
         mode: "send" as const,
         attachments: atts.length ? atts : undefined,
         html: !atts.length && needsHtml(outBody) ? humanHtml(outBody) : undefined,
