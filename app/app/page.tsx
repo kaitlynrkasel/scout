@@ -21204,6 +21204,91 @@ ${body}
         </div>
       </section>
 
+      {/* -------- Where every find stands: a staggered stage chart. Each find
+          is a bar built of flat stage segments (found, drafted, sent, replied)
+          on shared columns, sorted by progress so the whole thing cascades;
+          one glance says how far along everything is. -------- */}
+      {finds.some((f) => f.status !== "denied") && (
+        <section data-jig="7" className="mt-10">
+          <h2 className="text-lg font-semibold tracking-tight text-ink">
+            Where every find stands
+          </h2>
+          <div className="mt-4 rounded-2xl border border-warm-border bg-surface p-5 shadow-card">
+            {(() => {
+              const STAGES = [
+                { label: "Found", color: "#E2CBA8" },
+                { label: "Drafted", color: "#C9A277" },
+                { label: "Sent", color: "#A9764A" },
+                { label: "Replied", color: "#5B3A1F" },
+              ];
+              const prog = (f: Find) =>
+                f.status === "replied" ? 4 : f.status === "sent" ? 3 : f.status === "drafted" ? 2 : 1;
+              const alive = finds.filter((f) => f.status !== "denied");
+              const rows = [...alive]
+                .sort((a, b) => prog(b) - prog(a) || (b.addedAt || 0) - (a.addedAt || 0))
+                .slice(0, 14);
+              return (
+                <div>
+                  <div className="flex">
+                    <span className="w-28 shrink-0 sm:w-40" />
+                    <div className="grid flex-1 grid-cols-4">
+                      {STAGES.map((s) => (
+                        <div
+                          key={s.label}
+                          className="border-l border-warm-border pb-2 pl-2 text-[10px] font-bold uppercase tracking-[0.12em] text-body/50"
+                        >
+                          {s.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    {rows.map((f) => {
+                      const p = prog(f);
+                      return (
+                        <button
+                          key={f.id}
+                          onClick={goFinds}
+                          className="group flex w-full items-center text-left"
+                          title={`${f.opp.name}: ${STAGES[p - 1].label.toLowerCase()}`}
+                        >
+                          <span className="w-28 shrink-0 truncate pr-3 text-xs font-semibold text-ink transition group-hover:text-brown sm:w-40">
+                            {f.opp.name}
+                          </span>
+                          <span className="grid flex-1 grid-cols-4">
+                            {STAGES.map((s, i) => (
+                              <span key={s.label} className="relative h-6 border-l border-warm-border">
+                                {i < p && (
+                                  <span
+                                    className="absolute inset-y-0.5 -left-px right-0 transition group-hover:opacity-90"
+                                    style={{ background: s.color }}
+                                  />
+                                )}
+                              </span>
+                            ))}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {alive.length > rows.length && (
+                    <p className="mt-3 text-[11px] text-body/55">
+                      Furthest-along {rows.length} of {alive.length} shown.{" "}
+                      <button
+                        onClick={goFinds}
+                        className="font-semibold text-accent hover:underline"
+                      >
+                        All finds →
+                      </button>
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        </section>
+      )}
+
       
 
       {/* -------- Owner view: the same lens pointed at the TEAM -------- */}

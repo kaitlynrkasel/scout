@@ -48,12 +48,11 @@ export const metadata = {
 const CSS = `
   :root{
     --paper:#F5F2EB; --paper2:#E9D4C3; --ink:#3A2A1B; --cream:#F9F5EE;
-    /* Pantone board — Mystic Navy (#13273F) is the deep anchor: CTAs + the dark
-       band. Dusty blue (#8496B4) is the light accent (stickers). Chocolate
-       Cremoso browns + Mother of Pearl tan (paper2) are the warm identity.
-       --blue = navy fills, --blue-ink = navy labels, --blue-mid = dusty blue. */
-    --blue:#13273F; --blue-ink:#1E3A5C; --blue-mid:#8496B4;
-    --terra:#5A4331; --terra-deep:#42301F; --olive:#536872;
+    /* Warm-or-white board: espresso is the deep anchor (CTAs + labels),
+       caramel the light accent (stickers). Token NAMES kept (--blue etc.)
+       so nothing downstream breaks, but every value is warm. */
+    --blue:#42301F; --blue-ink:#8A5A34; --blue-mid:#C79F76;
+    --terra:#5A4331; --terra-deep:#42301F; --olive:#7A6A4F;
     --muted:#8B8271; --line:#DED6C7; --border:#D2C9B8; --dark:#2A2017;
     --r:12px; --rs:9px;
   }
@@ -98,7 +97,14 @@ const CSS = `
   .dog .lab{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);text-align:center}
   .dog .lab .t{font-size:11px;font-weight:600;letter-spacing:.08em;margin-top:10px}
   .dog .lab .s{font-size:12px;margin-top:5px;color:#A99E88}
-  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--blue-mid);color:#13273F;font-size:11px;font-weight:700;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
+  .sticker{position:absolute;right:44px;top:78px;z-index:8;background:var(--blue-mid);color:#42301F;font-size:11px;font-weight:700;letter-spacing:.06em;padding:9px 14px;border-radius:var(--rs)}
+  /* Floating proof chips over the hero, Teamway-style: real find cards, not
+     claims. Hidden on phones where the hero stacks. */
+  .fchip{position:absolute;z-index:9;display:flex;align-items:center;gap:10px;background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:10px 14px;box-shadow:0 18px 40px -26px rgba(36,28,19,.35)}
+  .fchip .av{width:34px;height:34px;border-radius:10px;background:#E4D6C3;display:grid;place-items:center;font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;color:#5b4632;font-size:15px}
+  .fchip .nm{font-size:13px;font-weight:700;color:var(--ink);line-height:1.15}
+  .fchip .rl{font-size:10.5px;color:var(--muted);letter-spacing:.03em;margin-top:1px}
+  .fchip .ok{color:#8A5A34;flex:0 0 auto;margin-left:2px}
   .sticker2{position:absolute;left:548px;top:196px;z-index:8;background:var(--olive);color:#F5F2EB;font-size:11px;font-weight:600;letter-spacing:.04em;padding:8px 13px;border-radius:var(--rs)}
   .ledechip{position:absolute;left:56px;top:506px;z-index:7;width:404px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);padding:22px;box-shadow:0 20px 44px -30px rgba(36,28,19,.26)}
   .ledechip p{font-size:15.5px;line-height:1.55;color:#4a4336}
@@ -125,19 +131,22 @@ const CSS = `
   .howrow h3{font-size:19px;font-weight:600;color:var(--ink)}
   .howrow p{font-size:15px;line-height:1.6;color:#57503f;margin-top:7px;max-width:46ch}
 
-  /* USES — overlapping cards (the collision) + example list */
-  .stack{position:relative;margin-top:36px;height:492px}
-  .card{position:absolute;width:340px;background:var(--cream);border:1px solid var(--border);border-radius:var(--r);overflow:hidden}
-  .card .ph{height:196px;background:var(--paper2);position:relative}
-  .card .ph::after{content:"";position:absolute;inset:12px;border:1px dashed #C7BBA6;border-radius:6px}
-  .card .ph .t{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:var(--muted)}
-  .card .bd{padding:18px}
-  .card .who{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--terra-deep)}
-  .card h3{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:27px;margin-top:6px;color:var(--ink)}
-  .card p{font-size:14px;line-height:1.5;color:#57503f;margin-top:8px}
-  .c1{left:0;top:0;z-index:3}
-  .c2{left:300px;top:150px;z-index:4;box-shadow:0 34px 66px -36px rgba(36,28,19,.36)}
-  .c3{left:640px;top:44px;z-index:2}
+  /* USES — warm tinted feature grid: borderless soft blocks, one bold claim
+     each, an oversized abstract shape bleeding off the card edge. The 2/5 +
+     3/5 asymmetric split keeps it from reading as a template. */
+  .trow{display:grid;gap:18px;margin-top:18px}
+  .trow.a{grid-template-columns:2fr 3fr}
+  .trow.b{grid-template-columns:3fr 2fr}
+  .trow:first-of-type{margin-top:36px}
+  .tcard{position:relative;overflow:hidden;border-radius:18px;padding:30px 28px;min-height:232px}
+  .tcard .who{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--terra-deep);position:relative;z-index:2}
+  .tcard h3{font-family:var(--font-bric),system-ui,sans-serif;font-weight:700;font-size:24px;margin-top:8px;color:var(--ink);position:relative;z-index:2}
+  .tcard p{font-size:14.5px;line-height:1.6;color:#57503f;margin-top:9px;max-width:36ch;position:relative;z-index:2}
+  .tcard .shape{position:absolute;z-index:1;pointer-events:none}
+  .t-sand{background:#EDE3D0}
+  .t-blush{background:#F3DFCE}
+  .t-butter{background:#F3E8C9}
+  .t-caramel{background:#E8D5BC}
   .exlist{margin-top:28px;border-top:1px solid var(--border)}
   .exrow{display:flex;align-items:center;gap:16px;padding:13px 4px;border-bottom:1px solid var(--line)}
   .exrow svg{color:var(--terra);flex:0 0 auto}
@@ -162,7 +171,7 @@ const CSS = `
   .msg + .msg{margin-top:-16px;margin-left:44px;box-shadow:0 26px 54px -34px rgba(36,28,19,.34)}
   .msg .lbl{font-size:10.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;margin-bottom:8px}
   .msg.gen{opacity:.7} .msg.gen .lbl{color:var(--muted)} .msg.gen p{color:#7a7264;text-decoration:line-through;text-decoration-color:#cfc3af}
-  .msg.you{border-left:3px solid var(--olive)} .msg.you .lbl{color:#536872}
+  .msg.you{border-left:3px solid var(--olive)} .msg.you .lbl{color:var(--olive)}
   .msg p{font-size:14.5px;line-height:1.55;color:#463f33}
 
   /* TEAM */
@@ -197,7 +206,7 @@ const CSS = `
   .form .send{align-self:flex-start}
   /* On the dark contact band the navy .btn-t would be muddy — give the send
      button the dusty-blue fill with navy text so it pops. */
-  .scoutland .contact .btn-t{background:var(--blue-mid);color:#13273F}
+  .scoutland .contact .btn-t{background:var(--blue-mid);color:#42301F}
   .contact .em{margin-top:16px;font-size:13.5px;color:#B7AB96}
   .contact .em b{color:#EDE6D6}
 
@@ -252,7 +261,7 @@ const CSS = `
     .hero{height:auto;overflow:visible;padding-bottom:34px}
     .herwrap{height:auto}
     .hero .eyebrow{position:static;display:inline-block;margin:22px 0 0 22px}
-    .hero .eyebrow2,.sticker,.backword{display:none}
+    .hero .eyebrow2,.sticker,.backword,.fchip{display:none}
     .headline{position:static;padding:0 22px;margin-top:14px}
     .headline .l{font-size:74px;line-height:.84}
     .dog{position:static;width:auto;height:300px;margin:22px 22px 0}
@@ -260,8 +269,8 @@ const CSS = `
     .run .big{font-size:64px}
     .run .cap .s{padding:0 22px}
     .how{grid-template-columns:1fr;gap:26px}
-    .stack{height:auto;display:flex;flex-direction:column;gap:16px;margin-top:24px}
-    .card{position:static;width:auto}
+    .trow.a,.trow.b{grid-template-columns:1fr}
+    .tcard{min-height:200px}
     .steps{grid-template-columns:1fr;gap:0}
     .step{border-top:none;border-bottom:1px solid var(--line);padding:18px 0}
     .voicegrid{grid-template-columns:1fr;gap:26px}
@@ -302,6 +311,8 @@ const BODY = `
   <div class="headline headfont"><span class="l">Find</span><span class="l">Your</span><span class="l">People</span></div>
   <div class="dog"><img src="/scout-dog.png" alt="Scout the dog" style="width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 14px 22px rgb(36 28 19 / 0.18))"></div>
   <div class="sticker">Fetch · Track · Find</div>
+  <div class="fchip" style="right:408px;top:168px"><div class="av">M</div><div><div class="nm">Maren Doyle</div><div class="rl">A&amp;R · Big Loud</div></div><svg class="ok" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" opacity=".35"/><path d="m8.5 12.5 2.4 2.4 4.6-5.3"/></svg></div>
+  <div class="fchip" style="right:20px;top:596px"><div class="av">T</div><div><div class="nm">Tuned Up</div><div class="rl">Playlist curator · replied</div></div><svg class="ok" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9" opacity=".35"/><path d="m8.5 12.5 2.4 2.4 4.6-5.3"/></svg></div>
   <div class="ledechip">
     <p>Scout hunts down the mentors, recruiters, and alumni who fit your goal, then drafts a warm intro in your own voice.</p>
     <div class="row"><a class="btn btn-t" href="/app">Start scouting →</a><a class="btn btn-o" href="#how">How it works</a></div>
@@ -332,11 +343,30 @@ const BODY = `
 
 <!-- USES -->
 <section class="sec" id="uses" style="background:#EFE7D6"><div class="wrap">
-  <div style="max-width:640px"><div class="kicker">What you can use it for</div><h2 class="h2">Whatever you're hunting for.</h2></div>
-  <div class="stack">
-    <div class="card c1"><div class="ph" style="background:#E9E0CE;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9h11a4 4 0 0 1 0 8h-1"/><path d="M4 9v6a4 4 0 0 0 4 4h3a4 4 0 0 0 4-4V9z"/><path d="M8 3v2M11 3v2"/></svg></div><div class="bd"><div class="who">For students</div><h3>Coffee chats &amp; alumni</h3><p>Alumni in your field, opened with a note that doesn't read like a cold email.</p></div></div>
-    <div class="card c2"><div class="ph" style="background:#D7E1EE;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="8" width="18" height="12" rx="2"/><path d="M9 8V6a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/><path d="M3 13h18"/></svg></div><div class="bd"><div class="who">For job seekers</div><h3>Recruiters &amp; referrals</h3><p>The people hiring right now, with a warm intro ready to send.</p></div></div>
-    <div class="card c3"><div class="ph" style="background:#E4D6C3;display:grid;place-items:center"><svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#5b4632" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11v3l10 4V7z"/><path d="M14 8a8 8 0 0 1 0 9"/><path d="M6 14v5"/></svg></div><div class="bd"><div class="who">For founders</div><h3>Partners &amp; press</h3><p>Point the whole team at one pipeline of real contacts.</p></div></div>
+  <div style="max-width:680px"><div class="kicker">What Scout gives you</div><h2 class="h2">Search faster. Reach warmer. Stay organized.</h2></div>
+  <div class="trow a">
+    <div class="tcard t-sand">
+      <div class="who">Fast search</div><h3>A pipeline in about a minute</h3>
+      <p>Describe who you want in plain words. Scout reads the live public web the moment you ask and comes back with real people.</p>
+      <svg class="shape" style="right:-54px;bottom:-66px" width="230" height="230" viewBox="0 0 230 230" fill="none"><circle cx="115" cy="115" r="52" stroke="#C9803F" stroke-width="22" opacity=".8"/><circle cx="115" cy="115" r="96" stroke="#C9803F" stroke-width="14" opacity=".4"/></svg>
+    </div>
+    <div class="tcard t-blush">
+      <div class="who">Warm outreach</div><h3>Messages that sound like you</h3>
+      <p>Every draft is written in your voice for the right channel, a note worth sending, never a template blast. Edit once and Scout remembers.</p>
+      <svg class="shape" style="right:-30px;top:-44px" width="260" height="260" viewBox="0 0 260 260" fill="none"><path d="M60 230c0-72 38-130 118-130" stroke="#B98A57" stroke-width="26" stroke-linecap="round" opacity=".7"/><path d="M110 236c0-52 26-92 88-92" stroke="#B98A57" stroke-width="18" stroke-linecap="round" opacity=".45"/></svg>
+    </div>
+  </div>
+  <div class="trow b">
+    <div class="tcard t-butter">
+      <div class="who">Organization</div><h3>Everything files itself</h3>
+      <p>Finds, drafts, sent, and replies land in one pipeline your whole team can see, with follow-ups queued and nothing lost in a spreadsheet.</p>
+      <svg class="shape" style="right:-20px;bottom:-30px" width="250" height="190" viewBox="0 0 250 190" fill="none"><g fill="#8A5A34"><circle cx="30" cy="160" r="7" opacity=".9"/><circle cx="30" cy="130" r="7" opacity=".6"/><circle cx="30" cy="100" r="7" opacity=".35"/><circle cx="75" cy="160" r="7" opacity=".9"/><circle cx="75" cy="130" r="7" opacity=".75"/><circle cx="75" cy="100" r="7" opacity=".55"/><circle cx="75" cy="70" r="7" opacity=".3"/><circle cx="120" cy="160" r="7" opacity=".9"/><circle cx="120" cy="130" r="7" opacity=".8"/><circle cx="120" cy="100" r="7" opacity=".65"/><circle cx="120" cy="70" r="7" opacity=".5"/><circle cx="120" cy="40" r="7" opacity=".3"/><circle cx="165" cy="160" r="7" opacity=".9"/><circle cx="165" cy="130" r="7" opacity=".8"/><circle cx="165" cy="100" r="7" opacity=".7"/><circle cx="165" cy="70" r="7" opacity=".55"/><circle cx="165" cy="40" r="7" opacity=".4"/><circle cx="165" cy="10" r="7" opacity=".25"/><circle cx="210" cy="160" r="7"/><circle cx="210" cy="130" r="7" opacity=".9"/><circle cx="210" cy="100" r="7" opacity=".8"/><circle cx="210" cy="70" r="7" opacity=".7"/><circle cx="210" cy="40" r="7" opacity=".55"/><circle cx="210" cy="10" r="7" opacity=".4"/></g></svg>
+    </div>
+    <div class="tcard t-caramel">
+      <div class="who">No stale lists</div><h3>Live contacts only</h3>
+      <p>Names, roles, and emails come from public pages read at the moment you ask, not a recycled database of leads everyone else already emailed.</p>
+      <svg class="shape" style="right:-60px;bottom:-60px" width="220" height="220" viewBox="0 0 220 220" fill="none"><path d="M110 10c55 0 100 45 100 100s-45 100-100 100" stroke="#5A4331" stroke-width="30" stroke-linecap="round" opacity=".5"/><circle cx="110" cy="110" r="44" fill="#C9803F" opacity=".75"/></svg>
+    </div>
   </div>
   <div class="exlist">
     <div class="exrow"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg><span class="who">Job seeker</span><span class="q">Recruiters hiring remote UX designers</span></div>
