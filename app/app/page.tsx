@@ -29750,15 +29750,16 @@ function FindsTray({
       return !c;
     });
   };
-  // Layout preview flags for the canvas: ?finds=cards | ledger | stamps | deck,
+  // Layout preview flags for the canvas: ?finds=cards | ledger | leaders |
+  // notebook | table | stamps | deck,
   // and ?demo=finds fills an empty search with sample finds (display only:
   // never saved, never draggable to Drafts).
-  const [findsStyle, setFindsStyle] = useState<"cards" | "ledger" | "stamps" | "deck">("cards");
+  const [findsStyle, setFindsStyle] = useState<string>("cards");
   const [demo, setDemo] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const v = q.get("finds");
-    if (v === "ledger" || v === "stamps" || v === "deck") setFindsStyle(v);
+    if (v && ["ledger", "leaders", "notebook", "table", "stamps", "deck"].includes(v)) setFindsStyle(v);
     setDemo(q.get("demo") === "finds");
   }, []);
   const realFresh = finds
@@ -29801,9 +29802,20 @@ function FindsTray({
                 ? "grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-4"
                 : findsStyle === "deck"
                 ? "flex gap-5 overflow-x-auto px-1 pb-12 pt-3"
+                : findsStyle === "notebook"
+                ? "relative flex flex-col border-l-2 border-brown/35 pl-5"
                 : "flex flex-col"
             }`}
           >
+            {findsStyle === "table" && fresh.length > 0 && (
+              <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_90px_70px] gap-4 border-b-2 border-ink/70 px-1 pb-2 text-[10px] font-bold uppercase tracking-[0.16em] text-body/50">
+                <span>Name</span>
+                <span>Role</span>
+                <span>Outlet</span>
+                <span>Channel</span>
+                <span className="text-right">Fit</span>
+              </div>
+            )}
             {fresh.length === 0 && (
               <div className="rounded-2xl border border-dashed border-[rgb(var(--v-dash))] px-5 py-10 text-center text-sm text-body/45 sm:col-span-2">
                 Send Scout and the finds for this search land here.
@@ -29843,6 +29855,61 @@ function FindsTray({
                     <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{f.opp.channel}</span>
                     {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
                     {draftBtn}
+                  </div>
+                );
+
+              if (findsStyle === "leaders")
+                return (
+                  <div key={f.id} {...drag} className="group/card flex cursor-grab items-baseline gap-3 px-1 py-3 active:cursor-grabbing">
+                    <span className="shrink-0 font-display text-[18px] font-bold tracking-tight text-ink">{name}</span>
+                    <span aria-hidden className="min-w-[24px] flex-1 translate-y-[-4px] border-b-2 border-dotted border-[rgb(var(--v-dash))]" />
+                    <span className="max-w-[45%] shrink-0 truncate text-[13px] italic text-body/60">{f.opp.outlet || f.opp.contactRole}</span>
+                    {fit !== null && <span className="w-9 shrink-0 text-right font-display text-[13px] font-bold tabular-nums text-brown">{fit}</span>}
+                    {draftBtn}
+                  </div>
+                );
+
+              if (findsStyle === "notebook")
+                return (
+                  <div key={f.id} {...drag} className="group/card relative flex h-14 cursor-grab items-center gap-4 border-b border-[rgb(var(--v-dash))] active:cursor-grabbing">
+                    <span aria-hidden className="absolute -left-[30px] h-3.5 w-3.5 rounded-full border border-[rgb(var(--v-dash))] bg-[rgb(var(--v-field))]" />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
+                      <span className="ml-3 text-[13px] text-body/55">{sub}</span>
+                    </span>
+                    {fit !== null && (
+                      <span className="shrink-0 rounded-full border border-brown/40 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-brown">{fit}%</span>
+                    )}
+                    {draftBtn}
+                  </div>
+                );
+
+              if (findsStyle === "table")
+                return (
+                  <div
+                    key={f.id}
+                    {...drag}
+                    className={`group/card grid cursor-grab grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,1fr)_90px_70px] items-center gap-4 px-1 py-2.5 text-[13px] active:cursor-grabbing ${
+                      i % 2 ? "bg-[rgb(var(--v-tint))]" : ""
+                    }`}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-semibold text-ink">{name}</span>
+                      {draftBtn}
+                    </span>
+                    <span className="truncate text-body/65">{f.opp.contactRole}</span>
+                    <span className="truncate text-body/65">{f.opp.outlet}</span>
+                    <span className="truncate text-[11px] font-semibold uppercase tracking-wider text-body/45">{f.opp.channel}</span>
+                    <span className="flex items-center justify-end gap-1.5">
+                      {fit !== null && (
+                        <>
+                          <span className="h-1.5 w-8 overflow-hidden rounded-full bg-[rgb(var(--v-chip))]">
+                            <span className="block h-full rounded-full bg-brown" style={{ width: `${fit}%` }} />
+                          </span>
+                          <span className="w-6 text-right text-[11px] tabular-nums text-body/60">{fit}</span>
+                        </>
+                      )}
+                    </span>
                   </div>
                 );
 
