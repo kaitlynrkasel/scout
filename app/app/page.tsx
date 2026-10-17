@@ -29951,12 +29951,12 @@ function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps })
         <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
         <div className="space-y-1">
           <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3">
-            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Project</span>
+            <span className="w-20 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Project</span>
             <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
               className="font-display text-[34px] font-extrabold leading-tight tracking-tight text-ink sm:text-[44px]" />
           </div>
           <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3 pt-2">
-            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Search</span>
+            <span className="w-20 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Category</span>
             <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
               className="font-display text-[24px] font-bold tracking-tight text-brown sm:text-[28px]" />
           </div>
