@@ -29723,7 +29723,20 @@ function demoFinds(catId: string): Find[] {
     categoryId: catId,
     status: "new",
     addedAt: Date.now() - i * 60000,
-    opp: { id: `demo-${i}`, name: n, contactName: n, contactRole: role, outlet, channel, location, fitScore: fit } as unknown as Opportunity,
+    opp: {
+      id: `demo-${i}`,
+      name: n,
+      contactName: n,
+      contactRole: role,
+      outlet,
+      channel,
+      location,
+      fitScore: fit,
+      url: "https://example.com",
+      contactEmail: channel === "Email" ? "hello@example.com" : "",
+      whyItFits: `${outlet} features independent acoustic and Americana releases and takes submissions directly, which matches the sound you described.`,
+      signals: ["Accepting submissions", "Active this month", "Public email"].slice(0, (i % 3) + 1),
+    } as unknown as Opportunity,
   }));
 }
 function FindsTray({
@@ -29767,16 +29780,17 @@ function FindsTray({
       return !c;
     });
   };
-  // Layout preview flags for the canvas: ?finds=cards | ledger | leaders |
-  // notebook | table | stamps | deck,
+  // Finds show as the ledger (each row opens to its details). Preview flags
+  // for the canvas: ?finds=cards | leaders | notebook | table | stamps | deck,
   // and ?demo=finds fills an empty search with sample finds (display only:
   // never saved, never draggable to Drafts).
-  const [findsStyle, setFindsStyle] = useState<string>("cards");
+  const [findsStyle, setFindsStyle] = useState<string>("ledger");
+  const [openFind, setOpenFind] = useState("");
   const [demo, setDemo] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const v = q.get("finds");
-    if (v && ["ledger", "leaders", "notebook", "table", "stamps", "deck"].includes(v)) setFindsStyle(v);
+    if (v && ["cards", "ledger", "leaders", "notebook", "table", "stamps", "deck"].includes(v)) setFindsStyle(v);
     setDemo(q.get("demo") === "finds");
   }, []);
   const realFresh = finds
@@ -29861,19 +29875,124 @@ function FindsTray({
                 </button>
               );
 
-              if (findsStyle === "ledger")
+              if (findsStyle === "ledger") {
+                const open = openFind === f.id;
+                const o = f.opp;
+                const contact = [o.contactEmail, o.contactHandle, o.contactPhone].filter(Boolean);
                 return (
-                  <div key={f.id} {...drag} className="group/card flex cursor-grab items-baseline gap-4 border-b border-[rgb(var(--v-line))] px-1 py-3.5 active:cursor-grabbing">
-                    <span className="w-6 shrink-0 font-display text-[12px] font-bold tabular-nums text-body/35">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
-                      <span className="block truncate text-[12px] text-body/55">{sub}</span>
-                    </span>
-                    <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{f.opp.channel}</span>
-                    {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
-                    {draftBtn}
+                  <div key={f.id} {...drag} className="group/card cursor-grab border-b border-[rgb(var(--v-line))] active:cursor-grabbing">
+                    <button
+                      onClick={() => setOpenFind(open ? "" : f.id)}
+                      aria-expanded={open}
+                      className="flex w-full items-baseline gap-4 px-1 py-3.5 text-left"
+                    >
+                      <span className="w-6 shrink-0 font-display text-[12px] font-bold tabular-nums text-body/35">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
+                        <span className="block truncate text-[12px] text-body/55">{sub}</span>
+                      </span>
+                      <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{o.channel}</span>
+                      {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 self-center text-body/35 transition-transform ${open ? "rotate-180" : ""}`}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    {open && (() => {
+                      let host = "";
+                      try {
+                        host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
+                      } catch {}
+                      const platform = socialPlatform(o.url);
+                      return (
+                      <div className="flex cursor-auto flex-col gap-5 pb-5 pl-11 pr-1 lg:flex-row">
+                        {/* The same site tile the Finds tab leads with: their
+                            colour and logo, and a way through to the page. */}
+                        {o.url && (
+                          <a
+                            href={o.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open their page"
+                            className="group block w-full shrink-0 self-start overflow-hidden rounded-xl border border-[rgb(var(--v-line))] transition hover:shadow-soft lg:w-64 [&>div]:border-b-0"
+                          >
+                            <SiteTile
+                              url={o.url}
+                              name={o.name}
+                              host={host}
+                              label={
+                                isSocialProfileUrl(o.url)
+                                  ? [platform ? `${platform} profile` : "Profile", socialHandle(o.url)].filter(Boolean).join(" · ")
+                                  : host
+                              }
+                            />
+                          </a>
+                        )}
+                        <div className="min-w-0 flex-1">
+                        {o.whyItFits && <p className="max-w-2xl text-[13px] leading-relaxed text-body/80">{o.whyItFits}</p>}
+                        {!!o.signals?.length && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {o.signals.slice(0, 5).map((sig) => (
+                              <span key={sig} className="rounded-full bg-[rgb(var(--v-chip))] px-2.5 py-1 text-[11px] font-medium text-body/75">{sig}</span>
+                            ))}
+                          </div>
+                        )}
+                        <dl className="mt-4 grid max-w-2xl grid-cols-[90px_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[12px]">
+                          {contact.length > 0 && (
+                            <>
+                              <dt className="text-body/45">Contact</dt>
+                              <dd className="truncate text-ink">{contact.join(" · ")}</dd>
+                            </>
+                          )}
+                          {o.location && (
+                            <>
+                              <dt className="text-body/45">Location</dt>
+                              <dd className="truncate text-ink">{o.location}</dd>
+                            </>
+                          )}
+                          {o.channel && (
+                            <>
+                              <dt className="text-body/45">Reach via</dt>
+                              <dd className="truncate text-ink">{o.channel}</dd>
+                            </>
+                          )}
+                        </dl>
+                        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                          {o.url && (
+                            <a
+                              href={o.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[13px] font-semibold text-brown underline-offset-2 hover:text-ink hover:underline"
+                            >
+                              Open their page ↗
+                            </a>
+                          )}
+                          {o.contactSource?.url && (
+                            <a
+                              href={o.contactSource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[12px] font-semibold text-body/55 underline-offset-2 hover:text-ink hover:underline"
+                            >
+                              Where Scout found the contact ↗
+                            </a>
+                          )}
+                          {canDrag && (
+                            <button
+                              onClick={() => draft(f)}
+                              className="ml-auto rounded-full bg-brand-gradient px-4 py-1.5 text-[12px] font-bold text-white transition hover:opacity-95"
+                            >
+                              Draft
+                            </button>
+                          )}
+                        </div>
+                        </div>
+                      </div>
+                      );
+                    })()}
                   </div>
                 );
+              }
 
               if (findsStyle === "leaders")
                 return (
