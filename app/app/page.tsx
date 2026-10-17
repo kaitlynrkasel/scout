@@ -13489,6 +13489,24 @@ function FindDetailModal({
       setPreviewFailed(true);
     }
   };
+  // Hosts whose pages never render usefully in a frame (app shells that come
+  // up as a black box). Skip the doomed embed and go straight to the
+  // everything-Scout-gathered card.
+  useEffect(() => {
+    let h = "";
+    try {
+      h = new URL(o.url || "").hostname.replace(/^www\./, "");
+    } catch {}
+    if (
+      /^(open\.spotify\.com|music\.apple\.com|soundcloud\.com|youtube\.com|m\.youtube\.com|instagram\.com|facebook\.com|m\.facebook\.com|tiktok\.com|x\.com|twitter\.com)$/.test(
+        h
+      )
+    ) {
+      triedCleanRef.current = true;
+      setPreviewFailed(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [o.url]);
   const [editingDraft, setEditingDraft] = useState(false); // editor takes the big pane
   // Deny reason popover in the header (Deny asks why, like the card does).
   const [denyingModal, setDenyingModal] = useState(false);
@@ -18330,6 +18348,15 @@ function ApplicationPacket({
     copy(all, "__all");
   };
 
+  // Nothing to apply WITH and nothing to apply TO: a panel that only says
+  // "no application process exists here" is noise, so it doesn't render.
+  if (
+    components.length === 0 &&
+    (!app.howToApply || /no application|no submission|not a job|no process/i.test(app.howToApply))
+  ) {
+    return null;
+  }
+
   return (
     <div className="mt-3 rounded-xl border border-coral/30 bg-warm-bg/40 p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -19846,34 +19873,25 @@ function FindWorkflow({
                 </div>
               </>
             );
-            if (ownExpanded)
-              return (
-                <div
-                  className="fixed inset-0 z-[80] flex items-center justify-center bg-ink/40 p-4"
-                  onClick={() => setOwnExpanded(false)}
-                >
-                  <div
-                    className="w-full max-w-2xl rounded-2xl border border-warm-border bg-surface p-5 shadow-xl"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <span className="text-sm font-bold text-ink">
-                        Your message to {find.opp.name}
-                      </span>
-                      <button
-                        onClick={() => setOwnExpanded(false)}
-                        className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
-                      >
-                        Close
-                      </button>
-                    </div>
-                    {composer(true)}
-                  </div>
-                </div>
-              );
+            // Expanded is still the SAME outreach panel, grown in place: no
+            // pop-up over the page, the edits and move-forward controls stay
+            // where they live.
             return (
               <div className="mt-1 w-full rounded-xl border border-warm-border bg-warm-bg/30 p-3.5">
-                {composer(false)}
+                {ownExpanded && (
+                  <div className="mb-3 flex items-center justify-between gap-3">
+                    <span className="text-sm font-bold text-ink">
+                      Your message to {find.opp.name}
+                    </span>
+                    <button
+                      onClick={() => setOwnExpanded(false)}
+                      className="rounded-lg px-2 py-1 text-xs font-semibold text-body/60 transition hover:bg-warm-bg hover:text-ink"
+                    >
+                      Smaller
+                    </button>
+                  </div>
+                )}
+                {composer(ownExpanded)}
               </div>
             );
           })()}

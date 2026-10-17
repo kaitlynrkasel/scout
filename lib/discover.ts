@@ -5,6 +5,8 @@
 
 import { claudeJson, parseJsonLoose, noDash } from "./claude";
 import { tavilySearch, type TavilyResult } from "./tavily";
+import { webSearch } from "./webSearch";
+import { detectBoard, fetchBoardPostings, matchPostings, type BoardRef } from "./jobBoards";
 import { resolveTemplate, GENERIC, isProspectingUseCase } from "./templates";
 import { ApiCreditError } from "./apiErrors";
 import { targetKey, cappedKeys } from "./exposure";
@@ -1881,7 +1883,9 @@ export async function discover(
       // wall. Show a clipped label and never repeat it on the result line.
       const qLabel = q.length > 72 ? `${q.slice(0, 72).trim()}…` : q;
       emit(`Searching: ${qLabel}`);
-      const results = await tavilySearch(q, perQuery, {
+      // Multi-net: Tavily first; thin results fan out to Exa/Brave when their
+      // keys are configured (see lib/webSearch), merged and deduped.
+      const results = await webSearch(q, perQuery, {
         depth,
         ...(scope?.includeDomains ? { includeDomains: scope.includeDomains } : {}),
       });
@@ -1940,6 +1944,40 @@ export async function discover(
     }
   }
   await gather(queries);
+
+  // ---- Job-board expansion ---------------------------------------------
+  // One posting on a company's Greenhouse/Lever/Ashby/Workable board means
+  // the WHOLE board is one open JSON request away: fresher and more complete
+  // than any web search. Read up to three boards per run, match postings
+  // loosely against the goal, and let the matches re-earn their place
+  // through the same extraction and scoring as everything else.
+  if (isJobSearch(useCase, goal) && !aborted()) {
+    try {
+      const boards = new Map<string, BoardRef>();
+      for (const c of candidates) {
+        const b = detectBoard(c.url);
+        if (b) boards.set(`${b.kind}:${b.token}`, b);
+      }
+      let read = 0;
+      for (const b of boards.values()) {
+        if (read >= 3 || aborted()) break;
+        const postings = await fetchBoardPostings(b).catch(() => []);
+        if (!postings.length) continue;
+        read++;
+        emit(`Reading ${b.token}'s whole ${b.kind} board (${postings.length} open roles)`);
+        for (const r of matchPostings(postings, goal).slice(0, 15)) {
+          if (!r.url) continue;
+          const k = canonicalLink(r.url) || urlHost(r.url);
+          if (!k || seenLinks.has(k)) continue;
+          seenLinks.add(k);
+          emit(`@site ${urlHost(r.url)}|${(r.title || "").slice(0, 80)}`);
+          candidates.push(r);
+        }
+      }
+    } catch {
+      /* boards are a bonus net, never break the run */
+    }
+  }
 
   // ---- Platform sweeps -------------------------------------------------
   // Ordinary web search ranks articles ABOUT people above the people
