@@ -1592,6 +1592,35 @@
                 "Open a find whose website is open.spotify.com (or YouTube/Instagram).",
                 "The right pane should show the gathered-info card, not a black rectangle."
               ]
+            },
+            {
+              "sev": "should",
+              "title": "More like the finds you kept",
+              "good": "After you have moved a few finds forward in a category, a new run's progress log shows a line like Found N more like the ones you kept, and those finds are on sites you had not found before.",
+              "steps": [
+                "In a category where you have drafted or sent to at least one find, send Scout again.",
+                "Watch the progress steps for Found ... more like the ones you kept.",
+                "Check that the new finds are not on the same sites as the ones you kept."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Contacts found one page deeper",
+              "good": "Finds whose search page had no contact still come back with an email or handle when their own site has a contact or submit page; the log says Found a way to reach (name) on their site.",
+              "steps": [
+                "Run a curator or blog search.",
+                "Watch for Checking N sites one page deeper for a contact.",
+                "Open a find that log names: its contact should show, with the source pointing at the site's contact page."
+              ]
+            },
+            {
+              "sev": "could",
+              "title": "Curator and podcast directories in the mix",
+              "good": "A playlist-curator search includes finds from curator directories like playlistlookup or submithub; a podcast search includes show pages from podchaser or listennotes.",
+              "steps": [
+                "Run a playlist-curator search; check the site deck for those directory hosts.",
+                "Run a podcasts-that-interview-artists search; check for podchaser, listennotes or Apple Podcasts show pages."
+              ]
             }
           ]
         },
@@ -2705,6 +2734,16 @@
                 "Templates tab: drag a voice dial dot slowly across its track.",
                 "Release between stops; it should snap.",
                 "Tab to a track and press the arrow keys; the dot should move one stop."
+              ]
+            },
+            {
+              "sev": "should",
+              "title": "Template preview shows the fitted words",
+              "good": "Picking a template on a find shows it with each highlighted part already rewritten for that find (the playlist's real name), highlighted, with your original wording on hover.",
+              "steps": [
+                "Make a template with a highlighted part like your playlist.",
+                "Open a playlist find and pick that template.",
+                "The preview should show the playlist's actual name in the highlight within a few seconds."
               ]
             }
           ]
