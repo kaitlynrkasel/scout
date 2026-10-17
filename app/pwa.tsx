@@ -30,6 +30,17 @@ export function Pwa() {
   }, []);
 
   useEffect(() => {
+    // Palette preview by URL (?palette=navy): per page, never stored, so it
+    // only repaints the tab that asked for it. See globals.css.
+    const p = new URLSearchParams(window.location.search).get("palette");
+    if (p === "navy") document.documentElement.classList.add("palette-navy");
+    // Heading-font preview (?font=…), same idea: per page, never stored.
+    const f = new URLSearchParams(window.location.search).get("font");
+    if (f && ["fraunces", "instrument", "dmserif", "space", "bricolage"].includes(f))
+      document.documentElement.classList.add(`font-${f}`);
+  }, []);
+
+  useEffect(() => {
     // The theme is a .dark class on <html> driven by localStorage, not by the
     // OS preference, so a media-query theme-color would guess wrong half the
     // time. Mirror the class instead, on every toggle.
