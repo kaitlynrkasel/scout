@@ -29458,9 +29458,9 @@ function StageBullets({ goal, onGoal }: { goal: string; onGoal: (g: string) => v
 
 /* ---------------- Scout stage: the postcard ----------------
  * The empty Scout tab. A full-width postcard asks (project and search set big,
- * who to find on the address lines, the logo stamp sends it); a Drafts
- * postcard comes out of its bottom-right corner to drop finds on; and this
- * search's finds sit underneath, ready to drag. Colours come from the --v-*
+ * who to find on the address lines, the logo stamp sends it); this search's
+ * finds sit underneath, ready to drag onto the Drafts postcard waiting in
+ * the page's bottom-right corner. Colours come from the --v-*
  * tokens in globals.css (arbitrary rgb(var()) classes, which `.scout-stage`
  * does not remap the way it remaps white/cream utilities). */
 type StageLayoutProps = {
@@ -29646,7 +29646,7 @@ function ScoutPostcard(p: StageLayoutProps) {
             )}
           </div>
         </div>
-        <div className="flex flex-col gap-8 p-7 sm:p-10 md:pb-40">
+        <div className="flex flex-col gap-8 p-7 sm:p-10">
           {p.extra && <div>{p.extra}</div>}
           <div className="mt-auto">
             <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
@@ -29855,7 +29855,7 @@ function FindsTray({
   );
 }
 
-/* The reply: a postcard coming out of the big one's bottom-right corner.
+/* The reply: a Drafts postcard in the page's bottom-right corner.
  * Drag a find onto it and it's addressed to them while Scout drafts. */
 function ReplyCard({
   finds,
@@ -29918,8 +29918,8 @@ function ReplyCard({
   );
 }
 
-/* Postcard + finds: the postcard asks, the Drafts postcard comes out of its
- * corner, and the finds for this search sit under both, ready to drag. */
+/* Postcard + finds: the postcard asks, this search's finds sit under it, and
+ * the Drafts postcard waits in the page's bottom-right corner to drop on. */
 function ScoutPostcardBoard(p: StageLayoutProps) {
   return (
     <div className="flex w-full flex-1 flex-col items-center gap-10 pb-4">
@@ -29927,11 +29927,8 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
           and its top padding so the paper runs the full width of the page. */}
       <div className="relative -mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
         <ScoutPostcard {...p} />
-        <div className="mt-6 flex justify-center px-5 md:absolute md:bottom-0 md:right-10 md:mt-0 md:w-[380px] md:translate-y-1/2 md:px-0">
-          <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
-        </div>
       </div>
-      <div className="w-full md:pt-24">
+      <div className="w-full">
         <FindsTray
           finds={p.finds}
           catId={p.catId}
@@ -29942,6 +29939,10 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
           onSend={p.onSend}
           sendingId={p.sendingId}
         />
+      </div>
+      {/* Bottom-right corner of the page, just above the footer. */}
+      <div className="mt-auto flex w-full justify-center md:justify-end">
+        <ReplyCard finds={p.finds} onDraft={p.onDraft} draftingId={p.draftingId} />
       </div>
     </div>
   );
