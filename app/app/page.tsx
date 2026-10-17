@@ -29642,6 +29642,16 @@ function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; siz
  * stamp in the corner sends it. */
 function ScoutPostcard(p: StageLayoutProps) {
   const g = useGoalPoints(p.goal, p.onGoal);
+  // The left half is the ruled "label" front (Project / Search on lines, the
+  // logo stamp to send). Other fronts stay comparable on the canvas:
+  // ?front=classic (picker + pill) | tabs | postmark.
+  const [front, setFront] = useState("label");
+  useEffect(() => {
+    const v = new URLSearchParams(window.location.search).get("front");
+    if (v === "classic") setFront("");
+    else if (v === "tabs" || v === "label" || v === "postmark") setFront(v);
+  }, []);
+  if (front) return <ScoutPostcardShell p={p} g={g} left={<PostcardFront variant={front} p={p} />} />;
   return (
     <div className="flex w-full justify-center">
       <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
@@ -29700,6 +29710,169 @@ function ScoutPostcard(p: StageLayoutProps) {
   );
 }
 
+/* The postcard with a swappable left half (for ?front= comparisons); the
+ * right half, who to find, is the same in every version. */
+function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType<typeof useGoalPoints>; left: React.ReactNode }) {
+  return (
+    <div className="flex w-full justify-center">
+      <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
+        <div className="flex flex-col justify-between gap-8 border-b-2 border-dashed border-[rgb(var(--v-line))] p-7 sm:p-10 md:border-b-0 md:border-r-2">
+          {left}
+        </div>
+        {/* Nudged in from the dashed divider so the address block floats in
+            its half instead of hugging the fold. */}
+        <div className="flex flex-col gap-8 p-7 sm:py-10 sm:pl-14 sm:pr-10">
+          {p.extra && <div>{p.extra}</div>}
+          <div className="mt-auto">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
+            <ul data-guide="goal" className="mt-2">
+              {g.points.map((pt, i) => (
+                <li key={i} className="border-b border-[rgb(var(--v-line))] py-2">
+                  {g.editing === i ? (
+                    <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys}
+                      className="w-full bg-transparent text-[16px] font-medium text-ink outline-none" />
+                  ) : (
+                    <button onClick={() => g.start(i)} className="text-left text-[16px] font-medium leading-snug text-ink hover:text-brown">{pt}</button>
+                  )}
+                </li>
+              ))}
+              <li className="border-b border-[rgb(var(--v-line))] py-2">
+                {g.editing === -1 ? (
+                  <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys} placeholder="who else?"
+                    className="w-full bg-transparent text-[16px] font-medium text-ink outline-none placeholder:text-body/30" />
+                ) : (
+                  <button onClick={() => g.start(-1)} className="text-[16px] font-medium text-body/30 hover:text-body/60">+</button>
+                )}
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Left-half designs for the postcard. Every one keeps the same jobs: pick the
+// project, pick the search, send Scout, and reach Templates / Projects.
+function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps }) {
+  const searches = p.searchOptions.filter((o) => !o.value.startsWith("__"));
+  const links = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-body/40">
+      <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
+      <button onClick={p.onManage} className="hover:text-ink">Projects</button>
+      {p.showProfileNudge && (
+        <button onClick={p.onProfile} className="hover:text-ink">Add your profile so drafts sound like you →</button>
+      )}
+    </div>
+  );
+
+  if (variant === "tabs")
+    return (
+      <>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+        <div>
+          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+            className="font-display text-[40px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[54px]" />
+          <div data-tour="category-switcher" className="mt-6 flex flex-wrap items-center gap-x-6 gap-y-2">
+            {searches.map((o) => {
+              const on = o.value === p.catId;
+              return (
+                <button
+                  key={o.value}
+                  onClick={() => p.onSearch(o.value)}
+                  aria-pressed={on}
+                  className={`border-b-2 pb-1 text-[16px] font-semibold transition ${
+                    on ? "border-brown text-ink" : "border-transparent text-body/45 hover:text-ink"
+                  }`}
+                >
+                  {o.label}
+                </button>
+              );
+            })}
+            <button onClick={() => p.onSearch("__newcat__")} className="pb-1 text-[16px] font-semibold text-body/30 hover:text-ink">
+              + New
+            </button>
+          </div>
+          <button
+            data-guide="start"
+            onClick={p.onRun}
+            disabled={p.runDisabled}
+            className="group/go mt-9 inline-flex items-center gap-3 border-2 border-dashed border-[rgb(var(--v-accent2))] bg-[rgb(var(--v-tint))] py-2.5 pl-3 pr-5 transition hover:border-solid hover:border-brown disabled:opacity-50"
+          >
+            <img src="/scout-logo.png" alt="" className="h-7 w-7 transition group-hover/go:-rotate-6" />
+            <span className="font-display text-[17px] font-bold tracking-tight text-ink">
+              {p.runLabel === "Scout" ? "Send Scout" : p.runLabel}
+            </span>
+          </button>
+        </div>
+        {links}
+      </>
+    );
+
+  if (variant === "label")
+    return (
+      <>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+        <div className="space-y-1">
+          <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3">
+            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Project</span>
+            <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+              className="font-display text-[34px] font-extrabold leading-tight tracking-tight text-ink sm:text-[44px]" />
+          </div>
+          <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3 pt-2">
+            <span className="w-16 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Search</span>
+            <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
+              className="font-display text-[24px] font-bold tracking-tight text-brown sm:text-[28px]" />
+          </div>
+        </div>
+        <div className="flex items-end justify-between gap-6">
+          {links}
+          <StampButton p={p} size={88} />
+        </div>
+      </>
+    );
+
+  // postmark
+  return (
+    <>
+      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+      <div className="flex items-center justify-between gap-6">
+        <div className="min-w-0">
+          <BigPicker tour="project-switcher" ariaLabel="Project" value={p.activeId} options={p.projectOptions} onChange={p.onProject}
+            className="font-display text-[40px] font-extrabold leading-[0.98] tracking-tight text-ink sm:text-[54px]" />
+          <div className="mt-2">
+            <BigPicker tour="category-switcher" ariaLabel="Category of search" value={p.catId} options={p.searchOptions} onChange={p.onSearch}
+              className="text-[22px] font-light tracking-tight text-body/70 sm:text-[26px]" />
+          </div>
+        </div>
+        <button
+          data-guide="start"
+          onClick={p.onRun}
+          disabled={p.runDisabled}
+          aria-label={p.runLabel}
+          title={p.runLabel}
+          className="group/go relative grid h-32 w-32 shrink-0 place-items-center disabled:opacity-50"
+        >
+          <svg viewBox="0 0 128 128" aria-hidden className="absolute inset-0 h-full w-full transition-transform duration-700 group-hover/go:rotate-[30deg]">
+            <defs>
+              <path id="postmark-ring" d="M64 64m-46 0a46 46 0 1 1 92 0a46 46 0 1 1-92 0" />
+            </defs>
+            <circle cx="64" cy="64" r="60" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.5" />
+            <circle cx="64" cy="64" r="34" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.6" />
+            <text fontSize="11" fontWeight="700" letterSpacing="3.2" fill="rgb(var(--c-brown))" style={{ fontFamily: "var(--font-sans), sans-serif" }}>
+              <textPath href="#postmark-ring">
+                {(p.runLabel === "Scout" ? "SEND SCOUT · SEND SCOUT ·" : `${p.runLabel.toUpperCase()} · `)}
+              </textPath>
+            </text>
+          </svg>
+          <img src="/scout-logo.png" alt="" className="relative h-10 w-10 transition group-active/go:scale-90" />
+        </button>
+      </div>
+      {links}
+    </>
+  );
+}
+
 /* Finds tray: this search's finds that haven't been worked yet, and a drop
  * zone beside them. Drag a find onto it (or press Draft on the card) to have
  * Scout draft it. The whole tray collapses, and remembers that. */
@@ -29723,7 +29896,20 @@ function demoFinds(catId: string): Find[] {
     categoryId: catId,
     status: "new",
     addedAt: Date.now() - i * 60000,
-    opp: { id: `demo-${i}`, name: n, contactName: n, contactRole: role, outlet, channel, location, fitScore: fit } as unknown as Opportunity,
+    opp: {
+      id: `demo-${i}`,
+      name: n,
+      contactName: n,
+      contactRole: role,
+      outlet,
+      channel,
+      location,
+      fitScore: fit,
+      url: "https://example.com",
+      contactEmail: channel === "Email" ? "hello@example.com" : "",
+      whyItFits: `${outlet} features independent acoustic and Americana releases and takes submissions directly, which matches the sound you described.`,
+      signals: ["Accepting submissions", "Active this month", "Public email"].slice(0, (i % 3) + 1),
+    } as unknown as Opportunity,
   }));
 }
 function FindsTray({
@@ -29767,16 +29953,17 @@ function FindsTray({
       return !c;
     });
   };
-  // Layout preview flags for the canvas: ?finds=cards | ledger | leaders |
-  // notebook | table | stamps | deck,
+  // Finds show as the ledger (each row opens to its details). Preview flags
+  // for the canvas: ?finds=cards | leaders | notebook | table | stamps | deck,
   // and ?demo=finds fills an empty search with sample finds (display only:
   // never saved, never draggable to Drafts).
-  const [findsStyle, setFindsStyle] = useState<string>("cards");
+  const [findsStyle, setFindsStyle] = useState<string>("ledger");
+  const [openFind, setOpenFind] = useState("");
   const [demo, setDemo] = useState(false);
   useEffect(() => {
     const q = new URLSearchParams(window.location.search);
     const v = q.get("finds");
-    if (v && ["ledger", "leaders", "notebook", "table", "stamps", "deck"].includes(v)) setFindsStyle(v);
+    if (v && ["cards", "ledger", "leaders", "notebook", "table", "stamps", "deck"].includes(v)) setFindsStyle(v);
     setDemo(q.get("demo") === "finds");
   }, []);
   const realFresh = finds
@@ -29861,19 +30048,124 @@ function FindsTray({
                 </button>
               );
 
-              if (findsStyle === "ledger")
+              if (findsStyle === "ledger") {
+                const open = openFind === f.id;
+                const o = f.opp;
+                const contact = [o.contactEmail, o.contactHandle, o.contactPhone].filter(Boolean);
                 return (
-                  <div key={f.id} {...drag} className="group/card flex cursor-grab items-baseline gap-4 border-b border-[rgb(var(--v-line))] px-1 py-3.5 active:cursor-grabbing">
-                    <span className="w-6 shrink-0 font-display text-[12px] font-bold tabular-nums text-body/35">{String(i + 1).padStart(2, "0")}</span>
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
-                      <span className="block truncate text-[12px] text-body/55">{sub}</span>
-                    </span>
-                    <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{f.opp.channel}</span>
-                    {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
-                    {draftBtn}
+                  <div key={f.id} {...drag} className="group/card cursor-grab border-b border-[rgb(var(--v-line))] active:cursor-grabbing">
+                    <button
+                      onClick={() => setOpenFind(open ? "" : f.id)}
+                      aria-expanded={open}
+                      className="flex w-full items-baseline gap-4 px-1 py-3.5 text-left"
+                    >
+                      <span className="w-6 shrink-0 font-display text-[12px] font-bold tabular-nums text-body/35">{String(i + 1).padStart(2, "0")}</span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-display text-[17px] font-bold tracking-tight text-ink">{name}</span>
+                        <span className="block truncate text-[12px] text-body/55">{sub}</span>
+                      </span>
+                      <span className="hidden shrink-0 text-[11px] font-semibold uppercase tracking-wider text-body/40 sm:block">{o.channel}</span>
+                      {fit !== null && <span className="w-10 shrink-0 text-right text-[12px] font-semibold tabular-nums text-brown">{fit}%</span>}
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`shrink-0 self-center text-body/35 transition-transform ${open ? "rotate-180" : ""}`}>
+                        <polyline points="6 9 12 15 18 9" />
+                      </svg>
+                    </button>
+                    {open && (() => {
+                      let host = "";
+                      try {
+                        host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
+                      } catch {}
+                      const platform = socialPlatform(o.url);
+                      return (
+                      <div className="flex cursor-auto flex-col gap-5 pb-5 pl-11 pr-1 lg:flex-row">
+                        {/* The same site tile the Finds tab leads with: their
+                            colour and logo, and a way through to the page. */}
+                        {o.url && (
+                          <a
+                            href={o.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open their page"
+                            className="group block w-full shrink-0 self-start overflow-hidden rounded-xl border border-[rgb(var(--v-line))] transition hover:shadow-soft lg:w-64 [&>div]:border-b-0"
+                          >
+                            <SiteTile
+                              url={o.url}
+                              name={o.name}
+                              host={host}
+                              label={
+                                isSocialProfileUrl(o.url)
+                                  ? [platform ? `${platform} profile` : "Profile", socialHandle(o.url)].filter(Boolean).join(" · ")
+                                  : host
+                              }
+                            />
+                          </a>
+                        )}
+                        <div className="min-w-0 flex-1">
+                        {o.whyItFits && <p className="max-w-2xl text-[13px] leading-relaxed text-body/80">{o.whyItFits}</p>}
+                        {!!o.signals?.length && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {o.signals.slice(0, 5).map((sig) => (
+                              <span key={sig} className="rounded-full bg-[rgb(var(--v-chip))] px-2.5 py-1 text-[11px] font-medium text-body/75">{sig}</span>
+                            ))}
+                          </div>
+                        )}
+                        <dl className="mt-4 grid max-w-2xl grid-cols-[90px_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-[12px]">
+                          {contact.length > 0 && (
+                            <>
+                              <dt className="text-body/45">Contact</dt>
+                              <dd className="truncate text-ink">{contact.join(" · ")}</dd>
+                            </>
+                          )}
+                          {o.location && (
+                            <>
+                              <dt className="text-body/45">Location</dt>
+                              <dd className="truncate text-ink">{o.location}</dd>
+                            </>
+                          )}
+                          {o.channel && (
+                            <>
+                              <dt className="text-body/45">Reach via</dt>
+                              <dd className="truncate text-ink">{o.channel}</dd>
+                            </>
+                          )}
+                        </dl>
+                        <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2">
+                          {o.url && (
+                            <a
+                              href={o.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[13px] font-semibold text-brown underline-offset-2 hover:text-ink hover:underline"
+                            >
+                              Open their page ↗
+                            </a>
+                          )}
+                          {o.contactSource?.url && (
+                            <a
+                              href={o.contactSource.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[12px] font-semibold text-body/55 underline-offset-2 hover:text-ink hover:underline"
+                            >
+                              Where Scout found the contact ↗
+                            </a>
+                          )}
+                          {canDrag && (
+                            <button
+                              onClick={() => draft(f)}
+                              className="ml-auto rounded-full bg-brand-gradient px-4 py-1.5 text-[12px] font-bold text-white transition hover:opacity-95"
+                            >
+                              Draft
+                            </button>
+                          )}
+                        </div>
+                        </div>
+                      </div>
+                      );
+                    })()}
                   </div>
                 );
+              }
 
               if (findsStyle === "leaders")
                 return (
@@ -30051,29 +30343,6 @@ function FindsTray({
               >
                 <polyline points="6 9 12 15 18 9" />
               </svg>
-              {/* A postage stamp, top right of the card's back: perforated
-                  edge, inner frame, and a wavy postmark running over it. */}
-              <svg
-                aria-hidden
-                viewBox="0 0 40 48"
-                className={`ml-auto h-12 w-10 shrink-0 transition ${over ? "-rotate-6 scale-110" : "rotate-3"}`}
-              >
-                <path
-                  d="M2 2h36v44H2z"
-                  fill="rgb(var(--v-tint))"
-                  stroke="rgb(var(--v-dash))"
-                  strokeWidth="3"
-                  strokeDasharray="2.2 2.2"
-                />
-                <rect x="6.5" y="6.5" width="27" height="35" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1" opacity="0.55" />
-                <path d="M12 30c3-6 7-12 9-16 2 4 5 9 8 16" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" opacity="0.7" />
-                <circle cx="27" cy="14" r="2.4" fill="rgb(var(--c-brown))" opacity="0.6" />
-                <g fill="none" stroke="rgb(var(--c-ink))" strokeWidth="0.9" opacity="0.35" strokeLinecap="round">
-                  <path d="M-4 20c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                  <path d="M-4 25c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                  <path d="M-4 30c4-2 6 2 10 0s6 2 10 0 6 2 10 0 6 2 10 0" />
-                </g>
-              </svg>
             </button>
             {draftsOpen && (
             <div className="flex min-h-0 flex-1 flex-col px-5 pb-16">
@@ -30181,7 +30450,10 @@ function ScoutPostcardBoard(p: StageLayoutProps) {
       <div className="relative -mx-5 -mt-8 w-[calc(100%+2.5rem)] sm:-ml-14 sm:-mr-8 sm:-mt-10 sm:w-[calc(100%+5.5rem)] xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
         <ScoutPostcard {...p} />
       </div>
-      <div className="w-full">
+      {/* Same edges as the postcard's own content: bleed out like the paper,
+          then pad back in by the postcard's column padding, so "Finds" sits
+          on the project title's left edge at every width. */}
+      <div className="-mx-5 w-[calc(100%+2.5rem)] px-7 sm:-ml-14 sm:-mr-8 sm:w-[calc(100%+5.5rem)] sm:px-10 xl:-ml-[88px] xl:-mr-12 xl:w-[calc(100%+136px)]">
         <FindsTray
           finds={p.finds}
           catId={p.catId}
