@@ -933,6 +933,25 @@ const PLATFORM_SWEEPS: {
     unless: /\b(wedding|weddings|conference|conferences|corporate|catering|banquet|reception)\b/i,
   },
   {
+    // Curator directories and submission hubs: each curator has a public
+    // profile page naming their playlists, genres and how to submit, which is
+    // exactly the find a playlist search wants. Fee-based hubs are legitimate
+    // (the scam screen only flags undisclosed or predatory fees).
+    key: "curators",
+    label: "playlist curator directories",
+    domains: ["playlistlookup.com", "one-submit.com", "submithub.com", "groover.co", "dailyplaylists.com"],
+    when: /\b(playlists?|curators?|playlisting|spotify)\b/i,
+  },
+  {
+    // Podcast directories expose show pages with hosts, topics and contact
+    // routes publicly; a far richer net for "podcasts that interview X" than
+    // general web search, which mostly returns individual episodes.
+    key: "podcasts",
+    label: "podcast directories",
+    domains: ["podchaser.com", "listennotes.com", "podcasts.apple.com"],
+    when: /\b(podcasts?|podcasters?|interview shows?)\b/i,
+  },
+  {
     key: "tech",
     label: "public developer profiles",
     domains: ["github.com", "wellfound.com"],
