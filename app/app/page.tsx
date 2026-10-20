@@ -47,6 +47,8 @@ import {
   loadProfile as dbLoadProfile,
   saveProfile as dbSaveProfile,
   loadState as dbLoadState,
+  loadStateSnapshot as dbLoadStateSnapshot,
+  stateStamp as dbStateStamp,
   saveState as dbSaveState,
   rememberAccount,
   listSavedAccounts,
@@ -54,6 +56,14 @@ import {
   forgetAccount,
   type AppState,
 } from "@/lib/supabase";
+import {
+  mergeStates,
+  readTombstones,
+  mergeTombstones,
+  applyTombstones,
+  EMPTY_TOMBSTONES,
+  type Tombstones,
+} from "@/lib/stateMerge";
 
 const OUTREACH_KINDS = [
   "Email",
@@ -386,9 +396,10 @@ const LISTS_KEY = "scout_lists"; // saved status lists (the stakeholder-friendly
 // what keeps a teammate's categories from being lost — but it also means a
 // project you delete is handed straight back on the next pull. A delete has to
 // outlive the blob that still remembers it, so the ids are kept here and
-// filtered out of every merge. Capped so it can't grow without bound.
+// filtered out of every merge. Capped (in lib/stateMerge) so the list can't
+// grow without bound, and carried in the account blob so a delete on the phone
+// is honoured by the laptop too.
 const DELETED_KEY = "scout_deleted_ids";
-const DELETED_CAP = 500;
 
 // Short-lived token gating /api/site-preview (iframes can't send auth
 // headers, so the token rides the query string). Module-level: the app shell
@@ -514,6 +525,54 @@ function runSchemaMigrations() {
     // if (stored < 2) { /* rewrite FINDS_KEY entries to add a new field */ }
     localStorage.setItem(SCHEMA_KEY, String(SCHEMA_VERSION));
   } catch {}
+}
+
+// The profile fields that have no column on the profiles table and so ride in
+// the user_state JSON blob. Anything coming back out of that blob is untrusted
+// (an old client, a hand-edited row), so the enum-ish fields are checked
+// against their allowed values instead of cast. Shared by the boot hydrate and
+// the cross-device merge, which must agree on what a valid extras object is.
+function narrowProfileExtras(raw: Record<string, any>): Partial<Profile> {
+  const allowedSize = new Set<CompanySize>(["any", "small", "big"]);
+  const allowedComp = new Set<Competitiveness>([
+    "any",
+    "beginner",
+    "intermediate",
+    "competitive",
+  ]);
+  const allowedEdu = new Set<EducationStatus>([
+    "highschool",
+    "college",
+    "graduated",
+    ...EDU_OTHER,
+  ]);
+  const allowedAcct = new Set<AccountType>(["individual", "company"]);
+  const out: Partial<Profile> = {};
+  if (raw.accountType && allowedAcct.has(raw.accountType as AccountType))
+    out.accountType = raw.accountType as AccountType;
+  if (typeof raw.companyName === "string") out.companyName = raw.companyName;
+  if (typeof raw.companyRole === "string") out.companyRole = raw.companyRole;
+  if (typeof raw.companyContribution === "string")
+    out.companyContribution = raw.companyContribution;
+  if (typeof raw.companyExpertise === "string") out.companyExpertise = raw.companyExpertise;
+  if (typeof raw.useExpertise === "boolean") out.useExpertise = raw.useExpertise;
+  if (typeof raw.companyAbout === "string") out.companyAbout = raw.companyAbout;
+  if (typeof raw.companyIndustry === "string") out.companyIndustry = raw.companyIndustry;
+  if (typeof raw.companyStage === "string") out.companyStage = raw.companyStage;
+  if (typeof raw.companyLocation === "string") out.companyLocation = raw.companyLocation;
+  if (typeof raw.companyWorkspaceId === "string")
+    out.companyWorkspaceId = raw.companyWorkspaceId;
+  if (typeof raw.age === "number") out.age = raw.age;
+  if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
+    out.eduStatus = raw.eduStatus as EducationStatus;
+  if (typeof raw.college === "string") out.college = raw.college;
+  if (typeof raw.major === "string") out.major = raw.major;
+  if (typeof raw.location === "string") out.location = raw.location;
+  if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
+    out.companySize = raw.companySize as CompanySize;
+  if (raw.competitiveness && allowedComp.has(raw.competitiveness as Competitiveness))
+    out.competitiveness = raw.competitiveness as Competitiveness;
+  return out;
 }
 
 interface Activity {
@@ -1182,6 +1241,12 @@ interface ScoutToolProps {
   // present, ScoutTool hydrates from it instead of localStorage and saves back.
   initialState?: AppState | null;
   onSaveState?: (state: AppState) => void;
+  // A newer copy of the account state, pulled after boot because another device
+  // saved (see AuthedShell's pullRemoteState). `syncTick` increments on every
+  // pull so the tool applies each one exactly once; the state itself is folded
+  // into what's on screen rather than replacing it (lib/stateMerge).
+  syncedState?: AppState | null;
+  syncTick?: number;
   accountEmail?: string; // the signed-in user's email, for the Account section
   guest?: boolean; // no-account trial: local-only, prompts to sign up to save
   onCreateAccount?: () => void; // leave guest mode and show the sign-up screen
@@ -1247,6 +1312,23 @@ function AuthedShell() {
   const [profileLoaded, setProfileLoaded] = useState(false);
   const [initial, setInitial] = useState<Profile>({ name: "", bio: "", useCase: "Networking" });
   const [initialState, setInitialState] = useState<AppState | null>(null);
+  // The account state as of the last time another device saved it, handed to
+  // ScoutTool to fold in. Starts null: boot already hydrates from the account.
+  const [syncedState, setSyncedState] = useState<AppState | null>(null);
+  const [syncTick, setSyncTick] = useState(0);
+  // updated_at of the newest version of the row this device knows about,
+  // including its own writes. A stamp that differs from this means some OTHER
+  // device (or tab) saved, and only then is the blob worth downloading.
+  const knownStamp = useRef<string | null>(null);
+  const pullBusy = useRef(false);
+  const lastPullAt = useRef(0);
+  // Every write records the version it produced, so the pollers above can tell
+  // this device's own save from another device's and skip downloading it back.
+  const pushState = useCallback((id: string, payload: AppState) => {
+    dbSaveState(id, payload).then(({ error, updatedAt }) => {
+      if (!error) knownStamp.current = updatedAt;
+    });
+  }, []);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The latest state payloads pending a debounced write. Kept in refs so the
@@ -1281,7 +1363,7 @@ function AuthedShell() {
         stateTimer.current = null;
         const s = pendingState.current;
         pendingState.current = null;
-        dbSaveState(uid, s);
+        pushState(uid, s);
       }
     };
     document.addEventListener("visibilitychange", flush);
@@ -1290,7 +1372,7 @@ function AuthedShell() {
       document.removeEventListener("visibilitychange", flush);
       window.removeEventListener("pagehide", flush);
     };
-  }, [session?.user?.id]);
+  }, [session?.user?.id, pushState]);
 
   useEffect(() => {
     if (!supabase) return;
@@ -1325,6 +1407,101 @@ function AuthedShell() {
   // (watchdog timeout or load error). While true, server writes are held:
   // an empty boot once autosaved over a filled account, wiping the profile.
   const degradedBoot = useRef(false);
+
+  // ---- Pull the account state back down when another device changes it ----
+  //
+  // The blob is written on every edit but used to be read exactly once, at
+  // boot. Open Scout on a laptop and a phone and the two simply drifted: a
+  // search run on one was invisible on the other until a hard reload, and
+  // whichever device saved next replaced the other's work wholesale.
+  //
+  // Three things ask "has someone else saved?", cheapest first:
+  //   - coming back to the app (tab visible again, window focused) — this is
+  //     the case that matters most: search on the laptop, pick up the phone;
+  //   - a slow poll while the app is actually on screen, for two devices open
+  //     side by side. It stops when the tab is hidden, so a backgrounded phone
+  //     costs nothing;
+  //   - a Postgres realtime nudge on this user's row, when the Supabase project
+  //     has realtime turned on for user_state (see supabase/realtime_state.sql).
+  //     Purely an accelerator — everything works without it.
+  //
+  // Each asks only for updated_at; the blob is downloaded solely when that
+  // stamp differs from the newest version this device already knows about.
+  const pullRemoteState = useCallback(
+    async (reason: string) => {
+      const id = session?.user?.id;
+      if (!supabase || !id) return;
+      // A pull applies the server's copy over local state, so holding it during
+      // a degraded boot matters for the same reason holding writes does: we
+      // don't know what we have is real.
+      if (degradedBoot.current || !profileLoaded) return;
+      if (pullBusy.current) return;
+      // Floor between checks, so focus + visibilitychange + a realtime nudge
+      // firing together (they routinely do) is still one round trip.
+      const now = Date.now();
+      if (now - lastPullAt.current < 3000) return;
+      lastPullAt.current = now;
+      pullBusy.current = true;
+      try {
+        const stamp = await dbStateStamp(id);
+        if (!stamp || stamp === knownStamp.current) return;
+        const snap = await dbLoadStateSnapshot(id);
+        if (!snap.state) return;
+        knownStamp.current = snap.updatedAt ?? stamp;
+        setSyncedState(snap.state);
+        setSyncTick((t) => t + 1);
+        if (process.env.NODE_ENV !== "production") {
+          console.info(`[Scout] pulled newer account state (${reason}).`);
+        }
+      } catch {
+        /* offline or the row is unreadable; the next trigger tries again */
+      } finally {
+        pullBusy.current = false;
+      }
+    },
+    [session?.user?.id, profileLoaded]
+  );
+
+  useEffect(() => {
+    if (!supabase || !session?.user?.id || !profileLoaded) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") pullRemoteState("foreground");
+    };
+    const onFocus = () => pullRemoteState("focus");
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onFocus);
+    // Catch up straight away: this effect also runs when the app is restored
+    // from the PWA's cache, where no visibility change ever fires.
+    pullRemoteState("mount");
+    const poll = setInterval(() => {
+      if (document.visibilityState === "visible") pullRemoteState("poll");
+    }, 20000);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(poll);
+    };
+  }, [session?.user?.id, profileLoaded, pullRemoteState]);
+
+  // Realtime, when the project has it enabled for user_state. Subscribing to a
+  // table that isn't in the publication is harmless — no events ever arrive and
+  // the pollers above carry the load — so this needs no feature flag.
+  useEffect(() => {
+    const id = session?.user?.id;
+    if (!supabase || !id || !profileLoaded) return;
+    const channel = supabase
+      .channel(`user_state:${id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "user_state", filter: `user_id=eq.${id}` },
+        () => pullRemoteState("realtime")
+      )
+      .subscribe();
+    return () => {
+      supabase?.removeChannel(channel);
+    };
+  }, [session?.user?.id, profileLoaded, pullRemoteState]);
+
   useEffect(() => {
     if (!uid) return;
     // Cross-account guard: localStorage is per-BROWSER, not per-account. When
@@ -1370,10 +1547,14 @@ function AuthedShell() {
       setInitialState(null);
       setProfileLoaded(true);
     }, 8000);
-    Promise.all([dbLoadProfile(uid), dbLoadState(uid)]).then(([p, s]) => {
+    Promise.all([dbLoadProfile(uid), dbLoadStateSnapshot(uid)]).then(([p, snap]) => {
       if (cancelled || done) return;
       done = true;
       clearTimeout(watchdog);
+      const s = snap.state;
+      // Boot is the baseline for change detection: anything newer than this
+      // stamp came from another device.
+      knownStamp.current = snap.updatedAt;
       // Merge the extras from three places, prefer server state over
       // localStorage (the fallback is only for the migration from the
       // browser-only era; after this ships, the server state is the
@@ -1432,48 +1613,7 @@ function AuthedShell() {
       }
       // AppState stores companySize/competitiveness as string; narrow to the
       // Profile enums here so we don't leak an unexpected value into state.
-      const allowedSize = new Set<CompanySize>(["any", "small", "big"]);
-      const allowedComp = new Set<Competitiveness>([
-        "any",
-        "beginner",
-        "intermediate",
-        "competitive",
-      ]);
-      const allowedEdu = new Set<EducationStatus>([
-        "highschool",
-        "college",
-        "graduated",
-        ...EDU_OTHER,
-      ]);
-      const allowedAcct = new Set<AccountType>(["individual", "company"]);
-      const mergedExtras: Partial<Profile> = {};
-      if (raw.accountType && allowedAcct.has(raw.accountType as AccountType))
-        mergedExtras.accountType = raw.accountType as AccountType;
-      if (typeof raw.companyName === "string") mergedExtras.companyName = raw.companyName;
-      if (typeof raw.companyRole === "string") mergedExtras.companyRole = raw.companyRole;
-      if (typeof raw.companyContribution === "string")
-        mergedExtras.companyContribution = raw.companyContribution;
-      if (typeof raw.companyExpertise === "string")
-        mergedExtras.companyExpertise = raw.companyExpertise;
-      if (typeof raw.useExpertise === "boolean") mergedExtras.useExpertise = raw.useExpertise;
-      if (typeof raw.companyAbout === "string") mergedExtras.companyAbout = raw.companyAbout;
-      if (typeof raw.companyIndustry === "string")
-        mergedExtras.companyIndustry = raw.companyIndustry;
-      if (typeof raw.companyStage === "string") mergedExtras.companyStage = raw.companyStage;
-      if (typeof raw.companyLocation === "string")
-        mergedExtras.companyLocation = raw.companyLocation;
-      if (typeof raw.companyWorkspaceId === "string")
-        mergedExtras.companyWorkspaceId = raw.companyWorkspaceId;
-      if (typeof raw.age === "number") mergedExtras.age = raw.age;
-      if (raw.eduStatus && allowedEdu.has(raw.eduStatus as EducationStatus))
-        mergedExtras.eduStatus = raw.eduStatus as EducationStatus;
-      if (typeof raw.college === "string") mergedExtras.college = raw.college;
-      if (typeof raw.major === "string") mergedExtras.major = raw.major;
-      if (typeof raw.location === "string") mergedExtras.location = raw.location;
-      if (raw.companySize && allowedSize.has(raw.companySize as CompanySize))
-        mergedExtras.companySize = raw.companySize as CompanySize;
-      if (raw.competitiveness && allowedComp.has(raw.competitiveness as Competitiveness))
-        mergedExtras.competitiveness = raw.competitiveness as Competitiveness;
+      const mergedExtras = narrowProfileExtras(raw);
       // Seed the display name from the sign-up metadata (first/last name) when
       // there's no saved profile name yet, so new accounts feel personal at once.
       const meta = (session?.user?.user_metadata || {}) as Record<string, string>;
@@ -1592,6 +1732,8 @@ function AuthedShell() {
         return data.session?.access_token ?? null;
       }}
       initialState={initialState}
+      syncedState={syncedState}
+      syncTick={syncTick}
       onSaveState={(s) => {
         pendingState.current = s;
         if (stateTimer.current) clearTimeout(stateTimer.current);
@@ -1604,7 +1746,7 @@ function AuthedShell() {
             console.warn("[Scout] degraded boot; holding the server state write.");
             return;
           }
-          dbSaveState(session.user.id, payload);
+          pushState(session.user.id, payload);
         }, 250);
       }}
       accountEmail={session.user.email || ""}
@@ -1663,6 +1805,8 @@ function ScoutTool({
   getToken,
   initialState,
   onSaveState,
+  syncedState,
+  syncTick = 0,
   accountEmail,
   guest,
   onCreateAccount,
@@ -2413,6 +2557,10 @@ function ScoutTool({
   // inside the pull sees them instead of clobbering them from a stale closure.
   const [seedPullTick, setSeedPullTick] = useState(0);
 
+  // Tombstones live in localStorage (deletedIds), which React can't observe, so
+  // deletes bump this to re-run the sync effect and push the new list out.
+  const [deletedRev, setDeletedRev] = useState(0);
+
   // True once initial hydration finishes, so the sync effect doesn't fire mid-load.
   const hydratedRef = useRef(false);
   const [hydrated, setHydrated] = useState(false); // reactive mirror, for effects that must run post-load
@@ -2654,11 +2802,11 @@ function ScoutTool({
     }
   }, []);
 
-  // Once hydrated, mirror app state to the account (debounced by the parent) so
-  // templates, projects, categories, and activity follow the user across devices.
-  useEffect(() => {
-    if (!onSaveState || !hydratedRef.current) return;
-    onSaveState({
+  // Everything this device would put in the account blob, in one place, so the
+  // push below and the cross-device merge above agree on the shape byte for
+  // byte. They have to: convergence is decided by comparing two of these.
+  const currentAppState = useCallback(
+    (): AppState => ({
       templates: myTemplates,
       projects,
       categories,
@@ -2671,6 +2819,7 @@ function ScoutTool({
       signature,
       syncedSheets,
       lists,
+      deleted: deletedIds(),
       // Ride the extras along in the JSON blob so they survive a redeploy.
       // The profiles table only has name/bio/useCase/linkedin; everything else
       // lived in localStorage before this, which meant it evaporated on any
@@ -2695,9 +2844,84 @@ function ScoutTool({
         companySize: profile.companySize,
         competitiveness: profile.competitiveness,
       },
-    });
+    }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyLocation, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]);
+    [myTemplates, projects, categories, activeId, activity, finds, coaching, editPairs, resumeFile, signature, syncedSheets, lists, deletedRev, profile.accountType, profile.companyName, profile.companyRole, profile.companyContribution, profile.companyExpertise, profile.useExpertise, profile.companyAbout, profile.companyIndustry, profile.companyStage, profile.companyLocation, profile.companyWorkspaceId, profile.age, profile.eduStatus, profile.college, profile.major, profile.location, profile.companySize, profile.competitiveness]
+  );
+
+  // Content of the last blob this device pushed (or accepted from the account
+  // unchanged). Two devices now both push AND pull, so without this they answer
+  // each other forever: A's save wakes B, B merges and saves, which wakes A,
+  // which merges and saves… Skipping a push whose content we already know the
+  // account has turns that into the two or three writes it takes to converge.
+  const lastSyncedSig = useRef<string | null>(null);
+
+  // Once hydrated, mirror app state to the account (debounced by the parent) so
+  // templates, projects, categories, and activity follow the user across devices.
+  useEffect(() => {
+    if (!onSaveState || !hydratedRef.current) return;
+    const next = currentAppState();
+    const sig = JSON.stringify(next);
+    if (sig === lastSyncedSig.current) return;
+    lastSyncedSig.current = sig;
+    onSaveState(next);
+  }, [onSaveState, currentAppState]);
+
+  // ---- Fold in a newer copy of the account state from another device ----
+  //
+  // AuthedShell pulls the row whenever it changes under us and bumps syncTick.
+  // The merge is a union (lib/stateMerge), so this device's own rows survive
+  // even when the account's copy predates them — what arrives is added to what
+  // is here, not swapped in for it.
+  const appliedSyncTick = useRef(0);
+  useEffect(() => {
+    if (!syncTick || syncTick === appliedSyncTick.current) return;
+    if (!hydratedRef.current || !syncedState) return;
+    // Never rearrange the board mid-search: the run commits its finds through
+    // mergeFinds when it ends, and this effect re-runs then (discovering is a
+    // dependency) to apply whatever has been waiting.
+    if (discovering) return;
+    appliedSyncTick.current = syncTick;
+
+    const local = currentAppState();
+    const merged = mergeStates(local, syncedState);
+
+    // Write back only what actually moved, through the normal save helpers, so
+    // the localStorage mirror stays in step with what is on screen.
+    const changed = (a: unknown, b: unknown) => JSON.stringify(a) !== JSON.stringify(b);
+    if (changed(local.deleted, merged.deleted)) writeDeleted(readTombstones(merged.deleted));
+    if (changed(local.projects, merged.projects)) saveProjectsRaw(merged.projects as Project[]);
+    if (changed(local.categories, merged.categories)) saveCats(merged.categories as Category[]);
+    if (changed(local.finds, merged.finds)) saveFinds(merged.finds as Find[]);
+    if (changed(local.templates, merged.templates))
+      saveTpls(merged.templates as OutreachTemplate[]);
+    if (changed(local.lists, merged.lists)) saveLists(merged.lists as ScoutList[]);
+    // syncedSheets has no localStorage mirror; it lives in the account blob only.
+    if (changed(local.syncedSheets, merged.syncedSheets))
+      setSyncedSheets(merged.syncedSheets as SyncedSheet[]);
+    if (changed(local.activity, merged.activity))
+      saveActivity({ ...ZERO_ACTIVITY, ...(merged.activity as Partial<Activity>) });
+    if (changed(local.coaching, merged.coaching)) saveCoaching(merged.coaching as string[]);
+    if (changed(local.editPairs, merged.editPairs))
+      saveEditPairs(merged.editPairs as { before: string; after: string }[]);
+    if (changed(local.signature, merged.signature)) saveSignature(merged.signature || "");
+    if (changed(local.resumeFile, merged.resumeFile))
+      saveResumeFile(merged.resumeFile as { name: string; dataUrl: string } | null);
+    if (changed(local.profileExtras, merged.profileExtras)) {
+      patchProfile(narrowProfileExtras(merged.profileExtras || {}));
+    }
+
+    // If the merge produced exactly what the account already holds, there is
+    // nothing to tell it — record the signature so the push effect above stays
+    // quiet instead of bouncing an identical blob back.
+    const mergedSig = JSON.stringify({ ...merged, activeId: local.activeId });
+    const remoteSig = JSON.stringify({
+      ...mergeStates(syncedState, syncedState),
+      activeId: local.activeId,
+    });
+    if (mergedSig === remoteSig) lastSyncedSig.current = mergedSig;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncTick, syncedState, hydrated, discovering]);
 
   // ---- Structured profile for the Scout browser extension ----
   // The extension fills application forms from ONE tidy object; parsing lives
@@ -3088,6 +3312,15 @@ function ScoutTool({
       (f) => f.id !== editedFindId && f.status === "drafted" && f.draft?.body
     );
     if (otherDrafts.length > 0) setVoiceRefreshAvailable(true);
+  };
+  // Replace the counters wholesale. Only the cross-device merge needs this (it
+  // takes the per-key maximum of two devices' counts); everything else adds to
+  // them through bumpActivity.
+  const saveActivity = (n: Activity) => {
+    setActivity(n);
+    try {
+      localStorage.setItem(ACT_KEY, JSON.stringify(n));
+    } catch {}
   };
   // Bump real activity counters (searches run, people found, drafts written,
   // drafts copied to send). Honest usage, no invented metrics.
@@ -4040,29 +4273,35 @@ function ScoutTool({
   }
 
   // Deleted ids, read straight from localStorage so the sync effect and the
-  // delete path can never disagree about what's gone.
-  function deletedIds(): { projects: string[]; categories: string[] } {
+  // delete path can never disagree about what's gone. These also ride along in
+  // the account blob: the cross-device merge is a UNION, so without a record of
+  // what was deleted the other device hands every removed row straight back.
+  function deletedIds(): Tombstones {
     try {
-      const raw = JSON.parse(localStorage.getItem(DELETED_KEY) || "{}");
-      return {
-        projects: Array.isArray(raw.projects) ? raw.projects.map(String) : [],
-        categories: Array.isArray(raw.categories) ? raw.categories.map(String) : [],
-      };
+      return readTombstones(JSON.parse(localStorage.getItem(DELETED_KEY) || "{}"));
     } catch {
-      return { projects: [], categories: [] };
+      return EMPTY_TOMBSTONES;
     }
   }
-  function recordDeleted(projectIds: string[], categoryIds: string[]) {
+  function writeDeleted(next: Tombstones) {
     try {
-      const cur = deletedIds();
-      const next = {
-        projects: Array.from(new Set([...cur.projects, ...projectIds])).slice(-DELETED_CAP),
-        categories: Array.from(new Set([...cur.categories, ...categoryIds])).slice(-DELETED_CAP),
-      };
       localStorage.setItem(DELETED_KEY, JSON.stringify(next));
     } catch {
       /* localStorage unavailable — the delete still stands for this session */
     }
+    // Bump a counter so the sync effect pushes the new tombstone out; the
+    // tombstones live in localStorage, which React can't see on its own.
+    setDeletedRev((r) => r + 1);
+  }
+  function recordDeleted(projectIds: string[], categoryIds: string[], findIds: string[] = []) {
+    const cur = deletedIds();
+    writeDeleted(
+      mergeTombstones(cur, {
+        projects: projectIds.map(String),
+        categories: categoryIds.map(String),
+        finds: findIds.map(String),
+      })
+    );
   }
 
   async function removeProject(id: string) {
@@ -4412,6 +4651,7 @@ function ScoutTool({
   function removeCategoriesBulk(ids: string[]) {
     const set = new Set(ids);
     const next = categories.filter((c) => !set.has(c.id));
+    recordDeleted([], ids);
     saveCats(next);
     if (set.has(catId)) {
       const mine = next.filter((c) => c.projectId === activeId);
@@ -4458,6 +4698,7 @@ function ScoutTool({
 
   function removeCategory(id: string) {
     const next = categories.filter((c) => c.id !== id);
+    recordDeleted([], [id]);
     saveCats(next);
     if (catId === id) {
       const mine = next.filter((c) => c.projectId === activeId);
@@ -6169,6 +6410,9 @@ function ScoutTool({
   }
   function removeFind(id: string) {
     const gone = finds.find((f) => f.id === id);
+    // Tombstone it, or the cross-device merge unions it back in from whichever
+    // device hasn't heard about the delete yet.
+    recordDeleted([], [], [id]);
     saveFinds(findsRef.current.filter((f) => f.id !== id));
     if (gone) saveTrash([{ find: gone, deletedAt: Date.now() }, ...trash].slice(0, 100));
   }
@@ -6176,6 +6420,12 @@ function ScoutTool({
   function restoreFind(id: string) {
     const row = trash.find((r) => r.find.id === id);
     if (!row) return;
+    // Lift the tombstone first: while it stands, every merge strips this find
+    // straight back out again.
+    const cur = deletedIds();
+    if (cur.finds.includes(id)) {
+      writeDeleted({ ...cur, finds: cur.finds.filter((f) => f !== id) });
+    }
     saveTrash(trash.filter((r) => r.find.id !== id));
     if (findsRef.current.some((f) => f.id === id)) return;
     saveFinds([row.find, ...findsRef.current]);
