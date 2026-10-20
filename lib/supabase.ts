@@ -149,6 +149,10 @@ export interface AppState {
   signature?: string; // email signature appended to drafted emails
   syncedSheets?: any[]; // linked spreadsheets Scout re-reads automatically
   lists?: any[]; // saved status lists (the stakeholder-friendly Lists tab)
+  // Ids this user has deleted, so the cross-device merge can honour a delete
+  // instead of handing the row straight back from the other device's copy.
+  // See lib/stateMerge.ts.
+  deleted?: { projects?: string[]; categories?: string[]; finds?: string[] };
   // Extra profile fields that aren't columns on the profiles table (age,
   // education, location, company-size preference, competitiveness). Ride along
   // in the JSON blob so a redeploy or new device doesn't wipe them out.
@@ -174,33 +178,67 @@ export interface AppState {
   };
 }
 
-export async function loadState(userId: string): Promise<AppState | null> {
-  if (!supabase) return null;
+// Reads carry the row's updated_at as well as its contents. A device compares
+// that stamp against the last one it knows about to tell "someone else saved"
+// from "this is my own write coming back", which is what makes polling for
+// another device's changes cheap instead of a merge on every tick.
+export interface StateSnapshot {
+  state: AppState | null;
+  updatedAt: string | null;
+}
+
+export async function loadStateSnapshot(userId: string): Promise<StateSnapshot> {
+  if (!supabase) return { state: null, updatedAt: null };
   const { data, error } = await supabase
     .from("user_state")
-    .select("data")
+    .select("data, updated_at")
     .eq("user_id", userId)
     .maybeSingle();
   if (error) console.warn("loadState failed:", error.message);
+  if (error || !data) return { state: null, updatedAt: null };
+  return {
+    state: (data.data || {}) as AppState,
+    updatedAt: (data as { updated_at?: string | null }).updated_at ?? null,
+  };
+}
+
+export async function loadState(userId: string): Promise<AppState | null> {
+  return (await loadStateSnapshot(userId)).state;
+}
+
+/**
+ * Just the row's updated_at. Polling for another device's changes runs this on
+ * a timer, so it deliberately does NOT pull `data` — the blob holds every find
+ * and draft the user has, and re-downloading it every few seconds to discover
+ * nothing changed would be the expensive way to do nothing.
+ */
+export async function stateStamp(userId: string): Promise<string | null> {
+  if (!supabase) return null;
+  const { data, error } = await supabase
+    .from("user_state")
+    .select("updated_at")
+    .eq("user_id", userId)
+    .maybeSingle();
   if (error || !data) return null;
-  return (data.data || {}) as AppState;
+  return (data as { updated_at?: string | null }).updated_at ?? null;
 }
 
 export async function saveState(
   userId: string,
   state: AppState
-): Promise<string | null> {
-  if (!supabase) return null;
+): Promise<{ error: string | null; updatedAt: string }> {
+  const updatedAt = new Date().toISOString();
+  if (!supabase) return { error: null, updatedAt };
   const { error } = await supabase.from("user_state").upsert({
     user_id: userId,
     data: state,
-    updated_at: new Date().toISOString(),
+    updated_at: updatedAt,
   });
   if (error) {
     console.error("saveState failed:", error.message);
-    return error.message;
+    return { error: error.message, updatedAt };
   }
-  return null;
+  return { error: null, updatedAt };
 }
 
 // ---- Multi-account switcher ------------------------------------------------
