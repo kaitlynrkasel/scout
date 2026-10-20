@@ -30363,6 +30363,77 @@ function SignalChips({ signals }: { signals: string[] }) {
   );
 }
 
+// ---- The drag ghost for dragging a find into Drafts ----
+// Browsers default to a washed-out screenshot of the element being dragged,
+// which for a full-width ledger row is a wide grey smear that says nothing
+// about what is in flight. Carry the Scout mark instead: one small puck,
+// identical from every finds layout, so the gesture reads the same everywhere.
+//
+// Kept at module scope and reused: setDragImage snapshots the element at
+// dragstart, so it has to be laid out and its image already decoded. Building
+// it on first need (and on first hover over a draggable row) gives the PNG time
+// to load before anyone actually drags.
+const DRAG_GHOST_SIZE = 46;
+let dragGhostEl: HTMLElement | null = null;
+
+function scoutDragGhost(): HTMLElement | null {
+  if (typeof document === "undefined") return null;
+  if (dragGhostEl?.isConnected) return dragGhostEl;
+  const el = document.createElement("div");
+  el.setAttribute("aria-hidden", "true");
+  // Parked off-screen: the snapshot is taken from wherever the element sits, so
+  // it must be rendered (Firefox skips detached nodes) and never visible.
+  el.style.cssText = [
+    "position:fixed",
+    "top:-9999px",
+    "left:-9999px",
+    `width:${DRAG_GHOST_SIZE}px`,
+    `height:${DRAG_GHOST_SIZE}px`,
+    "display:flex",
+    "align-items:center",
+    "justify-content:center",
+    "border-radius:9999px",
+    // Warm paper + a soft lifted shadow, same family as the find tiles. Literal
+    // values, not tokens: this node lives outside React and outside the
+    // stylesheet's cascade, so a var() here would resolve to nothing.
+    "background:#FFFDF7",
+    "border:1px solid rgba(138,90,52,0.22)",
+    "box-shadow:0 10px 22px -8px rgba(60,40,24,0.5)",
+    "pointer-events:none",
+  ].join(";");
+  const img = document.createElement("img");
+  img.src = "/scout-logo.png";
+  img.alt = "";
+  img.decoding = "sync";
+  img.style.cssText = "width:30px;height:30px;object-fit:contain;";
+  el.appendChild(img);
+  document.body.appendChild(el);
+  dragGhostEl = el;
+  return el;
+}
+
+// Hand the mark to a dragstart. Falls through silently if the browser won't
+// take a custom image — the drag itself still works, it just looks default.
+function useScoutDragImage() {
+  // Warm the ghost up once the tray is on screen, so the PNG is decoded before
+  // the first drag rather than during it (an undecoded image draws nothing).
+  useEffect(() => {
+    scoutDragGhost();
+  }, []);
+  return useCallback((e: React.DragEvent) => {
+    try {
+      const ghost = scoutDragGhost();
+      if (ghost) {
+        // Centred under the cursor, so the mark tracks the pointer instead of
+        // trailing behind and below it.
+        e.dataTransfer.setDragImage(ghost, DRAG_GHOST_SIZE / 2, DRAG_GHOST_SIZE / 2);
+      }
+    } catch {
+      /* setDragImage unsupported; the default ghost is fine */
+    }
+  }, []);
+}
+
 function FindsTray({
   finds,
   catId,
@@ -30384,6 +30455,9 @@ function FindsTray({
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [openDraft, setOpenDraft] = useState<string>("");
+  // Dragging a find to Drafts carries the Scout mark rather than a screenshot
+  // of the row (see scoutDragGhost).
+  const setScoutDragImage = useScoutDragImage();
   // Drafts column: drag-over highlight + its own collapse (title row toggles).
   const [over, setOver] = useState(false);
   const [draftsOpen, setDraftsOpen] = useState(true);
@@ -30488,6 +30562,7 @@ function FindsTray({
                 onDragStart: (e: React.DragEvent) => {
                   e.dataTransfer.setData("text/scout-find", f.id);
                   e.dataTransfer.effectAllowed = "move";
+                  setScoutDragImage(e);
                 },
               };
               const draftBtn = canDrag && (
