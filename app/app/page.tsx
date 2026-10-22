@@ -30664,10 +30664,10 @@ function FindsTray({
                     {...drag}
                     // An open row lifts out of the list onto a deeper beige
                     // panel, so the eye knows which find it's reading.
-                    className={`group/card cursor-grab border-b transition-colors duration-200 active:cursor-grabbing ${
+                    className={`group/card cursor-grab border-b transition-all duration-300 ease-out active:cursor-grabbing ${
                       open
                         ? "my-2 border-transparent bg-[#E9DCC7] px-2"
-                        : "border-[rgb(var(--v-line))]"
+                        : "my-0 border-[rgb(var(--v-line))] bg-transparent px-0"
                     }`}
                   >
                     <button
@@ -30686,7 +30686,16 @@ function FindsTray({
                         <polyline points="6 9 12 15 18 9" />
                       </svg>
                     </button>
-                    {open && (() => {
+                    {/* Details stay mounted and the 0fr/1fr grid row animates their
+                        height, so opening slides and fades instead of popping. */}
+                    <div
+                      aria-hidden={!open}
+                      className={`grid transition-[grid-template-rows,opacity] duration-300 ease-out ${
+                        open ? "grid-rows-[1fr] opacity-100" : "pointer-events-none grid-rows-[0fr] opacity-0"
+                      }`}
+                    >
+                    <div className="min-h-0 overflow-hidden">
+                    {(() => {
                       let host = "";
                       try {
                         host = o.url ? new URL(o.url).hostname.replace(/^www\./, "") : "";
@@ -30751,6 +30760,8 @@ function FindsTray({
                       </div>
                       );
                     })()}
+                    </div>
+                    </div>
                   </div>
                 );
               }
