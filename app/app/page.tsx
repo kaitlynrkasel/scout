@@ -8691,7 +8691,7 @@ function ScoutTool({
                   back into the compact stacked band and the dark section fades
                   in underneath. Same DOM both ways; only the grid changes. */}
               <div
-                className={`w-full max-w-[1400px] ${
+                className={`w-full ${postcardStage ? "" : "max-w-[1400px]"} ${
                   stageHasWorkBelow && !postcardStage
                     ? ""
                     : postcardStage
@@ -11971,11 +11971,27 @@ function SideNav({
         </aside>
       ) : (
         <>
+          {/* Collapsed is a slim visible rail, not an invisible edge: the
+              open button sits at the top, and hovering anywhere on the rail
+              still peeks the full sidebar out over the page. */}
           <div
-            aria-hidden
             onMouseEnter={() => setRailPeek(true)}
-            className="su-rail sticky top-0 hidden h-screen w-2.5 shrink-0 md:block"
-          />
+            className="su-rail sticky top-0 hidden h-screen w-14 shrink-0 flex-col items-center gap-3 border-r border-[color:var(--su-rail-line)] pt-3.5 md:flex"
+          >
+            <button
+              onClick={() => setRailPinned(true)}
+              aria-label="Open sidebar"
+              title="Open sidebar"
+              className="grid h-9 w-9 place-items-center rounded-lg text-[color:var(--su-rail-muted)] transition hover:bg-[color:var(--su-rail-hover)] hover:text-[color:var(--su-rail-fg-strong)]"
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <rect x="3" y="4" width="18" height="16" rx="3" />
+                <path d="M9 4v16" />
+                <path d="m14 10 2 2-2 2" />
+              </svg>
+            </button>
+            <img src="/scout-logo.png" alt="" className="h-6 w-6 opacity-80" />
+          </div>
           <aside
             onMouseLeave={() => setRailPeek(false)}
             aria-hidden={!railPeek}
