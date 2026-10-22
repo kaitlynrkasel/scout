@@ -30659,7 +30659,17 @@ function FindsTray({
                 const o = f.opp;
                 const contact = [o.contactEmail, o.contactHandle, o.contactPhone].filter(Boolean);
                 return (
-                  <div key={f.id} {...drag} className="group/card cursor-grab border-b border-[rgb(var(--v-line))] active:cursor-grabbing">
+                  <div
+                    key={f.id}
+                    {...drag}
+                    // An open row lifts out of the list onto a deeper beige
+                    // panel, so the eye knows which find it's reading.
+                    className={`group/card cursor-grab border-b transition-colors duration-200 active:cursor-grabbing ${
+                      open
+                        ? "my-2 rounded-2xl border-transparent bg-[#E9DCC7] px-2 shadow-[0_14px_30px_-22px_rgba(60,40,20,0.45)] dark:bg-[rgb(58_46_34)]"
+                        : "border-[rgb(var(--v-line))]"
+                    }`}
+                  >
                     <button
                       onClick={() => setOpenFind(open ? "" : f.id)}
                       aria-expanded={open}
