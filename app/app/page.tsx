@@ -30683,29 +30683,7 @@ function FindsTray({
                       } catch {}
                       const platform = socialPlatform(o.url);
                       return (
-                      <div className="flex cursor-auto flex-col gap-5 pb-5 pl-11 pr-1 lg:flex-row">
-                        {/* The same site tile the Finds tab leads with: their
-                            colour and logo, and a way through to the page. */}
-                        {o.url && (
-                          <a
-                            href={o.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            title="Open their page"
-                            className="group block w-full shrink-0 self-start overflow-hidden rounded-xl border border-[rgb(var(--v-line))] transition hover:shadow-soft lg:w-64 [&>div]:border-b-0"
-                          >
-                            <SiteTile
-                              url={o.url}
-                              name={o.name}
-                              host={host}
-                              label={
-                                isSocialProfileUrl(o.url)
-                                  ? [platform ? `${platform} profile` : "Profile", socialHandle(o.url)].filter(Boolean).join(" · ")
-                                  : host
-                              }
-                            />
-                          </a>
-                        )}
+                      <div className="flex cursor-auto flex-col gap-5 pb-5 pl-11 pr-1">
                         <div className="min-w-0 flex-1">
                         {o.whyItFits && <FitNote text={o.whyItFits} />}
                         {!!o.signals?.length && <SignalChips signals={o.signals} />}
