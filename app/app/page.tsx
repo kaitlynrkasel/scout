@@ -30666,7 +30666,7 @@ function FindsTray({
                     // panel, so the eye knows which find it's reading.
                     className={`group/card cursor-grab border-b transition-colors duration-200 active:cursor-grabbing ${
                       open
-                        ? "my-2 rounded-2xl border-transparent bg-[#E9DCC7] px-2 shadow-[0_14px_30px_-22px_rgba(60,40,20,0.45)]"
+                        ? "my-2 border-transparent bg-[#E9DCC7] px-2"
                         : "border-[rgb(var(--v-line))]"
                     }`}
                   >
