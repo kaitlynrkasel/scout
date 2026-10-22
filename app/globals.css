@@ -1291,3 +1291,8 @@ select.scout-kind-picker option {
   --v-tint: 243 231 214;
   --v-dash: 217 203 180;
 }
+
+/* The Scout send pill: its brown comes from --pill / --pill-hover set inline
+   by StampButton (?shade= compares chestnut, walnut, espresso, coffee). */
+.scout-pill { background-color: var(--pill, #8a5a34); }
+.scout-pill:hover { background-color: var(--pill-hover, #6e4626); }

@@ -29956,7 +29956,158 @@ function BigPicker({
 }
 
 // The logo as a postage stamp: the run button for every letter.
-function StampButton({ p, size = 112, label = true }: { p: StageLayoutProps; size?: number; label?: boolean }) {
+// The Scout logo drawn as a mask, so it can take any colour (cream on the
+// chestnut seal, ink on paper).
+function LogoMark({ size, color }: { size: number; color: string }) {
+  const m = 'url("/scout-logo.png")';
+  return (
+    <span
+      aria-hidden
+      style={{
+        width: size,
+        height: size,
+        backgroundColor: color,
+        WebkitMaskImage: m,
+        maskImage: m,
+        WebkitMaskSize: "contain",
+        maskSize: "contain",
+        WebkitMaskRepeat: "no-repeat",
+        maskRepeat: "no-repeat",
+        WebkitMaskPosition: "center",
+        maskPosition: "center",
+      }}
+      className="block"
+    />
+  );
+}
+
+function StampButton({
+  p,
+  size = 112,
+  label = true,
+  force = "",
+}: {
+  p: StageLayoutProps;
+  size?: number;
+  label?: boolean;
+  force?: string;
+}) {
+  // Send-button designs under comparison on the canvas: ?send=seal | pill |
+  // pill-text | ring | postmark. Default is the tilted dashed stamp.
+  const [variant, setVariant] = useState("");
+  const [shade, setShade] = useState("");
+  useEffect(() => {
+    setShade(new URLSearchParams(window.location.search).get("shade") || "");
+    const v = new URLSearchParams(window.location.search).get("send");
+    if (force) setVariant(force);
+    else if (v === "seal" || v === "pill" || v === "pill-text" || v === "ring" || v === "postmark") setVariant(v);
+  }, [force]);
+  const label2 = p.runLabel === "Scout" ? "Send Scout" : p.runLabel;
+  const common = {
+    "data-guide": "start",
+    onClick: p.onRun,
+    disabled: p.runDisabled,
+    "aria-label": "Send Scout",
+    title: "Send Scout",
+  };
+
+  if (variant === "seal")
+    return (
+      <button {...common} className="group/go flex shrink-0 flex-col items-center gap-2.5 disabled:opacity-50">
+        <span
+          style={{ width: size, height: size }}
+          className="relative grid place-items-center transition duration-300 group-hover/go:-translate-y-0.5 group-active/go:scale-95"
+        >
+          {/* A wax seal: a softly lobed disc with an inner ring pressed in. */}
+          <svg viewBox="0 0 100 100" aria-hidden className="absolute inset-0 h-full w-full drop-shadow-[0_8px_14px_rgba(70,40,15,0.35)]">
+            <path
+              d="M50 3c6 0 8 4 13 5s10-2 14 2 2 9 5 13 8 5 9 10-3 8-3 13 4 8 3 13-6 6-9 10-1 9-5 13-9 1-14 2-7 5-13 5-8-4-13-5-10 2-14-2-2-9-5-13-8-5-9-10 3-8 3-13-4-8-3-13 6-6 9-10 1-9 5-13 9-1 14-2 7-5 13-5Z"
+              fill="rgb(var(--c-brown))"
+            />
+            <circle cx="50" cy="50" r="33" fill="none" stroke="rgb(255 255 255 / 0.22)" strokeWidth="1.5" />
+          </svg>
+          <span className="relative">
+            <LogoMark size={size * 0.42} color="rgb(var(--v-sheet))" />
+          </span>
+        </span>
+        {label && (
+          <span style={{ width: size + 24 }} className="truncate text-center text-[11px] font-semibold uppercase tracking-[0.18em] text-body/55">
+            {p.runLabel}
+          </span>
+        )}
+      </button>
+    );
+
+  if (variant === "pill")
+    return (
+      <button
+        {...common}
+        className="group/go inline-flex shrink-0 items-center gap-3 rounded-full bg-[rgb(var(--c-brown))] py-3 pl-3 pr-6 text-[rgb(var(--v-sheet))] shadow-[0_10px_24px_-14px_rgba(70,40,15,0.7)] transition hover:bg-[rgb(var(--c-brown-deep))] active:scale-[0.98] disabled:opacity-50"
+      >
+        <span className="grid h-9 w-9 place-items-center rounded-full bg-[rgb(var(--v-sheet))]">
+          <LogoMark size={20} color="rgb(var(--c-brown))" />
+        </span>
+        <span className="font-display text-[17px] font-bold tracking-tight">{label2}</span>
+        <span aria-hidden className="transition group-hover/go:translate-x-0.5">→</span>
+      </button>
+    );
+
+  if (variant === "pill-text") {
+    // ?shade= compares browns: chestnut (default) | walnut | espresso | coffee.
+    const SHADES: Record<string, [string, string]> = {
+      chestnut: ["#8A5A34", "#6E4626"],
+      walnut: ["#5B3A1F", "#4A2F18"],
+      espresso: ["#3A2618", "#2E1E13"],
+      coffee: ["#2B2119", "#1F1812"],
+    };
+    const [bg, bgHover] = SHADES[shade] || SHADES.chestnut;
+    return (
+      <button
+        {...common}
+        style={{ ["--pill" as string]: bg, ["--pill-hover" as string]: bgHover }}
+        className="group/go inline-flex shrink-0 items-center gap-2.5 scout-pill rounded-full px-8 py-3.5 text-[#FBF6EE] shadow-[0_10px_24px_-14px_rgba(40,25,10,0.8)] transition active:scale-[0.98] disabled:opacity-50"
+      >
+        <span className="font-display text-[17px] font-bold tracking-tight">{p.runLabel}</span>
+        <span aria-hidden className="transition group-hover/go:translate-x-0.5">→</span>
+      </button>
+    );
+  }
+
+  if (variant === "ring")
+    return (
+      <button {...common} className="group/go inline-flex shrink-0 items-center gap-4 disabled:opacity-50">
+        <span
+          style={{ width: size * 0.78, height: size * 0.78 }}
+          className="grid place-items-center rounded-full border border-ink/25 transition duration-300 group-hover/go:border-ink group-hover/go:bg-[rgb(var(--v-tint))]"
+        >
+          <LogoMark size={size * 0.32} color="rgb(var(--c-ink))" />
+        </span>
+        <span className="text-left">
+          <span className="block font-display text-[20px] font-bold leading-none tracking-tight text-ink">{label2}</span>
+          <span className="mt-1 block text-[12px] text-body/50 transition group-hover/go:text-brown">Fetch the people on this card →</span>
+        </span>
+      </button>
+    );
+
+  if (variant === "postmark")
+    return (
+      <button {...common} style={{ width: size * 1.15, height: size * 1.15 }} className="group/go relative grid shrink-0 place-items-center disabled:opacity-50">
+        <svg viewBox="0 0 128 128" aria-hidden className="absolute inset-0 h-full w-full transition-transform duration-700 group-hover/go:rotate-[20deg]">
+          <defs>
+            <path id="send-postmark-ring" d="M64 64m-47 0a47 47 0 1 1 94 0a47 47 0 1 1-94 0" />
+          </defs>
+          <circle cx="64" cy="64" r="61" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.25" />
+          <circle cx="64" cy="64" r="35" fill="none" stroke="rgb(var(--c-brown))" strokeWidth="1.25" />
+          <text fontSize="10.5" fontWeight="700" letterSpacing="3.4" fill="rgb(var(--c-brown))" style={{ fontFamily: "var(--font-sans), sans-serif" }}>
+            <textPath href="#send-postmark-ring">{p.runLabel === "Scout" ? "SEND SCOUT · SEND SCOUT ·" : `${p.runLabel.toUpperCase()} · `}</textPath>
+          </text>
+        </svg>
+        <span className="relative transition group-active/go:scale-90">
+          <LogoMark size={size * 0.34} color="rgb(var(--c-brown))" />
+        </span>
+      </button>
+    );
+
   return (
     <button
       data-guide="start"
@@ -30000,7 +30151,13 @@ function ScoutPostcard(p: StageLayoutProps) {
     if (v === "classic") setFront("");
     else if (v === "tabs" || v === "label" || v === "postmark") setFront(v);
   }, []);
-  if (front) return <ScoutPostcardShell p={p} g={g} left={<PostcardFront variant={front} p={p} />} />;
+  // ?look=plain: the same two sections without the postcard dressing.
+  const [plain, setPlain] = useState(false);
+  useEffect(() => {
+    setPlain(new URLSearchParams(window.location.search).get("look") === "plain");
+  }, []);
+  if (front)
+    return <ScoutPostcardShell p={p} g={g} plain={plain} left={<PostcardFront variant={front} p={p} plain={plain} />} />;
   return (
     <div className="flex w-full justify-center">
       <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
@@ -30061,11 +30218,33 @@ function ScoutPostcard(p: StageLayoutProps) {
 
 /* The postcard with a swappable left half (for ?front= comparisons); the
  * right half, who to find, is the same in every version. */
-function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType<typeof useGoalPoints>; left: React.ReactNode }) {
+function ScoutPostcardShell({
+  p,
+  g,
+  left,
+  plain = false,
+}: {
+  p: StageLayoutProps;
+  g: ReturnType<typeof useGoalPoints>;
+  left: React.ReactNode;
+  plain?: boolean;
+}) {
   return (
     <div className="flex w-full justify-center">
-      <div className="grid w-full grid-cols-1 border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)] md:min-h-[420px] md:grid-cols-[1.15fr_1fr]">
-        <div className="flex flex-col justify-between gap-8 border-b-2 border-dashed border-[rgb(var(--v-line))] p-7 sm:p-10 md:border-b-0 md:border-r-2">
+      <div
+        className={`grid w-full grid-cols-1 md:min-h-[420px] md:grid-cols-[1.15fr_1fr] ${
+          plain
+            ? "border-b border-[rgb(var(--v-line))]"
+            : "border-y border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)]"
+        }`}
+      >
+        <div
+          className={`flex flex-col justify-between gap-8 p-7 sm:p-10 ${
+            plain
+              ? "border-b border-[rgb(var(--v-line))] md:border-b-0 md:border-r"
+              : "border-b-2 border-dashed border-[rgb(var(--v-line))] md:border-b-0 md:border-r-2"
+          }`}
+        >
           {left}
         </div>
         {/* Nudged in from the dashed divider so the address block floats in
@@ -30073,7 +30252,7 @@ function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType
         <div className="flex flex-col gap-8 p-7 sm:py-10 sm:pl-14 sm:pr-10">
           {p.extra && <div>{p.extra}</div>}
           <div className="mt-auto">
-            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Find</div>
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">{plain ? "Who to find" : "Find"}</div>
             <ul data-guide="goal" className="mt-2">
               {g.points.map((pt, i) => (
                 <li key={i} className="border-b border-[rgb(var(--v-line))] py-2">
@@ -30090,7 +30269,7 @@ function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType
                   <input autoFocus value={g.draft} onChange={(e) => g.setDraft(e.target.value)} onBlur={g.commit} onKeyDown={g.keys} placeholder="who else?"
                     className="w-full bg-transparent text-[16px] font-medium text-ink outline-none placeholder:text-body/30" />
                 ) : (
-                  <button onClick={() => g.start(-1)} className="text-[16px] font-medium text-body/30 hover:text-body/60">+</button>
+                  <button onClick={() => g.start(-1)} className="text-[16px] font-medium text-body/30 hover:text-body/60">{plain ? "+ Add another" : "+"}</button>
                 )}
               </li>
             </ul>
@@ -30103,16 +30282,28 @@ function ScoutPostcardShell({ p, g, left }: { p: StageLayoutProps; g: ReturnType
 
 // Left-half designs for the postcard. Every one keeps the same jobs: pick the
 // project, pick the search, send Scout, and reach Templates / Projects.
-function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps }) {
+function PostcardFront({ variant, p, plain = false }: { variant: string; p: StageLayoutProps; plain?: boolean }) {
   const searches = p.searchOptions.filter((o) => !o.value.startsWith("__"));
+  // Templates / Projects / Profile as a small menu bar: one rounded strip,
+  // thin rules between items, a soft fill on hover.
+  const menuItem =
+    "px-4 py-2 text-[12px] font-semibold text-body/65 transition hover:bg-[rgb(var(--v-tint))] hover:text-ink";
   const links = (
-    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[12px] font-semibold text-body/40">
-      <button onClick={p.onTemplates} className="hover:text-ink">Templates</button>
-      <button onClick={p.onManage} className="hover:text-ink">Projects</button>
-      {p.showProfileNudge && (
-        <button onClick={p.onProfile} className="hover:text-ink">Add your profile so drafts sound like you →</button>
-      )}
-    </div>
+    <nav
+      aria-label="Search tools"
+      className="inline-flex items-stretch divide-x divide-[rgb(var(--v-line))] overflow-hidden rounded-full border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))]"
+    >
+      <button onClick={p.onTemplates} className={menuItem}>Templates</button>
+      <button onClick={p.onManage} className={menuItem}>Projects</button>
+      <button
+        onClick={p.onProfile}
+        title={p.showProfileNudge ? "Add your profile so drafts sound like you" : "Your profile"}
+        className={`${menuItem} inline-flex items-center gap-1.5`}
+      >
+        Profile
+        {p.showProfileNudge && <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-brown" />}
+      </button>
+    </nav>
   );
 
   if (variant === "tabs")
@@ -30161,7 +30352,7 @@ function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps })
   if (variant === "label")
     return (
       <>
-        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">Greetings from</div>
+        <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-body/40">{plain ? "Your search" : "Greetings from"}</div>
         <div className="space-y-1">
           <div className="flex items-baseline gap-5 border-b border-[rgb(var(--v-line))] pb-3">
             <span className="w-20 shrink-0 text-[11px] font-bold uppercase tracking-[0.16em] text-body/40">Project</span>
@@ -30176,7 +30367,7 @@ function PostcardFront({ variant, p }: { variant: string; p: StageLayoutProps })
         </div>
         <div className="flex items-end justify-between gap-6">
           {links}
-          <StampButton p={p} size={88} />
+          <StampButton p={p} size={88} force={plain ? "pill" : ""} />
         </div>
       </>
     );
