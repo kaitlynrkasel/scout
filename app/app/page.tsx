@@ -26492,18 +26492,34 @@ function TemplatesTab({
     return `${projName} · ${cat?.name || "a category"}`;
   };
   const outreachKinds = kinds.filter((k) => k !== "Cover letter");
-  const kindTpls = (k: string) => myOutreach.filter((t) => t.channel === k);
-  // Pick a kind: open its first saved template, or a blank one to write.
-  const openKind = (k: string) => {
-    const first = kindTpls(k)[0];
+  // The index is organized the way the work is: by project, with each
+  // project's categories folded under it. A project node shows every
+  // template in that project; a category node shows only that category's;
+  // "All projects" holds the global ones. Channel is a property of each
+  // template, chosen on the sheet.
+  const inScope = (t: OutreachTemplate, pid: string, cid: string) =>
+    !pid ? !t.projectId : t.projectId === pid && (!cid || t.categoryId === cid);
+  const scopeTpls = myOutreach.filter((t) => inScope(t, scopeProjectId, scopeCategoryId));
+  const [openProjs, setOpenProjs] = useState<Set<string>>(() => new Set(scopeProjectId ? [scopeProjectId] : []));
+  const pickScope = (pid: string, cid: string) => {
+    setTView("outreach");
+    setScopeProjectId(pid);
+    setScopeCategoryId(cid);
+    if (pid) setOpenProjs((s0) => new Set(s0).add(pid));
+    const first = myOutreach.find((t) => inScope(t, pid, cid));
     if (first) startEdit(first);
     else {
       setEditingId("");
       setText("");
       setTitle("");
-      setChannel(k);
+      if (!outreachKinds.includes(channel)) setChannel("Email");
     }
   };
+  const scopeTitle = !scopeProjectId
+    ? "All projects"
+    : `${projects.find((p) => p.id === scopeProjectId)?.name || "Project"}${
+        scopeCategoryId ? ` · ${categories.find((c) => c.id === scopeCategoryId)?.name || ""}` : ""
+      }`;
 
   return (
     <main className={`${tView === "outreach" ? "tpl-open " : "tpl-materials "}w-full px-5 py-8 sm:px-8 sm:py-12 xl:px-12`}>
@@ -26528,25 +26544,72 @@ function TemplatesTab({
       <div className="mt-8 grid items-start gap-6 lg:grid-cols-[176px_minmax(0,1fr)]">
         <nav aria-label="Templates index" className="lg:sticky lg:top-6">
           <div className="mb-1.5 text-[11px] font-bold uppercase tracking-[0.16em] text-body/45">Outreach</div>
-          {outreachKinds.map((k) => {
-            const n = kindTpls(k).length;
-            const on = tView === "outreach" && channel === k;
+          {(() => {
+            const nodeCls = (on: boolean) =>
+              `flex w-full items-baseline justify-between border-l-2 py-1.5 pr-1 text-left text-[14px] transition ${
+                on ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
+              }`;
+            const count = (pid: string, cid: string) => myOutreach.filter((t) => inScope(t, pid, cid)).length;
             return (
-              <button
-                key={k}
-                onClick={() => {
-                  setTView("outreach");
-                  openKind(k);
-                }}
-                className={`flex w-full items-baseline justify-between border-l-2 py-1.5 pl-3 pr-1 text-left text-[14px] transition ${
-                  on ? "border-brown font-semibold text-ink" : "border-[rgb(var(--v-line))] text-body/60 hover:text-ink"
-                }`}
-              >
-                <span className="truncate">{k}</span>
-                <span className="text-[11px] tabular-nums text-body/40">{n || ""}</span>
-              </button>
+              <>
+                <button
+                  onClick={() => pickScope("", "")}
+                  className={`${nodeCls(tView === "outreach" && !scopeProjectId)} pl-3`}
+                >
+                  <span className="truncate">All projects</span>
+                  <span className="text-[11px] tabular-nums text-body/40">{count("", "") || ""}</span>
+                </button>
+                {projects.map((p) => {
+                  const cats = categories.filter((c) => c.projectId === p.id);
+                  const open = openProjs.has(p.id);
+                  const onProj = tView === "outreach" && scopeProjectId === p.id && !scopeCategoryId;
+                  return (
+                    <div key={p.id}>
+                      <div className={`${nodeCls(onProj)} items-center pl-1`}>
+                        <button
+                          onClick={() =>
+                            setOpenProjs((s0) => {
+                              const n = new Set(s0);
+                              if (n.has(p.id)) n.delete(p.id);
+                              else n.add(p.id);
+                              return n;
+                            })
+                          }
+                          aria-label={open ? `Collapse ${p.name}` : `Expand ${p.name}`}
+                          aria-expanded={open}
+                          className={`grid h-5 w-5 shrink-0 place-items-center text-body/40 transition hover:text-ink ${
+                            cats.length ? "" : "invisible"
+                          }`}
+                        >
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden className={`transition-transform ${open ? "rotate-90" : ""}`}>
+                            <polyline points="9 6 15 12 9 18" />
+                          </svg>
+                        </button>
+                        <button onClick={() => pickScope(p.id, "")} className="flex min-w-0 flex-1 items-baseline justify-between text-left">
+                          <span className="truncate">{p.name}</span>
+                          <span className="text-[11px] tabular-nums text-body/40">{count(p.id, "") || ""}</span>
+                        </button>
+                      </div>
+                      {open &&
+                        cats.map((c) => {
+                          const onCat = tView === "outreach" && scopeProjectId === p.id && scopeCategoryId === c.id;
+                          return (
+                            <button
+                              key={c.id}
+                              onClick={() => pickScope(p.id, c.id)}
+                              className={`${nodeCls(onCat)} pl-8 text-[13px]`}
+                            >
+                              <span className="truncate">{c.name}</span>
+                              <span className="text-[11px] tabular-nums text-body/40">{count(p.id, c.id) || ""}</span>
+                            </button>
+                          );
+                        })}
+                    </div>
+                  );
+                })}
+              </>
             );
-          })}
+          })()}
           {teamName && (
             <button
               onClick={() => setTView("team")}
@@ -26583,12 +26646,12 @@ function TemplatesTab({
           {tView === "outreach" && (
             <div className="rounded-[4px] border border-[rgb(var(--v-line))] bg-[rgb(var(--v-sheet))] shadow-[0_30px_60px_-30px_rgba(40,30,20,0.35)]">
               <div className="flex flex-wrap items-end justify-between gap-3 px-6 pt-7 sm:px-10">
-                <h2 className="font-display text-[34px] font-extrabold leading-none tracking-tight text-ink">{channel}</h2>
-                <span className="text-[12px] text-body/45">{kindTpls(channel).length} saved</span>
+                <h2 className="font-display text-[34px] font-extrabold leading-none tracking-tight text-ink">{scopeTitle}</h2>
+                <span className="text-[12px] text-body/45">{scopeTpls.length} saved</span>
               </div>
               {/* Versions of this kind, each named by where it applies. */}
               <div className="mt-5 flex flex-wrap gap-2 border-b-2 border-dashed border-[rgb(var(--v-line))] px-6 pb-4 sm:px-10">
-                {kindTpls(channel).map((t, ti, all) => (
+                {scopeTpls.map((t, ti, all) => (
                   <button
                     key={t.id}
                     onClick={() => startEdit(t)}
@@ -26599,11 +26662,16 @@ function TemplatesTab({
                         : "border-[rgb(var(--v-line))] text-body/70 hover:border-brown/50 hover:text-ink"
                     }`}
                   >
-                    {t.title ? `${t.title} · ${scopeLabel(t)}` : scopeLabel(t)}
-                    {/* Two unnamed for the same place: number them so they read apart. */}
-                    {!t.title &&
-                      all.filter((x) => !x.title && scopeLabel(x) === scopeLabel(t)).length > 1 &&
-                      ` · ${all.filter((x) => !x.title && scopeLabel(x) === scopeLabel(t)).indexOf(t) + 1}`}
+                    {[
+                      t.title || "Template",
+                      t.channel,
+                      // Under a project node, say which category each one is for.
+                      scopeProjectId && !scopeCategoryId && t.categoryId
+                        ? categories.find((c) => c.id === t.categoryId)?.name
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </button>
                 ))}
                 <button
@@ -26616,20 +26684,32 @@ function TemplatesTab({
                     !editingId ? "border-brown text-brown" : "border-[rgb(var(--v-dash))] text-body/50 hover:text-ink"
                   }`}
                 >
-                  + New {channel.toLowerCase()} template
+                  + New template
                 </button>
               </div>
 
               <div className="px-6 pb-8 pt-6 sm:px-10">
-                <label className="mb-6 block">
-                  <Label>Name</Label>
-                  <input
-                    value={title}
-                    onChange={(e) => setTitle(e.target.value)}
-                    placeholder={`Template ${(list?.length || 0) + 1}`}
-                    className="mt-1 w-full max-w-md border-0 border-b border-[rgb(var(--v-line))] bg-transparent px-0 py-1.5 font-display text-[18px] font-bold text-ink outline-none placeholder:font-normal placeholder:text-body/35 focus:border-brown"
-                  />
-                </label>
+                <div className="mb-6 grid gap-5 sm:grid-cols-[minmax(0,1fr)_220px]">
+                  <label className="block">
+                    <Label>Name</Label>
+                    <input
+                      value={title}
+                      onChange={(e) => setTitle(e.target.value)}
+                      placeholder={`Template ${(list?.length || 0) + 1}`}
+                      className="mt-1 w-full max-w-md border-0 border-b border-[rgb(var(--v-line))] bg-transparent px-0 py-1.5 font-display text-[18px] font-bold text-ink outline-none placeholder:font-normal placeholder:text-body/35 focus:border-brown"
+                    />
+                  </label>
+                  <div>
+                    <Label>Kind of outreach</Label>
+                    <PrettySelect
+                      ariaLabel="Kind of outreach"
+                      value={channel}
+                      onChange={setChannel}
+                      className="mt-1 w-full"
+                      options={outreachKinds.map((k) => ({ value: k, label: k }))}
+                    />
+                  </div>
+                </div>
                 {/* Where it applies comes next: it decides which drafts use it. */}
         <div data-guide="tpl-scope">
           <Label>Use it for</Label>
